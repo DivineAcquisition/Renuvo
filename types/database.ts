@@ -747,6 +747,80 @@ export type Database = {
           },
         ]
       }
+      signup_links: {
+        Row: {
+          cadence_profile_id: string
+          created_at: string
+          currency: string
+          customer_id: string
+          expires_at: string
+          id: string
+          job_id: string | null
+          organization_id: string
+          price_cents: number
+          status: Database["public"]["Enums"]["signup_link_status"]
+          token: string
+          used_at: string | null
+        }
+        Insert: {
+          cadence_profile_id: string
+          created_at?: string
+          currency?: string
+          customer_id: string
+          expires_at: string
+          id?: string
+          job_id?: string | null
+          organization_id: string
+          price_cents: number
+          status?: Database["public"]["Enums"]["signup_link_status"]
+          token: string
+          used_at?: string | null
+        }
+        Update: {
+          cadence_profile_id?: string
+          created_at?: string
+          currency?: string
+          customer_id?: string
+          expires_at?: string
+          id?: string
+          job_id?: string | null
+          organization_id?: string
+          price_cents?: number
+          status?: Database["public"]["Enums"]["signup_link_status"]
+          token?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signup_links_cadence_profile_id_fkey"
+            columns: ["cadence_profile_id"]
+            isOneToOne: false
+            referencedRelation: "cadence_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signup_links_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signup_links_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signup_links_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usage_rates: {
         Row: {
           channel: string
@@ -1145,6 +1219,7 @@ export type Database = {
         | "cancelled"
         | "skipped"
         | "failed"
+      signup_link_status: "active" | "used" | "expired"
       template_event_key:
         | "post_payment_activation"
         | "conversion_offer"
@@ -1330,6 +1405,7 @@ export const Constants = {
         "skipped",
         "failed",
       ],
+      signup_link_status: ["active", "used", "expired"],
       template_event_key: [
         "post_payment_activation",
         "conversion_offer",

@@ -1,14 +1,63 @@
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buildCaptureUrl } from "@/lib/urls";
+import { newToken } from "./token";
 
 /**
- * Returns the recurring-signup link an SMS points to. Prompt 18 replaces this
- * with a DB-backed, signed, single-use token. For now returns a placeholder so
- * generation works end-to-end.
+ * Get (or create) the recurring-signup link for a customer+job. Reuses an active
+ * link so the offer and reminder texts point to the same page. Offer defaults:
+ * the org's default cadence for its vertical, priced at the one-time job amount.
  */
-export async function getSignupLink(_args: {
+export async function getSignupLink(args: {
   orgId: string;
   customerId: string;
   jobId?: string;
 }): Promise<string> {
-  return buildCaptureUrl("pending"); // TODO Prompt 18: mint a real token
+  const admin = createAdminClient();
+
+  // reuse an active link for this customer/job
+  const { data: existing } = await admin
+    .from("signup_links")
+    .select("token")
+    .eq("organization_id", args.orgId)
+    .eq("customer_id", args.customerId)
+    .eq("status", "active")
+    .gte("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (existing?.token) return buildCaptureUrl(existing.token);
+
+  // resolve default cadence + price
+  const { data: org } = await admin
+    .from("organizations")
+    .select("vertical_id")
+    .eq("id", args.orgId)
+    .single();
+  const { data: vertical } = await admin
+    .from("verticals")
+    .select("default_cadence_id")
+    .eq("id", org?.vertical_id ?? "")
+    .maybeSingle();
+
+  let priceCents = 0;
+  if (args.jobId) {
+    const { data: job } = await admin
+      .from("jobs")
+      .select("price_cents")
+      .eq("id", args.jobId)
+      .single();
+    priceCents = job?.price_cents ?? 0;
+  }
+  if (!vertical?.default_cadence_id) return buildCaptureUrl("invalid");
+
+  const token = newToken();
+  await admin.from("signup_links").insert({
+    organization_id: args.orgId,
+    customer_id: args.customerId,
+    job_id: args.jobId ?? null,
+    cadence_profile_id: vertical.default_cadence_id,
+    price_cents: priceCents,
+    token,
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+  });
+
+  return buildCaptureUrl(token);
 }
