@@ -114,6 +114,92 @@ export type Database = {
           },
         ]
       }
+      jobs: {
+        Row: {
+          cadence_profile_id: string | null
+          created_at: string
+          currency: string
+          customer_id: string
+          external_ref: string | null
+          id: string
+          kind: Database["public"]["Enums"]["job_kind"]
+          notes: string | null
+          organization_id: string
+          paid_at: string | null
+          parent_job_id: string | null
+          price_cents: number | null
+          scheduled_at: string | null
+          status: Database["public"]["Enums"]["job_status"]
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          cadence_profile_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_id: string
+          external_ref?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["job_kind"]
+          notes?: string | null
+          organization_id: string
+          paid_at?: string | null
+          parent_job_id?: string | null
+          price_cents?: number | null
+          scheduled_at?: string | null
+          status?: Database["public"]["Enums"]["job_status"]
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cadence_profile_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_id?: string
+          external_ref?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["job_kind"]
+          notes?: string | null
+          organization_id?: string
+          paid_at?: string | null
+          parent_job_id?: string | null
+          price_cents?: number | null
+          scheduled_at?: string | null
+          status?: Database["public"]["Enums"]["job_status"]
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_cadence_profile_id_fkey"
+            columns: ["cadence_profile_id"]
+            isOneToOne: false
+            referencedRelation: "cadence_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_parent_job_id_fkey"
+            columns: ["parent_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -257,6 +343,8 @@ export type Database = {
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
     }
     Enums: {
+      job_kind: "one_time" | "recurring"
+      job_status: "scheduled" | "completed" | "cancelled" | "no_show"
       membership_role: "owner" | "staff"
     }
     CompositeTypes: {
@@ -385,6 +473,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      job_kind: ["one_time", "recurring"],
+      job_status: ["scheduled", "completed", "cancelled", "no_show"],
       membership_role: ["owner", "staff"],
     },
   },
