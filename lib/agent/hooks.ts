@@ -12,3 +12,17 @@ export async function onPaymentRecorded(args: {
   // TODO (Prompt 15): enqueue activation sequence via the conversion engine.
   console.log("[onPaymentRecorded] queued conversion for", args);
 }
+
+/**
+ * Called when a customer replies to an SMS (inbound webhook, Prompt 13).
+ * Prompt 18 implements this: classify intent (interested / objection / question),
+ * generate + send a reply via sendGuardedSms, advance the plan if accepted.
+ */
+export async function onInboundMessage(args: {
+  orgId: string;
+  customerId: string;
+  text: string;
+}) {
+  // TODO (Prompt 18): classify intent + respond via the agent.
+  console.log("[onInboundMessage]", args);
+}

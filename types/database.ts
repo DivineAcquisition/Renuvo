@@ -398,32 +398,47 @@ export type Database = {
       }
       organizations: {
         Row: {
+          a2p_brand_id: string | null
+          a2p_campaign_id: string | null
+          a2p_status: Database["public"]["Enums"]["a2p_status"]
           created_at: string
           id: string
           ingest_secret: string
           name: string
           slug: string
           stripe_account_id: string | null
+          telnyx_messaging_profile_id: string | null
+          telnyx_phone_number: string | null
           updated_at: string
           vertical_id: string | null
         }
         Insert: {
+          a2p_brand_id?: string | null
+          a2p_campaign_id?: string | null
+          a2p_status?: Database["public"]["Enums"]["a2p_status"]
           created_at?: string
           id?: string
           ingest_secret?: string
           name: string
           slug: string
           stripe_account_id?: string | null
+          telnyx_messaging_profile_id?: string | null
+          telnyx_phone_number?: string | null
           updated_at?: string
           vertical_id?: string | null
         }
         Update: {
+          a2p_brand_id?: string | null
+          a2p_campaign_id?: string | null
+          a2p_status?: Database["public"]["Enums"]["a2p_status"]
           created_at?: string
           id?: string
           ingest_secret?: string
           name?: string
           slug?: string
           stripe_account_id?: string | null
+          telnyx_messaging_profile_id?: string | null
+          telnyx_phone_number?: string | null
           updated_at?: string
           vertical_id?: string | null
         }
@@ -960,6 +975,7 @@ export type Database = {
       }
     }
     Enums: {
+      a2p_status: "not_started" | "pending" | "approved" | "rejected"
       event_source: "stripe" | "telnyx" | "agent" | "system" | "app"
       event_type:
         | "payment_succeeded"
@@ -1135,6 +1151,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      a2p_status: ["not_started", "pending", "approved", "rejected"],
       event_source: ["stripe", "telnyx", "agent", "system", "app"],
       event_type: [
         "payment_succeeded",
