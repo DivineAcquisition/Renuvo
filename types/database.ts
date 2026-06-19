@@ -49,6 +49,50 @@ export type Database = {
           },
         ]
       }
+      calendar_connections: {
+        Row: {
+          access_token_enc: string | null
+          calendar_id: string | null
+          created_at: string
+          enabled: boolean
+          organization_id: string
+          provider: string
+          refresh_token_enc: string | null
+          token_expiry: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token_enc?: string | null
+          calendar_id?: string | null
+          created_at?: string
+          enabled?: boolean
+          organization_id: string
+          provider?: string
+          refresh_token_enc?: string | null
+          token_expiry?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token_enc?: string | null
+          calendar_id?: string | null
+          created_at?: string
+          enabled?: boolean
+          organization_id?: string
+          provider?: string
+          refresh_token_enc?: string | null
+          token_expiry?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           created_at: string
@@ -930,6 +974,14 @@ export type Database = {
           p_segments: number
         }
         Returns: Json
+      }
+      get_calendar_status: {
+        Args: { p_org_id: string }
+        Returns: {
+          calendar_id: string
+          connected: boolean
+          enabled: boolean
+        }[]
       }
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
       record_event: {
