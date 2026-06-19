@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      cadence_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          interval_days: number
+          key: string
+          label: string
+          vertical_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          interval_days: number
+          key: string
+          label: string
+          vertical_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          interval_days?: number
+          key?: string
+          label?: string
+          vertical_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cadence_profiles_vertical_id_fkey"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "verticals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -81,7 +116,15 @@ export type Database = {
           updated_at?: string
           vertical_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_orgs_vertical"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "verticals"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -103,6 +146,38 @@ export type Database = {
           id?: string
         }
         Relationships: []
+      }
+      verticals: {
+        Row: {
+          created_at: string
+          default_cadence_id: string | null
+          display_name: string
+          id: string
+          key: string
+        }
+        Insert: {
+          created_at?: string
+          default_cadence_id?: string | null
+          display_name: string
+          id?: string
+          key: string
+        }
+        Update: {
+          created_at?: string
+          default_cadence_id?: string | null
+          display_name?: string
+          id?: string
+          key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_verticals_default_cadence"
+            columns: ["default_cadence_id"]
+            isOneToOne: false
+            referencedRelation: "cadence_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
