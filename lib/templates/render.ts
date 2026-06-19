@@ -5,9 +5,14 @@ export type RenderVars = {
   first_name?: string | null;
   business_name?: string | null;
   cadence_label?: string | null;
-  /** Price in cents — formatted to a currency string at render time. */
-  price?: number | null;
-  /** ISO 4217 code used to format `price`. Defaults to "usd". */
+  /**
+   * Price either as cents (number — formatted at render time) or as an
+   * already-formatted currency string (used as-is). Both are supported so
+   * callers that pre-format (the agent context) and callers that pass cents
+   * both work.
+   */
+  price?: number | string | null;
+  /** ISO 4217 code used to format a numeric `price`. Defaults to "usd". */
   currency?: string | null;
   booking_link?: string | null;
 };
@@ -51,7 +56,10 @@ export function renderTemplate(body: string, vars: RenderVars): string {
   if (vars.booking_link != null)
     replacements.booking_link = String(vars.booking_link);
   if (vars.price != null)
-    replacements.price = formatPrice(vars.price, vars.currency ?? "usd");
+    replacements.price =
+      typeof vars.price === "number"
+        ? formatPrice(vars.price, vars.currency ?? "usd")
+        : String(vars.price);
 
   return body.replace(/\{\{\s*([\w]+)\s*\}\}/g, (whole, key: string) => {
     if (key in replacements) {
