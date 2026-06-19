@@ -670,6 +670,83 @@ export type Database = {
           },
         ]
       }
+      scheduled_messages: {
+        Row: {
+          attempts: number
+          cancel_reason: string | null
+          created_at: string
+          customer_id: string
+          event_key: Database["public"]["Enums"]["template_event_key"]
+          id: string
+          job_id: string | null
+          last_error: string | null
+          organization_id: string
+          recurring_plan_id: string | null
+          send_at: string
+          status: Database["public"]["Enums"]["scheduled_msg_status"]
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          cancel_reason?: string | null
+          created_at?: string
+          customer_id: string
+          event_key: Database["public"]["Enums"]["template_event_key"]
+          id?: string
+          job_id?: string | null
+          last_error?: string | null
+          organization_id: string
+          recurring_plan_id?: string | null
+          send_at: string
+          status?: Database["public"]["Enums"]["scheduled_msg_status"]
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          cancel_reason?: string | null
+          created_at?: string
+          customer_id?: string
+          event_key?: Database["public"]["Enums"]["template_event_key"]
+          id?: string
+          job_id?: string | null
+          last_error?: string | null
+          organization_id?: string
+          recurring_plan_id?: string | null
+          send_at?: string
+          status?: Database["public"]["Enums"]["scheduled_msg_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_messages_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_messages_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_messages_recurring_plan_id_fkey"
+            columns: ["recurring_plan_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       usage_rates: {
         Row: {
           channel: string
@@ -1062,6 +1139,12 @@ export type Database = {
         | "winback_recovered"
         | "payment_failed"
         | "payment_recovered"
+      scheduled_msg_status:
+        | "pending"
+        | "sent"
+        | "cancelled"
+        | "skipped"
+        | "failed"
       template_event_key:
         | "post_payment_activation"
         | "conversion_offer"
@@ -1239,6 +1322,13 @@ export const Constants = {
         "winback_recovered",
         "payment_failed",
         "payment_recovered",
+      ],
+      scheduled_msg_status: [
+        "pending",
+        "sent",
+        "cancelled",
+        "skipped",
+        "failed",
       ],
       template_event_key: [
         "post_payment_activation",
