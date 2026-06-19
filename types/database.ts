@@ -249,6 +249,57 @@ export type Database = {
           },
         ]
       }
+      message_templates: {
+        Row: {
+          body: string
+          channel: string
+          created_at: string
+          event_key: Database["public"]["Enums"]["template_event_key"]
+          id: string
+          is_active: boolean
+          organization_id: string | null
+          updated_at: string
+          vertical_id: string
+        }
+        Insert: {
+          body: string
+          channel?: string
+          created_at?: string
+          event_key: Database["public"]["Enums"]["template_event_key"]
+          id?: string
+          is_active?: boolean
+          organization_id?: string | null
+          updated_at?: string
+          vertical_id: string
+        }
+        Update: {
+          body?: string
+          channel?: string
+          created_at?: string
+          event_key?: Database["public"]["Enums"]["template_event_key"]
+          id?: string
+          is_active?: boolean
+          organization_id?: string | null
+          updated_at?: string
+          vertical_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_templates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_templates_vertical_id_fkey"
+            columns: ["vertical_id"]
+            isOneToOne: false
+            referencedRelation: "verticals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -610,6 +661,14 @@ export type Database = {
         }
       }
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
+      resolve_template: {
+        Args: {
+          p_event_key: Database["public"]["Enums"]["template_event_key"]
+          p_org_id: string
+          p_vertical_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       job_kind: "one_time" | "recurring"
@@ -631,6 +690,14 @@ export type Database = {
         | "winback_recovered"
         | "payment_failed"
         | "payment_recovered"
+      template_event_key:
+        | "post_payment_activation"
+        | "conversion_offer"
+        | "reminder"
+        | "objection_followup"
+        | "recurring_confirmation"
+        | "winback"
+        | "save_offer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -777,6 +844,15 @@ export const Constants = {
         "winback_recovered",
         "payment_failed",
         "payment_recovered",
+      ],
+      template_event_key: [
+        "post_payment_activation",
+        "conversion_offer",
+        "reminder",
+        "objection_followup",
+        "recurring_confirmation",
+        "winback",
+        "save_offer",
       ],
     },
   },
