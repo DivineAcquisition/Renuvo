@@ -49,7 +49,15 @@ export async function sendGuardedSms(args: {
     .eq("id", args.orgId)
     .single();
   if (!org?.telnyx_phone_number) return { ok: false, reason: "no_number" };
-  if (process.env.NODE_ENV === "production" && org.a2p_status !== "approved") {
+  // Until Renuvo's A2P 10DLC campaigns are registered/approved, allow sending on
+  // the available (verified) Telnyx numbers by setting TELNYX_ALLOW_UNREGISTERED
+  // = "true". Default is strict: production sends require a2p_status='approved'.
+  const allowPreA2p = process.env.TELNYX_ALLOW_UNREGISTERED === "true";
+  if (
+    process.env.NODE_ENV === "production" &&
+    org.a2p_status !== "approved" &&
+    !allowPreA2p
+  ) {
     return { ok: false, reason: "a2p_not_ready" };
   }
 
