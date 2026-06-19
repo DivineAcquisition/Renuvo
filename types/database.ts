@@ -49,6 +49,71 @@ export type Database = {
           },
         ]
       }
+      customers: {
+        Row: {
+          created_at: string
+          email: string | null
+          external_ref: string | null
+          full_name: string | null
+          id: string
+          notes: string | null
+          opted_out: boolean
+          opted_out_at: string | null
+          organization_id: string
+          phone: string
+          sms_consent: boolean
+          sms_consent_at: string | null
+          sms_consent_source: string | null
+          sms_sendable: boolean | null
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          external_ref?: string | null
+          full_name?: string | null
+          id?: string
+          notes?: string | null
+          opted_out?: boolean
+          opted_out_at?: string | null
+          organization_id: string
+          phone: string
+          sms_consent?: boolean
+          sms_consent_at?: string | null
+          sms_consent_source?: string | null
+          sms_sendable?: boolean | null
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          external_ref?: string | null
+          full_name?: string | null
+          id?: string
+          notes?: string | null
+          opted_out?: boolean
+          opted_out_at?: string | null
+          organization_id?: string
+          phone?: string
+          sms_consent?: boolean
+          sms_consent_at?: string | null
+          sms_consent_source?: string | null
+          sms_sendable?: boolean | null
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -189,6 +254,7 @@ export type Database = {
         Args: { org_name: string; org_slug: string }
         Returns: string
       }
+      mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
     }
     Enums: {
       membership_role: "owner" | "staff"
