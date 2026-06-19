@@ -209,7 +209,7 @@ export type Database = {
           cadence_profile_id: string | null
           created_at: string
           currency: string
-          customer_id: string
+          customer_id: string | null
           external_ref: string | null
           id: string
           kind: Database["public"]["Enums"]["job_kind"]
@@ -217,6 +217,8 @@ export type Database = {
           organization_id: string
           paid_at: string | null
           parent_job_id: string | null
+          payment_external_id: string | null
+          payment_source: string | null
           price_cents: number | null
           recurring_plan_id: string | null
           scheduled_at: string | null
@@ -228,7 +230,7 @@ export type Database = {
           cadence_profile_id?: string | null
           created_at?: string
           currency?: string
-          customer_id: string
+          customer_id?: string | null
           external_ref?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["job_kind"]
@@ -236,6 +238,8 @@ export type Database = {
           organization_id: string
           paid_at?: string | null
           parent_job_id?: string | null
+          payment_external_id?: string | null
+          payment_source?: string | null
           price_cents?: number | null
           recurring_plan_id?: string | null
           scheduled_at?: string | null
@@ -247,7 +251,7 @@ export type Database = {
           cadence_profile_id?: string | null
           created_at?: string
           currency?: string
-          customer_id?: string
+          customer_id?: string | null
           external_ref?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["job_kind"]
@@ -255,6 +259,8 @@ export type Database = {
           organization_id?: string
           paid_at?: string | null
           parent_job_id?: string | null
+          payment_external_id?: string | null
+          payment_source?: string | null
           price_cents?: number | null
           recurring_plan_id?: string | null
           scheduled_at?: string | null
@@ -394,6 +400,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          ingest_secret: string
           name: string
           slug: string
           stripe_account_id: string | null
@@ -403,6 +410,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          ingest_secret?: string
           name: string
           slug: string
           stripe_account_id?: string | null
@@ -412,6 +420,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          ingest_secret?: string
           name?: string
           slug?: string
           stripe_account_id?: string | null
