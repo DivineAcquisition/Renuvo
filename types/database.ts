@@ -512,6 +512,44 @@ export type Database = {
           },
         ]
       }
+      usage_rates: {
+        Row: {
+          channel: string
+          charge_cents_per_segment: number
+          cost_microdollars_per_segment: number
+          created_at: string
+          effective_from: string
+          id: string
+          organization_id: string | null
+        }
+        Insert: {
+          channel?: string
+          charge_cents_per_segment: number
+          cost_microdollars_per_segment: number
+          created_at?: string
+          effective_from?: string
+          id?: string
+          organization_id?: string | null
+        }
+        Update: {
+          channel?: string
+          charge_cents_per_segment?: number
+          cost_microdollars_per_segment?: number
+          created_at?: string
+          effective_from?: string
+          id?: string
+          organization_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_rates_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       verticals: {
         Row: {
           created_at: string
@@ -540,6 +578,106 @@ export type Database = {
             columns: ["default_cadence_id"]
             isOneToOne: false
             referencedRelation: "cadence_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_transactions: {
+        Row: {
+          amount_cents: number
+          balance_after_cents: number
+          charge_cents: number | null
+          cost_microdollars: number | null
+          created_at: string
+          id: string
+          margin_microdollars: number | null
+          meta: Json
+          organization_id: string
+          reference: string | null
+          segments: number | null
+          type: Database["public"]["Enums"]["wallet_txn_type"]
+        }
+        Insert: {
+          amount_cents: number
+          balance_after_cents: number
+          charge_cents?: number | null
+          cost_microdollars?: number | null
+          created_at?: string
+          id?: string
+          margin_microdollars?: number | null
+          meta?: Json
+          organization_id: string
+          reference?: string | null
+          segments?: number | null
+          type: Database["public"]["Enums"]["wallet_txn_type"]
+        }
+        Update: {
+          amount_cents?: number
+          balance_after_cents?: number
+          charge_cents?: number | null
+          cost_microdollars?: number | null
+          created_at?: string
+          id?: string
+          margin_microdollars?: number | null
+          meta?: Json
+          organization_id?: string
+          reference?: string | null
+          segments?: number | null
+          type?: Database["public"]["Enums"]["wallet_txn_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallets: {
+        Row: {
+          auto_reload_enabled: boolean
+          balance_cents: number
+          created_at: string
+          low_balance_notified_at: string | null
+          organization_id: string
+          reload_amount_cents: number
+          reload_threshold_cents: number
+          stripe_customer_id: string | null
+          stripe_payment_method_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_reload_enabled?: boolean
+          balance_cents?: number
+          created_at?: string
+          low_balance_notified_at?: string | null
+          organization_id: string
+          reload_amount_cents?: number
+          reload_threshold_cents?: number
+          stripe_customer_id?: string | null
+          stripe_payment_method_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_reload_enabled?: boolean
+          balance_cents?: number
+          created_at?: string
+          low_balance_notified_at?: string | null
+          organization_id?: string
+          reload_amount_cents?: number
+          reload_threshold_cents?: number
+          stripe_customer_id?: string | null
+          stripe_payment_method_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallets_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -660,7 +798,33 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      credit_wallet: {
+        Args: {
+          p_amount_cents: number
+          p_meta?: Json
+          p_org_id: string
+          p_reference?: string
+          p_type?: Database["public"]["Enums"]["wallet_txn_type"]
+        }
+        Returns: Json
+      }
+      debit_wallet: {
+        Args: {
+          p_meta?: Json
+          p_org_id: string
+          p_reference?: string
+          p_segments: number
+        }
+        Returns: Json
+      }
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
+      resolve_charge_rate: {
+        Args: { p_channel?: string; p_org_id: string }
+        Returns: {
+          charge_cents: number
+          cost_microdollars: number
+        }[]
+      }
       resolve_template: {
         Args: {
           p_event_key: Database["public"]["Enums"]["template_event_key"]
@@ -668,6 +832,15 @@ export type Database = {
           p_vertical_id: string
         }
         Returns: string
+      }
+      update_wallet_settings: {
+        Args: {
+          p_auto_reload_enabled: boolean
+          p_org_id: string
+          p_reload_amount: number
+          p_reload_threshold: number
+        }
+        Returns: undefined
       }
     }
     Enums: {
@@ -698,6 +871,12 @@ export type Database = {
         | "recurring_confirmation"
         | "winback"
         | "save_offer"
+      wallet_txn_type:
+        | "credit_reload"
+        | "credit_manual"
+        | "credit_refund"
+        | "debit_sms"
+        | "debit_adjustment"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -853,6 +1032,13 @@ export const Constants = {
         "recurring_confirmation",
         "winback",
         "save_offer",
+      ],
+      wallet_txn_type: [
+        "credit_reload",
+        "credit_manual",
+        "credit_refund",
+        "debit_sms",
+        "debit_adjustment",
       ],
     },
   },
