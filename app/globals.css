@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Renuvo brand — WHITE theme, indigo/purple accents (default) */
+    --background: 0 0% 100%;          /* white */
+    --foreground: 250 14% 12%;        /* near-black, slight purple tint */
+    --card: 0 0% 100%;
+    --card-foreground: 250 14% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 250 14% 12%;
+    --primary: 247 100% 61%;          /* #4F38FF */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 250 100% 96%;        /* pale lavender */
+    --secondary-foreground: 250 30% 20%;
+    --muted: 250 30% 96%;
+    --muted-foreground: 250 8% 45%;
+    --accent: 247 100% 95%;           /* #9A8CFF tint */
+    --accent-foreground: 247 60% 40%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 250 30% 91%;
+    --input: 250 30% 91%;
+    --ring: 247 100% 61%;
+    --radius: 0.75rem;
+
+    /* Brand ramp — use directly via bg-[hsl(var(--brand-500))] etc. */
+    --brand-600: 247 100% 61%;        /* #4F38FF deepest */
+    --brand-500: 247 100% 67%;        /* #6A57FF mid */
+    --brand-400: 247 100% 77%;        /* #9A8CFF light */
+  }
+
+  .dark {
+    /* Optional dark variant — keeps the purple identity on a deep indigo base */
+    --background: 250 30% 7%;
+    --foreground: 250 20% 96%;
+    --card: 250 28% 11%;
+    --card-foreground: 250 20% 96%;
+    --popover: 250 28% 11%;
+    --popover-foreground: 250 20% 96%;
+    --primary: 247 100% 67%;          /* lighter for contrast on dark */
+    --primary-foreground: 250 30% 7%;
+    --secondary: 250 22% 16%;
+    --secondary-foreground: 250 20% 96%;
+    --muted: 250 22% 16%;
+    --muted-foreground: 250 12% 60%;
+    --accent: 247 40% 22%;
+    --accent-foreground: 247 100% 85%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 250 20% 96%;
+    --border: 250 22% 18%;
+    --input: 250 22% 18%;
+    --ring: 247 100% 67%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
