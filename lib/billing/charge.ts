@@ -117,11 +117,9 @@ export async function creditFromReload(
 }
 
 /**
- * TODO (Prompt 13 — Stripe Connect + saved card):
- * When a debit verdict has reloadNeeded === true and auto-reload is enabled,
- * charge the wallet's saved card for `reload_amount_cents` via Stripe, then call
- * creditFromReload() with the resulting charge id. Stubbed until Stripe lands.
+ * Auto-reload (Prompt 11 — Stripe Connect + saved card). When a debit verdict
+ * has reloadNeeded === true and auto-reload is enabled, this charges the wallet's
+ * saved card for `reload_amount_cents` and credits the wallet. Re-exported from
+ * the Stripe module so the send path keeps importing it from one place.
  */
-export async function triggerAutoReload(_orgId: string): Promise<void> {
-  throw new Error("triggerAutoReload not implemented (Prompt 13 — Stripe).");
-}
+export { triggerAutoReload } from "@/lib/stripe/wallet-reload";
