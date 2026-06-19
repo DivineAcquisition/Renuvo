@@ -128,6 +128,7 @@ export type Database = {
           paid_at: string | null
           parent_job_id: string | null
           price_cents: number | null
+          recurring_plan_id: string | null
           scheduled_at: string | null
           status: Database["public"]["Enums"]["job_status"]
           stripe_payment_intent_id: string | null
@@ -146,6 +147,7 @@ export type Database = {
           paid_at?: string | null
           parent_job_id?: string | null
           price_cents?: number | null
+          recurring_plan_id?: string | null
           scheduled_at?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           stripe_payment_intent_id?: string | null
@@ -164,6 +166,7 @@ export type Database = {
           paid_at?: string | null
           parent_job_id?: string | null
           price_cents?: number | null
+          recurring_plan_id?: string | null
           scheduled_at?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           stripe_payment_intent_id?: string | null
@@ -196,6 +199,13 @@ export type Database = {
             columns: ["parent_job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_recurring_plan_id_fkey"
+            columns: ["recurring_plan_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_plans"
             referencedColumns: ["id"]
           },
         ]
@@ -298,6 +308,159 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_plans: {
+        Row: {
+          cadence_profile_id: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          currency: string
+          customer_id: string
+          health_score: number | null
+          id: string
+          next_service_at: string | null
+          organization_id: string
+          origin_job_id: string | null
+          paused_at: string | null
+          price_cents: number
+          risk_level: Database["public"]["Enums"]["plan_risk_level"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["plan_status"]
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          cadence_profile_id: string
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          currency?: string
+          customer_id: string
+          health_score?: number | null
+          id?: string
+          next_service_at?: string | null
+          organization_id: string
+          origin_job_id?: string | null
+          paused_at?: string | null
+          price_cents: number
+          risk_level?: Database["public"]["Enums"]["plan_risk_level"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["plan_status"]
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cadence_profile_id?: string
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          currency?: string
+          customer_id?: string
+          health_score?: number | null
+          id?: string
+          next_service_at?: string | null
+          organization_id?: string
+          origin_job_id?: string | null
+          paused_at?: string | null
+          price_cents?: number
+          risk_level?: Database["public"]["Enums"]["plan_risk_level"]
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["plan_status"]
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_plans_cadence_profile_id_fkey"
+            columns: ["cadence_profile_id"]
+            isOneToOne: false
+            referencedRelation: "cadence_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_plans_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_plans_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_plans_origin_job_id_fkey"
+            columns: ["origin_job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      retention_events: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          meta: Json
+          occurred_at: string
+          organization_id: string
+          reason: string | null
+          recurring_plan_id: string
+          type: Database["public"]["Enums"]["retention_event_type"]
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          meta?: Json
+          occurred_at?: string
+          organization_id: string
+          reason?: string | null
+          recurring_plan_id: string
+          type: Database["public"]["Enums"]["retention_event_type"]
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          meta?: Json
+          occurred_at?: string
+          organization_id?: string
+          reason?: string | null
+          recurring_plan_id?: string
+          type?: Database["public"]["Enums"]["retention_event_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retention_events_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "retention_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "retention_events_recurring_plan_id_fkey"
+            columns: ["recurring_plan_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       verticals: {
         Row: {
           created_at: string
@@ -335,10 +498,116 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activate_plan: {
+        Args: {
+          p_next_service_at?: string
+          p_plan: string
+          p_started_at?: string
+          p_stripe_subscription_id?: string
+        }
+        Returns: {
+          cadence_profile_id: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          currency: string
+          customer_id: string
+          health_score: number | null
+          id: string
+          next_service_at: string | null
+          organization_id: string
+          origin_job_id: string | null
+          paused_at: string | null
+          price_cents: number
+          risk_level: Database["public"]["Enums"]["plan_risk_level"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["plan_status"]
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       auth_org_ids: { Args: never; Returns: string[] }
+      change_plan_status: {
+        Args: {
+          p_plan: string
+          p_reason?: string
+          p_status: Database["public"]["Enums"]["plan_status"]
+        }
+        Returns: {
+          cadence_profile_id: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          currency: string
+          customer_id: string
+          health_score: number | null
+          id: string
+          next_service_at: string | null
+          organization_id: string
+          origin_job_id: string | null
+          paused_at: string | null
+          price_cents: number
+          risk_level: Database["public"]["Enums"]["plan_risk_level"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["plan_status"]
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_organization: {
         Args: { org_name: string; org_slug: string }
         Returns: string
+      }
+      create_recurring_plan: {
+        Args: {
+          p_cadence: string
+          p_currency?: string
+          p_customer: string
+          p_org: string
+          p_origin_job: string
+          p_price_cents: number
+        }
+        Returns: {
+          cadence_profile_id: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          currency: string
+          customer_id: string
+          health_score: number | null
+          id: string
+          next_service_at: string | null
+          organization_id: string
+          origin_job_id: string | null
+          paused_at: string | null
+          price_cents: number
+          risk_level: Database["public"]["Enums"]["plan_risk_level"]
+          started_at: string | null
+          status: Database["public"]["Enums"]["plan_status"]
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "recurring_plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
     }
@@ -346,6 +615,22 @@ export type Database = {
       job_kind: "one_time" | "recurring"
       job_status: "scheduled" | "completed" | "cancelled" | "no_show"
       membership_role: "owner" | "staff"
+      plan_risk_level: "none" | "low" | "medium" | "high"
+      plan_status: "pending" | "active" | "paused" | "cancelled"
+      retention_event_type:
+        | "plan_created"
+        | "activated"
+        | "paused"
+        | "resumed"
+        | "churn_risk_flagged"
+        | "save_offer_sent"
+        | "save_offer_accepted"
+        | "save_offer_declined"
+        | "cancelled"
+        | "winback_sent"
+        | "winback_recovered"
+        | "payment_failed"
+        | "payment_recovered"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -476,6 +761,23 @@ export const Constants = {
       job_kind: ["one_time", "recurring"],
       job_status: ["scheduled", "completed", "cancelled", "no_show"],
       membership_role: ["owner", "staff"],
+      plan_risk_level: ["none", "low", "medium", "high"],
+      plan_status: ["pending", "active", "paused", "cancelled"],
+      retention_event_type: [
+        "plan_created",
+        "activated",
+        "paused",
+        "resumed",
+        "churn_risk_flagged",
+        "save_offer_sent",
+        "save_offer_accepted",
+        "save_offer_declined",
+        "cancelled",
+        "winback_sent",
+        "winback_recovered",
+        "payment_failed",
+        "payment_recovered",
+      ],
     },
   },
 } as const
