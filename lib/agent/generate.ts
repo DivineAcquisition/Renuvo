@@ -1,4 +1,4 @@
-import { anthropic, SMS_MODEL } from "@/lib/anthropic/client";
+import { getAnthropicClient, SMS_MODEL } from "@/lib/anthropic/client";
 import { resolveTemplate } from "@/lib/templates/queries";
 import { renderTemplate } from "@/lib/templates/render";
 import { buildMergeVars, type MergeVars } from "./context";
@@ -111,6 +111,7 @@ export async function generateMessage(args: {
       .filter(Boolean)
       .join("\n\n");
 
+    const anthropic = await getAnthropicClient();
     const res = await anthropic.messages.create({
       model: SMS_MODEL,
       max_tokens: 200,
