@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordPayment } from "@/lib/payments/record";
 import type Stripe from "stripe";
@@ -8,6 +8,7 @@ export async function POST(req: NextRequest) {
   const body = await req.text();
   const sig = req.headers.get("stripe-signature")!;
 
+  const stripe = await getStripe();
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(

@@ -1,4 +1,4 @@
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /** Ensure the org has a Stripe Customer on the PLATFORM account (for wallet billing). */
@@ -18,6 +18,7 @@ export async function ensurePlatformCustomer(orgId: string): Promise<string> {
     .eq("id", orgId)
     .single();
 
+  const stripe = await getStripe();
   const customer = await stripe.customers.create({
     name: org?.name ?? undefined,
     metadata: { organization_id: orgId },
@@ -33,6 +34,7 @@ export async function ensurePlatformCustomer(orgId: string): Promise<string> {
 /** SetupIntent client secret so the tenant can save a card (Elements on the client). */
 export async function createWalletSetupIntent(orgId: string): Promise<string> {
   const customerId = await ensurePlatformCustomer(orgId);
+  const stripe = await getStripe();
   const si = await stripe.setupIntents.create({
     customer: customerId,
     payment_method_types: ["card"],
@@ -49,6 +51,7 @@ export async function saveWalletPaymentMethod(
   const admin = createAdminClient();
   const customerId = await ensurePlatformCustomer(orgId);
 
+  const stripe = await getStripe();
   await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
   await stripe.customers.update(customerId, {
     invoice_settings: { default_payment_method: paymentMethodId },

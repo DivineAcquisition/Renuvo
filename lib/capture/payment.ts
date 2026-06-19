@@ -1,6 +1,6 @@
 "use server";
 
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveSignupToken } from "./token";
 
@@ -25,6 +25,7 @@ export async function createSignupPaymentSetup(token: string) {
 
   const acct = org.stripe_account_id;
 
+  const stripe = await getStripe();
   // create a Stripe customer on the connected account
   const customer = await stripe.customers.create(
     { name: offer.firstName, metadata: { renuvo_customer_id: offer.customerId } },

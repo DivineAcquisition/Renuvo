@@ -1,4 +1,4 @@
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -22,6 +22,7 @@ export async function chargeWalletReload(
   }
 
   try {
+    const stripe = await getStripe();
     const pi = await stripe.paymentIntents.create({
       amount: amountCents,
       currency: "usd",

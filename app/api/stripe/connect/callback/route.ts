@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe/client";
+import { getStripe } from "@/lib/stripe/client";
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    const stripe = await getStripe();
     const token = await stripe.oauth.token({
       grant_type: "authorization_code",
       code,
