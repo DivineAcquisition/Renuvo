@@ -114,6 +114,96 @@ export type Database = {
           },
         ]
       }
+      events: {
+        Row: {
+          body: string | null
+          channel: string | null
+          created_at: string
+          customer_id: string | null
+          direction: Database["public"]["Enums"]["msg_direction"] | null
+          external_id: string | null
+          id: string
+          job_id: string | null
+          occurred_at: string
+          organization_id: string
+          payload: Json
+          recurring_plan_id: string | null
+          source: Database["public"]["Enums"]["event_source"]
+          type: Database["public"]["Enums"]["event_type"]
+          wallet_transaction_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          channel?: string | null
+          created_at?: string
+          customer_id?: string | null
+          direction?: Database["public"]["Enums"]["msg_direction"] | null
+          external_id?: string | null
+          id?: string
+          job_id?: string | null
+          occurred_at?: string
+          organization_id: string
+          payload?: Json
+          recurring_plan_id?: string | null
+          source: Database["public"]["Enums"]["event_source"]
+          type: Database["public"]["Enums"]["event_type"]
+          wallet_transaction_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          channel?: string | null
+          created_at?: string
+          customer_id?: string | null
+          direction?: Database["public"]["Enums"]["msg_direction"] | null
+          external_id?: string | null
+          id?: string
+          job_id?: string | null
+          occurred_at?: string
+          organization_id?: string
+          payload?: Json
+          recurring_plan_id?: string | null
+          source?: Database["public"]["Enums"]["event_source"]
+          type?: Database["public"]["Enums"]["event_type"]
+          wallet_transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_recurring_plan_id_fkey"
+            columns: ["recurring_plan_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_wallet_transaction_id_fkey"
+            columns: ["wallet_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jobs: {
         Row: {
           cadence_profile_id: string | null
@@ -818,6 +908,23 @@ export type Database = {
         Returns: Json
       }
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
+      record_event: {
+        Args: {
+          p_body?: string
+          p_channel?: string
+          p_customer_id?: string
+          p_direction?: Database["public"]["Enums"]["msg_direction"]
+          p_external_id?: string
+          p_job_id?: string
+          p_org_id: string
+          p_payload?: Json
+          p_plan_id?: string
+          p_source: Database["public"]["Enums"]["event_source"]
+          p_type: Database["public"]["Enums"]["event_type"]
+          p_wallet_txn_id?: string
+        }
+        Returns: string
+      }
       resolve_charge_rate: {
         Args: { p_channel?: string; p_org_id: string }
         Returns: {
@@ -844,9 +951,24 @@ export type Database = {
       }
     }
     Enums: {
+      event_source: "stripe" | "telnyx" | "agent" | "system" | "app"
+      event_type:
+        | "payment_succeeded"
+        | "payment_refunded"
+        | "message_sent"
+        | "message_delivered"
+        | "message_failed"
+        | "reply_received"
+        | "activation_sent"
+        | "conversion_offer_sent"
+        | "recurring_booked"
+        | "opted_out"
+        | "scheduled_message_queued"
+        | "agent_action"
       job_kind: "one_time" | "recurring"
       job_status: "scheduled" | "completed" | "cancelled" | "no_show"
       membership_role: "owner" | "staff"
+      msg_direction: "outbound" | "inbound"
       plan_risk_level: "none" | "low" | "medium" | "high"
       plan_status: "pending" | "active" | "paused" | "cancelled"
       retention_event_type:
@@ -1004,9 +1126,25 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      event_source: ["stripe", "telnyx", "agent", "system", "app"],
+      event_type: [
+        "payment_succeeded",
+        "payment_refunded",
+        "message_sent",
+        "message_delivered",
+        "message_failed",
+        "reply_received",
+        "activation_sent",
+        "conversion_offer_sent",
+        "recurring_booked",
+        "opted_out",
+        "scheduled_message_queued",
+        "agent_action",
+      ],
       job_kind: ["one_time", "recurring"],
       job_status: ["scheduled", "completed", "cancelled", "no_show"],
       membership_role: ["owner", "staff"],
+      msg_direction: ["outbound", "inbound"],
       plan_risk_level: ["none", "low", "medium", "high"],
       plan_status: ["pending", "active", "paused", "cancelled"],
       retention_event_type: [
