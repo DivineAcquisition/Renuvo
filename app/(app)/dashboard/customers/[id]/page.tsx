@@ -1,16 +1,35 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
-import { createClient } from "@/lib/supabase/server";
+import { getCustomerDetail } from "@/lib/customers/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Takeover } from "./Takeover";
+import { Button } from "@/components/ui/button";
+import { Money } from "@/components/ui/money";
+import { RiskBadge } from "@/components/ui/risk-badge";
+import { fromCents } from "@/lib/money";
 
-import { fromCents, formatMoney } from "@/lib/money";
+const ACTIVITY_COPY: Record<string, string> = {
+  plan_created: "Plan created",
+  activated: "Started recurring service",
+  paused: "Plan paused",
+  resumed: "Plan resumed",
+  cancelled: "Plan cancelled",
+  save_offer_sent: "Save offer sent",
+  save_offer_accepted: "Save offer accepted",
+  winback_sent: "Win-back sent",
+  winback_recovered: "Came back",
+  payment_failed: "Payment failed",
+  payment_recovered: "Payment recovered",
+};
 
-function money(c?: number | null) {
-  return c == null ? "—" : formatMoney(fromCents(c));
+function relTime(iso: string) {
+  const d = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (d < 1) return "today";
+  if (d === 1) return "yesterday";
+  return `${d}d ago`;
 }
 
-export default async function CustomerProfile({
+export default async function CustomerDetail({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -18,125 +37,121 @@ export default async function CustomerProfile({
   const { id } = await params;
   const active = await getActiveOrg();
   if (!active) return null;
-  const supabase = await createClient();
-
-  const { data: customer } = await supabase
-    .from("customers")
-    .select("id, full_name, phone, sms_sendable, agent_paused")
-    .eq("id", id)
-    .eq("organization_id", active.org.id)
-    .maybeSingle();
+  const { customer, plans, events } = await getCustomerDetail(active.org.id, id);
   if (!customer) notFound();
 
-  const [{ data: plan }, { data: timeline }] = await Promise.all([
-    supabase
-      .from("recurring_plans")
-      .select(
-        "status, risk_level, price_cents, currency, next_service_at, cadence_profiles(label)"
-      )
-      .eq("customer_id", id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("events")
-      .select("type, direction, body, occurred_at")
-      .eq("organization_id", active.org.id)
-      .eq("customer_id", id)
-      .order("occurred_at", { ascending: false })
-      .limit(50),
-  ]);
-
-  const conversation = (timeline ?? [])
-    .filter(
-      (e) => e.body && (e.direction === "inbound" || e.direction === "outbound")
-    )
-    .reverse();
+  const isOwner = active.role === "owner";
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-2">
-        <div>
-          <h1 className="font-display text-2xl font-bold">
-            {customer.full_name ?? "Customer"}
-          </h1>
-          <p className="font-mono text-sm text-muted-foreground">
-            {customer.phone}
-          </p>
-        </div>
-
-        {/* conversation */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Conversation</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {conversation.length === 0 && (
-              <p className="text-sm text-muted-foreground">No messages yet.</p>
-            )}
-            {conversation.map((m, i) => (
-              <div
-                key={i}
-                className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                  m.direction === "outbound"
-                    ? "ml-auto bg-primary text-primary-foreground"
-                    : "bg-secondary"
-                }`}
-              >
-                {m.body}
+    <div className="mx-auto max-w-3xl space-y-6">
+      {/* header */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#9A8CFF] to-[#4F38FF] text-sm font-bold text-white">
+                {(customer.full_name ?? "C").slice(0, 2).toUpperCase()}
+              </span>
+              <div>
+                <h1 className="font-display text-xl font-bold">
+                  {customer.full_name ?? "Customer"}
+                </h1>
+                <p className="font-mono text-sm text-muted-foreground">
+                  {customer.phone}
+                </p>
+                {customer.email && (
+                  <p className="text-xs text-muted-foreground">
+                    {customer.email}
+                  </p>
+                )}
               </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* human takeover */}
-        <Takeover
-          customerId={customer.id}
-          sendable={!!customer.sms_sendable}
-          agentPaused={customer.agent_paused}
-        />
-      </div>
-
-      {/* plan sidebar */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recurring plan</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {plan ? (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className="font-medium capitalize">{plan.status}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Cadence</span>
-                  <span className="font-medium">
-                    {(plan.cadence_profiles as unknown as {
-                      label: string;
-                    } | null)?.label ?? "—"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Price</span>
-                  <span className="font-mono font-medium">
-                    {money(plan.price_cents)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Risk</span>
-                  <span className="font-medium capitalize">
-                    {plan.risk_level}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <p className="text-muted-foreground">No recurring plan yet.</p>
+            </div>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                customer.sms_sendable
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-secondary text-muted-foreground"
+              }`}
+            >
+              {customer.sms_sendable ? "Sendable" : "No SMS consent"}
+            </span>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/inbox/${customer.id}`}>Message</Link>
+            </Button>
+            {isOwner && (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/dashboard/customers/${customer.id}/edit`}>
+                  Edit
+                </Link>
+              </Button>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* plans */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recurring plans</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {plans.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No recurring plan yet.
+            </p>
+          ) : (
+            plans.map((p) => {
+              const cadence = p.cadence_profiles as unknown as {
+                label: string;
+              } | null;
+              return (
+                <Link
+                  key={p.id}
+                  href={`/dashboard/plans/${p.id}`}
+                  className="flex items-center justify-between rounded-xl border p-3 text-sm hover:border-primary/40"
+                >
+                  <div>
+                    <p className="font-medium capitalize">{p.status}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {cadence?.label ?? "—"} ·{" "}
+                      <Money value={fromCents(p.price_cents)} />/visit
+                    </p>
+                  </div>
+                  {p.risk_level && p.risk_level !== "none" && (
+                    <RiskBadge level={p.risk_level} />
+                  )}
+                </Link>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
+
+      {/* activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Activity</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No activity yet.</p>
+          ) : (
+            events.map((e) => (
+              <div
+                key={e.id}
+                className="flex items-center justify-between border-b py-2 text-sm last:border-0"
+              >
+                <span>{ACTIVITY_COPY[e.type] ?? e.type}</span>
+                <span className="text-xs text-muted-foreground">
+                  {relTime(e.occurred_at)}
+                </span>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

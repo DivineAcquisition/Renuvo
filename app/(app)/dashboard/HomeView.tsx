@@ -10,7 +10,6 @@ import {
   BarChart3,
   Wallet,
   Upload,
-  Settings,
   CheckCircle2,
   Circle,
   Activity,
@@ -311,7 +310,7 @@ export function HomeView({
                     {attention.failedPayments.map((p) => (
                       <Link
                         key={p.id}
-                        href={`/dashboard/customers/${p.customer_id}`}
+                        href={`/dashboard/plans/${p.id}`}
                         className="flex items-center justify-between rounded-xl border p-3 text-sm hover:border-primary/40"
                       >
                         <span className="flex items-center gap-2">
@@ -334,7 +333,7 @@ export function HomeView({
                     {attention.replies.map((r) => (
                       <Link
                         key={r.id}
-                        href={`/dashboard/customers/${r.id}`}
+                        href={`/dashboard/inbox/${r.id}`}
                         className="flex items-center justify-between rounded-xl border p-3 text-sm hover:border-primary/40"
                       >
                         <span className="flex items-center gap-2">
@@ -405,22 +404,18 @@ export function HomeView({
       <Reveal delay={0.22}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: "Analytics", href: "/dashboard/analytics", Icon: BarChart3 },
+            { label: "Inbox", href: "/dashboard/inbox", Icon: MessageSquareText },
             {
-              label: "Import customers",
-              href: "/onboarding",
+              label: "Add customer",
+              href: "/dashboard/customers/new",
               Icon: Upload,
               owner: true,
             },
+            { label: "Analytics", href: "/dashboard/analytics", Icon: BarChart3 },
             {
               label: "Billing",
               href: "/dashboard/settings/payments",
               Icon: Wallet,
-            },
-            {
-              label: "Messaging",
-              href: "/dashboard/settings/messaging",
-              Icon: Settings,
             },
           ]
             .filter((a) => !a.owner || isOwner)

@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Home,
+  Inbox,
+  Users,
   BarChart3,
   MessageSquare,
   CalendarClock,
   Wallet,
-  Users,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ import { LogoMark } from "@/components/ui/logo";
 
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, exact: true },
+  { href: "/dashboard/inbox", label: "Inbox", icon: Inbox },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   {
     href: "/dashboard/settings/messaging",
