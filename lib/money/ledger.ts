@@ -3,7 +3,7 @@ import type { Microdollars } from "@/lib/money";
 
 export async function recordFinancialEntry(e: {
   orgId: string;
-  category: "subscription_fee" | "adjustment";
+  category: "subscription_fee" | "saas_fee" | "adjustment";
   bucket: "platform_revenue" | "tenant_in" | "tenant_out" | "platform_cost";
   amountMicrodollars: Microdollars;
   source: string;

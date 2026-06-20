@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { recordPayment } from "@/lib/payments/record";
 import { recordFinancialEntry } from "@/lib/money/ledger";
 import { fromStripeAmount } from "@/lib/money";
+import { getServerSecret } from "@/lib/secrets";
 import { log } from "@/lib/log";
 import type Stripe from "stripe";
 
@@ -12,13 +13,10 @@ export async function POST(req: NextRequest) {
   const sig = req.headers.get("stripe-signature")!;
 
   const stripe = await getStripe();
+  const whsec = (await getServerSecret("STRIPE_WEBHOOK_SECRET")) ?? "";
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(
-      body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
+    event = stripe.webhooks.constructEvent(body, sig, whsec);
   } catch {
     log.error("webhook.stripe.bad_signature");
     return NextResponse.json({ error: "bad signature" }, { status: 400 });
@@ -91,6 +89,90 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (seen) return NextResponse.json({ received: true });
 
+    // ---- PLATFORM account (flows 1 & 2): Renuvo's SaaS billing. No event.account.
+    if (!event.account) {
+      let platformOrgId: string | null = null;
+
+      if (event.type === "customer.subscription.deleted") {
+        const sub = event.data.object as Stripe.Subscription;
+        const { data: org } = await admin
+          .from("organizations")
+          .select("id")
+          .eq("platform_subscription_id", sub.id)
+          .maybeSingle();
+        if (org) {
+          platformOrgId = org.id;
+          await admin
+            .from("organizations")
+            .update({ subscription_status: "canceled" })
+            .eq("id", org.id);
+        }
+      } else {
+        const inv = event.data.object as {
+          id?: string;
+          amount_paid?: number;
+          subscription?: string | { id?: string } | null;
+          lines?: { data?: { period?: { end?: number } }[] };
+        };
+        const psubId =
+          typeof inv.subscription === "string"
+            ? inv.subscription
+            : inv.subscription?.id ?? null;
+        if (psubId) {
+          const { data: org } = await admin
+            .from("organizations")
+            .select("id")
+            .eq("platform_subscription_id", psubId)
+            .maybeSingle();
+          if (org) {
+            platformOrgId = org.id;
+            if (event.type === "invoice.payment_failed") {
+              await admin
+                .from("organizations")
+                .update({ subscription_status: "past_due" })
+                .eq("id", org.id);
+            } else {
+              // invoice.payment_succeeded → active + period end + SaaS revenue
+              const periodEnd = inv.lines?.data?.[0]?.period?.end;
+              await admin
+                .from("organizations")
+                .update({
+                  subscription_status: "active",
+                  current_period_end: periodEnd
+                    ? new Date(periodEnd * 1000).toISOString()
+                    : null,
+                })
+                .eq("id", org.id);
+              const paid = inv.amount_paid ?? 0;
+              if (paid > 0) {
+                await recordFinancialEntry({
+                  orgId: org.id,
+                  category: "saas_fee",
+                  bucket: "platform_revenue",
+                  amountMicrodollars: fromStripeAmount(paid),
+                  source: "stripe",
+                  reference: inv.id ?? event.id,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // mark processed (idempotency) if we resolved an org
+      if (platformOrgId) {
+        await admin.rpc("record_event", {
+          p_org_id: platformOrgId,
+          p_type: "agent_action",
+          p_source: "stripe",
+          p_external_id: event.id,
+          p_payload: { action: "platform_billing", stripe_type: event.type },
+        });
+      }
+      return NextResponse.json({ received: true });
+    }
+
+    // ---- CONNECTED account (flow 3): the tenant's customers ----
     // resolve the subscription id, then the owned plan
     let subId: string | null = null;
     if (event.type === "customer.subscription.deleted") {

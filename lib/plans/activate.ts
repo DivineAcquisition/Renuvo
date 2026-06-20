@@ -5,6 +5,7 @@ import { intervalToStripe, nextVisitDates } from "./cadence";
 import { generateMessage } from "@/lib/agent/generate";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
 import { writeVisitsToCalendar } from "@/lib/calendar/sync";
+import { getEntitlement } from "@/lib/billing/entitlements";
 
 const FIRST_INSTANCES = 4;
 
@@ -70,6 +71,18 @@ export async function activateRecurringPlan(
     return { ok: false, reason: "no_connected_account" };
   if (!cadence || !plan.stripe_customer_id)
     return { ok: false, reason: "missing_billing_context" };
+
+  // plan gating: enforce the org's max_active_plans entitlement (Prompt 30)
+  const maxActive = await getEntitlement(plan.organization_id, "max_active_plans");
+  if (typeof maxActive === "number") {
+    const { count } = await admin
+      .from("recurring_plans")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", plan.organization_id)
+      .eq("status", "active");
+    if ((count ?? 0) >= maxActive)
+      return { ok: false, reason: "plan_limit_reached" };
+  }
 
   const acct = org.stripe_account_id;
   const rec = intervalToStripe(cadence.interval_days);

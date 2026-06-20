@@ -8,17 +8,39 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Money } from "@/components/ui/money";
 import { WalletCard } from "./WalletCard";
+import { PlanCard } from "./PlanCard";
+
+type OrgBilling = {
+  stripe_account_id: string | null;
+  subscription_status: string | null;
+  subscription_plan_id: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+};
 
 export default async function PaymentsSettings() {
   const active = await getActiveOrg();
   if (!active) return null;
 
   const admin = createAdminClient();
-  const { data: org } = await admin
+  const { data: orgRow } = await admin
     .from("organizations")
-    .select("stripe_account_id")
+    .select(
+      "stripe_account_id, subscription_status, subscription_plan_id, trial_ends_at, current_period_end"
+    )
     .eq("id", active.org.id)
     .single();
+  const org = orgRow as unknown as OrgBilling | null;
+  const { data: plansRaw } = await admin
+    .from("subscription_plans")
+    .select("id, name, price_cents, active")
+    .eq("active", true)
+    .order("price_cents");
+  const plans = (plansRaw ?? []) as unknown as {
+    id: string;
+    name: string;
+    price_cents: number;
+  }[];
   const wallet = await getWallet(active.org.id);
   if (!wallet) return null;
   const connected = !!org?.stripe_account_id;
@@ -28,7 +50,17 @@ export default async function PaymentsSettings() {
     <div className="max-w-2xl space-y-6">
       <h1 className="font-display text-2xl font-bold">Payments &amp; billing</h1>
 
-      {/* Connect */}
+      {/* Flow 1 — your Renuvo plan (SaaS subscription on the platform account) */}
+      <PlanCard
+        status={org?.subscription_status ?? "none"}
+        currentPlanId={org?.subscription_plan_id ?? null}
+        trialEndsAt={org?.trial_ends_at ?? null}
+        currentPeriodEnd={org?.current_period_end ?? null}
+        plans={plans}
+        isOwner={active.role === "owner"}
+      />
+
+      {/* Flow 3 — your Stripe connection (you charge YOUR clients) */}
       <Card>
         <CardHeader>
           <CardTitle>Your Stripe account</CardTitle>

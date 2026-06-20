@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateMessage, mapEventKeyToEventType } from "./generate";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
 import { canSendNow } from "./guardrails";
+import { canRunAgent } from "@/lib/billing/entitlements";
 import { log } from "@/lib/log";
 import type { Database } from "@/types/database";
 
@@ -81,8 +82,25 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
     failed = 0,
     deferred = 0;
 
+  // cache the per-org subscription gate for this run
+  const agentOk = new Map<string, boolean>();
+
   for (const row of rows) {
     try {
+      // plan gating: a delinquent SaaS subscription pauses the agent loop
+      let ok = agentOk.get(row.organization_id);
+      if (ok === undefined) {
+        ok = await canRunAgent(row.organization_id);
+        agentOk.set(row.organization_id, ok);
+      }
+      if (!ok) {
+        await setStatus(row.id, "skipped", {
+          cancel_reason: "subscription_inactive",
+        });
+        skipped++;
+        continue;
+      }
+
       // send-time policy (quiet hours / rate limit — Prompt 22)
       const gate = await canSendNow(row.organization_id, row.customer_id);
       if (!gate.allowed) {
