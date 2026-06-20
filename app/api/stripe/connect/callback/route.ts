@@ -26,10 +26,28 @@ export async function GET(req: NextRequest) {
     });
     const connectedAccountId = token.stripe_user_id!;
 
+    // pull readiness so the UI + capture flow know whether the tenant can charge
+    let chargesEnabled = false;
+    let payoutsEnabled = false;
+    let detailsSubmitted = false;
+    try {
+      const acct = await stripe.accounts.retrieve(connectedAccountId);
+      chargesEnabled = !!acct.charges_enabled;
+      payoutsEnabled = !!acct.payouts_enabled;
+      detailsSubmitted = !!acct.details_submitted;
+    } catch {
+      /* best-effort; account.updated webhook will reconcile */
+    }
+
     const admin = createAdminClient();
     await admin
       .from("organizations")
-      .update({ stripe_account_id: connectedAccountId })
+      .update({
+        stripe_account_id: connectedAccountId,
+        stripe_charges_enabled: chargesEnabled,
+        stripe_payouts_enabled: payoutsEnabled,
+        stripe_details_submitted: detailsSubmitted,
+      })
       .eq("id", active.org.id);
 
     settings.searchParams.set("connected", "1");
