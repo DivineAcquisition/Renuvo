@@ -4,15 +4,18 @@ import { useFormState } from "react-dom";
 import Link from "next/link";
 import { signIn, type AuthResult } from "@/app/actions/auth";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/submit-button";
 
 export default function LoginPage() {
   const [state, action] = useFormState<AuthResult, FormData>(signIn, undefined);
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-sm">
+    <>
+      <div
+        className="glass rounded-2xl p-7"
+        style={{ boxShadow: "0 30px 80px -40px rgba(79,56,255,.4)" }}
+      >
         <h1 className="font-display text-2xl font-bold tracking-tight">
           Welcome back
         </h1>
@@ -21,36 +24,40 @@ export default function LoginPage() {
         </p>
 
         <form action={action} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+          <Field label="Email" htmlFor="email">
             <Input
               id="email"
               name="email"
               type="email"
               placeholder="you@company.com"
+              autoComplete="email"
               required
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" name="password" type="password" required />
-          </div>
+          </Field>
+          <Field label="Password" htmlFor="password">
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+          </Field>
           {state?.error && (
-            <p className="text-sm text-destructive">{state.error}</p>
+            <p className="text-sm font-medium text-destructive">{state.error}</p>
           )}
-          <SubmitButton pendingText="Signing in…">Sign in</SubmitButton>
+          <SubmitButton variant="gradient" size="lg" pendingText="Signing in…">
+            Sign in
+          </SubmitButton>
         </form>
-
-        <p className="mt-6 text-sm text-muted-foreground">
-          No account?{" "}
-          <Link
-            href="/signup"
-            className="font-medium text-primary hover:underline"
-          >
-            Create one
-          </Link>
-        </p>
       </div>
-    </main>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        No account?{" "}
+        <Link href="/signup" className="font-semibold text-primary hover:underline">
+          Create one
+        </Link>
+      </p>
+    </>
   );
 }

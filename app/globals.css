@@ -260,6 +260,31 @@
   animation: shimmer 1.4s ease infinite;
 }
 
+/* Aurora — a soft, slow brand-gradient backdrop (re-tokenized; one signature per
+   surface). Used on auth + first-impression panels. Static under reduced-motion. */
+.aurora-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aurora-bg::before {
+  content: "";
+  position: absolute;
+  inset: -45%;
+  background:
+    radial-gradient(38% 48% at 22% 28%, rgba(106, 87, 255, 0.55), transparent 60%),
+    radial-gradient(40% 44% at 80% 22%, rgba(154, 140, 255, 0.45), transparent 60%),
+    radial-gradient(48% 52% at 62% 82%, rgba(79, 56, 255, 0.5), transparent 60%);
+  filter: blur(44px);
+  animation: aurora 20s ease-in-out infinite alternate;
+}
+@keyframes aurora {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(-4%, 3%, 0) rotate(8deg); }
+  100% { transform: translate3d(3%, -3%, 0) rotate(-6deg); }
+}
+
 @keyframes pulse {
   0% { transform: scale(0.8); opacity: 0.8; }
   70% { transform: scale(2.2); opacity: 0; }

@@ -7,6 +7,7 @@ import { Menu, Search, X, Bell } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import { markNotificationsRead } from "@/app/actions/controls";
 import { SidebarContent } from "./SidebarContent";
+import { CommandPalette } from "./CommandPalette";
 
 type Notif = {
   id: string;
@@ -160,38 +161,8 @@ export function Topbar({
         )}
       </AnimatePresence>
 
-      {/* ⌘K placeholder modal (real search wired later) */}
-      <AnimatePresence>
-        {searchOpen && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[15vh]">
-            <motion.div
-              className="absolute inset-0 bg-foreground/30 backdrop-blur-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSearchOpen(false)}
-            />
-            <motion.div
-              className="glass relative w-full max-w-lg rounded-2xl p-4"
-              initial={{ opacity: 0, y: 12, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-            >
-              <div className="flex items-center gap-2 border-b pb-3">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <input
-                  autoFocus
-                  placeholder="Search clients, plans, messages…"
-                  className="w-full bg-transparent text-sm outline-none"
-                />
-              </div>
-              <p className="px-1 pt-3 text-xs text-muted-foreground">
-                Search is coming soon.
-              </p>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* ⌘K command palette — navigate + quick actions */}
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
     </>
   );
 }
