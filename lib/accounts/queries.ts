@@ -18,6 +18,7 @@ export type AccountRow = {
   created_at: string;
   cadence_label: string | null;
   cadence_key: string | null;
+  package_name: string | null;
   customer: { id: string; full_name: string | null; sms_sendable: boolean } | null;
 };
 
@@ -32,7 +33,8 @@ export async function listAccounts(
     .select(
       `id, status, risk_level, price_cents, next_service_at, created_at,
        customers!inner ( id, full_name, sms_sendable ),
-       cadence_profiles!inner ( key, label, interval_days )`
+       cadence_profiles!inner ( key, label, interval_days ),
+       service_packages ( name )`
     )
     .eq("organization_id", orgId);
 
@@ -66,6 +68,7 @@ export async function listAccounts(
       full_name: string | null;
       sms_sendable: boolean;
     } | null;
+    const pkg = r.service_packages as unknown as { name?: string } | null;
     return {
       id: r.id,
       status: r.status,
@@ -75,6 +78,7 @@ export async function listAccounts(
       created_at: r.created_at,
       cadence_label: cad?.label ?? null,
       cadence_key: cad?.key ?? null,
+      package_name: pkg?.name ?? null,
       customer: cust,
     };
   });

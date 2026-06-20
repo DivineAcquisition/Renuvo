@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { resolveSignupToken } from "@/lib/capture/token";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgSettings } from "@/lib/settings/resolve";
+import { getActiveMenu } from "@/lib/packages/compose";
 import { EnrollForm } from "./EnrollForm";
 import { GenericLeadForm } from "./GenericLeadForm";
 
@@ -50,6 +51,9 @@ export default async function CapturePage({
       (c.key != null && offered.includes(c.key))
   );
 
+  // the business's service menu (packages + add-ons). Empty → legacy single price.
+  const menu = await getActiveMenu(offer.orgId);
+
   const isGeneric = offer.linkType === "generic" || !offer.customerId;
 
   return (
@@ -76,12 +80,27 @@ export default async function CapturePage({
             priceCents={offer.priceCents}
             currency={offer.currency}
             cadences={(cadences ?? []).map(
-              (c: { id: string; label: string }) => ({
+              (c: { id: string; label: string; key?: string | null }) => ({
                 id: c.id,
                 label: c.label,
+                key: c.key,
               })
             )}
             defaultCadenceId={offer.cadenceProfileId ?? ""}
+            packages={menu.packages.map((p) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              basePriceCents: p.base_price_cents,
+              defaultCadenceKey: p.default_cadence_key,
+              discountPct: p.recurring_discount_pct,
+            }))}
+            addons={menu.addons.map((a) => ({
+              id: a.id,
+              name: a.name,
+              priceCents: a.price_cents,
+            }))}
+            orgDiscountPct={menu.orgDiscountPct}
           />
         )}
         <p className="mt-4 text-center text-[11px] text-muted-foreground">

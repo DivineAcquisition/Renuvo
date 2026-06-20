@@ -313,6 +313,7 @@ export function AccountsView({
                     </th>
                   )}
                   <th className="px-3 py-2">Customer</th>
+                  <th className="px-3 py-2">Package</th>
                   <th className="px-3 py-2">Cadence</th>
                   <th className="px-3 py-2">Price</th>
                   <th className="px-3 py-2">Status</th>
@@ -338,6 +339,9 @@ export function AccountsView({
                       >
                         {a.customer?.full_name ?? "Customer"}
                       </Link>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {a.package_name ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {a.cadence_label ?? "—"}

@@ -26,7 +26,7 @@ export default async function PortalOverview() {
     admin
       .from("recurring_plans")
       .select(
-        "id, status, price_cents, next_service_at, stripe_subscription_id, cadence_profile_id, cadence_profiles(label)"
+        "id, status, price_cents, next_service_at, stripe_subscription_id, cadence_profile_id, cadence_profiles(label), service_packages(name)"
       )
       .eq("organization_id", s.orgId)
       .eq("customer_id", s.customerId)
@@ -89,16 +89,34 @@ export default async function PortalOverview() {
   const cadenceLabel =
     (plan.cadence_profiles as unknown as { label?: string } | null)?.label ??
     "Recurring";
+  const pkgName = (plan.service_packages as unknown as { name?: string } | null)
+    ?.name;
+  const { data: lineItems } = await admin
+    .from("plan_line_items")
+    .select("id, label, price_cents")
+    .eq("organization_id", s.orgId)
+    .eq("recurring_plan_id", plan.id)
+    .order("created_at", { ascending: true });
 
   return (
     <div className="space-y-5">
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <p className="text-sm text-[#6b6880]">Your plan</p>
-        <h1 className="mt-1 font-display text-2xl font-bold">{cadenceLabel}</h1>
+        <h1 className="mt-1 font-display text-2xl font-bold">
+          {pkgName ?? cadenceLabel}
+        </h1>
         <p className="mt-1 text-sm">
+          {pkgName ? `${cadenceLabel} · ` : ""}
           <Money value={fromCents(plan.price_cents)} />/visit · next{" "}
           {date(plan.next_service_at)}
         </p>
+        {lineItems && lineItems.length > 0 && (
+          <p className="mt-1 text-xs text-[#6b6880]">
+            {lineItems
+              .map((li) => `${li.label} $${(li.price_cents / 100).toFixed(0)}`)
+              .join(" + ")}
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded-full bg-[#f0eefc] px-2.5 py-1 font-semibold capitalize text-[#4F38FF]">
             {plan.status}

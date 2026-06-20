@@ -6,6 +6,7 @@ import { cancelPendingMessages } from "@/lib/agent/engine";
 import { activateRecurringPlan } from "@/lib/plans/activate"; // stub → Prompt 20
 import { recordConsent } from "@/lib/consent";
 import { markWinbackRecovered } from "@/lib/winback/recovery";
+import { composePlan } from "@/lib/packages/compose";
 
 export type EnrollResult =
   | { error: string; planId?: string }
@@ -20,6 +21,8 @@ export async function enrollRecurring(input: {
   stripeCustomerId: string;
   email?: string;
   emailConsent?: boolean;
+  packageId?: string;
+  addonIds?: string[];
 }): Promise<EnrollResult> {
   if (!input.billingConsent) return { error: "billing_consent_required" };
 
@@ -61,6 +64,21 @@ export async function enrollRecurring(input: {
       });
   }
 
+  // Service packages (Prompt 47): if a package was chosen, compute the total from
+  // the CURRENT menu and snapshot it onto the plan. No package → legacy single price.
+  let composed: Awaited<ReturnType<typeof composePlan>> | null = null;
+  if (input.packageId) {
+    try {
+      composed = await composePlan(offer.orgId, {
+        packageId: input.packageId,
+        addonIds: input.addonIds ?? [],
+      });
+    } catch {
+      return { error: "package_not_available" };
+    }
+  }
+  const planPriceCents = composed ? composed.totalCents : offer.priceCents;
+
   // 2) CREATE THE OWNED PLAN (pending) + plan_created retention event (Prompt 6).
   // The public page has no auth session, so we go through the service-role client
   // (create_recurring_plan is SECURITY INVOKER; service_role bypasses RLS).
@@ -71,7 +89,7 @@ export async function enrollRecurring(input: {
       p_customer: customerId,
       p_origin_job: offer.jobId ?? undefined,
       p_cadence: input.cadenceProfileId,
-      p_price_cents: offer.priceCents,
+      p_price_cents: planPriceCents,
       p_currency: offer.currency,
     }
   );
@@ -84,15 +102,34 @@ export async function enrollRecurring(input: {
   // 3) attach the billing identity to the plan (subscription created in Prompt 20).
   // If this came from a win-back link, record the incentive on the plan so
   // margin/LTV reporting stays honest about what we gave away.
+  const meta: Record<string, unknown> = {};
+  if (offer.winbackDiscountPct > 0)
+    meta.winback_discount_pct = offer.winbackDiscountPct;
+  if (composed && composed.discountPct > 0)
+    meta.package_discount_pct = composed.discountPct;
+
   await admin
     .from("recurring_plans")
     .update({
       stripe_customer_id: input.stripeCustomerId,
-      ...(offer.winbackDiscountPct > 0
-        ? { meta: { winback_discount_pct: offer.winbackDiscountPct } }
-        : {}),
+      ...(composed ? { service_package_id: input.packageId } : {}),
+      ...(Object.keys(meta).length ? { meta } : {}),
     })
     .eq("id", plan.id);
+
+  // snapshot the composition — the immutable record of what they agreed to
+  if (composed) {
+    await admin.from("plan_line_items").insert(
+      composed.lineItems.map((li) => ({
+        organization_id: offer.orgId,
+        recurring_plan_id: plan.id,
+        kind: li.kind,
+        ref_id: li.ref_id,
+        label: li.label,
+        price_cents: li.price_cents,
+      }))
+    );
+  }
 
   // 4) consume the token (single-use) + stop the conversion sequence
   await consumeSignupToken(offer.linkId);
