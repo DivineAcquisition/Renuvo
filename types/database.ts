@@ -95,6 +95,7 @@ export type Database = {
       }
       customers: {
         Row: {
+          agent_paused: boolean
           created_at: string
           email: string | null
           external_ref: string | null
@@ -113,6 +114,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_paused?: boolean
           created_at?: string
           email?: string | null
           external_ref?: string | null
@@ -131,6 +133,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_paused?: boolean
           created_at?: string
           email?: string | null
           external_ref?: string | null
@@ -1133,6 +1136,14 @@ export type Database = {
           connected: boolean
           enabled: boolean
         }[]
+      }
+      get_dashboard_metrics: {
+        Args: { p_org_id: string }
+        Returns: Json
+      }
+      get_monthly_conversions: {
+        Args: { p_org_id: string }
+        Returns: Json
       }
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
       record_event: {

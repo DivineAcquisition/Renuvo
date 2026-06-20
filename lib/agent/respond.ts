@@ -22,13 +22,26 @@ export async function handleInboundMessage(args: {
 }) {
   const admin = createAdminClient();
 
-  // load the customer (phone + sendable)
+  // load the customer (phone + sendable + takeover flag)
   const { data: customer } = await admin
     .from("customers")
-    .select("phone, sms_sendable")
+    .select("phone, sms_sendable, agent_paused")
     .eq("id", args.customerId)
     .single();
   if (!customer?.sms_sendable) return; // opted out / no consent → don't reply
+
+  // HUMAN TAKEOVER: a person is handling this thread — log it, don't auto-reply.
+  // (The reply_received event is already written by the inbound webhook.)
+  if (customer.agent_paused) {
+    await admin.rpc("record_event", {
+      p_org_id: args.orgId,
+      p_type: "agent_action",
+      p_source: "agent",
+      p_customer_id: args.customerId,
+      p_payload: { action: "skipped_paused", inbound: args.text },
+    });
+    return;
+  }
 
   // DE-DUPE: if we already handled this exact inbound (webhook redelivery), stop.
   const marker = args.externalId
