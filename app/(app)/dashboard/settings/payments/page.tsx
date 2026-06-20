@@ -12,6 +12,7 @@ import { PlanCard } from "./PlanCard";
 
 type OrgBilling = {
   stripe_account_id: string | null;
+  stripe_charges_enabled: boolean | null;
   subscription_status: string | null;
   subscription_plan_id: string | null;
   trial_ends_at: string | null;
@@ -26,7 +27,7 @@ export default async function PaymentsSettings() {
   const { data: orgRow } = await admin
     .from("organizations")
     .select(
-      "stripe_account_id, subscription_status, subscription_plan_id, trial_ends_at, current_period_end"
+      "stripe_account_id, stripe_charges_enabled, subscription_status, subscription_plan_id, trial_ends_at, current_period_end"
     )
     .eq("id", active.org.id)
     .single();
@@ -58,6 +59,7 @@ export default async function PaymentsSettings() {
         currentPeriodEnd={org?.current_period_end ?? null}
         plans={plans}
         isOwner={active.role === "owner"}
+        hasCard={!!wallet.stripe_payment_method_id}
       />
 
       {/* Flow 3 — your Stripe connection (you charge YOUR clients) */}
@@ -72,15 +74,23 @@ export default async function PaymentsSettings() {
             Renuvo reads events and acts on your behalf.
           </p>
           {connected ? (
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-primary">
-                Connected ✓
-              </span>
-              <form action={disconnectStripe}>
-                <Button variant="ghost" size="sm">
-                  Disconnect
-                </Button>
-              </form>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-primary">
+                  Connected ✓
+                </span>
+                <form action={disconnectStripe}>
+                  <Button variant="ghost" size="sm">
+                    Disconnect
+                  </Button>
+                </form>
+              </div>
+              {org?.stripe_charges_enabled === false && (
+                <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                  Your Stripe account can&apos;t accept charges yet. Finish Stripe&apos;s
+                  onboarding (identity/bank details) so Renuvo can bill your clients.
+                </p>
+              )}
             </div>
           ) : (
             <Button asChild>
