@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useFormState } from "react-dom";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import {
   CreditCard,
   Phone,
@@ -95,7 +96,15 @@ export function Wizard({
     setProvisioning(true);
     const res = await provisionNumberStep();
     setProvisioning(false);
-    if ("number" in res && res.number) setNumber(res.number);
+    if ("number" in res && res.number) {
+      setNumber(res.number);
+      toast.success("Texting number provisioned.");
+    } else {
+      toast.error(
+        ("error" in res && res.error) ||
+          "Couldn't get a number. Check your Telnyx setup and try again."
+      );
+    }
   }
 
   // ---- create-org screen --------------------------------------------------
