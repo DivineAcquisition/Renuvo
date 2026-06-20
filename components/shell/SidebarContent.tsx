@@ -12,6 +12,7 @@ import {
   CalendarClock,
   Wallet,
   Settings,
+  HeartHandshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CountUp } from "@/components/ui/count-up";
@@ -21,6 +22,7 @@ const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, exact: true },
   { href: "/dashboard/inbox", label: "Inbox", icon: Inbox },
   { href: "/dashboard/links", label: "Links", icon: Link2 },
+  { href: "/dashboard/winback", label: "Win-back", icon: HeartHandshake },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   {
     href: "/dashboard/settings/messaging",

@@ -80,6 +80,13 @@ export default async function ControlsPage() {
           (offerCfg?.pitch_style as "gentle" | "balanced" | "direct") ??
           "balanced",
       }}
+      winback={{
+        enabled: Boolean(offerCfg?.winback_enabled ?? false),
+        discountPct: Number(offerCfg?.winback_discount_pct ?? 0),
+        cooldownDays: Number(offerCfg?.winback_cooldown_days ?? 14),
+        maxAttempts: Number(offerCfg?.winback_max_attempts ?? 2),
+        retryGapDays: Number(offerCfg?.winback_retry_gap_days ?? 21),
+      }}
       steps={
         (steps as
           | {

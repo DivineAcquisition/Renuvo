@@ -52,6 +52,33 @@ export async function saveOfferConfig(input: {
   return { ok: true };
 }
 
+// ---- Win-back -------------------------------------------------------------
+export async function saveWinbackConfig(input: {
+  enabled: boolean;
+  discountPct: number;
+  cooldownDays: number;
+  maxAttempts: number;
+  retryGapDays: number;
+}) {
+  const active = await getActiveOrg();
+  if (!active || active.role !== "owner") return { error: "Not allowed." };
+  const admin = createAdminClient();
+  await admin.from("offer_configs").upsert(
+    {
+      organization_id: active.org.id,
+      winback_enabled: input.enabled,
+      winback_discount_pct: Math.max(0, Math.min(90, input.discountPct)),
+      winback_cooldown_days: Math.max(0, Math.min(180, Math.round(input.cooldownDays))),
+      winback_max_attempts: Math.max(1, Math.min(5, Math.round(input.maxAttempts))),
+      winback_retry_gap_days: Math.max(1, Math.min(120, Math.round(input.retryGapDays))),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "organization_id" }
+  );
+  revalidatePath(CONTROLS_PATH);
+  return { ok: true };
+}
+
 // ---- Sequence -------------------------------------------------------------
 export type SequenceStepInput = {
   template_key: string;
