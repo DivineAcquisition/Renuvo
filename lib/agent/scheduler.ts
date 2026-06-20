@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateMessage, mapEventKeyToEventType } from "./generate";
-import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
+import { dispatchMessage } from "@/lib/messaging/dispatch";
 import { canSendNow } from "./guardrails";
 import { canRunAgent } from "@/lib/billing/entitlements";
 import { log } from "@/lib/log";
@@ -152,8 +152,9 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
         continue;
       }
 
-      // guarded send (consent + deliverability + funds)
-      const res = await sendGuardedSms({
+      // route to the right channel (SMS today; email when enabled/preferred).
+      // each channel runs its own guarded path (consent/funds/quiet-hours).
+      const res = await dispatchMessage({
         orgId: row.organization_id,
         customerId: row.customer_id,
         toPhone: customer.phone,
