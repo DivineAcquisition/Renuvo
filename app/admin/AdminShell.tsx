@@ -11,6 +11,7 @@ import {
   Activity,
   ArrowLeft,
   Landmark,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ const NAV = [
   { href: "/admin/benchmarks", label: "Benchmarks", icon: BarChart3 },
   { href: "/admin/a2p", label: "A2P", icon: ShieldCheck },
   { href: "/admin/system", label: "System", icon: Activity },
+  { href: "/admin/email-preview", label: "Email", icon: Mail },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

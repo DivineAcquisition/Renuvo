@@ -1,8 +1,9 @@
+import * as React from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getServerSecret } from "@/lib/secrets";
-import { renderEmail } from "./render";
 import { signUnsub } from "./unsub";
-import { captureError, log } from "@/lib/observability/logger";
+import { sendSystemEmail } from "./send-system";
+import { CustomerGeneric } from "@/emails/customer";
+import { log } from "@/lib/observability/logger";
 
 export type EmailResult = { ok: true } | { ok: false; reason: string };
 
@@ -60,64 +61,49 @@ export async function sendGuardedEmail(args: {
     .limit(1);
   if (sup && sup.length) return { ok: false, reason: "suppressed" };
 
-  const apiKey = await getServerSecret("RESEND_API_KEY");
-  if (!apiKey) return { ok: false, reason: "email_not_configured" };
-
-  const domain = process.env.EMAIL_FROM_DOMAIN ?? "mail.renuvo.io";
-  const from = `${o.email_from_name ?? o.name} <${o.email_local_part}@${domain}>`;
   const unsubUrl = `${process.env.NEXT_PUBLIC_APP_URL}/u/${args.customerId}/${signUnsub(
     args.customerId,
     args.orgId
   )}`;
-  const html = renderEmail(args.body, {
-    businessName: o.name,
-    unsubUrl,
-    postalAddress: o.postal_address,
+  const subject = args.subject ?? `A note from ${o.name}`;
+
+  // Compose the tenant-branded React Email and send it through the unified
+  // pipeline (Prompt 52). All CAN-SPAM gates above still govern this path.
+  const react = React.createElement(CustomerGeneric, {
+    brand: { name: o.email_from_name ?? o.name },
+    body: args.body,
+    preview: subject,
+    footer: { address: o.postal_address, unsubscribeUrl: unsubUrl },
   });
 
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from,
-        to: c.email,
-        reply_to: o.email_reply_to ?? undefined,
-        subject: args.subject ?? `A note from ${o.name}`,
-        html,
-        headers: {
-          "List-Unsubscribe": `<${unsubUrl}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
-      }),
-    });
-    if (!res.ok) {
-      captureError(new Error(`resend ${res.status}`), {
-        orgId: args.orgId,
-        event: "email_send_failed",
-      });
-      return { ok: false, reason: "send_failed" };
-    }
-    const json = (await res.json()) as { id?: string };
+  const res = await sendSystemEmail({
+    audience: "homeowner",
+    klass: "marketing",
+    to: c.email,
+    subject,
+    react,
+    orgId: args.orgId,
+    fromLocalPart: o.email_local_part,
+    fromName: o.email_from_name ?? o.name,
+    replyTo: o.email_reply_to ?? undefined,
+    headers: {
+      "List-Unsubscribe": `<${unsubUrl}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    },
+  });
+  if (!res.ok) return { ok: false, reason: res.reason };
 
-    await admin.rpc("record_event", {
-      p_org_id: args.orgId,
-      p_type: "message_sent",
-      p_source: "app",
-      p_customer_id: args.customerId,
-      p_channel: "email",
-      p_direction: "outbound",
-      p_body: args.body,
-      p_external_id: json.id ? `email_${json.id}` : undefined,
-      p_payload: { ...args.meta, provider_id: json.id },
-    });
-    log.info("email_sent", { orgId: args.orgId, event: "email_sent" });
-    return { ok: true };
-  } catch (e) {
-    captureError(e, { orgId: args.orgId, event: "email_send_failed" });
-    return { ok: false, reason: "send_failed" };
-  }
+  await admin.rpc("record_event", {
+    p_org_id: args.orgId,
+    p_type: "message_sent",
+    p_source: "app",
+    p_customer_id: args.customerId,
+    p_channel: "email",
+    p_direction: "outbound",
+    p_body: args.body,
+    p_external_id: res.id ? `email_${res.id}` : undefined,
+    p_payload: { ...args.meta, provider_id: res.id },
+  });
+  log.info("email_sent", { orgId: args.orgId, event: "email_sent" });
+  return { ok: true };
 }
