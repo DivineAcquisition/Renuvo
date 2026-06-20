@@ -72,14 +72,17 @@ function Inner() {
 export function CardForm({
   clientSecret,
   stripeAccount,
+  publishableKey,
 }: {
   clientSecret: string;
   stripeAccount: string;
+  publishableKey?: string | null;
 }) {
   const [promise] = useState(() =>
-    loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!, {
-      stripeAccount,
-    })
+    loadStripe(
+      publishableKey ?? process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
+      { stripeAccount }
+    )
   );
   return (
     <Elements

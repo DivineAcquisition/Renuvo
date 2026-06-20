@@ -1,6 +1,7 @@
 "use server";
 
 import { getStripe } from "@/lib/stripe/client";
+import { getPublishableKey } from "@/lib/stripe/publishable";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveSignupToken } from "./token";
 
@@ -41,5 +42,6 @@ export async function createSignupPaymentSetup(token: string) {
     clientSecret: si.client_secret!,
     connectedAccountId: acct,
     stripeCustomerId: customer.id,
+    publishableKey: await getPublishableKey(),
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { loadStripe } from "@stripe/stripe-js";
+import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import {
   Elements,
   useStripe,
@@ -17,20 +17,22 @@ import { toast } from "sonner";
 import { updateWalletSettingsAction } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { fromCents, formatMoney } from "@/lib/money";
-
-const stripePromise = loadStripe(
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-);
 
 function money(cents: number) {
   return formatMoney(fromCents(cents));
 }
 
-function CardSetup({ onSaved }: { onSaved: () => void }) {
+function CardSetup({
+  onSaved,
+  onCancel,
+}: {
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [busy, setBusy] = useState(false);
@@ -50,16 +52,32 @@ function CardSetup({ onSaved }: { onSaved: () => void }) {
       return;
     }
     await confirmSaveCard(String(setupIntent!.payment_method));
+    toast.success("Card saved.");
     onSaved();
   }
 
   return (
-    <div className="space-y-3">
-      <PaymentElement />
+    <div className="space-y-3 rounded-xl border bg-secondary/30 p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold">Card details</p>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Cancel
+        </button>
+      </div>
+      <div className="rounded-lg border bg-background p-3">
+        <PaymentElement />
+      </div>
       {err && <p className="text-sm text-destructive">{err}</p>}
-      <Button onClick={save} disabled={busy} className="w-full">
+      <Button onClick={save} disabled={busy} className="w-full" variant="gradient">
         {busy ? "Saving…" : "Save card"}
       </Button>
+      <p className="text-center text-xs text-muted-foreground">
+        🔒 Secured by Stripe — your card never touches Renuvo.
+      </p>
     </div>
   );
 }
@@ -73,17 +91,39 @@ export function WalletCard(props: {
   isOwner: boolean;
 }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [stripePromise, setStripePromise] =
+    useState<Promise<Stripe | null> | null>(null);
   const [adding, setAdding] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   async function beginAddCard() {
-    const res = await startSaveCard();
-    if ("clientSecret" in res && res.clientSecret)
-      setClientSecret(res.clientSecret);
+    setStarting(true);
+    try {
+      const res = await startSaveCard();
+      if ("clientSecret" in res && res.clientSecret && res.publishableKey) {
+        // load Stripe.js with the server-provided key so it always matches the
+        // secret used to create the SetupIntent (no NEXT_PUBLIC mismatch).
+        setStripePromise(loadStripe(res.publishableKey));
+        setClientSecret(res.clientSecret);
+      } else {
+        toast.error(
+          "error" in res && res.error === "payments_unconfigured"
+            ? "Card payments aren't set up yet. Connect Stripe in settings."
+            : "Couldn't start the card form. Please try again."
+        );
+      }
+    } catch {
+      toast.error("Couldn't start the card form. Please try again.");
+    } finally {
+      setStarting(false);
+    }
   }
   async function topUp(amount: number) {
     setAdding(true);
-    await addFunds(amount);
+    const res = await addFunds(amount);
     setAdding(false);
+    if (res && "error" in res) toast.error(res.error ?? "Charge failed.");
+    else toast.success("Funds added.");
   }
 
   return (
@@ -128,12 +168,17 @@ export function WalletCard(props: {
                   Add $25
                 </Button>
               </div>
-            ) : clientSecret ? (
+            ) : clientSecret && stripePromise ? (
               <Elements stripe={stripePromise} options={{ clientSecret }}>
-                <CardSetup onSaved={() => setClientSecret(null)} />
+                <CardSetup
+                  onSaved={() => setClientSecret(null)}
+                  onCancel={() => setClientSecret(null)}
+                />
               </Elements>
             ) : (
-              <Button onClick={beginAddCard}>Add a card</Button>
+              <Button onClick={beginAddCard} disabled={starting} variant="gradient">
+                {starting ? "Opening…" : "Add a card"}
+              </Button>
             )}
           </>
         )}
@@ -188,8 +233,7 @@ function AutoReloadForm(props: {
           Automatically top up when the balance runs low
         </label>
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>Reload when below ($)</Label>
+          <Field label="Reload when below ($)">
             <Input
               type="number"
               min={0}
@@ -198,9 +242,8 @@ function AutoReloadForm(props: {
               onChange={(e) => setThreshold(Number(e.target.value))}
               disabled={!enabled}
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Reload amount ($)</Label>
+          </Field>
+          <Field label="Reload amount ($)">
             <Input
               type="number"
               min={1}
@@ -209,7 +252,7 @@ function AutoReloadForm(props: {
               onChange={(e) => setAmount(Number(e.target.value))}
               disabled={!enabled}
             />
-          </div>
+          </Field>
         </div>
         <Button onClick={save} disabled={busy}>
           {busy ? "Saving…" : "Save auto-reload"}

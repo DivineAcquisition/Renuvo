@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { getPortalSession, PORTAL_COOKIE } from "@/lib/portal/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/client";
+import { getPublishableKey } from "@/lib/stripe/publishable";
 import { captureError } from "@/lib/observability/logger";
 
 async function sessionOrNull() {
@@ -60,6 +61,7 @@ export async function startCardUpdate() {
       ok: true as const,
       clientSecret: si.client_secret,
       stripeAccount: acct,
+      publishableKey: await getPublishableKey(),
     };
   } catch (e) {
     captureError(e, { orgId: s.orgId, event: "portal_card_setup_failed" });
