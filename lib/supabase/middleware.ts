@@ -57,6 +57,24 @@ export async function updateSession(request: NextRequest) {
   const isProtected =
     path.startsWith("/dashboard") || path.startsWith("/onboarding");
 
+  // ROOT on the APP host: the product lives here, not the marketing site. Only
+  // the apex/root domain (renuvo.io / www) bounces to the Framer marketing page;
+  // app.renuvo.io (and the *.vercel.app deploy host) goes straight into the app.
+  if (path === "/") {
+    const isApex = host === ROOT || host === `www.${ROOT}`;
+    if (isApex) {
+      const marketing =
+        process.env.NEXT_PUBLIC_MARKETING_URL ?? `https://${ROOT}`;
+      // avoid redirecting the marketing host to itself (loop guard)
+      if (!marketing.includes(host)) {
+        return NextResponse.redirect(marketing);
+      }
+    }
+    const u = url.clone();
+    u.pathname = user ? "/dashboard" : "/login";
+    return NextResponse.redirect(u);
+  }
+
   if (!user && isProtected) {
     const u = url.clone();
     u.pathname = "/login";
