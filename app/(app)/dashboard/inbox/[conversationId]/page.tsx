@@ -34,6 +34,7 @@ export default async function ThreadPage({
           direction: m.direction,
           body: m.body,
           type: m.type,
+          channel: m.channel,
         }))}
       />
     </div>

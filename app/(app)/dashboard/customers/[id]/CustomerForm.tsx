@@ -18,13 +18,23 @@ export function CustomerForm({
     phone: string;
     email: string;
     smsConsent: boolean;
+    emailConsent?: boolean;
+    channelPreference?: "sms" | "email" | "any";
   };
 }) {
   const router = useRouter();
+  const emailChannelOn =
+    process.env.NEXT_PUBLIC_EMAIL_CHANNEL_ENABLED === "true";
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [consent, setConsent] = useState(initial?.smsConsent ?? false);
+  const [emailConsent, setEmailConsent] = useState(
+    initial?.emailConsent ?? false
+  );
+  const [channelPref, setChannelPref] = useState<"sms" | "email" | "any">(
+    initial?.channelPreference ?? "sms"
+  );
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -35,6 +45,8 @@ export function CustomerForm({
       phone,
       email: email || undefined,
       smsConsent: consent,
+      emailConsent,
+      channelPreference: emailChannelOn ? channelPref : undefined,
     });
     setBusy(false);
     if ("error" in res) {
@@ -84,6 +96,37 @@ export function CustomerForm({
             </span>
           </span>
         </label>
+        <label className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+          <input
+            type="checkbox"
+            checked={emailConsent}
+            onChange={(e) => setEmailConsent(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            This customer consented to receive email.
+            <span className="block text-xs text-muted-foreground">
+              Separate from texts (CAN-SPAM). Requires an email address. Every email
+              includes an unsubscribe link and your business address.
+            </span>
+          </span>
+        </label>
+        {emailChannelOn && (
+          <div className="space-y-1.5">
+            <Label>Preferred channel</Label>
+            <select
+              value={channelPref}
+              onChange={(e) =>
+                setChannelPref(e.target.value as "sms" | "email" | "any")
+              }
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            >
+              <option value="sms">Text (SMS)</option>
+              <option value="email">Email</option>
+              <option value="any">Either</option>
+            </select>
+          </div>
+        )}
         <Button onClick={save} disabled={busy}>
           {busy ? "Saving…" : "Save customer"}
         </Button>

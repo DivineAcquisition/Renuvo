@@ -14,7 +14,9 @@ export default async function EditCustomerPage({
   const admin = createAdminClient();
   const { data: c } = await admin
     .from("customers")
-    .select("id, full_name, phone, email, sms_consent")
+    .select(
+      "id, full_name, phone, email, sms_consent, email_sendable, channel_preference"
+    )
     .eq("id", id)
     .eq("organization_id", active.org.id)
     .maybeSingle();
@@ -29,6 +31,10 @@ export default async function EditCustomerPage({
           phone: c.phone,
           email: c.email ?? "",
           smsConsent: c.sms_consent,
+          emailConsent: (c as { email_sendable?: boolean }).email_sendable ?? false,
+          channelPreference:
+            (c as { channel_preference?: "sms" | "email" | "any" })
+              .channel_preference ?? "sms",
         }}
       />
     </div>

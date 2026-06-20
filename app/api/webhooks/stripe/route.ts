@@ -26,6 +26,16 @@ export async function POST(req: NextRequest) {
 
   log.info("webhook.stripe.received", { type: event.type });
 
+  // Stripe subscription.status → our platform sub_status enum.
+  function mapPlatformStatus(s: string): string {
+    if (s === "trialing") return "trialing";
+    if (s === "active") return "active";
+    if (s === "past_due" || s === "unpaid" || s === "incomplete")
+      return "past_due";
+    if (s === "canceled" || s === "incomplete_expired") return "canceled";
+    return "active";
+  }
+
   // Only care about successful charges on CONNECTED accounts
   if (
     event.type === "charge.succeeded" ||
@@ -265,6 +275,96 @@ export async function POST(req: NextRequest) {
       p_external_id: event.id,
       p_payload: { action: "subscription_event", stripe_type: event.type },
     });
+  }
+
+  // ── customer.subscription.updated — status/period/pause-resume drift ─────────
+  if (event.type === "customer.subscription.updated") {
+    const admin = createAdminClient();
+    const sub = event.data.object as Stripe.Subscription;
+    const subAny = sub as unknown as {
+      id: string;
+      status: string;
+      current_period_end?: number | null;
+    };
+
+    if (!event.account) {
+      // PLATFORM SaaS: keep the org's billing state truthful between invoices.
+      const { data: org } = await admin
+        .from("organizations")
+        .select("id")
+        .eq("platform_subscription_id", sub.id)
+        .maybeSingle();
+      if (org) {
+        await admin
+          .from("organizations")
+          .update({
+            subscription_status: mapPlatformStatus(subAny.status),
+            current_period_end: subAny.current_period_end
+              ? new Date(subAny.current_period_end * 1000).toISOString()
+              : null,
+          })
+          .eq("id", org.id);
+      }
+    } else {
+      // CONNECTED: mirror pause/resume the owner did in Stripe back to the plan.
+      const { data: plan } = await admin
+        .from("recurring_plans")
+        .select("id, status")
+        .eq("stripe_subscription_id", sub.id)
+        .maybeSingle();
+      if (plan) {
+        if (subAny.status === "paused" && plan.status !== "paused") {
+          await admin.rpc("change_plan_status", {
+            p_plan: plan.id,
+            p_status: "paused",
+            p_reason: "stripe_paused",
+          });
+        } else if (subAny.status === "active" && plan.status !== "active") {
+          await admin.rpc("change_plan_status", {
+            p_plan: plan.id,
+            p_status: "active",
+            p_reason: "stripe_resumed",
+          });
+        }
+      }
+    }
+    return NextResponse.json({ received: true });
+  }
+
+  // ── account.updated — Connect onboarding/readiness reconciliation ───────────
+  if (event.type === "account.updated") {
+    const admin = createAdminClient();
+    const acct = event.data.object as Stripe.Account;
+    const acctId = acct.id ?? event.account;
+    if (acctId) {
+      await admin
+        .from("organizations")
+        .update({
+          stripe_charges_enabled: !!acct.charges_enabled,
+          stripe_payouts_enabled: !!acct.payouts_enabled,
+          stripe_details_submitted: !!acct.details_submitted,
+        })
+        .eq("stripe_account_id", acctId);
+    }
+    return NextResponse.json({ received: true });
+  }
+
+  // ── payment_intent.payment_failed — alert on a failed wallet auto-reload ─────
+  if (event.type === "payment_intent.payment_failed" && !event.account) {
+    const pi = event.data.object as Stripe.PaymentIntent;
+    const md = (pi.metadata ?? {}) as Record<string, string>;
+    if (md.purpose === "wallet_reload" && md.organization_id) {
+      captureError(new Error("wallet_reload_payment_failed"), {
+        orgId: md.organization_id,
+        event: "wallet_reload_failed",
+      });
+      void notify(md.organization_id, "wallet_low", {
+        title: "Card declined on SMS top-up",
+        body: "We couldn't charge your card to refill your SMS balance. Update it to keep texts sending.",
+        link: "/dashboard/settings/payments",
+      });
+    }
+    return NextResponse.json({ received: true });
   }
 
   return NextResponse.json({ received: true });

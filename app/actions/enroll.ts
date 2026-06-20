@@ -17,6 +17,8 @@ export async function enrollRecurring(input: {
   billingConsent: boolean;
   paymentMethodId: string;
   stripeCustomerId: string;
+  email?: string;
+  emailConsent?: boolean;
 }): Promise<EnrollResult> {
   if (!input.billingConsent) return { error: "billing_consent_required" };
 
@@ -26,13 +28,20 @@ export async function enrollRecurring(input: {
 
   const admin = createAdminClient();
 
-  // 1) CAPTURE CONSENT on the customer (this is our clean, first-party opt-in)
+  // 1) CAPTURE CONSENT on the customer (this is our clean, first-party opt-in).
+  // SMS and email are SEPARATE legal bases — capture each independently.
+  const email = input.email?.trim() || null;
+  const grantEmail = !!(input.emailConsent && email);
   await admin
     .from("customers")
     .update({
       sms_consent: input.smsConsent,
       sms_consent_at: input.smsConsent ? new Date().toISOString() : null,
       sms_consent_source: input.smsConsent ? "recurring_signup" : null,
+      ...(email ? { email } : {}),
+      email_sendable: grantEmail,
+      email_consent_at: grantEmail ? new Date().toISOString() : null,
+      email_consent_source: grantEmail ? "capture_page" : null,
     })
     .eq("id", customerId);
 

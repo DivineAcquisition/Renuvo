@@ -77,6 +77,7 @@ export type ThreadMessage = {
   direction: "inbound" | "outbound";
   body: string;
   type: string;
+  channel: string | null;
   occurred_at: string;
 };
 
@@ -91,7 +92,7 @@ export async function getThread(orgId: string, customerId: string) {
       .maybeSingle(),
     supabase
       .from("events")
-      .select("id, direction, body, type, occurred_at")
+      .select("id, direction, body, type, channel, occurred_at")
       .eq("organization_id", orgId)
       .eq("customer_id", customerId)
       .in("direction", ["inbound", "outbound"])

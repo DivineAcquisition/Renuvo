@@ -12,6 +12,7 @@ type Msg = {
   direction: "inbound" | "outbound";
   body: string;
   type: string;
+  channel?: string | null;
 };
 
 export function Thread({
@@ -98,6 +99,11 @@ export function Thread({
               }`}
             >
               {m.body}
+              {m.channel === "email" && (
+                <span className="ml-2 text-[10px] uppercase opacity-70">
+                  email
+                </span>
+              )}
               {m.type === "message_failed" && (
                 <span className="ml-2 text-[10px] opacity-80">failed</span>
               )}

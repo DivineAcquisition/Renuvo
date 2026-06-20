@@ -5,7 +5,7 @@ import { generateMessage } from "./generate";
 import { generateContextualReply } from "./contextual-reply";
 import { cancelPendingMessages } from "./engine";
 import { getSignupLink } from "@/lib/capture/links";
-import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
+import { dispatchMessage } from "@/lib/messaging/dispatch";
 import { notify } from "@/lib/notify/dispatch";
 
 // LOOP GUARD: this is the ONLY entry point for agent replies and it runs solely
@@ -189,7 +189,9 @@ export async function handleInboundMessage(args: {
 
   if (!body) return;
 
-  await sendGuardedSms({
+  // inbound is an SMS conversation, so 'auto' resolves to SMS here; the dispatcher
+  // keeps the door open for email-preference customers without changing SMS replies.
+  await dispatchMessage({
     orgId: args.orgId,
     customerId: args.customerId,
     toPhone: customer.phone,
