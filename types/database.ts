@@ -452,6 +452,7 @@ export type Database = {
           id: string
           ingest_secret: string
           name: string
+          onboarding_completed_at: string | null
           preferred_cadence_id: string | null
           quiet_hours_end: number
           quiet_hours_start: number
@@ -471,6 +472,7 @@ export type Database = {
           id?: string
           ingest_secret?: string
           name: string
+          onboarding_completed_at?: string | null
           preferred_cadence_id?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
@@ -490,6 +492,7 @@ export type Database = {
           id?: string
           ingest_secret?: string
           name?: string
+          onboarding_completed_at?: string | null
           preferred_cadence_id?: string | null
           quiet_hours_end?: number
           quiet_hours_start?: number
