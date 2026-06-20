@@ -1,6 +1,9 @@
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { getBenchmarks, getWinningMessages, type Benchmark } from "@/lib/intelligence/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { PageBody } from "@/components/ui/section";
+import { EmptyState } from "@/components/ui/empty-state";
 
 function pct(n: number | null) {
   return n == null ? "—" : `${Math.round(n * 100)}%`;
@@ -61,16 +64,11 @@ export default async function IntelligencePage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold tracking-tight">
-          Intelligence
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          How you stack up against businesses like yours — anonymized, never
-          identifying any other business.
-        </p>
-      </div>
+    <PageBody>
+      <PageHeader
+        title="Intelligence"
+        description="How you stack up against businesses like yours — anonymized, never identifying any other business."
+      />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <BenchCard
@@ -103,10 +101,10 @@ export default async function IntelligencePage() {
             volume; no business is ever identified).
           </p>
           {winners.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Not enough network data yet — this gets smarter as more businesses
-              like yours come online.
-            </p>
+            <EmptyState
+              title="Not enough network data yet"
+              body="This gets smarter as more businesses like yours come online — we only show patterns at meaningful volume."
+            />
           ) : (
             <div className="space-y-2">
               {winners.map((w) => (
@@ -125,6 +123,6 @@ export default async function IntelligencePage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageBody>
   );
 }
