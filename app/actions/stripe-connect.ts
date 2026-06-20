@@ -2,6 +2,7 @@
 
 import { getStripe } from "@/lib/stripe/client";
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
+import { getServerSecret } from "@/lib/secrets";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
@@ -19,8 +20,12 @@ export async function disconnectStripe(): Promise<void> {
   if (org?.stripe_account_id) {
     try {
       const stripe = await getStripe();
+      const clientId =
+        (await getServerSecret("STRIPE_CONNECT_CLIENT_ID")) ??
+        process.env.STRIPE_CONNECT_CLIENT_ID ??
+        "";
       await stripe.oauth.deauthorize({
-        client_id: process.env.STRIPE_CONNECT_CLIENT_ID!,
+        client_id: clientId,
         stripe_user_id: org.stripe_account_id,
       });
     } catch {

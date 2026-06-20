@@ -33,6 +33,7 @@ export default async function PortalPaymentPage() {
       <CardForm
         clientSecret={setup.clientSecret}
         stripeAccount={setup.stripeAccount}
+        publishableKey={setup.publishableKey}
       />
     </div>
   );

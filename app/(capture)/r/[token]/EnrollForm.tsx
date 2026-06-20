@@ -371,9 +371,10 @@ export function EnrollForm(props: Props) {
         return;
       }
       setStripePromise(
-        loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!, {
-          stripeAccount: r.connectedAccountId,
-        })
+        loadStripe(
+          r.publishableKey ?? process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!,
+          { stripeAccount: r.connectedAccountId }
+        )
       );
       setClientSecret(r.clientSecret);
       setCustomerId(r.stripeCustomerId);

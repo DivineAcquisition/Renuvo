@@ -6,13 +6,24 @@ import {
   saveWalletPaymentMethod,
 } from "@/lib/stripe/wallet-billing";
 import { chargeWalletReload } from "@/lib/stripe/wallet-reload";
+import { getPublishableKey } from "@/lib/stripe/publishable";
 import { revalidatePath } from "next/cache";
 
 export async function startSaveCard() {
   const active = await getActiveOrg();
   if (!active) return { error: "Not authenticated." };
-  const clientSecret = await createWalletSetupIntent(active.org.id);
-  return { clientSecret };
+  try {
+    const [clientSecret, publishableKey] = await Promise.all([
+      createWalletSetupIntent(active.org.id),
+      getPublishableKey(),
+    ]);
+    if (!clientSecret || !publishableKey)
+      return { error: "payments_unconfigured" as const };
+    return { clientSecret, publishableKey };
+  } catch {
+    // most commonly the platform Stripe key isn't set in this environment
+    return { error: "payments_unconfigured" as const };
+  }
 }
 
 export async function confirmSaveCard(paymentMethodId: string) {
