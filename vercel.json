@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/scheduler", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/winback", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/process-deletions", "schedule": "0 4 * * *" },
     { "path": "/api/cron/retention", "schedule": "0 5 * * 0" }
   ]

@@ -17,6 +17,7 @@ export type ResolvedOffer = {
   businessName: string;
   firstName: string;
   verticalId: string | null;
+  winbackDiscountPct: number;
 };
 
 /** Resolve a token to its offer, or null if missing/revoked/expired/converted. */
@@ -27,7 +28,7 @@ export async function resolveSignupToken(
   const { data: link } = await admin
     .from("signup_links")
     .select(
-      "id, organization_id, link_type, customer_id, job_id, cadence_profile_id, price_cents, currency, status, expires_at, opened_at, open_count, converted_at, revoked_at"
+      "id, organization_id, link_type, customer_id, job_id, cadence_profile_id, price_cents, currency, status, expires_at, opened_at, open_count, converted_at, revoked_at, winback_discount_pct"
     )
     .eq("token", token)
     .maybeSingle();
@@ -77,6 +78,9 @@ export async function resolveSignupToken(
     firstName:
       (customerRes.data?.full_name ?? "").trim().split(/\s+/)[0] || "there",
     verticalId: org?.vertical_id ?? null,
+    winbackDiscountPct: Number(
+      (link as { winback_discount_pct?: number }).winback_discount_pct ?? 0
+    ),
   };
 }
 

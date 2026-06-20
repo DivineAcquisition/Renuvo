@@ -6,6 +6,8 @@ import { recordFinancialEntry } from "@/lib/money/ledger";
 import { fromStripeAmount } from "@/lib/money";
 import { getServerSecret } from "@/lib/secrets";
 import { notify } from "@/lib/notify/dispatch";
+import { enrollWinback } from "@/lib/winback/enroll";
+import { markWinbackRecovered } from "@/lib/winback/recovery";
 import { log } from "@/lib/log";
 import { captureError } from "@/lib/observability/logger";
 import type Stripe from "stripe";
@@ -213,6 +215,13 @@ export async function POST(req: NextRequest) {
         body: "A client's card was declined. Their plan is now at risk.",
         link: "/dashboard",
       });
+      // involuntary churn → time-sensitive recovery (no cooldown, no discount)
+      await enrollWinback({
+        orgId: plan.organization_id,
+        customerId: plan.customer_id,
+        planId: plan.id,
+        kind: "involuntary",
+      });
     } else if (event.type === "invoice.payment_succeeded") {
       // only a meaningful "recovery" if the plan was previously at risk
       if (plan.risk_level !== "none") {
@@ -225,6 +234,12 @@ export async function POST(req: NextRequest) {
           recurring_plan_id: plan.id,
           customer_id: plan.customer_id,
           type: "payment_recovered",
+        });
+        // the card works again → close out any involuntary win-back
+        await markWinbackRecovered({
+          orgId: plan.organization_id,
+          customerId: plan.customer_id,
+          kind: "involuntary",
         });
       }
 
@@ -252,6 +267,14 @@ export async function POST(req: NextRequest) {
         p_plan: plan.id,
         p_status: "cancelled",
         p_reason: "subscription_cancelled",
+      });
+      // a deletion that followed failed payments is involuntary; otherwise it's a
+      // voluntary cancel. Either way enrollWinback dedupes against existing rows.
+      await enrollWinback({
+        orgId: plan.organization_id,
+        customerId: plan.customer_id,
+        planId: plan.id,
+        kind: plan.risk_level === "high" ? "involuntary" : "voluntary",
       });
     }
 

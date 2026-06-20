@@ -7,6 +7,7 @@ import {
   resumeStripeSubscription,
   cancelStripeSubscription,
 } from "@/lib/stripe/recurring";
+import { enrollWinback } from "@/lib/winback/enroll";
 import { revalidatePath } from "next/cache";
 
 export async function pausePlan(planId: string) {
@@ -28,7 +29,7 @@ async function lifecycle(
   const admin = createAdminClient();
   const { data: plan } = await admin
     .from("recurring_plans")
-    .select("stripe_subscription_id")
+    .select("stripe_subscription_id, customer_id")
     .eq("id", planId)
     .eq("organization_id", active.org.id)
     .single();
@@ -47,6 +48,15 @@ async function lifecycle(
       p_status: status,
       p_reason: `owner_${status}`,
     });
+    // voluntary churn → eligible for a win-back offer (gated + cooldown'd inside)
+    if (status === "cancelled" && plan.customer_id) {
+      await enrollWinback({
+        orgId: active.org.id,
+        customerId: plan.customer_id,
+        planId,
+        kind: "voluntary",
+      });
+    }
     revalidatePath(`/dashboard/plans/${planId}`);
     return { ok: true };
   } catch (e) {
