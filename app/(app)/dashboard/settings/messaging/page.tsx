@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { createClient } from "@/lib/supabase/server";
 import { TemplateEditor } from "./TemplateEditor";
@@ -41,10 +42,25 @@ export default async function MessagingSettings() {
   }));
 
   return (
-    <TemplateEditor
-      verticalId={active.org.vertical_id}
-      rows={rows}
-      isOwner={active.role === "owner"}
-    />
+    <div className="space-y-6">
+      <Link
+        href="/dashboard/settings/messaging/a2p"
+        className="flex items-center justify-between rounded-xl border bg-card p-4 text-sm transition-colors hover:border-primary/40"
+      >
+        <div>
+          <p className="font-medium">SMS delivery (A2P 10DLC)</p>
+          <p className="text-xs text-muted-foreground">
+            Register your business so texts deliver reliably. Required before
+            sending.
+          </p>
+        </div>
+        <span className="font-medium text-primary">Set up →</span>
+      </Link>
+      <TemplateEditor
+        verticalId={active.org.vertical_id}
+        rows={rows}
+        isOwner={active.role === "owner"}
+      />
+    </div>
   );
 }

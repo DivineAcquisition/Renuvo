@@ -152,9 +152,17 @@ export function Wizard({
         )}
         {number && <p className="mt-2 font-mono text-sm">{number}</p>}
         <p className="mt-2 text-xs text-muted-foreground">
-          A2P 10DLC registration is required before texts deliver reliably —
-          we&apos;ll guide you through it.
+          A number alone isn&apos;t enough to send — A2P 10DLC registration is
+          required before texts deliver reliably.
         </p>
+        {state.hasNumber && (
+          <Link
+            href="/dashboard/settings/messaging/a2p"
+            className="mt-2 inline-block text-xs font-medium text-primary underline"
+          >
+            Register for A2P →
+          </Link>
+        )}
       </StepShell>
 
       <StepShell n={4} title="Add an SMS balance" done={state.hasCard}>

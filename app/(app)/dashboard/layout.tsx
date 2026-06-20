@@ -41,6 +41,19 @@ export default async function DashboardLayout({
             </Link>
           </div>
         )}
+        {onboarding.hasNumber && onboarding.a2pStatus !== "approved" && (
+          <div className="flex items-center justify-between gap-3 border-b bg-amber-50 px-6 py-2 text-sm text-amber-800">
+            <span>
+              Texts are paused until your A2P registration is approved.
+            </span>
+            <Link
+              href="/dashboard/settings/messaging/a2p"
+              className="font-medium underline"
+            >
+              Finish A2P
+            </Link>
+          </div>
+        )}
         <main className="flex-1 p-6">{children}</main>
       </div>
       <Toaster position="top-right" richColors />
