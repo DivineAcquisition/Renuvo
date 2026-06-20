@@ -5,27 +5,30 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
+  // shared base: tactile press, premium focus ring, smooth easing, and a sheen
+  // sweep (the ::before) that brand-colored variants opt into on hover.
+  "relative inline-flex items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded-xl text-sm font-semibold ring-offset-background transition-[transform,box-shadow,background-color,border-color] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] [&_svg]:size-4 [&_svg]:shrink-0 before:pointer-events-none before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/25 before:to-transparent before:transition-transform before:duration-700 before:content-['']",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-sm hover:-translate-y-0.5 hover:bg-primary/95 hover:shadow-md hover:shadow-primary/25",
+          "bg-primary text-primary-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_8px_20px_-10px_hsl(247_60%_30%/0.45)] hover:-translate-y-0.5 hover:bg-primary/95 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_16px_32px_-12px_hsl(247_60%_30%/0.55)] hover:before:translate-x-full",
         gradient:
-          "relative overflow-hidden bg-gradient-to-r from-[#6A57FF] to-[#4F38FF] text-white shadow-lg shadow-primary/30 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/40",
+          "bg-gradient-to-r from-[#6A57FF] to-[#4F38FF] bg-[length:140%_100%] bg-left text-white shadow-[0_10px_28px_-12px_hsl(247_80%_45%/0.6)] transition-[transform,box-shadow,background-position] hover:-translate-y-0.5 hover:bg-right hover:shadow-[0_18px_40px_-12px_hsl(247_80%_45%/0.7)] hover:before:translate-x-full",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:-translate-y-0.5 hover:bg-destructive/90 hover:shadow-md hover:shadow-destructive/25",
+          "bg-destructive text-destructive-foreground shadow-[0_8px_20px_-10px_hsl(0_72%_45%/0.5)] hover:-translate-y-0.5 hover:bg-destructive/90 hover:shadow-[0_16px_32px_-12px_hsl(0_72%_45%/0.6)]",
         outline:
-          "border border-input bg-background hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent hover:text-accent-foreground hover:shadow-sm",
+          "border border-input bg-background/70 backdrop-blur-sm hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent hover:text-accent-foreground hover:shadow-[0_8px_20px_-14px_hsl(247_60%_30%/0.4)]",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+          "bg-secondary text-secondary-foreground hover:-translate-y-0.5 hover:bg-secondary/70 hover:shadow-sm",
+        ghost:
+          "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-lg px-8 text-base",
+        sm: "h-9 rounded-lg px-3.5",
+        lg: "h-12 rounded-xl px-8 text-base",
         icon: "h-10 w-10",
       },
     },
