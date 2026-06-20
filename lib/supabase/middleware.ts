@@ -10,6 +10,25 @@ export async function updateSession(request: NextRequest) {
   // Which surface is this? (localhost → treat as app; use /r/* path for capture in dev)
   const isLocal = host === "localhost" || host.endsWith(".local");
   const isCaptureHost = host === `r.${ROOT}`;
+  const isPortalHost = host === `account.${ROOT}`;
+
+  // ---- PORTAL host (account.renuvo.io): passwordless homeowner self-service ----
+  // Rewrite everything under "/portal/*"; gate non-/access pages on a session
+  // cookie (full validation happens in the page via getPortalSession).
+  if (isPortalHost) {
+    const p = url.pathname;
+    if (p.startsWith("/api") || p.startsWith("/portal"))
+      return NextResponse.next({ request });
+    const isAccess = p.startsWith("/access");
+    const hasSession = !!request.cookies.get("renuvo_portal");
+    const rewrite = url.clone();
+    if (!isAccess && !hasSession) {
+      rewrite.pathname = "/portal/access-expired";
+    } else {
+      rewrite.pathname = `/portal${p === "/" ? "" : p}`;
+    }
+    return NextResponse.rewrite(rewrite);
+  }
 
   // ---- CAPTURE host: public, rewrite "/{token}" → "/r/{token}", no auth ----
   if (isCaptureHost) {
