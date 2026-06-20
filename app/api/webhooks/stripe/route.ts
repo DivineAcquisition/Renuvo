@@ -8,6 +8,7 @@ import { getServerSecret } from "@/lib/secrets";
 import { notify } from "@/lib/notify/dispatch";
 import { enrollWinback } from "@/lib/winback/enroll";
 import { markWinbackRecovered } from "@/lib/winback/recovery";
+import { emitOutcome } from "@/lib/intelligence/emit";
 import { log } from "@/lib/log";
 import { captureError } from "@/lib/observability/logger";
 import type Stripe from "stripe";
@@ -232,6 +233,12 @@ export async function POST(req: NextRequest) {
         planId: plan.id,
         kind: "involuntary",
       });
+      await emitOutcome({
+        orgId: plan.organization_id,
+        type: "plan_failed",
+        recurringPlanId: plan.id,
+        customerId: plan.customer_id,
+      });
     } else if (event.type === "invoice.payment_succeeded") {
       // only a meaningful "recovery" if the plan was previously at risk
       if (plan.risk_level !== "none") {
@@ -250,6 +257,12 @@ export async function POST(req: NextRequest) {
           orgId: plan.organization_id,
           customerId: plan.customer_id,
           kind: "involuntary",
+        });
+        await emitOutcome({
+          orgId: plan.organization_id,
+          type: "plan_recovered",
+          recurringPlanId: plan.id,
+          customerId: plan.customer_id,
         });
       }
 
@@ -285,6 +298,12 @@ export async function POST(req: NextRequest) {
         customerId: plan.customer_id,
         planId: plan.id,
         kind: plan.risk_level === "high" ? "involuntary" : "voluntary",
+      });
+      await emitOutcome({
+        orgId: plan.organization_id,
+        type: "plan_canceled",
+        recurringPlanId: plan.id,
+        customerId: plan.customer_id,
       });
     }
 

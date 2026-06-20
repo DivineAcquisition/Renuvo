@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { emitOutcome } from "@/lib/intelligence/emit";
 
 export function newToken(): string {
   return crypto.randomBytes(32).toString("base64url"); // ~43 chars, unguessable
@@ -42,6 +43,7 @@ export async function resolveSignupToken(
     return null;
 
   // track the open (best-effort)
+  const firstOpen = !link.opened_at;
   await admin
     .from("signup_links")
     .update({
@@ -49,6 +51,15 @@ export async function resolveSignupToken(
       open_count: (link.open_count ?? 0) + 1,
     })
     .eq("id", link.id);
+
+  // intelligence spine: recipient engaged (first open only) (Prompt 48)
+  if (firstOpen) {
+    void emitOutcome({
+      orgId: link.organization_id,
+      type: "capture_opened",
+      customerId: link.customer_id ?? undefined,
+    });
+  }
 
   const [{ data: org }, customerRes] = await Promise.all([
     admin

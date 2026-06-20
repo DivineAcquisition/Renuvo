@@ -7,6 +7,7 @@ import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
 import { writeVisitsToCalendar } from "@/lib/calendar/sync";
 import { getEntitlement } from "@/lib/billing/entitlements";
 import { notify } from "@/lib/notify/dispatch";
+import { emitOutcome } from "@/lib/intelligence/emit";
 
 const FIRST_INSTANCES = 4;
 
@@ -188,6 +189,15 @@ export async function activateRecurringPlan(
         cadence: cadence.label,
         price_cents: plan.price_cents,
       },
+    });
+
+    // intelligence spine: the conversion win (Prompt 48)
+    await emitOutcome({
+      orgId: plan.organization_id,
+      type: "plan_activated",
+      cadence: cadence.label,
+      recurringPlanId: plan.id,
+      customerId: plan.customer_id,
     });
   } catch (e) {
     console.error("[activate] failed:", e);
