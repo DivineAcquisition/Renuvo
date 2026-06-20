@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -50,8 +51,8 @@ const ACTIVITY_COPY: Record<string, string> = {
   payment_recovered: "A payment recovered",
 };
 
-function relativeTime(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
+function relativeTime(iso: string, nowMs: number) {
+  const diff = nowMs - new Date(iso).getTime();
   const m = Math.round(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
@@ -95,6 +96,11 @@ export function HomeView({
   activity: ActivityEvent[];
   isOwner: boolean;
 }) {
+  // Time-based values are computed after mount to avoid SSR/client hydration
+  // mismatches (server runs in UTC; the visitor is in their own timezone).
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => setNow(new Date()), []);
+
   const s = summary.setup;
   const mode = s.messaging_suspended
     ? "suspended"
@@ -145,15 +151,16 @@ export function HomeView({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-bold tracking-tight">
-              {greeting()}, {userName}
+              {now ? greeting() : "Welcome"}, {userName}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {new Date().toLocaleDateString("en-US", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-              })}{" "}
-              · {orgName}
+              {now
+                ? `${now.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                  })} · ${orgName}`
+                : orgName}
             </p>
           </div>
           {mode === "setup" ? (
@@ -383,7 +390,7 @@ export function HomeView({
                     <div>
                       <p>{ACTIVITY_COPY[e.type] ?? e.type}</p>
                       <p className="text-xs text-muted-foreground">
-                        {relativeTime(e.occurred_at)}
+                        {now ? relativeTime(e.occurred_at, now.getTime()) : ""}
                       </p>
                     </div>
                   </div>
