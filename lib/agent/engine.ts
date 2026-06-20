@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSequence, ACTIVATION_KEY } from "./sequence";
 import { notify } from "@/lib/notify/dispatch";
+import { getOrgSettings } from "@/lib/settings/resolve";
 
 /**
  * Schedule the post-payment conversion sequence for a paid one-time job.
@@ -33,16 +34,10 @@ export async function scheduleConversionSequence(args: {
     return { scheduled: 0, reason: "no_consent" as const };
   }
 
-  // org autonomy config (Prompt 33): review mode gates sends; cap follow-ups.
-  const { data: org } = await admin
-    .from("organizations")
-    .select("agent_mode, max_follow_ups")
-    .eq("id", args.orgId)
-    .single();
-  const reviewMode =
-    (org as { agent_mode?: string } | null)?.agent_mode === "review";
-  const maxFollowUps =
-    (org as { max_follow_ups?: number } | null)?.max_follow_ups ?? 3;
+  // org autonomy config via the single settings resolver (Prompt 35)
+  const settings = await getOrgSettings(args.orgId);
+  const reviewMode = settings.agentMode === "review";
+  const maxFollowUps = settings.maxFollowUps;
 
   // data-driven sequence (falls back to the built-in default)
   const sequence = await getSequence(args.orgId);

@@ -1,7 +1,16 @@
 import { getAnthropicClient, SMS_MODEL } from "@/lib/anthropic/client";
 import { withRetry } from "@/lib/retry";
 import { log } from "@/lib/log";
+import { getOrgSettings } from "@/lib/settings/resolve";
 import { resolveTemplate } from "@/lib/templates/queries";
+
+const PITCH_GUIDANCE: Record<string, string> = {
+  gentle:
+    "Tone: gentle and low-pressure. No urgency, no hard ask. Warm and reassuring.",
+  balanced: "Tone: warm and natural, a clear but friendly ask.",
+  direct:
+    "Tone: clear and direct with one obvious call to action (still human, never pushy or robotic).",
+};
 import { renderTemplate } from "@/lib/templates/render";
 import { buildMergeVars, type MergeVars } from "./context";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -103,12 +112,22 @@ export async function generateMessage(args: {
       .map((m) => `${m.direction === "inbound" ? "Customer" : "Business"}: ${m.body}`)
       .join("\n");
 
+    // pitch style (Prompt 35) shifts tone within the human-tone rules
+    let pitch = "";
+    try {
+      const settings = await getOrgSettings(args.orgId);
+      pitch = PITCH_GUIDANCE[settings.pitchStyle] ?? "";
+    } catch {
+      /* default tone */
+    }
+
     const user = [
       `Baseline SMS to personalize:\n"${baseline}"`,
       vars.booking_link
         ? `Link that must appear unchanged: ${vars.booking_link}`
         : "",
       convo ? `Recent conversation:\n${convo}` : "",
+      pitch,
     ]
       .filter(Boolean)
       .join("\n\n");

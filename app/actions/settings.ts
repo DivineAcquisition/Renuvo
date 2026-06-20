@@ -5,8 +5,109 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import type { Database } from "@/types/database";
+import {
+  orgSettingsSchema,
+  ORG_SETTING_ROUTES,
+  type OrgSettings,
+} from "@/lib/settings/schema";
+import { getOrgSettings } from "@/lib/settings/resolve";
 
 type EventKey = Database["public"]["Enums"]["template_event_key"];
+
+async function currentUserId(): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+/**
+ * The ONE consolidated org-settings save path (Prompt 35): validates the full
+ * merged object (cross-field rules), routes each changed key to its real table,
+ * and writes an audit row per change. Owner-gated.
+ */
+export async function updateOrgSettings(patch: Partial<OrgSettings>) {
+  const active = await getActiveOrg();
+  if (!active || active.role !== "owner")
+    return { error: "Only owners can change business settings." };
+  const admin = createAdminClient();
+
+  const current = await getOrgSettings(active.org.id);
+  const merged = { ...current, ...patch };
+
+  const parsed = orgSettingsSchema.safeParse(merged);
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? "Invalid settings." };
+
+  const byTable: Record<string, Record<string, unknown>> = {};
+  const audits: { key: string; oldV: unknown; newV: unknown }[] = [];
+  for (const key of Object.keys(patch) as (keyof OrgSettings)[]) {
+    if (
+      JSON.stringify(merged[key]) === JSON.stringify(current[key])
+    )
+      continue;
+    const route = ORG_SETTING_ROUTES[key];
+    (byTable[route.table] ??= {})[route.column] = merged[key];
+    audits.push({ key, oldV: current[key], newV: merged[key] });
+  }
+
+  for (const [table, cols] of Object.entries(byTable)) {
+    if (table === "organizations") {
+      await admin.from("organizations").update(cols).eq("id", active.org.id);
+    } else {
+      await admin
+        .from(table)
+        .upsert(
+          { organization_id: active.org.id, ...cols },
+          { onConflict: "organization_id" }
+        );
+    }
+  }
+
+  if (audits.length) {
+    const uid = await currentUserId();
+    if (uid) {
+      await admin.from("settings_audit").insert(
+        audits.map((a) => ({
+          organization_id: active.org.id,
+          profile_id: uid,
+          scope: "org",
+          setting_key: a.key,
+          old_value: a.oldV,
+          new_value: a.newV,
+        }))
+      );
+    }
+  }
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function updateUserSettings(patch: { displayName?: string }) {
+  const active = await getActiveOrg();
+  if (!active) return { error: "Not authenticated." };
+  const uid = await currentUserId();
+  if (!uid) return { error: "Not authenticated." };
+  const admin = createAdminClient();
+  if (patch.displayName !== undefined) {
+    await admin
+      .from("profiles")
+      .update({ full_name: patch.displayName })
+      .eq("id", uid);
+    await admin.from("settings_audit").insert({
+      organization_id: active.org.id,
+      profile_id: uid,
+      scope: "user",
+      setting_key: "displayName",
+      new_value: patch.displayName,
+    });
+  }
+  revalidatePath("/dashboard/settings");
+  return { ok: true };
+}
 
 export async function updateBusinessProfile(input: {
   name: string;
