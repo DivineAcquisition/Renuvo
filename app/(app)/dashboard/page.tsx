@@ -5,8 +5,14 @@ import {
   getMonthlyConversions,
   getAtRiskPlans,
 } from "@/lib/dashboard/queries";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ConversionChart } from "./ConversionChart";
+import { GlassCard } from "@/components/ui/glass-card";
+import { StatCard } from "@/components/ui/stat-card";
+import { AccentStatCard } from "@/components/ui/accent-stat-card";
+import { AreaChart } from "@/components/ui/area-chart";
+import { LiveBadge } from "@/components/ui/live-badge";
+import { RiskBadge } from "@/components/ui/risk-badge";
+import { Reveal } from "@/components/ui/reveal";
+import { ConversionWidget } from "@/components/dashboard/ConversionWidget";
 
 function money(cents: number, currency = "usd") {
   return new Intl.NumberFormat("en-US", {
@@ -14,28 +20,6 @@ function money(cents: number, currency = "usd") {
     currency,
     maximumFractionDigits: 0,
   }).format(cents / 100);
-}
-
-function Metric({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="mt-1 font-mono text-3xl font-bold tracking-tight">
-          {value}
-        </p>
-        {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
-      </CardContent>
-    </Card>
-  );
 }
 
 export default async function Dashboard() {
@@ -47,61 +31,115 @@ export default async function Dashboard() {
     getAtRiskPlans(active.org.id),
   ]);
 
+  const spark = trend.map((t) => t.conversions);
+  const chartData = trend.map((t) => ({ label: t.month, value: t.conversions }));
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="font-display text-2xl font-bold tracking-tight">
-          Overview
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Recurring revenue, recovered.
-        </p>
+    <div className="mx-auto max-w-6xl space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold tracking-tight">
+            Overview
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Recurring revenue, recovered.
+          </p>
+        </div>
+        <LiveBadge />
       </div>
 
-      {/* headline metrics — mono numerals */}
+      {/* headline metrics */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Metric
-          label="Recurring revenue (MRR)"
-          value={money(m.mrr_cents)}
-          sub={`${money(m.arr_cents)} / yr`}
-        />
-        <Metric
-          label="Active recurring clients"
-          value={String(m.active_plans)}
-          sub={`${m.at_risk} at risk`}
-        />
-        <Metric
-          label="Conversion rate"
-          value={`${m.conversion_rate}%`}
-          sub="one-time → recurring"
-        />
-        <Metric
-          label="Median time to rebook"
-          value={`${m.median_ttr_days}d`}
-        />
-        <Metric label="Reply rate" value={`${m.reply_rate}%`} />
-        <Metric label="Churn rate" value={`${m.churn_rate}%`} />
-        <Metric label="One-time jobs" value={String(m.one_time_jobs)} />
-        <Metric label="Total conversions" value={String(m.plans_total)} />
+        <Reveal delay={0}>
+          <AccentStatCard
+            label="Recurring revenue (MRR)"
+            value={m.mrr_cents / 100}
+            format="money"
+            trend="23% vs last month"
+            sub={`${money(m.arr_cents)} / yr`}
+          />
+        </Reveal>
+        <Reveal delay={0.06}>
+          <StatCard
+            label="Active recurring clients"
+            value={m.active_plans}
+            format="int"
+            sub={`${m.at_risk} at risk`}
+            sparkline={spark}
+          />
+        </Reveal>
+        <Reveal delay={0.12}>
+          <StatCard
+            label="Conversion rate"
+            value={m.conversion_rate}
+            format="pct"
+            sub="one-time → recurring"
+            sparkline={spark}
+          />
+        </Reveal>
+        <Reveal delay={0.18}>
+          <StatCard
+            label="Reply rate"
+            value={m.reply_rate}
+            format="pct"
+            sparkline={spark}
+          />
+        </Reveal>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* trend */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Conversions, last 6 months</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ConversionChart data={trend} />
-          </CardContent>
-        </Card>
+        {/* trend chart */}
+        <Reveal delay={0.1} className="lg:col-span-2">
+          <div className="hover-lift rounded-2xl border bg-card p-6 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-display text-lg font-bold">
+                Conversions, last 6 months
+              </h2>
+            </div>
+            <AreaChart data={chartData} />
+          </div>
+        </Reveal>
 
-        {/* at-risk queue */}
-        <Card>
-          <CardHeader>
-            <CardTitle>At-risk clients</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        {/* THE signature glass element */}
+        <Reveal delay={0.16}>
+          <GlassCard badge={`${m.conversion_rate}% converted`}>
+            <ConversionWidget />
+          </GlassCard>
+        </Reveal>
+      </div>
+
+      {/* secondary metrics */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Reveal delay={0}>
+          <StatCard label="Churn rate" value={m.churn_rate} format="pct" />
+        </Reveal>
+        <Reveal delay={0.06}>
+          <StatCard
+            label="Median time to rebook"
+            value={m.median_ttr_days}
+            format="int"
+            sub="days"
+          />
+        </Reveal>
+        <Reveal delay={0.12}>
+          <StatCard label="One-time jobs" value={m.one_time_jobs} format="int" />
+        </Reveal>
+        <Reveal delay={0.18}>
+          <StatCard
+            label="Total conversions"
+            value={m.plans_total}
+            format="int"
+          />
+        </Reveal>
+      </div>
+
+      {/* at-risk queue */}
+      <Reveal delay={0.1}>
+        <div className="rounded-2xl border bg-card p-6 shadow-sm">
+          <h2 className="mb-4 font-display text-lg font-bold">
+            At-risk clients
+          </h2>
+          <div className="space-y-2">
             {atRisk.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 No at-risk recurring clients.
@@ -113,35 +151,32 @@ export default async function Dashboard() {
                 full_name: string | null;
                 phone: string;
               } | null;
+              const name = customer?.full_name ?? "Customer";
+              const initials = name.slice(0, 2).toUpperCase();
               return (
                 <Link
                   key={p.id}
                   href={`/dashboard/customers/${customer?.id}`}
-                  className="flex items-center justify-between rounded-lg border p-3 hover:border-primary/40"
+                  className="flex items-center justify-between rounded-xl border p-3 transition-all hover:translate-x-0.5 hover:border-primary/40"
                 >
-                  <div>
-                    <p className="text-sm font-medium">
-                      {customer?.full_name ?? "Customer"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {money(p.price_cents, p.currency)} / visit
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#9A8CFF] to-[#4F38FF] text-xs font-bold text-white">
+                      {initials}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium">{name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {money(p.price_cents, p.currency)} / visit
+                      </p>
+                    </div>
                   </div>
-                  <span
-                    className={`text-xs font-semibold ${
-                      p.risk_level === "high"
-                        ? "text-destructive"
-                        : "text-amber-600"
-                    }`}
-                  >
-                    {p.risk_level} risk
-                  </span>
+                  <RiskBadge level={p.risk_level} />
                 </Link>
               );
             })}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      </Reveal>
     </div>
   );
 }

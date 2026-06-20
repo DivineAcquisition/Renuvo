@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { saveTemplate } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,19 +49,17 @@ function TemplateRow({
 }) {
   const [body, setBody] = useState(row.body);
   const [isOverride, setIsOverride] = useState(row.isOverride);
-  const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
-    setNote(null);
     const res = await saveTemplate(verticalId, row.eventKey, body);
     setBusy(false);
     if ("error" in res) {
-      setNote(res.error ?? "Could not save.");
+      toast.error(res.error ?? "Could not save.");
     } else {
       setIsOverride(true);
-      setNote("Saved (override active).");
+      toast.success("Template saved (override active).");
     }
   }
 
@@ -82,7 +81,7 @@ function TemplateRow({
         />
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
-            {body.length} chars{note ? ` · ${note}` : ""}
+            {body.length} chars
           </span>
           {isOwner && (
             <Button size="sm" onClick={save} disabled={busy}>

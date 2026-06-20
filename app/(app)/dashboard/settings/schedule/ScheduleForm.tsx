@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { updatePreferredCadence } from "@/app/actions/settings";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,13 +16,12 @@ export function ScheduleForm({
   isOwner: boolean;
 }) {
   const [value, setValue] = useState(current ?? cadences[0]?.id ?? "");
-  const [note, setNote] = useState<string | null>(null);
 
   async function onChange(next: string) {
     setValue(next);
-    setNote(null);
     const res = await updatePreferredCadence(next);
-    setNote("error" in res ? res.error ?? "Could not save." : "Saved.");
+    if ("error" in res) toast.error(res.error ?? "Could not save.");
+    else toast.success("Preferred cadence updated.");
   }
 
   return (
@@ -47,9 +47,6 @@ export function ScheduleForm({
           <p className="text-xs text-muted-foreground">
             Default cadence offered when converting a one-time client.
           </p>
-          {note && (
-            <span className="text-sm text-muted-foreground">{note}</span>
-          )}
         </div>
       </CardContent>
     </Card>

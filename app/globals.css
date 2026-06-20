@@ -65,3 +65,171 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* ============================================================================
+   RENUVO — high-end UI system (glass, motion, ambient wash)
+   purple as a scalpel · depth via shadow · ONE signature glass per view
+   ============================================================================ */
+
+/* Single ambient radial wash for the whole app (one blob, never flooded). */
+.ambient-wash::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 600px at 88% -8%, hsl(247 100% 61% / 0.07), transparent 60%),
+    radial-gradient(700px 500px at -6% 8%, hsl(247 100% 67% / 0.05), transparent 55%);
+}
+
+/* Frosted glass surface — the signature element. */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
+    0 20px 50px -20px hsl(247 60% 30% / 0.28),
+    0 8px 24px -16px hsl(247 60% 30% / 0.2);
+}
+
+.glass-dark {
+  background: linear-gradient(160deg, hsl(250 30% 12%), hsl(250 35% 8%));
+  border: 1px solid hsl(250 30% 22%);
+  box-shadow: 0 20px 50px -24px hsl(250 60% 6% / 0.7);
+}
+
+/* Gradient-bordered accent card (mask technique). */
+.accent-border {
+  position: relative;
+  background: #fff;
+}
+.accent-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(135deg, #6a57ff, #4f38ff 55%, #9a8cff);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* diagonal sheen sweep across the accent card */
+.accent-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.55) 48%,
+    transparent 66%
+  );
+  background-size: 250% 250%;
+  animation: sheen 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #6a57ff, #4f38ff 60%, #9a8cff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hover-lift {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 24px 48px -24px hsl(247 60% 30% / 0.35);
+}
+
+/* self-drawing SVG lines (charts + sparklines) */
+.draw-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.draw-fill {
+  opacity: 0;
+  animation: fadeIn 0.9s ease-out 0.9s forwards;
+}
+
+/* pulsing live dot */
+.live-dot {
+  position: relative;
+}
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  background: hsl(145 65% 45% / 0.5);
+  animation: pulse 2s ease-out infinite;
+}
+
+.badge-float {
+  animation: bob 3.5s ease-in-out infinite;
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    hsl(250 30% 94%) 25%,
+    hsl(250 30% 97%) 37%,
+    hsl(250 30% 94%) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  70% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes sheen {
+  0% { background-position: 200% 0; }
+  60%, 100% { background-position: -120% 0; }
+}
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes fadeIn {
+  to { opacity: 1; }
+}
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* ---- reduced motion: disable everything, show final states, no shift ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .draw-line {
+    stroke-dashoffset: 0;
+  }
+  .draw-fill {
+    opacity: 1;
+  }
+}

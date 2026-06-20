@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { inviteTeamMember, removeTeamMember } from "@/app/actions/team";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,26 +22,24 @@ export function TeamManager({
   isOwner: boolean;
 }) {
   const [email, setEmail] = useState("");
-  const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function invite() {
     if (!email.trim()) return;
     setBusy(true);
-    setNote(null);
     const res = await inviteTeamMember(email.trim());
     setBusy(false);
-    if ("error" in res) setNote(res.error ?? "Could not invite.");
+    if ("error" in res) toast.error(res.error ?? "Could not invite.");
     else {
       setEmail("");
-      setNote("Invite sent.");
+      toast.success("Invite sent.");
     }
   }
 
   async function remove(profileId: string) {
-    setNote(null);
     const res = await removeTeamMember(profileId);
-    if ("error" in res) setNote(res.error ?? "Could not remove.");
+    if ("error" in res) toast.error(res.error ?? "Could not remove.");
+    else toast.success("Member removed.");
   }
 
   return (
@@ -104,7 +103,6 @@ export function TeamManager({
           </CardContent>
         </Card>
       )}
-      {note && <p className="text-sm text-muted-foreground">{note}</p>}
     </div>
   );
 }

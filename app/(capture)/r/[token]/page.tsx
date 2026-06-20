@@ -46,15 +46,20 @@ export default async function CapturePage({
     .order("interval_days");
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <p className="text-sm text-muted-foreground">{offer.businessName}</p>
-        <h1 className="mt-1 font-display text-2xl font-bold tracking-tight">
-          Hi {offer.firstName} — keep your service going automatically
+    <main className="ambient-wash flex min-h-screen items-center justify-center p-6">
+      <div className="glass w-full max-w-md rounded-2xl p-7">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+          {offer.businessName}
+        </p>
+        <h1 className="mt-2 font-display text-2xl font-bold tracking-tight">
+          Hi {offer.firstName}, keep your service going automatically
         </h1>
-        <p className="mt-2 text-muted-foreground">
-          Lock in {money(offer.priceCents, offer.currency)} per visit, billed
-          automatically. No rebooking, cancel anytime.
+        <p className="mt-2 text-sm text-muted-foreground">
+          Lock in{" "}
+          <span className="font-mono font-semibold text-foreground">
+            {money(offer.priceCents, offer.currency)}
+          </span>{" "}
+          per visit, billed automatically. No rebooking, cancel anytime.
         </p>
 
         <EnrollForm

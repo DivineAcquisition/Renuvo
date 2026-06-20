@@ -13,6 +13,7 @@ import {
   confirmSaveCard,
   addFunds,
 } from "@/app/actions/wallet";
+import { toast } from "sonner";
 import { updateWalletSettingsAction } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -156,19 +157,18 @@ function AutoReloadForm(props: {
   const [enabled, setEnabled] = useState(props.enabled);
   const [threshold, setThreshold] = useState(props.thresholdCents / 100);
   const [amount, setAmount] = useState(props.amountCents / 100);
-  const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
-    setNote(null);
     const res = await updateWalletSettingsAction({
       autoReloadEnabled: enabled,
       thresholdCents: Math.round(threshold * 100),
       amountCents: Math.round(amount * 100),
     });
     setBusy(false);
-    setNote("error" in res ? res.error ?? "Could not save." : "Saved.");
+    if ("error" in res) toast.error(res.error ?? "Could not save.");
+    else toast.success("Auto-reload saved.");
   }
 
   return (
@@ -209,14 +209,9 @@ function AutoReloadForm(props: {
             />
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button onClick={save} disabled={busy}>
-            {busy ? "Saving…" : "Save auto-reload"}
-          </Button>
-          {note && (
-            <span className="text-sm text-muted-foreground">{note}</span>
-          )}
-        </div>
+        <Button onClick={save} disabled={busy}>
+          {busy ? "Saving…" : "Save auto-reload"}
+        </Button>
       </CardContent>
     </Card>
   );

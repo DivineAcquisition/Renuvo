@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { updateBusinessProfile } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,12 +34,10 @@ export function ProfileForm({
   const [tz, setTz] = useState(org.timezone);
   const [qs, setQs] = useState(org.quiet_hours_start);
   const [qe, setQe] = useState(org.quiet_hours_end);
-  const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
-    setNote(null);
     const res = await updateBusinessProfile({
       name,
       timezone: tz,
@@ -46,7 +45,8 @@ export function ProfileForm({
       quietEnd: qe,
     });
     setBusy(false);
-    setNote("error" in res ? res.error ?? "Could not save." : "Saved.");
+    if ("error" in res) toast.error(res.error ?? "Could not save.");
+    else toast.success("Profile saved.");
   }
 
   const hour = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? "am" : "pm"}`;
@@ -113,14 +113,9 @@ export function ProfileForm({
           </div>
         </div>
         {isOwner && (
-          <div className="flex items-center gap-3">
-            <Button onClick={save} disabled={busy}>
-              {busy ? "Saving…" : "Save"}
-            </Button>
-            {note && (
-              <span className="text-sm text-muted-foreground">{note}</span>
-            )}
-          </div>
+          <Button onClick={save} disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
         )}
       </CardContent>
     </Card>

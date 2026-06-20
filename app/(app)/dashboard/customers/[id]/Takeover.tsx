@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { sendManualMessage, setAgentPaused } from "@/app/actions/takeover";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,23 +18,22 @@ export function Takeover({
   const [paused, setPaused] = useState(agentPaused);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
 
   async function togglePause() {
     const next = !paused;
     setPaused(next);
     await setAgentPaused(customerId, next);
+    toast.success(next ? "Agent paused." : "Agent resumed.");
   }
   async function send() {
     if (!text.trim()) return;
     setBusy(true);
-    setNote(null);
     const res = await sendManualMessage(customerId, text.trim());
     setBusy(false);
-    if ("error" in res) setNote(res.error ?? "Could not send.");
+    if ("error" in res) toast.error(res.error ?? "Could not send.");
     else {
       setText("");
-      setNote("Sent.");
+      toast.success("Message sent.");
     }
   }
 
@@ -63,15 +63,8 @@ export function Takeover({
           disabled={!sendable}
           className="w-full rounded-md border border-input bg-background p-3 text-sm"
         />
-        <div className="flex items-center justify-between">
-          {note && (
-            <span className="text-xs text-muted-foreground">{note}</span>
-          )}
-          <Button
-            onClick={send}
-            disabled={!sendable || busy}
-            className="ml-auto"
-          >
+        <div className="flex items-center justify-end">
+          <Button onClick={send} disabled={!sendable || busy}>
             {busy ? "Sending…" : "Send"}
           </Button>
         </div>
