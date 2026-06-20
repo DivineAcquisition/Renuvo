@@ -33,8 +33,13 @@ export default async function PlanDetail({
   const { id } = await params;
   const active = await getActiveOrg();
   if (!active) return null;
-  const { plan, jobs, payments } = await getPlanDetail(active.org.id, id);
+  const { plan, jobs, payments, lineItems } = await getPlanDetail(
+    active.org.id,
+    id
+  );
   if (!plan) notFound();
+  const pkg = (plan as { service_packages?: { name?: string } | null })
+    .service_packages;
 
   const customer = plan.customers as unknown as {
     id: string;
@@ -65,10 +70,22 @@ export default async function PlanDetail({
                 {customer?.full_name ?? "Customer"}
               </Link>
               <p className="mt-1 text-sm text-muted-foreground">
+                {pkg?.name ? `${pkg.name} · ` : ""}
                 {cadence?.label ?? "—"} ·{" "}
                 <Money value={fromCents(plan.price_cents)} />/visit · next{" "}
                 {date(plan.next_service_at)}
               </p>
+              {lineItems.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {lineItems
+                    .map(
+                      (li) =>
+                        `${li.label} ${"$" + (li.price_cents / 100).toFixed(0)}`
+                    )
+                    .join(" + ")}{" "}
+                  = <Money value={fromCents(plan.price_cents)} />
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold capitalize">
