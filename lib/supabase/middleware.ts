@@ -55,7 +55,18 @@ export async function updateSession(request: NextRequest) {
   const path = url.pathname;
   const isAuthPage = path.startsWith("/login") || path.startsWith("/signup");
   const isProtected =
-    path.startsWith("/dashboard") || path.startsWith("/onboarding");
+    path.startsWith("/dashboard") ||
+    path.startsWith("/onboarding") ||
+    path.startsWith("/admin");
+
+  // Defense-in-depth for the platform admin console: require an auth session in
+  // middleware (the layout additionally verifies is_platform_admin).
+  if (path.startsWith("/admin") && !user) {
+    const u = url.clone();
+    u.pathname = "/login";
+    u.searchParams.set("next", "/admin");
+    return NextResponse.redirect(u);
+  }
 
   // ROOT on the APP host: the product lives here, not the marketing site. Only
   // the apex/root domain (renuvo.io / www) bounces to the Framer marketing page;

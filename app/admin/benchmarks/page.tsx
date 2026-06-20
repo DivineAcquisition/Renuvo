@@ -5,56 +5,21 @@ import {
   getCancellationReasons,
   getRetentionEffectiveness,
 } from "@/lib/admin/benchmarks";
-import { getPlatformRevenue } from "@/lib/money/reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Money } from "@/components/ui/money";
 
 export default async function Benchmarks() {
-  const [conv, ttr, intents, cancels, retention, revenue] = await Promise.all([
+  const [conv, ttr, intents, cancels, retention] = await Promise.all([
     getConversionByVertical(),
     getTtrByVertical(),
     getIntentMix(),
     getCancellationReasons(),
     getRetentionEffectiveness(),
-    getPlatformRevenue(),
   ]);
 
   const empty = "Not enough data yet (needs ≥ 5 orgs in a cohort).";
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      {/* Renuvo's platform revenue (margin + app fees − cost), NOT tenant GMV */}
-      <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Platform revenue (last 30 days)</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div>
-            <p className="text-xs text-muted-foreground">SMS margin</p>
-            <p className="mt-1 text-lg font-bold">
-              <Money value={revenue?.sms_margin_micro ?? 0} />
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Subscription fees</p>
-            <p className="mt-1 text-lg font-bold">
-              <Money value={revenue?.subscription_fees_micro ?? 0} />
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">SMS cost</p>
-            <p className="mt-1 text-lg font-bold">
-              <Money value={revenue?.sms_cost_micro ?? 0} />
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Net revenue</p>
-            <p className="mt-1 text-lg font-bold text-primary">
-              <Money value={revenue?.net_revenue_micro ?? 0} />
-            </p>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

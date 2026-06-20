@@ -1144,6 +1144,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_tenant_directory: {
+        Args: Record<string, never>
+        Returns: Json
+      }
       fin_tenant_spend: {
         Args: { p_org_id: string; p_since?: string }
         Returns: Json
