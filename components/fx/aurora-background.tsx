@@ -8,12 +8,23 @@ import { cn } from "@/lib/utils";
 export function AuroraBackground({
   className,
   dark = false,
+  accent,
   children,
 }: {
   className?: string;
   dark?: boolean;
+  /** Optional brand accent (hex). Tenant surfaces pass the business color. */
+  accent?: string | null;
   children?: React.ReactNode;
 }) {
+  // derive three alpha tints from a single accent hex (8-digit hex alpha)
+  const accentVars = accent
+    ? ({
+        "--aurora-1": `${accent}8c`,
+        "--aurora-2": `${accent}5e`,
+        "--aurora-3": `${accent}55`,
+      } as React.CSSProperties)
+    : undefined;
   return (
     <div className={cn("relative overflow-hidden", className)}>
       <div
@@ -23,7 +34,7 @@ export function AuroraBackground({
         )}
         aria-hidden
       />
-      <div className="aurora-bg" aria-hidden />
+      <div className="aurora-bg" style={accentVars} aria-hidden />
       {children && <div className="relative">{children}</div>}
     </div>
   );

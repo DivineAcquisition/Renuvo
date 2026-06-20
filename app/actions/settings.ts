@@ -114,11 +114,17 @@ export async function updateBusinessProfile(input: {
   timezone: string;
   quietStart: number;
   quietEnd: number;
+  accentColor?: string;
 }) {
   const active = await getActiveOrg();
   if (!active || active.role !== "owner") return { error: "Not allowed." };
   if (input.quietStart >= input.quietEnd)
     return { error: "Quiet-hours start must be before end." };
+  // accept only a valid hex color (or skip) — it's rendered into customer surfaces
+  const accent =
+    input.accentColor && /^#[0-9a-fA-F]{6}$/.test(input.accentColor)
+      ? input.accentColor
+      : undefined;
 
   const supabase = await createClient(); // RLS: orgs_update_owner allows this
   const { error } = await supabase
@@ -128,6 +134,7 @@ export async function updateBusinessProfile(input: {
       timezone: input.timezone,
       quiet_hours_start: input.quietStart,
       quiet_hours_end: input.quietEnd,
+      ...(accent ? { accent_color: accent } : {}),
     })
     .eq("id", active.org.id);
   if (error) return { error: error.message };

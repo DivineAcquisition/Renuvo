@@ -8,7 +8,7 @@ export default async function ProfilePage() {
   const supabase = await createClient();
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, timezone, quiet_hours_start, quiet_hours_end")
+    .select("name, timezone, quiet_hours_start, quiet_hours_end, accent_color")
     .eq("id", active.org.id)
     .single();
 

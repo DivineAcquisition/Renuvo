@@ -33,7 +33,7 @@ export async function sendGuardedEmail(args: {
     admin
       .from("organizations")
       .select(
-        "name, email_local_part, email_from_name, email_reply_to, postal_address, messaging_suspended"
+        "name, email_local_part, email_from_name, email_reply_to, postal_address, messaging_suspended, accent_color"
       )
       .eq("id", args.orgId)
       .single(),
@@ -50,6 +50,7 @@ export async function sendGuardedEmail(args: {
     email_from_name?: string | null;
     email_reply_to?: string | null;
     postal_address?: string | null;
+    accent_color?: string | null;
   } | null;
   if (!o?.email_local_part || !o.postal_address)
     return { ok: false, reason: "email_not_configured" };
@@ -70,7 +71,7 @@ export async function sendGuardedEmail(args: {
   // Compose the tenant-branded React Email and send it through the unified
   // pipeline (Prompt 52). All CAN-SPAM gates above still govern this path.
   const react = React.createElement(CustomerGeneric, {
-    brand: { name: o.email_from_name ?? o.name },
+    brand: { name: o.email_from_name ?? o.name, accent: o.accent_color ?? undefined },
     body: args.body,
     preview: subject,
     footer: { address: o.postal_address, unsubscribeUrl: unsubUrl },
