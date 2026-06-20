@@ -1,10 +1,14 @@
+import { getServerSecret } from "@/lib/secrets";
+
 const TELNYX_API = "https://api.telnyx.com/v2";
 
 export async function telnyxFetch(path: string, init?: RequestInit) {
+  // API key from env or Supabase Vault (so it can be managed entirely in Supabase).
+  const apiKey = (await getServerSecret("TELNYX_API_KEY")) ?? "";
   const res = await fetch(`${TELNYX_API}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${process.env.TELNYX_API_KEY!}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
     },

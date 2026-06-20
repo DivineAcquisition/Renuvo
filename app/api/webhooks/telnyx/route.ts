@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const sig = req.headers.get("telnyx-signature-ed25519") ?? "";
   const ts = req.headers.get("telnyx-timestamp") ?? "";
 
-  if (!verifyTelnyxSignature(raw, sig, ts)) {
+  if (!(await verifyTelnyxSignature(raw, sig, ts))) {
     log.error("webhook.telnyx.bad_signature");
     return NextResponse.json({ error: "bad signature" }, { status: 401 });
   }
