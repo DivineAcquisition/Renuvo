@@ -1,7 +1,8 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 /**
  * Submit button that reflects the parent <form>'s pending state.
@@ -10,13 +11,25 @@ import { Button } from "@/components/ui/button";
 export function SubmitButton({
   children,
   pendingText,
+  variant = "default",
+  size,
+  className,
 }: {
   children: React.ReactNode;
   pendingText: string;
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
+  className?: string;
 }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" className="w-full" disabled={pending}>
+    <Button
+      type="submit"
+      variant={variant}
+      size={size}
+      className={cn("w-full", className)}
+      disabled={pending}
+    >
       {pending ? pendingText : children}
     </Button>
   );
