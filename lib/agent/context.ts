@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSignupLink } from "@/lib/capture/links";
+import { resolveWinbackOffer, getCardUpdateUrl } from "@/lib/winback/links";
 
 export type MergeVars = {
   first_name: string;
@@ -8,6 +9,10 @@ export type MergeVars = {
   price: string; // formatted currency
   booking_link: string;
 };
+
+// win-back event keys route to different links than the conversion flow
+const WINBACK_OFFER_KEYS = new Set(["winback", "reactivation"]);
+const CARD_UPDATE_KEYS = new Set(["payment_recovery"]);
 
 function firstName(full?: string | null) {
   const n = (full ?? "").trim().split(/\s+/)[0];
@@ -27,6 +32,7 @@ export async function buildMergeVars(args: {
   customerId: string;
   jobId?: string;
   planId?: string;
+  eventKey?: string;
 }): Promise<MergeVars> {
   const admin = createAdminClient();
 
@@ -74,11 +80,28 @@ export async function buildMergeVars(args: {
     price = money(job?.price_cents, job?.currency ?? "usd");
   }
 
-  const booking_link = await getSignupLink({
-    orgId: args.orgId,
-    customerId: args.customerId,
-    jobId: args.jobId,
-  });
+  // Link selection:
+  //  - payment_recovery (involuntary): a card-update link, NOT a sales capture page
+  //  - winback / reactivation: a discounted win-back capture link
+  //  - everything else: the standard conversion capture link
+  let booking_link: string;
+  if (args.eventKey && CARD_UPDATE_KEYS.has(args.eventKey) && args.planId) {
+    booking_link = getCardUpdateUrl(args.planId);
+  } else if (args.eventKey && WINBACK_OFFER_KEYS.has(args.eventKey)) {
+    const offer = await resolveWinbackOffer({
+      orgId: args.orgId,
+      customerId: args.customerId,
+      planId: args.planId,
+    });
+    booking_link = offer.url;
+    if (!price && offer.priceCents) price = money(offer.priceCents);
+  } else {
+    booking_link = await getSignupLink({
+      orgId: args.orgId,
+      customerId: args.customerId,
+      jobId: args.jobId,
+    });
+  }
 
   return {
     first_name: firstName(customer?.full_name),

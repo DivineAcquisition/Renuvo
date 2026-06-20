@@ -5,6 +5,7 @@ import { resolveSignupToken, consumeSignupToken } from "@/lib/capture/token";
 import { cancelPendingMessages } from "@/lib/agent/engine";
 import { activateRecurringPlan } from "@/lib/plans/activate"; // stub → Prompt 20
 import { recordConsent } from "@/lib/consent";
+import { markWinbackRecovered } from "@/lib/winback/recovery";
 
 export type EnrollResult =
   | { error: string; planId?: string }
@@ -80,15 +81,25 @@ export async function enrollRecurring(input: {
   }
   const plan = planRow as { id: string };
 
-  // 3) attach the billing identity to the plan (subscription created in Prompt 20)
+  // 3) attach the billing identity to the plan (subscription created in Prompt 20).
+  // If this came from a win-back link, record the incentive on the plan so
+  // margin/LTV reporting stays honest about what we gave away.
   await admin
     .from("recurring_plans")
-    .update({ stripe_customer_id: input.stripeCustomerId })
+    .update({
+      stripe_customer_id: input.stripeCustomerId,
+      ...(offer.winbackDiscountPct > 0
+        ? { meta: { winback_discount_pct: offer.winbackDiscountPct } }
+        : {}),
+    })
     .eq("id", plan.id);
 
   // 4) consume the token (single-use) + stop the conversion sequence
   await consumeSignupToken(offer.linkId);
   await cancelPendingMessages(offer.orgId, customerId, "enrolled");
+
+  // a returnee came back → close out any live win-back campaigns + stop nudging
+  await markWinbackRecovered({ orgId: offer.orgId, customerId });
 
   await admin.rpc("record_event", {
     p_org_id: offer.orgId,

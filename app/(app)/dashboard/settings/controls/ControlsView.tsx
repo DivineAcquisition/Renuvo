@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   saveAutomation,
   saveOfferConfig,
+  saveWinbackConfig,
   saveSequence,
   resetSequence,
   saveNotificationPref,
@@ -46,6 +47,7 @@ export function ControlsView({
   agentMode,
   maxFollowUps,
   offer,
+  winback,
   steps,
   notifEvents,
   prefMap,
@@ -59,6 +61,13 @@ export function ControlsView({
     defaultCadence: string;
     pitchStyle: "gentle" | "balanced" | "direct";
   };
+  winback: {
+    enabled: boolean;
+    discountPct: number;
+    cooldownDays: number;
+    maxAttempts: number;
+    retryGapDays: number;
+  };
   steps: { template_key: string; delay_minutes: number; enabled: boolean }[];
   notifEvents: string[];
   prefMap: Record<string, { email: boolean; in_app: boolean }>;
@@ -70,11 +79,118 @@ export function ControlsView({
         <>
           <Automation agentMode={agentMode} maxFollowUps={maxFollowUps} />
           <Offer offer={offer} />
+          <Winback winback={winback} />
           <Sequence steps={steps} />
         </>
       )}
       <Notifications events={notifEvents} prefMap={prefMap} />
     </div>
+  );
+}
+
+function Winback({
+  winback,
+}: {
+  winback: {
+    enabled: boolean;
+    discountPct: number;
+    cooldownDays: number;
+    maxAttempts: number;
+    retryGapDays: number;
+  };
+}) {
+  const [enabled, setEnabled] = useState(winback.enabled);
+  const [discount, setDiscount] = useState(winback.discountPct);
+  const [cooldown, setCooldown] = useState(winback.cooldownDays);
+  const [maxAttempts, setMaxAttempts] = useState(winback.maxAttempts);
+  const [gap, setGap] = useState(winback.retryGapDays);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    const r = await saveWinbackConfig({
+      enabled,
+      discountPct: discount,
+      cooldownDays: cooldown,
+      maxAttempts,
+      retryGapDays: gap,
+    });
+    setBusy(false);
+    if ("error" in r) toast.error(r.error ?? "Failed");
+    else toast.success("Win-back saved.");
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Win-back &amp; reactivation</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Brings churned customers back. Re-contacting people too aggressively
+          breeds spam complaints that hurt your sending reputation — so keep it
+          gentle and capped. Failed-payment customers get a card-fix message, not a
+          discount.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          <span className="font-medium">Enable win-back</span>
+        </label>
+        <div className="space-y-1.5">
+          <Label>Win-back discount: {discount}%</Label>
+          <input
+            type="range"
+            min={0}
+            max={90}
+            value={discount}
+            onChange={(e) => setDiscount(Number(e.target.value))}
+            className="w-full"
+          />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <Label>Cooldown (days)</Label>
+            <input
+              type="number"
+              min={0}
+              max={180}
+              value={cooldown}
+              onChange={(e) => setCooldown(Number(e.target.value))}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Max attempts</Label>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={maxAttempts}
+              onChange={(e) => setMaxAttempts(Number(e.target.value))}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Retry gap (days)</Label>
+            <input
+              type="number"
+              min={1}
+              max={120}
+              value={gap}
+              onChange={(e) => setGap(Number(e.target.value))}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </div>
+        </div>
+        <Button onClick={save} disabled={busy}>
+          {busy ? "Saving…" : "Save win-back"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
