@@ -4,6 +4,7 @@
     { "path": "/api/cron/process-bulk-operations", "schedule": "*/2 * * * *" },
     { "path": "/api/cron/winback", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/churn-scoring", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/compute-book-metrics", "schedule": "30 3 * * *" },
     { "path": "/api/cron/process-deletions", "schedule": "0 4 * * *" },
     { "path": "/api/cron/retention", "schedule": "0 5 * * 0" }
   ]
