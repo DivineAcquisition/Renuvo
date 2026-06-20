@@ -1145,6 +1145,7 @@ export type Database = {
         Args: { p_org_id: string }
         Returns: Json
       }
+      is_platform_admin: { Args: Record<string, never>; Returns: boolean }
       mark_opted_out: { Args: { p_customer_id: string }; Returns: undefined }
       record_event: {
         Args: {
