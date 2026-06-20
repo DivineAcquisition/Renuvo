@@ -1,5 +1,7 @@
 import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { captureError } from "@/lib/observability/logger";
+import { notify } from "@/lib/notify/dispatch";
 
 /**
  * Charge the saved card on the PLATFORM account and credit the wallet on success.
@@ -86,8 +88,20 @@ export async function triggerAutoReload(orgId: string) {
     .update({ low_balance_notified_at: new Date().toISOString() })
     .eq("organization_id", orgId);
 
-  await chargeWalletReload(orgId, wallet.reload_amount_cents, {
+  const res = await chargeWalletReload(orgId, wallet.reload_amount_cents, {
     offSession: true,
   });
+  // a failed auto-reload is high-severity: sends will start failing for funds.
+  if (!res.ok) {
+    captureError(new Error(`wallet_reload_failed: ${res.reason}`), {
+      orgId,
+      event: "wallet_reload_failed",
+    });
+    void notify(orgId, "wallet_low", {
+      title: "Auto-reload failed",
+      body: "We couldn't top up your SMS balance. Update your card to keep sending.",
+      link: "/dashboard/settings/payments",
+    });
+  }
   // credit_wallet clears low_balance_notified_at on success
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RETENTION } from "@/lib/retention/config";
+import { writeHeartbeat } from "@/lib/observability/heartbeat";
 import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -33,5 +34,6 @@ export async function GET(req: NextRequest) {
 
   const scrubbed = data?.length ?? 0;
   log.info("retention.sweep", { scrubbed, cutoff });
+  await writeHeartbeat("retention", "ok", { scrubbed });
   return NextResponse.json({ ok: true, scrubbed });
 }

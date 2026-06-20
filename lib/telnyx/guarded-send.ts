@@ -8,6 +8,7 @@ import {
   ensureFirstMessageOptOut,
   reconcileSendFailure,
 } from "@/lib/agent/guardrails";
+import { captureError } from "@/lib/observability/logger";
 
 export type GuardedSendResult =
   | { ok: true; messageId: string; segments: number }
@@ -116,9 +117,12 @@ export async function sendGuardedSms(args: {
     });
 
     return { ok: true, messageId: sent.id, segments: sent.segments };
-  } catch {
-    // hard send failure → refund the wallet so the owner is never billed for an
-    // SMS that didn't go out, THEN log the failure (with the sendRef to trace it).
+  } catch (e) {
+    // hard send failure AFTER passing consent + funds gates — a worse class than
+    // a normal block. Capture it (no PII) so it alerts.
+    captureError(e, { orgId: args.orgId, event: "sms_send_failed" });
+    // refund the wallet so the owner is never billed for an SMS that didn't go
+    // out, THEN log the failure (with the sendRef to trace it).
     await reconcileSendFailure(args.orgId, debit.chargeCents, sendRef);
     await admin.rpc("record_event", {
       p_org_id: args.orgId,

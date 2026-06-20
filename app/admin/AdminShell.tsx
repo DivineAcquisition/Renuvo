@@ -8,6 +8,7 @@ import {
   DollarSign,
   BarChart3,
   ShieldCheck,
+  Activity,
   ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ const NAV = [
   { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
   { href: "/admin/benchmarks", label: "Benchmarks", icon: BarChart3 },
   { href: "/admin/a2p", label: "A2P", icon: ShieldCheck },
+  { href: "/admin/system", label: "System", icon: Activity },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {

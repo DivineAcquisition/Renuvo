@@ -7,6 +7,7 @@ import { fromStripeAmount } from "@/lib/money";
 import { getServerSecret } from "@/lib/secrets";
 import { notify } from "@/lib/notify/dispatch";
 import { log } from "@/lib/log";
+import { captureError } from "@/lib/observability/logger";
 import type Stripe from "stripe";
 
 export async function POST(req: NextRequest) {
@@ -18,8 +19,8 @@ export async function POST(req: NextRequest) {
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(body, sig, whsec);
-  } catch {
-    log.error("webhook.stripe.bad_signature");
+  } catch (e) {
+    captureError(e, { event: "stripe_webhook_error" });
     return NextResponse.json({ error: "bad signature" }, { status: 400 });
   }
 

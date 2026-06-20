@@ -1,21 +1,4 @@
-type Level = "info" | "warn" | "error";
-
-function emit(level: Level, event: string, data?: Record<string, unknown>) {
-  const line = JSON.stringify({
-    ts: new Date().toISOString(),
-    level,
-    event,
-    ...data,
-  });
-  if (level === "error") console.error(line);
-  else console.log(line);
-}
-
-export const log = {
-  info: (event: string, data?: Record<string, unknown>) =>
-    emit("info", event, data),
-  warn: (event: string, data?: Record<string, unknown>) =>
-    emit("warn", event, data),
-  error: (event: string, data?: Record<string, unknown>) =>
-    emit("error", event, data),
-};
+// Backward-compatible logger surface. The real implementation lives in
+// lib/observability/logger.ts (scrubs PII + emits Sentry breadcrumbs). Existing
+// call sites — log.info("event.name", { ...ctx }) — keep working unchanged.
+export { log, captureError } from "@/lib/observability/logger";

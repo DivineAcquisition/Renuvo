@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/client";
 import { cancelStripeSubscription } from "@/lib/stripe/recurring";
+import { writeHeartbeat } from "@/lib/observability/heartbeat";
 import { log } from "@/lib/log";
 
 export const dynamic = "force-dynamic";
@@ -113,5 +114,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  await writeHeartbeat("process_deletions", "ok", { torn });
   return NextResponse.json({ ok: true, torn });
 }
