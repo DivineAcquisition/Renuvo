@@ -1,8 +1,10 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 
+// Renuvo's 6-point north star: elongated vertical (top/bottom) + 4 diagonal
+// points, with concave waists at left/right (no horizontal points).
 const STAR_PATH =
-  "M50 3 L55 38 L73.3 26.7 L62 45 L88 50 L62 55 L73.3 73.3 L55 62 L50 97 L45 62 L26.7 73.3 L38 55 L12 50 L38 45 L26.7 26.7 L45 38 Z";
+  "M50 2 L55.5 35 L74.4 20.9 L66 50 L74.4 79.1 L55.5 65 L50 98 L44.5 65 L25.6 79.1 L34 50 L25.6 20.9 L44.5 35 Z";
 
 /** The Renuvo north-star mark. `gradient` fills it with the brand ramp. */
 export function StarMark({
