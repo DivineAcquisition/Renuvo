@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { tokens } = await oauthClient().getToken(code);
+    const client = await oauthClient();
+    const { tokens } = await client.getToken(code);
     const admin = createAdminClient();
     await admin.from("calendar_connections").upsert({
       organization_id: active.org.id,

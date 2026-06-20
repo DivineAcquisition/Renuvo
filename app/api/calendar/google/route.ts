@@ -8,5 +8,5 @@ export async function GET() {
     return NextResponse.redirect(
       new URL("/login", process.env.NEXT_PUBLIC_APP_URL)
     );
-  return NextResponse.redirect(googleConsentUrl(active.org.id));
+  return NextResponse.redirect(await googleConsentUrl(active.org.id));
 }

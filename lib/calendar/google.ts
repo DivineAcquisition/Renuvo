@@ -4,16 +4,34 @@ import { encryptToken, decryptToken } from "@/lib/crypto/tokens";
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar.events"];
 
-export function oauthClient() {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
+/**
+ * Resolve a Google OAuth value from env first, then Supabase Vault (service-role
+ * get_secret). Lets the Google config be managed entirely in Supabase.
+ */
+async function googleConfigValue(name: string): Promise<string | undefined> {
+  if (process.env[name]) return process.env[name];
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin.rpc("get_secret", { p_name: name });
+    if (error) return undefined;
+    return (data as string | null) ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-export function googleConsentUrl(state: string) {
-  return oauthClient().generateAuthUrl({
+export async function oauthClient() {
+  const [clientId, clientSecret, redirectUri] = await Promise.all([
+    googleConfigValue("GOOGLE_CLIENT_ID"),
+    googleConfigValue("GOOGLE_CLIENT_SECRET"),
+    googleConfigValue("GOOGLE_REDIRECT_URI"),
+  ]);
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+}
+
+export async function googleConsentUrl(state: string) {
+  const client = await oauthClient();
+  return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: SCOPES,
@@ -33,7 +51,7 @@ export async function authorizedClientForOrg(orgId: string) {
   if (!conn?.enabled || !conn.access_token_enc || !conn.refresh_token_enc)
     return null;
 
-  const client = oauthClient();
+  const client = await oauthClient();
   client.setCredentials({
     access_token: decryptToken(conn.access_token_enc),
     refresh_token: decryptToken(conn.refresh_token_enc),
