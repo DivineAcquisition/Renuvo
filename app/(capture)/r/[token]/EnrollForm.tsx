@@ -14,14 +14,27 @@ import { enrollRecurring } from "@/app/actions/enroll";
 import { StarMark } from "@/components/ui/logo";
 import { fromCents, formatMoney } from "@/lib/money";
 
+type PkgOption = {
+  id: string;
+  name: string;
+  description: string | null;
+  basePriceCents: number;
+  defaultCadenceKey: string;
+  discountPct: number | null;
+};
+type AddonOption = { id: string; name: string; priceCents: number };
+
 type Props = {
   token: string;
   businessName: string;
   firstName: string;
   priceCents: number;
   currency: string;
-  cadences: { id: string; label: string }[];
+  cadences: { id: string; label: string; key?: string | null }[];
   defaultCadenceId: string;
+  packages?: PkgOption[];
+  addons?: AddonOption[];
+  orgDiscountPct?: number;
 };
 
 function money(cents: number) {
@@ -160,7 +173,20 @@ function InnerCard(props: Props & { customerId: string }) {
   const elements = useElements();
   const emailChannelOn =
     process.env.NEXT_PUBLIC_EMAIL_CHANNEL_ENABLED === "true";
-  const [cadence, setCadence] = useState(props.defaultCadenceId);
+  const packages = props.packages ?? [];
+  const addons = props.addons ?? [];
+  const packageMode = packages.length > 0;
+
+  const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
+  const [addonIds, setAddonIds] = useState<Set<string>>(new Set());
+  const cadenceForPackage = (pkgId: string) => {
+    const pkg = packages.find((p) => p.id === pkgId);
+    const match = props.cadences.find((c) => c.key === pkg?.defaultCadenceKey);
+    return match?.id ?? props.defaultCadenceId;
+  };
+  const [cadence, setCadence] = useState(
+    packageMode ? cadenceForPackage(packages[0]?.id ?? "") : props.defaultCadenceId
+  );
   const [smsConsent, setSmsConsent] = useState(true);
   const [email, setEmail] = useState("");
   const [emailConsent, setEmailConsent] = useState(false);
@@ -198,6 +224,8 @@ function InnerCard(props: Props & { customerId: string }) {
       stripeCustomerId: props.customerId,
       email: emailChannelOn ? email || undefined : undefined,
       emailConsent: emailChannelOn ? emailConsent : false,
+      packageId: packageMode ? packageId : undefined,
+      addonIds: packageMode ? Array.from(addonIds) : undefined,
     });
     if ("error" in res) {
       setErr(
@@ -214,10 +242,36 @@ function InnerCard(props: Props & { customerId: string }) {
   const cadenceLabel =
     props.cadences.find((c) => c.id === cadence)?.label ?? "Recurring";
 
+  // live price composition (package mode)
+  const selectedPkg = packages.find((p) => p.id === packageId);
+  const selectedAddons = addons.filter((a) => addonIds.has(a.id));
+  const subtotalCents = packageMode
+    ? (selectedPkg?.basePriceCents ?? 0) +
+      selectedAddons.reduce((s, a) => s + a.priceCents, 0)
+    : props.priceCents;
+  const discountPct = packageMode
+    ? selectedPkg?.discountPct ?? props.orgDiscountPct ?? 0
+    : 0;
+  const effectivePriceCents = Math.round(
+    subtotalCents * (1 - discountPct / 100)
+  );
+
+  function toggleAddon(id: string) {
+    setAddonIds((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
   if (done)
     return (
       <div className="glass animate-up rounded-[20px] p-7">
-        <SuccessView cadenceLabel={cadenceLabel} priceCents={props.priceCents} />
+        <SuccessView
+          cadenceLabel={cadenceLabel}
+          priceCents={effectivePriceCents}
+        />
       </div>
     );
 
@@ -246,10 +300,93 @@ function InnerCard(props: Props & { customerId: string }) {
       <p className="mt-2 text-sm text-muted-foreground">
         Lock in{" "}
         <span className="font-mono font-bold text-foreground">
-          {money(props.priceCents)}
+          {money(effectivePriceCents)}
         </span>{" "}
         per visit, billed automatically. No rebooking, cancel anytime.
       </p>
+
+      {/* package picker (only when the business has a menu) */}
+      {packageMode && (
+        <div className="mt-5 space-y-2">
+          <label className="block text-sm font-medium">Choose your service</label>
+          {packages.map((p) => {
+            const active = p.id === packageId;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setPackageId(p.id);
+                  setCadence(cadenceForPackage(p.id));
+                }}
+                className={`flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition-all ${
+                  active
+                    ? "border-primary bg-primary/[0.06] shadow-[0_0_0_3px_rgba(79,56,255,0.1)]"
+                    : "border-border hover:border-primary/40"
+                }`}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{p.name}</span>
+                  {p.description && (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {p.description}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 font-mono text-sm font-bold">
+                  {money(p.basePriceCents)}
+                </span>
+              </button>
+            );
+          })}
+
+          {addons.length > 0 && (
+            <div className="pt-1">
+              <label className="mb-1.5 block text-sm font-medium">Add-ons</label>
+              <div className="flex flex-wrap gap-2">
+                {addons.map((a) => {
+                  const on = addonIds.has(a.id);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => toggleAddon(a.id)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        on
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/40"
+                      }`}
+                    >
+                      {on ? "✓ " : "+ "}
+                      {a.name} {money(a.priceCents)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* live total */}
+          <div className="mt-2 rounded-xl bg-secondary/60 px-3 py-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Total per visit</span>
+              <span className="font-mono font-bold">
+                {discountPct > 0 && (
+                  <span className="mr-2 font-normal text-muted-foreground line-through">
+                    {money(subtotalCents)}
+                  </span>
+                )}
+                {money(effectivePriceCents)}
+              </span>
+            </div>
+            {discountPct > 0 && (
+              <p className="mt-0.5 text-right text-xs text-primary">
+                {discountPct}% recurring discount applied
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* segmented cadence selector */}
       <div className="mt-5">
