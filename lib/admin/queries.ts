@@ -30,6 +30,7 @@ export type TenantDetail = {
   a2p_status: string;
   messaging_suspended: boolean;
   messaging_suspended_reason: string | null;
+  messagingProvisioned: boolean;
   ownerEmail: string | null;
   wallet: {
     balance_cents: number;
@@ -61,7 +62,7 @@ export async function getTenantDetail(
   const { data: org } = await admin
     .from("organizations")
     .select(
-      "id, name, created_at, subscription_status, current_period_end, a2p_status, messaging_suspended, messaging_suspended_reason"
+      "id, name, created_at, subscription_status, current_period_end, a2p_status, messaging_suspended, messaging_suspended_reason, telnyx_messaging_profile_id, telnyx_phone_number"
     )
     .eq("id", orgId)
     .maybeSingle();
@@ -125,6 +126,11 @@ export async function getTenantDetail(
     messaging_suspended_reason:
       (org as { messaging_suspended_reason?: string | null })
         .messaging_suspended_reason ?? null,
+    messagingProvisioned: !!(
+      (org as { telnyx_messaging_profile_id?: string | null })
+        .telnyx_messaging_profile_id &&
+      (org as { telnyx_phone_number?: string | null }).telnyx_phone_number
+    ),
     ownerEmail:
       (owner?.profiles as unknown as { email: string | null } | null)?.email ??
       null,

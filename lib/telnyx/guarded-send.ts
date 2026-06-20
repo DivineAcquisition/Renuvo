@@ -17,6 +17,7 @@ export type GuardedSendResult =
       reason:
         | "not_sendable"
         | "no_number"
+        | "messaging_not_provisioned"
         | "a2p_not_ready"
         | "messaging_suspended"
         | "insufficient_funds"
@@ -58,6 +59,12 @@ export async function sendGuardedSms(args: {
     .eq("id", args.orgId)
     .single();
   if (!org?.telnyx_phone_number) return { ok: false, reason: "no_number" };
+
+  // Per-tenant isolation (Prompt 41): a tenant's traffic MUST ride its own
+  // messaging profile — never a shared/global one. No profile → block, don't fall
+  // back. (one tenant → one profile → one number → one campaign.)
+  if (!org.telnyx_messaging_profile_id)
+    return { ok: false, reason: "messaging_not_provisioned" };
 
   // ISV kill-switch: a suspended tenant sends nothing (Prompt 31).
   if ((org as { messaging_suspended?: boolean }).messaging_suspended)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/client";
 import { cancelStripeSubscription } from "@/lib/stripe/recurring";
+import { deleteTenantMessagingProfile } from "@/lib/telnyx/provisioning";
 import { writeHeartbeat } from "@/lib/observability/heartbeat";
 import { log } from "@/lib/log";
 
@@ -18,7 +19,9 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   const { data: due } = await admin
     .from("organizations")
-    .select("id, platform_subscription_id, stripe_account_id")
+    .select(
+      "id, platform_subscription_id, stripe_account_id, telnyx_messaging_profile_id"
+    )
     .lte("deletion_scheduled_for", new Date().toISOString())
     .is("deleted_at", null);
 
@@ -62,13 +65,21 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // 3) (Telnyx number release / A2P deactivation handled manually for now —
-      //    TCR consent records are retained per law regardless.)
+      // 3) release the tenant's Telnyx messaging profile (no orphans). The number
+      //    is released with it. TCR consent records are retained per law.
+      const profileId = (
+        org as { telnyx_messaging_profile_id?: string | null }
+      ).telnyx_messaging_profile_id;
+      if (profileId) await deleteTenantMessagingProfile(profileId);
 
-      // 4) disconnect the Stripe connected account pointer
+      // 4) disconnect the Stripe connected account pointer + clear messaging ids
       await admin
         .from("organizations")
-        .update({ stripe_account_id: null })
+        .update({
+          stripe_account_id: null,
+          telnyx_messaging_profile_id: null,
+          telnyx_phone_number: null,
+        })
         .eq("id", org.id);
 
       // 5) anonymize all customers + scrub message bodies

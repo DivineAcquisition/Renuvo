@@ -59,6 +59,16 @@ export default async function AdminTenantDetail({
             <p className="text-white/50">
               {t.a2p?.step ?? "—"} · score {t.a2p?.vetting_score ?? "—"}
             </p>
+            <p className="mt-1 text-white/50">
+              Messaging{" "}
+              <span
+                className={
+                  t.messagingProvisioned ? "text-emerald-400" : "text-amber-400"
+                }
+              >
+                {t.messagingProvisioned ? "provisioned" : "not provisioned"}
+              </span>
+            </p>
           </CardContent>
         </Card>
 

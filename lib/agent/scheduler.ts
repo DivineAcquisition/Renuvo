@@ -179,6 +179,7 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
       } else if (
         res.reason === "not_sendable" ||
         res.reason === "no_number" ||
+        res.reason === "messaging_not_provisioned" ||
         res.reason === "a2p_not_ready" ||
         res.reason === "messaging_suspended"
       ) {

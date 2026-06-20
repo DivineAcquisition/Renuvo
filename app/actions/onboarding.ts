@@ -3,7 +3,7 @@
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { provisionNumber } from "@/lib/telnyx/provision";
+import { provisionTenantMessaging } from "@/lib/telnyx/provisioning";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -55,12 +55,15 @@ export async function createOrganizationStep(
   return { ok: true };
 }
 
-/** Step 3 — provision the sending number. */
-export async function provisionNumberStep(areaCode?: string) {
+/** Step 3 — provision the tenant's isolated messaging (profile + number). */
+export async function provisionNumberStep() {
   const active = await getActiveOrg();
   if (!active || active.role !== "owner") return { error: "Not allowed." };
   try {
-    const number = await provisionNumber(active.org.id, areaCode);
+    const { number } = await provisionTenantMessaging(
+      active.org.id,
+      active.org.name
+    );
     revalidatePath("/onboarding");
     return { ok: true, number };
   } catch (e) {
