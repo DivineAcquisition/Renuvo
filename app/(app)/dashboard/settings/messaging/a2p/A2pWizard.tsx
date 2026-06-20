@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { submitBrand, submitCampaign, syncA2pStatus } from "@/app/actions/a2p";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, RadioCard } from "@/components/ui/field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export type A2pReg = {
@@ -231,127 +231,115 @@ export function A2pWizard({
           <CardHeader>
             <CardTitle>Business identity</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Business type</Label>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="entity"
-                    checked={entityType === "SOLE_PROPRIETOR"}
-                    onChange={() => setEntityType("SOLE_PROPRIETOR")}
-                  />
-                  I&apos;m a sole proprietor (no EIN)
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="entity"
-                    checked={entityType === "PRIVATE_PROFIT"}
-                    onChange={() => setEntityType("PRIVATE_PROFIT")}
-                  />
-                  I have an LLC / EIN
-                </label>
+          <CardContent className="space-y-5">
+            <Field label="Business type">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <RadioCard
+                  checked={entityType === "SOLE_PROPRIETOR"}
+                  onSelect={() => setEntityType("SOLE_PROPRIETOR")}
+                  title="Sole proprietor"
+                  description="Just you — no EIN needed"
+                />
+                <RadioCard
+                  checked={entityType === "PRIVATE_PROFIT"}
+                  onSelect={() => setEntityType("PRIVATE_PROFIT")}
+                  title="LLC / registered business"
+                  description="You have an EIN"
+                />
               </div>
-            </div>
+            </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Legal name</Label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Legal name" required>
                 <Input
                   value={form.legalName}
                   onChange={(e) => set("legalName", e.target.value)}
+                  placeholder="Acme Cleaning LLC"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Display name</Label>
+              </Field>
+              <Field label="Display name" required>
                 <Input
                   value={form.displayName}
                   onChange={(e) => set("displayName", e.target.value)}
+                  placeholder="Acme Cleaning"
                 />
-              </div>
+              </Field>
             </div>
 
             {entityType === "PRIVATE_PROFIT" && (
-              <div className="space-y-1.5">
-                <Label>EIN</Label>
+              <Field
+                label="EIN"
+                required
+                hint="Must match your IRS record exactly — a mismatch leaves the brand permanently unverified."
+              >
                 <Input
                   value={form.ein}
                   onChange={(e) => set("ein", e.target.value)}
                   placeholder="12-3456789"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Must match your IRS record exactly — a mismatch leaves the
-                  brand permanently unverified.
-                </p>
-              </div>
+              </Field>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Business phone</Label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Business phone" required>
                 <Input
                   value={form.phone}
                   onChange={(e) => set("phone", e.target.value)}
-                  placeholder="+15551234567"
+                  placeholder="+1 555 123 4567"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Business email</Label>
+              </Field>
+              <Field
+                label="Business email"
+                required
+                hint="A verification email may be sent here."
+              >
                 <Input
+                  type="email"
                   value={form.email}
                   onChange={(e) => set("email", e.target.value)}
+                  placeholder="owner@business.com"
                 />
-              </div>
+              </Field>
             </div>
-            <p className="-mt-2 text-xs text-muted-foreground">
-              A verification email may be sent here. Sole proprietors complete an
-              identity check within ~24h.
-            </p>
 
-            <div className="space-y-1.5">
-              <Label>Website (optional)</Label>
+            <Field label="Website" hint="Optional, but it speeds up vetting.">
               <Input
                 value={form.website}
                 onChange={(e) => set("website", e.target.value)}
-                placeholder="https://"
+                placeholder="https://yourbusiness.com"
               />
-            </div>
+            </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Street</Label>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Field label="Street" className="col-span-2">
                 <Input
                   value={form.street}
                   onChange={(e) => set("street", e.target.value)}
+                  placeholder="123 Main St"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>City</Label>
+              </Field>
+              <Field label="City">
                 <Input
                   value={form.city}
                   onChange={(e) => set("city", e.target.value)}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>State</Label>
+              </Field>
+              <Field label="State">
                 <Input
                   value={form.state}
                   onChange={(e) => set("state", e.target.value)}
                   placeholder="TX"
                 />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Postal code</Label>
+              </Field>
+              <Field label="Postal code" className="col-span-2 sm:col-span-1">
                 <Input
                   value={form.postalCode}
                   onChange={(e) => set("postalCode", e.target.value)}
                 />
-              </div>
+              </Field>
             </div>
 
-            <Button onClick={onSubmitBrand} disabled={busy}>
+            <Button onClick={onSubmitBrand} disabled={busy} size="lg">
               {busy ? "Submitting…" : "Submit for verification"}
             </Button>
           </CardContent>
