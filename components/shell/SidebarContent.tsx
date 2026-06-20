@@ -13,6 +13,7 @@ import {
   Wallet,
   Settings,
   HeartHandshake,
+  Repeat,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CountUp } from "@/components/ui/count-up";
@@ -21,6 +22,7 @@ import { LogoMark } from "@/components/ui/logo";
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, exact: true },
   { href: "/dashboard/inbox", label: "Inbox", icon: Inbox },
+  { href: "/dashboard/accounts", label: "Accounts", icon: Repeat },
   { href: "/dashboard/links", label: "Links", icon: Link2 },
   { href: "/dashboard/winback", label: "Win-back", icon: HeartHandshake },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
