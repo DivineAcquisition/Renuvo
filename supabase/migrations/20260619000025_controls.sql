@@ -102,6 +102,8 @@ grant execute on function public.seed_org_controls(uuid) to authenticated, servi
 -- Update claim_due_messages: skip review-mode messages that aren't approved yet,
 -- and return the owner's edited_body so the scheduler can send it verbatim.
 -- ----------------------------------------------------------------------------
+-- return type changes (added edited_body) → must drop before recreating
+drop function if exists public.claim_due_messages(int);
 create or replace function public.claim_due_messages(p_limit int default 100)
 returns table (
   id                uuid,
