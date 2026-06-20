@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import {
   Elements,
@@ -9,92 +9,163 @@ import {
   PaymentElement,
 } from "@stripe/react-stripe-js";
 import { motion, useReducedMotion } from "framer-motion";
-import { Check } from "lucide-react";
 import { createSignupPaymentSetup } from "@/lib/capture/payment";
 import { enrollRecurring } from "@/app/actions/enroll";
+import { StarMark } from "@/components/ui/logo";
 
 type Props = {
   token: string;
+  businessName: string;
+  firstName: string;
   priceCents: number;
   currency: string;
   cadences: { id: string; label: string }[];
   defaultCadenceId: string;
 };
 
-function Switch({
+function money(cents: number, currency = "usd") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+  }).format(cents / 100);
+}
+
+/* ---------------- custom toggle switch ---------------- */
+function ToggleSwitch({
   checked,
   onChange,
-  children,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
-  children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className="flex items-start gap-3 text-left text-sm"
+      className="relative h-[23px] w-10 shrink-0 rounded-full transition-colors"
+      style={{
+        background: checked
+          ? "linear-gradient(120deg,#6A57FF,#4F38FF)"
+          : "#D8D5E8",
+      }}
     >
       <span
-        className={`mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${
-          checked ? "bg-primary" : "bg-muted"
-        }`}
-      >
-        <motion.span
-          layout
-          transition={{ type: "spring", stiffness: 500, damping: 32 }}
-          className={`h-4 w-4 rounded-full bg-white shadow ${
-            checked ? "ml-auto" : ""
-          }`}
-        />
-      </span>
-      <span className="text-muted-foreground">{children}</span>
+        className="absolute top-0.5 left-0.5 h-[19px] w-[19px] rounded-full bg-white shadow transition-transform duration-200"
+        style={{ transform: checked ? "translateX(17px)" : "translateX(0)" }}
+      />
     </button>
   );
 }
 
-function SuccessState() {
+/* ---------------- confetti (Web Animations API) ---------------- */
+function fireConfetti(container: HTMLDivElement) {
+  const colors = ["#4F38FF", "#6A57FF", "#9A8CFF", "#22C55E", "#E0457B"];
+  for (let i = 0; i < 80; i++) {
+    const el = document.createElement("div");
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    el.style.cssText = `position:absolute;top:0;left:50%;width:8px;height:12px;border-radius:2px;background:${color};will-change:transform,opacity;`;
+    container.appendChild(el);
+    const dx = (Math.random() * 2 - 1) * 220;
+    const dy = window.innerHeight * 0.7 + Math.random() * 120;
+    const rot = (Math.random() * 2 - 1) * 720;
+    const dur = 1400 + Math.random() * 900;
+    el.animate(
+      [
+        { transform: "translate(-50%,0) rotate(0deg)", opacity: 1 },
+        {
+          transform: `translate(calc(-50% + ${dx}px), ${dy}px) rotate(${rot}deg)`,
+          opacity: 0,
+        },
+      ],
+      { duration: dur, easing: "cubic-bezier(.2,.6,.4,1)", fill: "forwards" }
+    );
+    window.setTimeout(() => el.remove(), dur + 120);
+  }
+}
+
+function SuccessView({
+  cadenceLabel,
+  priceCents,
+  currency,
+}: {
+  cadenceLabel: string;
+  priceCents: number;
+  currency: string;
+}) {
   const reduce = useReducedMotion();
+  const confettiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (reduce || !confettiRef.current) return;
+    fireConfetti(confettiRef.current);
+  }, [reduce]);
+
   return (
-    <div className="flex flex-col items-center py-6 text-center">
-      <div className="relative mb-4 flex h-16 w-16 items-center justify-center">
+    <motion.div
+      className="flex flex-col items-center py-4 text-center"
+      initial={reduce ? false : { opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {!reduce && (
+        <div
+          ref={confettiRef}
+          className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
+        />
+      )}
+
+      <div className="relative mb-4 flex h-[88px] w-[88px] items-center justify-center">
         {!reduce && (
-          <motion.span
-            className="absolute inset-0 rounded-full bg-primary/20"
-            initial={{ scale: 0.6, opacity: 0.8 }}
-            animate={{ scale: 1.8, opacity: 0 }}
-            transition={{ duration: 1, ease: "easeOut" }}
-          />
+          <span className="success-halo absolute inset-0 rounded-full bg-primary/25" />
         )}
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-[#6A57FF] to-[#4F38FF] text-white shadow-lg shadow-primary/30">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M5 13l4 4L19 7"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              pathLength={1}
-              className="draw-line"
-            />
-          </svg>
+        <svg width="88" height="88" viewBox="0 0 88 88" fill="none">
+          <circle
+            cx="44"
+            cy="44"
+            r="40"
+            stroke="#6A57FF"
+            strokeWidth="3"
+            pathLength={1}
+            className="success-circle"
+          />
+          <path
+            d="M28 45 L40 57 L62 33"
+            stroke="#4F38FF"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            pathLength={1}
+            className="success-check"
+          />
+        </svg>
+      </div>
+
+      <h2 className="font-display text-2xl font-bold">You&apos;re all set 🎉</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        We&apos;ll text you before each visit. Cancel anytime, no hassle.
+      </p>
+
+      <div className="mt-4 rounded-xl bg-secondary px-4 py-2 text-sm">
+        <span className="font-semibold text-primary">{cadenceLabel}</span>
+        <span className="text-muted-foreground"> · </span>
+        <span className="font-mono font-semibold text-primary">
+          {money(priceCents, currency)}/visit
         </span>
       </div>
-      <p className="font-display text-xl font-bold">You&apos;re all set! 🎉</p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        We&apos;ll text you before each visit. You can cancel anytime.
-      </p>
-    </div>
+    </motion.div>
   );
 }
 
-function InnerForm(props: Props & { customerId: string }) {
+/* ---------------- the enroll card ---------------- */
+function InnerCard(props: Props & { customerId: string }) {
   const stripe = useStripe();
   const elements = useElements();
   const [cadence, setCadence] = useState(props.defaultCadenceId);
   const [smsConsent, setSmsConsent] = useState(true);
   const [billingConsent, setBillingConsent] = useState(false);
+  const [billingBlocked, setBillingBlocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -102,7 +173,7 @@ function InnerForm(props: Props & { customerId: string }) {
   async function submit() {
     if (!stripe || !elements) return;
     if (!billingConsent) {
-      setErr("Please authorize recurring billing to continue.");
+      setBillingBlocked(true);
       return;
     }
     setBusy(true);
@@ -138,14 +209,54 @@ function InnerForm(props: Props & { customerId: string }) {
     setDone(true);
   }
 
-  if (done) return <SuccessState />;
+  const cadenceLabel =
+    props.cadences.find((c) => c.id === cadence)?.label ?? "Recurring";
+
+  if (done)
+    return (
+      <div className="glass animate-up rounded-[20px] p-7">
+        <SuccessView
+          cadenceLabel={cadenceLabel}
+          priceCents={props.priceCents}
+          currency={props.currency}
+        />
+      </div>
+    );
+
+  const buttonLabel = busy
+    ? "Setting up…"
+    : billingBlocked && !billingConsent
+      ? "Please authorize recurring billing"
+      : "Confirm recurring service";
 
   return (
-    <div className="mt-6 space-y-5">
-      {/* segmented cadence control */}
-      <div>
+    <div
+      className="glass animate-up rounded-[20px] p-7"
+      style={{ boxShadow: "0 40px 90px -36px rgba(79,56,255,.42)" }}
+    >
+      {/* eyebrow */}
+      <div className="flex items-center gap-2">
+        <StarMark gradient className="h-5 w-5" />
+        <span className="text-[13px] font-semibold text-muted-foreground">
+          {props.businessName}
+        </span>
+      </div>
+
+      <h1 className="mt-3 font-display text-[25px] font-bold leading-tight tracking-[-0.025em]">
+        Hi {props.firstName}, keep your service going automatically
+      </h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Lock in{" "}
+        <span className="font-mono font-bold text-foreground">
+          {money(props.priceCents, props.currency)}
+        </span>{" "}
+        per visit, billed automatically. No rebooking, cancel anytime.
+      </p>
+
+      {/* segmented cadence selector */}
+      <div className="mt-5">
         <label className="mb-1.5 block text-sm font-medium">How often?</label>
-        <div className="flex gap-1 rounded-xl border bg-secondary/50 p-1">
+        <div className="flex gap-1 rounded-[13px] bg-secondary p-1">
           {props.cadences.map((c) => {
             const active = c.id === cadence;
             return (
@@ -153,15 +264,19 @@ function InnerForm(props: Props & { customerId: string }) {
                 key={c.id}
                 type="button"
                 onClick={() => setCadence(c.id)}
-                className={`relative flex-1 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                  active ? "text-white" : "text-muted-foreground hover:text-foreground"
+                className={`relative flex-1 rounded-[10px] px-3 py-2 text-xs font-semibold transition-colors ${
+                  active ? "text-primary" : "text-muted-foreground"
                 }`}
               >
                 {active && (
                   <motion.span
-                    layoutId="cadence-pill"
-                    transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                    className="absolute inset-0 rounded-lg bg-gradient-to-r from-[#6A57FF] to-[#4F38FF]"
+                    layoutId="cadencePill"
+                    transition={{
+                      type: "spring",
+                      stiffness: 420,
+                      damping: 34,
+                    }}
+                    className="absolute inset-0 rounded-[10px] bg-white shadow-[0_4px_14px_-4px_rgba(79,56,255,0.4)]"
                   />
                 )}
                 <span className="relative z-10">{c.label}</span>
@@ -171,26 +286,53 @@ function InnerForm(props: Props & { customerId: string }) {
         </div>
       </div>
 
-      <PaymentElement />
-
-      <div className="space-y-3">
-        <Switch checked={billingConsent} onChange={setBillingConsent}>
-          I authorize recurring charges for each scheduled visit until I cancel.
-        </Switch>
-        <Switch checked={smsConsent} onChange={setSmsConsent}>
-          Text me reminders before each visit. Reply STOP anytime.
-        </Switch>
+      {/* payment field */}
+      <div
+        className={`mt-4 rounded-xl border p-3 transition-shadow ${
+          billingBlocked
+            ? "border-primary shadow-[0_0_0_3px_rgba(79,56,255,0.12)]"
+            : "border-border"
+        }`}
+      >
+        <PaymentElement />
       </div>
 
-      {err && <p className="text-sm text-destructive">{err}</p>}
+      {/* consent switches */}
+      <div className="mt-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-sm text-muted-foreground">
+            Authorize recurring charges for each scheduled visit until I cancel.
+          </span>
+          <ToggleSwitch
+            checked={billingConsent}
+            onChange={(v) => {
+              setBillingConsent(v);
+              if (v) setBillingBlocked(false);
+            }}
+          />
+        </div>
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-sm text-muted-foreground">
+            Text me reminders before each visit. Reply STOP anytime.
+          </span>
+          <ToggleSwitch checked={smsConsent} onChange={setSmsConsent} />
+        </div>
+      </div>
+
+      {err && <p className="mt-3 text-sm text-destructive">{err}</p>}
 
       <button
         onClick={submit}
         disabled={busy}
-        className="hover-lift w-full rounded-xl bg-gradient-to-r from-[#6A57FF] to-[#4F38FF] px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/30 disabled:opacity-60"
+        className="accent-sheen hover-lift relative mt-5 w-full overflow-hidden rounded-xl bg-gradient-to-r from-[#6A57FF] to-[#4F38FF] px-4 py-3.5 text-sm font-semibold text-white shadow-lg shadow-primary/30 disabled:opacity-70"
       >
-        {busy ? "Setting up…" : "Confirm recurring service"}
+        <span className="relative z-10">{buttonLabel}</span>
       </button>
+
+      <p className="mt-3 text-center text-xs text-muted-foreground">
+        🔒 Secured by Stripe · Cancel anytime ·{" "}
+        <span className="font-semibold text-primary">Reply STOP</span> to opt out
+      </p>
     </div>
   );
 }
@@ -220,12 +362,20 @@ export function EnrollForm(props: Props) {
 
   if (err)
     return (
-      <p className="mt-6 text-sm text-destructive">
-        This offer isn&apos;t available right now.
-      </p>
+      <div className="glass rounded-[20px] p-7">
+        <p className="text-sm text-destructive">
+          This offer isn&apos;t available right now.
+        </p>
+      </div>
     );
   if (!stripePromise || !clientSecret || !customerId)
-    return <p className="mt-6 text-sm text-muted-foreground">Loading…</p>;
+    return (
+      <div className="glass rounded-[20px] p-7">
+        <div className="shimmer h-5 w-40 rounded" />
+        <div className="shimmer mt-3 h-7 w-full rounded" />
+        <div className="shimmer mt-4 h-24 w-full rounded" />
+      </div>
+    );
 
   return (
     <Elements
@@ -236,13 +386,15 @@ export function EnrollForm(props: Props) {
           theme: "stripe",
           variables: {
             colorPrimary: "#4F38FF",
-            borderRadius: "10px",
-            fontFamily: "Inter, system-ui, sans-serif",
+            colorText: "#141221",
+            colorDanger: "#E0457B",
+            borderRadius: "12px",
+            fontFamily: "Inter, sans-serif",
           },
         },
       }}
     >
-      <InnerForm {...props} customerId={customerId} />
+      <InnerCard {...props} customerId={customerId} />
     </Elements>
   );
 }

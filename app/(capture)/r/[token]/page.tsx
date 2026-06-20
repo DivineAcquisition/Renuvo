@@ -7,13 +7,6 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function money(cents: number, currency = "usd") {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(cents / 100);
-}
-
 export default async function CapturePage({
   params,
 }: {
@@ -24,7 +17,7 @@ export default async function CapturePage({
 
   if (!offer) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-6">
+      <main className="wash-capture flex min-h-screen items-center justify-center p-6">
         <div className="max-w-sm text-center">
           <h1 className="font-display text-xl font-bold">
             This link has expired
@@ -37,7 +30,6 @@ export default async function CapturePage({
     );
   }
 
-  // cadence options for this vertical
   const admin = createAdminClient();
   const { data: cadences } = await admin
     .from("cadence_profiles")
@@ -46,24 +38,12 @@ export default async function CapturePage({
     .order("interval_days");
 
   return (
-    <main className="ambient-wash flex min-h-screen items-center justify-center p-6">
-      <div className="glass w-full max-w-md rounded-2xl p-7">
-        <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-          {offer.businessName}
-        </p>
-        <h1 className="mt-2 font-display text-2xl font-bold tracking-tight">
-          Hi {offer.firstName}, keep your service going automatically
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Lock in{" "}
-          <span className="font-mono font-semibold text-foreground">
-            {money(offer.priceCents, offer.currency)}
-          </span>{" "}
-          per visit, billed automatically. No rebooking, cancel anytime.
-        </p>
-
+    <main className="wash-capture flex min-h-screen items-center justify-center p-6">
+      <div className="w-full max-w-[460px]">
         <EnrollForm
           token={token}
+          businessName={offer.businessName}
+          firstName={offer.firstName}
           priceCents={offer.priceCents}
           currency={offer.currency}
           cadences={(cadences ?? []).map(
@@ -74,6 +54,10 @@ export default async function CapturePage({
           )}
           defaultCadenceId={offer.cadenceProfileId}
         />
+        <p className="mt-4 text-center text-[11px] text-muted-foreground">
+          powered by{" "}
+          <span className="font-display font-semibold">Renuvo</span>
+        </p>
       </div>
     </main>
   );

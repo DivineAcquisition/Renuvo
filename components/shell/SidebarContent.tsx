@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CountUp } from "@/components/ui/count-up";
+import { LogoMark } from "@/components/ui/logo";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -48,9 +49,7 @@ export function SidebarContent({
         onClick={onNavigate}
         className="flex items-center gap-2.5 px-2 pt-1"
       >
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#6A57FF] to-[#4F38FF] font-display text-lg font-bold text-white shadow-lg shadow-primary/30">
-          R
-        </span>
+        <LogoMark className="h-9 w-9" />
         <span className="font-display text-lg font-bold tracking-tight">
           Renuvo
         </span>

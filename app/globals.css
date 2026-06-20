@@ -83,6 +83,18 @@
     radial-gradient(700px 500px at -6% 8%, hsl(247 100% 67% / 0.05), transparent 55%);
 }
 
+/* Capture page wash: top-right purple + bottom-left b400 (one ambient wash). */
+.wash-capture::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(820px 560px at 92% -6%, hsl(247 100% 61% / 0.08), transparent 60%),
+    radial-gradient(680px 520px at -6% 106%, hsl(247 100% 77% / 0.07), transparent 60%);
+}
+
 /* Frosted glass surface — the signature element. */
 .glass {
   background: rgba(255, 255, 255, 0.72);
@@ -216,6 +228,32 @@
   100% { background-position: -100% 0; }
 }
 
+/* capture card mount + success choreography */
+@keyframes up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes halo {
+  from { transform: scale(0.6); opacity: 0.6; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+.animate-up {
+  animation: up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.success-circle {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 0.7s ease 0.1s forwards;
+}
+.success-check {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 0.4s ease 0.6s forwards;
+}
+.success-halo {
+  animation: halo 1s ease 0.3s forwards;
+}
+
 /* ---- reduced motion: disable everything, show final states, no shift ---- */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -226,7 +264,9 @@
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
-  .draw-line {
+  .draw-line,
+  .success-circle,
+  .success-check {
     stroke-dashoffset: 0;
   }
   .draw-fill {
