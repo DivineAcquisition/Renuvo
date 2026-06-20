@@ -1,5 +1,6 @@
 import { telnyxFetch } from "./client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withRetry } from "@/lib/retry";
 
 /**
  * Order a local number and attach it to the tenant. A2P brand/campaign
@@ -9,21 +10,29 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export async function provisionNumber(orgId: string, areaCode?: string) {
   const admin = createAdminClient();
 
-  const search = await telnyxFetch(
-    `/available_phone_numbers?filter[country_code]=US&filter[features][]=sms` +
-      (areaCode ? `&filter[national_destination_code]=${areaCode}` : "") +
-      `&filter[limit]=1`
+  const search = await withRetry(
+    () =>
+      telnyxFetch(
+        `/available_phone_numbers?filter[country_code]=US&filter[features][]=sms` +
+          (areaCode ? `&filter[national_destination_code]=${areaCode}` : "") +
+          `&filter[limit]=1`
+      ),
+    { label: "telnyx.number_search" }
   );
   const number = search?.data?.[0]?.phone_number;
   if (!number) throw new Error("No numbers available");
 
-  await telnyxFetch("/number_orders", {
-    method: "POST",
-    body: JSON.stringify({
-      phone_numbers: [{ phone_number: number }],
-      messaging_profile_id: process.env.TELNYX_MESSAGING_PROFILE_ID,
-    }),
-  });
+  await withRetry(
+    () =>
+      telnyxFetch("/number_orders", {
+        method: "POST",
+        body: JSON.stringify({
+          phone_numbers: [{ phone_number: number }],
+          messaging_profile_id: process.env.TELNYX_MESSAGING_PROFILE_ID,
+        }),
+      }),
+    { label: "telnyx.number_order" }
+  );
 
   await admin
     .from("organizations")

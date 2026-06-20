@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { onPaymentRecorded } from "@/lib/agent/hooks"; // real in Prompt 15
+import { log } from "@/lib/log";
 
 export type RecordPaymentInput = {
   orgId: string;
@@ -32,6 +33,11 @@ export async function recordPayment(input: RecordPaymentInput) {
     .eq("payment_external_id", input.externalId)
     .maybeSingle();
   if (existingJob) {
+    log.info("payment.recorded", {
+      orgId: input.orgId,
+      source: input.source,
+      isNew: false,
+    });
     return {
       isNew: false,
       jobId: existingJob.id,
@@ -133,5 +139,10 @@ export async function recordPayment(input: RecordPaymentInput) {
     });
   }
 
+  log.info("payment.recorded", {
+    orgId: input.orgId,
+    source: input.source,
+    isNew: true,
+  });
   return { isNew: true, jobId: job?.id ?? null, customerId };
 }

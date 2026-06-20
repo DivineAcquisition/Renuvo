@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyTelnyxSignature } from "@/lib/telnyx/verify";
 import { onInboundMessage } from "@/lib/agent/hooks"; // real in Prompt 18
+import { log } from "@/lib/log";
 
 export async function POST(req: NextRequest) {
   const raw = await req.text();
@@ -9,11 +10,13 @@ export async function POST(req: NextRequest) {
   const ts = req.headers.get("telnyx-timestamp") ?? "";
 
   if (!verifyTelnyxSignature(raw, sig, ts)) {
+    log.error("webhook.telnyx.bad_signature");
     return NextResponse.json({ error: "bad signature" }, { status: 401 });
   }
 
   const evt = JSON.parse(raw);
   const type = evt?.data?.event_type as string;
+  log.info("webhook.telnyx.received", { type });
   const payload = evt?.data?.payload ?? {};
   const admin = createAdminClient();
 

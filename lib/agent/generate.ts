@@ -1,4 +1,6 @@
 import { getAnthropicClient, SMS_MODEL } from "@/lib/anthropic/client";
+import { withRetry } from "@/lib/retry";
+import { log } from "@/lib/log";
 import { resolveTemplate } from "@/lib/templates/queries";
 import { renderTemplate } from "@/lib/templates/render";
 import { buildMergeVars, type MergeVars } from "./context";
@@ -112,12 +114,16 @@ export async function generateMessage(args: {
       .join("\n\n");
 
     const anthropic = await getAnthropicClient();
-    const res = await anthropic.messages.create({
-      model: SMS_MODEL,
-      max_tokens: 200,
-      system: SYSTEM,
-      messages: [{ role: "user", content: user }],
-    });
+    const res = await withRetry(
+      () =>
+        anthropic.messages.create({
+          model: SMS_MODEL,
+          max_tokens: 200,
+          system: SYSTEM,
+          messages: [{ role: "user", content: user }],
+        }),
+      { label: "anthropic.generate" }
+    );
 
     let text = res.content
       .filter((b) => b.type === "text")
@@ -137,9 +143,17 @@ export async function generateMessage(args: {
     if (linkOk && optOutOk && lenOk) {
       return { text, personalized: true, fallbackUsed: false };
     }
+    log.warn("agent.fallback_used", {
+      eventKey: args.eventKey,
+      reason: "validation_failed",
+    });
     return { text: baseline, personalized: false, fallbackUsed: true };
   } catch (e) {
-    console.error("[generate] AI failed, using template:", e);
+    log.warn("agent.fallback_used", {
+      eventKey: args.eventKey,
+      reason: "ai_failed",
+      error: (e as Error)?.message,
+    });
     return { text: baseline, personalized: false, fallbackUsed: true };
   }
 }

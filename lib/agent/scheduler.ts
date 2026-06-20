@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateMessage, mapEventKeyToEventType } from "./generate";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
 import { canSendNow } from "./guardrails";
+import { log } from "@/lib/log";
 import type { Database } from "@/types/database";
 
 type EventKey = Database["public"]["Enums"]["template_event_key"];
@@ -179,7 +180,7 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
     }
   }
 
-  return {
+  const summary = {
     claimed: rows.length,
     sent,
     skipped,
@@ -187,4 +188,6 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
     deferred,
     recovered: recovered ?? 0,
   };
+  log.info("scheduler.run", summary);
+  return summary;
 }

@@ -1,4 +1,5 @@
 import { getAnthropicClient, SMS_MODEL } from "@/lib/anthropic/client";
+import { withRetry } from "@/lib/retry";
 
 export type Intent =
   | "interested"
@@ -36,17 +37,21 @@ export async function classifyIntent(
 
   try {
     const anthropic = await getAnthropicClient();
-    const res = await anthropic.messages.create({
-      model: SMS_MODEL,
-      max_tokens: 30,
-      system: CLASSIFY_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: `${convo ? convo + "\n" : ""}Customer (latest): ${latestText}`,
-        },
-      ],
-    });
+    const res = await withRetry(
+      () =>
+        anthropic.messages.create({
+          model: SMS_MODEL,
+          max_tokens: 30,
+          system: CLASSIFY_SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: `${convo ? convo + "\n" : ""}Customer (latest): ${latestText}`,
+            },
+          ],
+        }),
+      { label: "anthropic.classify" }
+    );
     const text = res.content
       .filter((b) => b.type === "text")
       .map((b) => (b as { text: string }).text)

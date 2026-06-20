@@ -1,5 +1,6 @@
 import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { withRetry } from "@/lib/retry";
 import { intervalToStripe, nextVisitDates } from "./cadence";
 import { generateMessage } from "@/lib/agent/generate";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
@@ -83,10 +84,18 @@ export async function activateRecurringPlan(
     const stripe = await getStripe();
 
     // set the saved card as default on the connected-account customer
-    await stripe.customers.update(
-      plan.stripe_customer_id,
-      { invoice_settings: { default_payment_method: args.paymentMethodId } },
-      { stripeAccount: acct }
+    await withRetry(
+      () =>
+        stripe.customers.update(
+          plan.stripe_customer_id!,
+          {
+            invoice_settings: {
+              default_payment_method: args.paymentMethodId,
+            },
+          },
+          { stripeAccount: acct }
+        ),
+      { label: "stripe.customer_update" }
     );
 
     const appFee = process.env.STRIPE_APP_FEE_PERCENT
@@ -94,32 +103,40 @@ export async function activateRecurringPlan(
       : {};
 
     // subscription item price_data needs a product id (not inline product_data)
-    const product = await stripe.products.create(
-      { name: `${orgName} — recurring service` },
-      { stripeAccount: acct }
+    const product = await withRetry(
+      () =>
+        stripe.products.create(
+          { name: `${orgName} — recurring service` },
+          { stripeAccount: acct }
+        ),
+      { label: "stripe.product_create" }
     );
 
-    const sub = await stripe.subscriptions.create(
-      {
-        customer: plan.stripe_customer_id,
-        default_payment_method: args.paymentMethodId,
-        items: [
+    const sub = await withRetry(
+      () =>
+        stripe.subscriptions.create(
           {
-            price_data: {
-              currency: plan.currency,
-              unit_amount: plan.price_cents,
-              recurring: {
-                interval: rec.interval,
-                interval_count: rec.interval_count,
+            customer: plan.stripe_customer_id!,
+            default_payment_method: args.paymentMethodId,
+            items: [
+              {
+                price_data: {
+                  currency: plan.currency,
+                  unit_amount: plan.price_cents,
+                  recurring: {
+                    interval: rec.interval,
+                    interval_count: rec.interval_count,
+                  },
+                  product: product.id,
+                },
               },
-              product: product.id,
-            },
+            ],
+            metadata: { renuvo_plan_id: plan.id },
+            ...appFee,
           },
-        ],
-        metadata: { renuvo_plan_id: plan.id },
-        ...appFee,
-      },
-      { stripeAccount: acct }
+          { stripeAccount: acct }
+        ),
+      { label: "stripe.subscription_create" }
     );
     subscriptionId = sub.id;
 

@@ -1,4 +1,5 @@
 import { telnyxFetch } from "./client";
+import { withRetry } from "@/lib/retry";
 
 export type RawSendResult = { id: string; segments: number };
 
@@ -12,10 +13,14 @@ export async function sendSmsRaw(
   const body: Record<string, unknown> = { from, to, text };
   if (messagingProfileId) body.messaging_profile_id = messagingProfileId;
 
-  const json = await telnyxFetch("/messages", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
+  const json = await withRetry(
+    () =>
+      telnyxFetch("/messages", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    { label: "telnyx.send" }
+  );
   const id = json?.data?.id as string;
   const segments = Array.isArray(json?.data?.parts)
     ? json.data.parts.length

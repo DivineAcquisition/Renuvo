@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordPayment } from "@/lib/payments/record";
+import { log } from "@/lib/log";
 import type Stripe from "stripe";
 
 export async function POST(req: NextRequest) {
@@ -17,8 +18,11 @@ export async function POST(req: NextRequest) {
       process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch {
+    log.error("webhook.stripe.bad_signature");
     return NextResponse.json({ error: "bad signature" }, { status: 400 });
   }
+
+  log.info("webhook.stripe.received", { type: event.type });
 
   // Only care about successful charges on CONNECTED accounts
   if (
