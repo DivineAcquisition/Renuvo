@@ -9,6 +9,34 @@ function pct(n: number | null) {
   return n == null ? "—" : `${Math.round(n * 100)}%`;
 }
 
+/** Your rate as a filled bar; the cohort median as a tick. Brand-tokened. */
+function ComparisonBar({
+  self,
+  cohort,
+  good,
+}: {
+  self: number;
+  cohort: number;
+  good: boolean;
+}) {
+  const scale = Math.max(self, cohort, 0.01) * 1.25;
+  const selfPct = Math.min(100, (self / scale) * 100);
+  const cohortPct = Math.min(100, (cohort / scale) * 100);
+  return (
+    <div className="relative mt-3 h-2 w-full rounded-full bg-secondary">
+      <div
+        className={`h-full rounded-full ${good ? "bg-primary" : "bg-amber-500"}`}
+        style={{ width: `${selfPct}%` }}
+      />
+      <div
+        className="absolute top-[-2px] h-3 w-0.5 rounded bg-foreground/50"
+        style={{ left: `calc(${cohortPct}% - 1px)` }}
+        title="Cohort median"
+      />
+    </div>
+  );
+}
+
 function BenchCard({
   title,
   b,
@@ -36,18 +64,22 @@ function BenchCard({
             We need a few more businesses like yours to show a benchmark.
           </p>
         ) : (
-          <p className="mt-1 text-xs text-muted-foreground">
-            {framing}{" "}
-            <span className="font-semibold text-foreground">{pct(b.cohort)}</span>
-            {ahead != null && (
-              <span
-                className={ahead ? "text-emerald-600" : "text-amber-600"}
-              >
-                {" "}
-                · you&apos;re {ahead ? "ahead" : "behind"}
-              </span>
+          <>
+            {/* re-tokenized comparison bar: your rate (fill) vs cohort median (tick) */}
+            {b.self != null && b.cohort != null && (
+              <ComparisonBar self={b.self} cohort={b.cohort} good={!!ahead} />
             )}
-          </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {framing}{" "}
+              <span className="font-semibold text-foreground">{pct(b.cohort)}</span>
+              {ahead != null && (
+                <span className={ahead ? "text-emerald-600" : "text-amber-600"}>
+                  {" "}
+                  · you&apos;re {ahead ? "ahead" : "behind"}
+                </span>
+              )}
+            </p>
+          </>
         )}
       </CardContent>
     </Card>
