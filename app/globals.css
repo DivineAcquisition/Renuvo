@@ -63,6 +63,12 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* use the Inter "Display" optical cut at large sizes, "Text" at small */
+    font-optical-sizing: auto;
+  }
+  /* headlines: tighter tracking for the display cut */
+  .font-display {
+    letter-spacing: -0.02em;
   }
 }
 

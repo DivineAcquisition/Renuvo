@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-// Display — characterful, used for headlines/wordmark (NOT Inter-for-everything)
-const display = Bricolage_Grotesque({
+// Inter is the core SaaS typeface. The `opsz` (optical size) axis gives the
+// "Inter Display" cut at large sizes (headlines) and the text cut at small —
+// enabled via `font-optical-sizing: auto` in globals. One family, body + display.
+const sans = Inter({
   subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["500", "600", "700", "800"],
+  variable: "--font-sans",
+  axes: ["opsz"],
+  display: "swap",
 });
-// Body — clean, neutral
-const body = Inter({ subsets: ["latin"], variable: "--font-body" });
 // Data — mono for dollar figures, stats, metrics (the operator-grade touch)
 const mono = JetBrains_Mono({
   subsets: ["latin"],
@@ -29,10 +30,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${display.variable} ${body.variable} ${mono.variable}`}
-    >
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="font-body">{children}</body>
     </html>
   );
