@@ -16,15 +16,17 @@ function Btn({
   onClick,
   busy,
   variant = "solid",
+  accent = "#4F38FF",
 }: {
   children: React.ReactNode;
   onClick: () => void;
   busy?: boolean;
   variant?: "solid" | "ghost" | "danger";
+  accent?: string;
 }) {
   const cls =
     variant === "solid"
-      ? "bg-[#4F38FF] text-white"
+      ? "text-white"
       : variant === "danger"
         ? "bg-white text-[#E0457B] border border-[#E0457B]/30"
         : "bg-white text-[#141221] border";
@@ -32,6 +34,7 @@ function Btn({
     <button
       onClick={onClick}
       disabled={busy}
+      style={variant === "solid" ? { background: accent } : undefined}
       className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition-opacity disabled:opacity-60 ${cls}`}
     >
       {children}
@@ -43,10 +46,12 @@ export function PortalHome({
   status,
   cadences,
   currentCadenceId,
+  accent = "#4F38FF",
 }: {
   status: string;
   cadences: { id: string; label: string }[];
   currentCadenceId: string;
+  accent?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -116,7 +121,7 @@ export function PortalHome({
           Update card
         </Btn>
         {status === "paused" ? (
-          <Btn busy={busy} onClick={() => run(portalResume, "Welcome back — your plan is active.")}>
+          <Btn busy={busy} accent={accent} onClick={() => run(portalResume, "Welcome back — your plan is active.")}>
             Resume service
           </Btn>
         ) : (
@@ -167,6 +172,7 @@ export function PortalHome({
             <>
               {reason === "too_frequent" && (
                 <Deflect
+                  accent={accent}
                   title="Want fewer visits instead?"
                   body="Switching to a less frequent schedule keeps your spot without cancelling."
                   cta="Change frequency"
@@ -178,6 +184,7 @@ export function PortalHome({
               )}
               {reason === "break" && (
                 <Deflect
+                  accent={accent}
                   title="Take a break, keep your spot"
                   body="Pause anytime and resume when you're ready — no need to cancel."
                   cta="Pause instead"
@@ -189,6 +196,7 @@ export function PortalHome({
               )}
               {reason === "too_expensive" && (
                 <Deflect
+                  accent={accent}
                   title="A lighter schedule costs less"
                   body="A less frequent visit lowers your per-month cost while keeping your home cared for."
                   cta="See options"
@@ -235,11 +243,13 @@ function Deflect({
   body,
   cta,
   onCta,
+  accent = "#4F38FF",
 }: {
   title: string;
   body: string;
   cta: string;
   onCta: () => void;
+  accent?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -247,7 +257,8 @@ function Deflect({
       <p className="text-sm text-[#6b6880]">{body}</p>
       <button
         onClick={onCta}
-        className="w-full rounded-xl bg-[#4F38FF] px-4 py-3 text-sm font-semibold text-white"
+        style={{ background: accent }}
+        className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white"
       >
         {cta}
       </button>

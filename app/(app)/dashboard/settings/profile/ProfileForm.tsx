@@ -27,6 +27,7 @@ export function ProfileForm({
     timezone: string;
     quiet_hours_start: number;
     quiet_hours_end: number;
+    accent_color: string | null;
   };
   isOwner: boolean;
 }) {
@@ -34,6 +35,7 @@ export function ProfileForm({
   const [tz, setTz] = useState(org.timezone);
   const [qs, setQs] = useState(org.quiet_hours_start);
   const [qe, setQe] = useState(org.quiet_hours_end);
+  const [accent, setAccent] = useState(org.accent_color ?? "#4F38FF");
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -43,6 +45,7 @@ export function ProfileForm({
       timezone: tz,
       quietStart: qs,
       quietEnd: qe,
+      accentColor: accent,
     });
     setBusy(false);
     if ("error" in res) toast.error(res.error ?? "Could not save.");
@@ -111,6 +114,34 @@ export function ProfileForm({
               ))}
             </select>
           </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Brand accent (customer-facing)</Label>
+          <div className="flex items-center gap-3">
+            <input
+              type="color"
+              value={accent}
+              onChange={(e) => setAccent(e.target.value)}
+              disabled={!isOwner}
+              className="h-10 w-14 cursor-pointer rounded-md border border-input bg-background p-1 disabled:cursor-not-allowed"
+              aria-label="Brand accent color"
+            />
+            <Input
+              value={accent}
+              onChange={(e) => setAccent(e.target.value)}
+              disabled={!isOwner}
+              className="w-32 font-mono"
+            />
+            <span
+              className="ml-auto rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
+              style={{ background: accent }}
+            >
+              Preview
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Shown to your customers on your capture page, portal, and emails.
+          </p>
         </div>
         {isOwner && (
           <Button onClick={save} disabled={busy}>

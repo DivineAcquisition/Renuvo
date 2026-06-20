@@ -272,10 +272,12 @@
   content: "";
   position: absolute;
   inset: -45%;
+  /* defaults to the Renuvo ramp; tenant surfaces override --aurora-* with their
+     brand accent so customer-facing pages carry the business brand, not purple. */
   background:
-    radial-gradient(38% 48% at 22% 28%, rgba(106, 87, 255, 0.55), transparent 60%),
-    radial-gradient(40% 44% at 80% 22%, rgba(154, 140, 255, 0.45), transparent 60%),
-    radial-gradient(48% 52% at 62% 82%, rgba(79, 56, 255, 0.5), transparent 60%);
+    radial-gradient(38% 48% at 22% 28%, var(--aurora-1, rgba(106, 87, 255, 0.55)), transparent 60%),
+    radial-gradient(40% 44% at 80% 22%, var(--aurora-2, rgba(154, 140, 255, 0.45)), transparent 60%),
+    radial-gradient(48% 52% at 62% 82%, var(--aurora-3, rgba(79, 56, 255, 0.5)), transparent 60%);
   filter: blur(44px);
   animation: aurora 20s ease-in-out infinite alternate;
 }

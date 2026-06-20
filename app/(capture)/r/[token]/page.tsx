@@ -3,6 +3,7 @@ import { resolveSignupToken } from "@/lib/capture/token";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgSettings } from "@/lib/settings/resolve";
 import { getActiveMenu } from "@/lib/packages/compose";
+import { AuroraBackground } from "@/components/fx/aurora-background";
 import { EnrollForm } from "./EnrollForm";
 import { GenericLeadForm } from "./GenericLeadForm";
 
@@ -54,11 +55,21 @@ export default async function CapturePage({
   // the business's service menu (packages + add-ons). Empty → legacy single price.
   const menu = await getActiveMenu(offer.orgId);
 
+  // tenant brand accent (customer-facing — carries the business brand, not purple)
+  const { data: brandOrg } = await admin
+    .from("organizations")
+    .select("accent_color")
+    .eq("id", offer.orgId)
+    .maybeSingle();
+  const accent =
+    (brandOrg as { accent_color?: string | null } | null)?.accent_color ?? null;
+
   const isGeneric = offer.linkType === "generic" || !offer.customerId;
 
   return (
-    <main className="wash-capture flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-[460px]">
+    <main className="relative flex min-h-screen items-center justify-center p-6">
+      <AuroraBackground accent={accent} className="absolute inset-0" />
+      <div className="relative w-full max-w-[460px]">
         {isGeneric ? (
           <div className="glass rounded-2xl p-7">
             <p className="text-xs font-semibold uppercase tracking-wide text-primary">

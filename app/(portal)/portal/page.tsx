@@ -20,7 +20,7 @@ export default async function PortalOverview() {
   const [{ data: org }, { data: plan }] = await Promise.all([
     admin
       .from("organizations")
-      .select("name, vertical_id, stripe_account_id")
+      .select("name, vertical_id, stripe_account_id, accent_color")
       .eq("id", s.orgId)
       .single(),
     admin
@@ -133,6 +133,10 @@ export default async function PortalOverview() {
         status={plan.status}
         cadences={cadences}
         currentCadenceId={plan.cadence_profile_id}
+        accent={
+          (org as { accent_color?: string | null } | null)?.accent_color ??
+          "#4F38FF"
+        }
       />
 
       {payments && payments.length > 0 && (
