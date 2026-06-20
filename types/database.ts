@@ -452,10 +452,14 @@ export type Database = {
           id: string
           ingest_secret: string
           name: string
+          preferred_cadence_id: string | null
+          quiet_hours_end: number
+          quiet_hours_start: number
           slug: string
           stripe_account_id: string | null
           telnyx_messaging_profile_id: string | null
           telnyx_phone_number: string | null
+          timezone: string
           updated_at: string
           vertical_id: string | null
         }
@@ -467,10 +471,14 @@ export type Database = {
           id?: string
           ingest_secret?: string
           name: string
+          preferred_cadence_id?: string | null
+          quiet_hours_end?: number
+          quiet_hours_start?: number
           slug: string
           stripe_account_id?: string | null
           telnyx_messaging_profile_id?: string | null
           telnyx_phone_number?: string | null
+          timezone?: string
           updated_at?: string
           vertical_id?: string | null
         }
@@ -482,10 +490,14 @@ export type Database = {
           id?: string
           ingest_secret?: string
           name?: string
+          preferred_cadence_id?: string | null
+          quiet_hours_end?: number
+          quiet_hours_start?: number
           slug?: string
           stripe_account_id?: string | null
           telnyx_messaging_profile_id?: string | null
           telnyx_phone_number?: string | null
+          timezone?: string
           updated_at?: string
           vertical_id?: string | null
         }

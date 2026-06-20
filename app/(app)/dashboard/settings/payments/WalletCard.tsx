@@ -13,7 +13,10 @@ import {
   confirmSaveCard,
   addFunds,
 } from "@/app/actions/wallet";
+import { updateWalletSettingsAction } from "@/app/actions/settings";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const stripePromise = loadStripe(
@@ -81,6 +84,7 @@ export function WalletCard(props: {
   }
 
   return (
+    <div className="space-y-6">
     <Card>
       <CardHeader>
         <CardTitle>SMS balance</CardTitle>
@@ -130,6 +134,89 @@ export function WalletCard(props: {
             )}
           </>
         )}
+      </CardContent>
+    </Card>
+
+      {props.isOwner && (
+        <AutoReloadForm
+          enabled={props.autoReloadEnabled}
+          thresholdCents={props.reloadThresholdCents}
+          amountCents={props.reloadAmountCents}
+        />
+      )}
+    </div>
+  );
+}
+
+function AutoReloadForm(props: {
+  enabled: boolean;
+  thresholdCents: number;
+  amountCents: number;
+}) {
+  const [enabled, setEnabled] = useState(props.enabled);
+  const [threshold, setThreshold] = useState(props.thresholdCents / 100);
+  const [amount, setAmount] = useState(props.amountCents / 100);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    setNote(null);
+    const res = await updateWalletSettingsAction({
+      autoReloadEnabled: enabled,
+      thresholdCents: Math.round(threshold * 100),
+      amountCents: Math.round(amount * 100),
+    });
+    setBusy(false);
+    setNote("error" in res ? res.error ?? "Could not save." : "Saved.");
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Auto-reload</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          Automatically top up when the balance runs low
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Reload when below ($)</Label>
+            <Input
+              type="number"
+              min={0}
+              step="1"
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+              disabled={!enabled}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Reload amount ($)</Label>
+            <Input
+              type="number"
+              min={1}
+              step="1"
+              value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              disabled={!enabled}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button onClick={save} disabled={busy}>
+            {busy ? "Saving…" : "Save auto-reload"}
+          </Button>
+          {note && (
+            <span className="text-sm text-muted-foreground">{note}</span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

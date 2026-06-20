@@ -25,10 +25,11 @@ export async function getSignupLink(args: {
     .maybeSingle();
   if (existing?.token) return buildCaptureUrl(existing.token);
 
-  // resolve default cadence + price
+  // resolve offered cadence + price.
+  // Cadence preference: org's preferred_cadence_id → the vertical default.
   const { data: org } = await admin
     .from("organizations")
-    .select("vertical_id")
+    .select("vertical_id, preferred_cadence_id")
     .eq("id", args.orgId)
     .single();
   const { data: vertical } = await admin
@@ -36,6 +37,8 @@ export async function getSignupLink(args: {
     .select("default_cadence_id")
     .eq("id", org?.vertical_id ?? "")
     .maybeSingle();
+
+  const cadenceId = org?.preferred_cadence_id ?? vertical?.default_cadence_id;
 
   let priceCents = 0;
   if (args.jobId) {
@@ -46,14 +49,14 @@ export async function getSignupLink(args: {
       .single();
     priceCents = job?.price_cents ?? 0;
   }
-  if (!vertical?.default_cadence_id) return buildCaptureUrl("invalid");
+  if (!cadenceId) return buildCaptureUrl("invalid");
 
   const token = newToken();
   await admin.from("signup_links").insert({
     organization_id: args.orgId,
     customer_id: args.customerId,
     job_id: args.jobId ?? null,
-    cadence_profile_id: vertical.default_cadence_id,
+    cadence_profile_id: cadenceId,
     price_cents: priceCents,
     token,
     expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
