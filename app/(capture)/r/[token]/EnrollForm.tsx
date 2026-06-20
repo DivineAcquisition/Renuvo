@@ -58,7 +58,11 @@ function InnerForm(props: Props & { customerId: string }) {
       stripeCustomerId: props.customerId,
     });
     if ("error" in res) {
-      setErr(res.error);
+      setErr(
+        res.error === "activation_failed"
+          ? "Your card was saved, but we hit a snag finishing setup. Your provider will confirm shortly."
+          : res.error
+      );
       setBusy(false);
       return;
     }

@@ -5,7 +5,9 @@ import { resolveSignupToken, consumeSignupToken } from "@/lib/capture/token";
 import { cancelPendingMessages } from "@/lib/agent/engine";
 import { activateRecurringPlan } from "@/lib/plans/activate"; // stub → Prompt 20
 
-export type EnrollResult = { error: string } | { ok: true; planId: string };
+export type EnrollResult =
+  | { error: string; planId?: string }
+  | { ok: true; planId: string };
 
 export async function enrollRecurring(input: {
   token: string;
@@ -74,11 +76,13 @@ export async function enrollRecurring(input: {
     },
   });
 
-  // 5) ACTIVATE → subscription + scheduled visits + confirmation SMS (Prompt 20)
-  await activateRecurringPlan(plan.id, {
+  // 5) ACTIVATE → subscription + scheduled visits + confirmation SMS (Prompt 20).
+  // Don't tell the customer "all set" unless billing actually started.
+  const activation = await activateRecurringPlan(plan.id, {
     paymentMethodId: input.paymentMethodId,
     cadenceProfileId: input.cadenceProfileId,
   });
+  if (!activation.ok) return { error: "activation_failed", planId: plan.id };
 
   return { ok: true, planId: plan.id };
 }

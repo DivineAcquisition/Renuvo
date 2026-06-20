@@ -68,5 +68,90 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Connected-account subscription lifecycle → keep plan status truthful.
+  if (
+    event.type === "invoice.payment_succeeded" ||
+    event.type === "invoice.payment_failed" ||
+    event.type === "customer.subscription.deleted"
+  ) {
+    const admin = createAdminClient();
+
+    // idempotency: skip if this Stripe event was already processed
+    const { data: seen } = await admin
+      .from("events")
+      .select("id")
+      .eq("source", "stripe")
+      .eq("external_id", event.id)
+      .maybeSingle();
+    if (seen) return NextResponse.json({ received: true });
+
+    // resolve the subscription id, then the owned plan
+    let subId: string | null = null;
+    if (event.type === "customer.subscription.deleted") {
+      subId = (event.data.object as Stripe.Subscription).id;
+    } else {
+      const inv = event.data.object as {
+        subscription?: string | { id?: string } | null;
+      };
+      subId =
+        typeof inv.subscription === "string"
+          ? inv.subscription
+          : inv.subscription?.id ?? null;
+    }
+    if (!subId) return NextResponse.json({ received: true });
+
+    const { data: plan } = await admin
+      .from("recurring_plans")
+      .select("id, organization_id, customer_id, risk_level")
+      .eq("stripe_subscription_id", subId)
+      .maybeSingle();
+    if (!plan) return NextResponse.json({ received: true });
+
+    if (event.type === "invoice.payment_failed") {
+      await admin
+        .from("recurring_plans")
+        .update({ risk_level: "high" })
+        .eq("id", plan.id);
+      await admin.from("retention_events").insert({
+        organization_id: plan.organization_id,
+        recurring_plan_id: plan.id,
+        customer_id: plan.customer_id,
+        type: "payment_failed",
+      });
+    } else if (event.type === "invoice.payment_succeeded") {
+      // only a meaningful "recovery" if the plan was previously at risk
+      if (plan.risk_level !== "none") {
+        await admin
+          .from("recurring_plans")
+          .update({ risk_level: "none" })
+          .eq("id", plan.id);
+        await admin.from("retention_events").insert({
+          organization_id: plan.organization_id,
+          recurring_plan_id: plan.id,
+          customer_id: plan.customer_id,
+          type: "payment_recovered",
+        });
+      }
+    } else {
+      // customer.subscription.deleted
+      await admin.rpc("change_plan_status", {
+        p_plan: plan.id,
+        p_status: "cancelled",
+        p_reason: "subscription_cancelled",
+      });
+    }
+
+    // mark processed (idempotency key = stripe event id)
+    await admin.rpc("record_event", {
+      p_org_id: plan.organization_id,
+      p_type: "agent_action",
+      p_source: "stripe",
+      p_customer_id: plan.customer_id,
+      p_plan_id: plan.id,
+      p_external_id: event.id,
+      p_payload: { action: "subscription_event", stripe_type: event.type },
+    });
+  }
+
   return NextResponse.json({ received: true });
 }
