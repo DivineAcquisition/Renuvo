@@ -1160,6 +1160,10 @@ export type Database = {
           enabled: boolean
         }[]
       }
+      get_home_summary: {
+        Args: { p_org_id: string }
+        Returns: Json
+      }
       get_dashboard_metrics: {
         Args: { p_org_id: string }
         Returns: Json

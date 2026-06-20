@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
+  Home,
+  BarChart3,
   MessageSquare,
   CalendarClock,
   Wallet,
@@ -15,7 +16,8 @@ import { CountUp } from "@/components/ui/count-up";
 import { LogoMark } from "@/components/ui/logo";
 
 const NAV = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
+  { href: "/dashboard", label: "Home", icon: Home, exact: true },
+  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   {
     href: "/dashboard/settings/messaging",
     label: "Messaging",

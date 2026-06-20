@@ -13,12 +13,30 @@ export type DashboardMetrics = {
   at_risk: number;
 };
 
+const EMPTY_METRICS: DashboardMetrics = {
+  one_time_jobs: 0,
+  plans_total: 0,
+  active_plans: 0,
+  conversion_rate: 0,
+  mrr_cents: 0,
+  arr_cents: 0,
+  median_ttr_days: 0,
+  churn_rate: 0,
+  reply_rate: 0,
+  at_risk: 0,
+};
+
 export async function getMetrics(orgId: string): Promise<DashboardMetrics> {
-  const supabase = await createClient();
-  const { data } = await supabase.rpc("get_dashboard_metrics", {
-    p_org_id: orgId,
-  });
-  return data as unknown as DashboardMetrics;
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("get_dashboard_metrics", {
+      p_org_id: orgId,
+    });
+    if (error || !data) return EMPTY_METRICS;
+    return data as unknown as DashboardMetrics;
+  } catch {
+    return EMPTY_METRICS;
+  }
 }
 
 export async function getMonthlyConversions(orgId: string) {
