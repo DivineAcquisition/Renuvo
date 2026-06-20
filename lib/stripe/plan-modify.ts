@@ -57,6 +57,7 @@ export async function modifyPlan(args: {
   newCadenceProfileId?: string;
   prorate: "create_prorations" | "none" | "always_invoice";
   actorId?: string;
+  actorKind?: "owner" | "customer" | "system";
 }): Promise<ModifyPlanResult> {
   const admin = createAdminClient();
   const [{ data: org }, { data: plan }] = await Promise.all([
@@ -158,12 +159,13 @@ export async function modifyPlan(args: {
 
   // log (one entry per dimension changed)
   const logs: Record<string, unknown>[] = [];
+  const actorKind = args.actorKind ?? "owner";
   if (priceChanged)
     logs.push({
       organization_id: args.orgId,
       recurring_plan_id: args.planId,
       actor_id: args.actorId ?? null,
-      actor_kind: "owner",
+      actor_kind: actorKind,
       change_type: "price",
       old_value: { price_cents: plan.price_cents },
       new_value: { price_cents: amountCents },
@@ -173,7 +175,7 @@ export async function modifyPlan(args: {
       organization_id: args.orgId,
       recurring_plan_id: args.planId,
       actor_id: args.actorId ?? null,
-      actor_kind: "owner",
+      actor_kind: actorKind,
       change_type: "cadence",
       old_value: { cadence_label: curCadence?.label },
       new_value: { cadence_label: newCadenceLabel },
