@@ -1,8 +1,13 @@
+import { randomUUID } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSmsRaw } from "./send";
 import { estimateSegments } from "@/lib/billing/wallet";
 import { chargeForSend } from "@/lib/billing/charge";
 import { triggerAutoReload } from "@/lib/stripe/wallet-reload";
+import {
+  ensureFirstMessageOptOut,
+  reconcileSendFailure,
+} from "@/lib/agent/guardrails";
 
 export type GuardedSendResult =
   | { ok: true; messageId: string; segments: number }
@@ -61,9 +66,19 @@ export async function sendGuardedSms(args: {
     return { ok: false, reason: "a2p_not_ready" };
   }
 
-  // 3) funds gate
-  const segments = estimateSegments(args.body);
-  const debit = await chargeForSend(args.orgId, segments, "pending", {
+  // 2.5) first-message opt-out guarantee — the very first outbound to a
+  // customer always carries "Reply STOP," even if the template/AI dropped it.
+  const body = await ensureFirstMessageOptOut(
+    args.orgId,
+    args.customerId,
+    args.body
+  );
+
+  // 3) funds gate — charge against a unique sendRef so a hard failure can be
+  // refunded exactly. Re-estimate segments on the possibly-lengthened body.
+  const sendRef = randomUUID();
+  const segments = estimateSegments(body);
+  const debit = await chargeForSend(args.orgId, segments, sendRef, {
     customerId: args.customerId,
   });
   if (!debit.ok) {
@@ -76,7 +91,7 @@ export async function sendGuardedSms(args: {
     const sent = await sendSmsRaw(
       org.telnyx_phone_number,
       args.toPhone,
-      args.body,
+      body,
       org.telnyx_messaging_profile_id ?? undefined
     );
 
@@ -88,15 +103,16 @@ export async function sendGuardedSms(args: {
       p_customer_id: args.customerId,
       p_channel: "sms",
       p_direction: "outbound",
-      p_body: args.body,
+      p_body: body,
       p_external_id: sent.id,
-      p_payload: { segments: sent.segments, ...args.meta },
+      p_payload: { segments: sent.segments, send_ref: sendRef, ...args.meta },
     });
 
     return { ok: true, messageId: sent.id, segments: sent.segments };
   } catch {
-    // NOTE: the wallet was already debited; Prompt 20 adds reconciliation/refund
-    // for hard send failures. Log a message_failed event for now.
+    // hard send failure → refund the wallet so the owner is never billed for an
+    // SMS that didn't go out, THEN log the failure (with the sendRef to trace it).
+    await reconcileSendFailure(args.orgId, debit.chargeCents, sendRef);
     await admin.rpc("record_event", {
       p_org_id: args.orgId,
       p_type: "message_failed",
@@ -104,8 +120,8 @@ export async function sendGuardedSms(args: {
       p_customer_id: args.customerId,
       p_channel: "sms",
       p_direction: "outbound",
-      p_body: args.body,
-      p_payload: { ...args.meta },
+      p_body: body,
+      p_payload: { ...args.meta, send_ref: sendRef },
     });
     return { ok: false, reason: "send_failed" };
   }

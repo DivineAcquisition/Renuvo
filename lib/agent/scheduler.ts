@@ -85,9 +85,17 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
       // send-time policy (quiet hours / rate limit — Prompt 22)
       const gate = await canSendNow(row.organization_id, row.customer_id);
       if (!gate.allowed) {
-        // no attempt consumed for a policy deferral
-        await requeue(row.id, gate.deferMinutes ?? 60, row.attempts - 1);
-        deferred++;
+        if (gate.deferMinutes) {
+          // quiet-hours / min-gap defer — no attempt consumed
+          await requeue(row.id, gate.deferMinutes, row.attempts - 1);
+          deferred++;
+        } else {
+          // hard block (e.g. weekly cap) — skip, don't retry
+          await setStatus(row.id, "skipped", {
+            cancel_reason: gate.reason ?? "blocked",
+          });
+          skipped++;
+        }
         continue;
       }
 
