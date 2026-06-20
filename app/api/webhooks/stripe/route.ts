@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordPayment } from "@/lib/payments/record";
+import { recordFinancialEntry } from "@/lib/money/ledger";
+import { fromStripeAmount } from "@/lib/money";
 import { log } from "@/lib/log";
 import type Stripe from "stripe";
 
@@ -134,6 +136,25 @@ export async function POST(req: NextRequest) {
           recurring_plan_id: plan.id,
           customer_id: plan.customer_id,
           type: "payment_recovered",
+        });
+      }
+
+      // Platform revenue: the application fee is RENUVO's money (NOT the full
+      // invoice amount — that's the tenant's). Record it to the ledger, idempotent.
+      const inv = event.data.object as {
+        id?: string;
+        application_fee_amount?: number | null;
+      };
+      const feeCents = inv.application_fee_amount ?? 0;
+      if (feeCents > 0) {
+        await recordFinancialEntry({
+          orgId: plan.organization_id,
+          category: "subscription_fee",
+          bucket: "platform_revenue",
+          amountMicrodollars: fromStripeAmount(feeCents),
+          source: "stripe",
+          reference: inv.id ?? `${subId}_${event.id}`,
+          recurringPlanId: plan.id,
         });
       }
     } else {

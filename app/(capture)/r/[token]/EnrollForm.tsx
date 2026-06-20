@@ -12,6 +12,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { createSignupPaymentSetup } from "@/lib/capture/payment";
 import { enrollRecurring } from "@/app/actions/enroll";
 import { StarMark } from "@/components/ui/logo";
+import { fromCents, formatMoney } from "@/lib/money";
 
 type Props = {
   token: string;
@@ -23,11 +24,8 @@ type Props = {
   defaultCadenceId: string;
 };
 
-function money(cents: number, currency = "usd") {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(cents / 100);
+function money(cents: number) {
+  return formatMoney(fromCents(cents));
 }
 
 /* ---------------- custom toggle switch ---------------- */
@@ -88,11 +86,9 @@ function fireConfetti(container: HTMLDivElement) {
 function SuccessView({
   cadenceLabel,
   priceCents,
-  currency,
 }: {
   cadenceLabel: string;
   priceCents: number;
-  currency: string;
 }) {
   const reduce = useReducedMotion();
   const confettiRef = useRef<HTMLDivElement>(null);
@@ -151,7 +147,7 @@ function SuccessView({
         <span className="font-semibold text-primary">{cadenceLabel}</span>
         <span className="text-muted-foreground"> · </span>
         <span className="font-mono font-semibold text-primary">
-          {money(priceCents, currency)}/visit
+          {money(priceCents)}/visit
         </span>
       </div>
     </motion.div>
@@ -215,11 +211,7 @@ function InnerCard(props: Props & { customerId: string }) {
   if (done)
     return (
       <div className="glass animate-up rounded-[20px] p-7">
-        <SuccessView
-          cadenceLabel={cadenceLabel}
-          priceCents={props.priceCents}
-          currency={props.currency}
-        />
+        <SuccessView cadenceLabel={cadenceLabel} priceCents={props.priceCents} />
       </div>
     );
 
@@ -248,7 +240,7 @@ function InnerCard(props: Props & { customerId: string }) {
       <p className="mt-2 text-sm text-muted-foreground">
         Lock in{" "}
         <span className="font-mono font-bold text-foreground">
-          {money(props.priceCents, props.currency)}
+          {money(props.priceCents)}
         </span>{" "}
         per visit, billed automatically. No rebooking, cancel anytime.
       </p>

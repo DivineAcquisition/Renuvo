@@ -1,11 +1,8 @@
 import { ArrowDown } from "lucide-react";
+import { fromCents, formatMoney } from "@/lib/money";
 
-function money(cents: number, currency = "usd") {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
+function money(cents: number) {
+  return formatMoney(fromCents(cents), { cents: false });
 }
 
 /**
@@ -14,10 +11,8 @@ function money(cents: number, currency = "usd") {
  */
 export function ConversionWidget({
   exampleCents = 18000,
-  currency = "usd",
 }: {
   exampleCents?: number;
-  currency?: string;
 }) {
   return (
     <div className="space-y-3">
@@ -32,7 +27,7 @@ export function ConversionWidget({
             <p className="text-xs text-muted-foreground">Paid once</p>
           </div>
           <span className="font-mono text-sm font-semibold">
-            {money(exampleCents, currency)}
+            {money(exampleCents)}
           </span>
         </div>
       </div>
@@ -50,7 +45,7 @@ export function ConversionWidget({
             <p className="text-xs text-muted-foreground">Auto-billed, every visit</p>
           </div>
           <span className="gradient-text font-mono text-sm font-bold">
-            {money(exampleCents, currency)}/visit
+            {money(exampleCents)}/visit
           </span>
         </div>
       </div>

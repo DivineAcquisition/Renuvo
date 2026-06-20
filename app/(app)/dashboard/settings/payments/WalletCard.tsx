@@ -20,12 +20,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { fromCents, formatMoney } from "@/lib/money";
+
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 );
 
 function money(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`;
+  return formatMoney(fromCents(cents));
 }
 
 function CardSetup({ onSaved }: { onSaved: () => void }) {

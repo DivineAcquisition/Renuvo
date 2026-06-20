@@ -1144,6 +1144,14 @@ export type Database = {
         }
         Returns: Json
       }
+      fin_tenant_spend: {
+        Args: { p_org_id: string; p_since?: string }
+        Returns: Json
+      }
+      fin_platform_revenue: {
+        Args: { p_since?: string }
+        Returns: Json
+      }
       get_calendar_status: {
         Args: { p_org_id: string }
         Returns: {

@@ -4,13 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Takeover } from "./Takeover";
 
-function money(c?: number | null, cur = "usd") {
-  return c == null
-    ? "—"
-    : new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: cur,
-      }).format(c / 100);
+import { fromCents, formatMoney } from "@/lib/money";
+
+function money(c?: number | null) {
+  return c == null ? "—" : formatMoney(fromCents(c));
 }
 
 export default async function CustomerProfile({
@@ -124,7 +121,7 @@ export default async function CustomerProfile({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Price</span>
                   <span className="font-mono font-medium">
-                    {money(plan.price_cents, plan.currency)}
+                    {money(plan.price_cents)}
                   </span>
                 </div>
                 <div className="flex justify-between">

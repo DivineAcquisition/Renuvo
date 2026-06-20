@@ -13,13 +13,11 @@ import { LiveBadge } from "@/components/ui/live-badge";
 import { RiskBadge } from "@/components/ui/risk-badge";
 import { Reveal } from "@/components/ui/reveal";
 import { ConversionWidget } from "@/components/dashboard/ConversionWidget";
+import { Money } from "@/components/ui/money";
+import { fromCents, toUsd, formatMoney } from "@/lib/money";
 
-function money(cents: number, currency = "usd") {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
+function money(cents: number) {
+  return formatMoney(fromCents(cents), { cents: false });
 }
 
 export default async function Dashboard() {
@@ -52,8 +50,8 @@ export default async function Dashboard() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Reveal delay={0}>
           <AccentStatCard
-            label="Recurring revenue (MRR)"
-            value={m.mrr_cents / 100}
+            label="Your recurring revenue (MRR)"
+            value={toUsd(fromCents(m.mrr_cents))}
             format="money"
             trend="23% vs last month"
             sub={`${money(m.arr_cents)} / yr`}
@@ -165,8 +163,8 @@ export default async function Dashboard() {
                     </span>
                     <div>
                       <p className="text-sm font-medium">{name}</p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {money(p.price_cents, p.currency)} / visit
+                      <p className="text-xs text-muted-foreground">
+                        <Money value={fromCents(p.price_cents)} /> / visit
                       </p>
                     </div>
                   </div>

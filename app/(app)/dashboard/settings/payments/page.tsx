@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { getWallet } from "@/lib/billing/wallet";
+import { getTenantSpend } from "@/lib/money/reports";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { disconnectStripe } from "@/app/actions/stripe-connect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Money } from "@/components/ui/money";
 import { WalletCard } from "./WalletCard";
 
 export default async function PaymentsSettings() {
@@ -20,6 +22,7 @@ export default async function PaymentsSettings() {
   const wallet = await getWallet(active.org.id);
   if (!wallet) return null;
   const connected = !!org?.stripe_account_id;
+  const spend = await getTenantSpend(active.org.id);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -64,6 +67,33 @@ export default async function PaymentsSettings() {
         reloadAmountCents={wallet.reload_amount_cents}
         isOwner={active.role === "owner"}
       />
+
+      {/* Your Renuvo spend (what you pay Renuvo — distinct from your recurring revenue) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Renuvo spend (last 30 days)</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-3 gap-4 text-sm">
+          <div>
+            <p className="text-muted-foreground">Wallet top-ups</p>
+            <p className="mt-1 text-lg font-bold">
+              <Money value={spend.wallet_topups_micro} />
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">SMS spend</p>
+            <p className="mt-1 text-lg font-bold">
+              <Money value={spend.sms_spend_micro} />
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Refunds</p>
+            <p className="mt-1 text-lg font-bold">
+              <Money value={spend.refunds_micro} />
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
