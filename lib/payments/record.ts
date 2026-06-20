@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { onPaymentRecorded } from "@/lib/agent/hooks"; // real in Prompt 15
+import { recordConsent } from "@/lib/consent";
 import { log } from "@/lib/log";
 
 export type RecordPaymentInput = {
@@ -129,6 +130,15 @@ export async function recordPayment(input: RecordPaymentInput) {
       ...input.metadata,
     },
   });
+
+  // record A2P consent proof when the source legitimately captured it
+  if (phone && input.customer.smsConsent && input.customer.consentSource) {
+    await recordConsent({
+      orgId: input.orgId,
+      phone,
+      source: input.customer.consentSource,
+    });
+  }
 
   // 5) HAND OFF TO THE CONVERSION ENGINE (stub now; real in Prompt 15)
   if (job?.id && customerId) {

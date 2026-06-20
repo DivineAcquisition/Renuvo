@@ -3,6 +3,7 @@
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toE164 } from "@/lib/phone";
+import { recordConsent } from "@/lib/consent";
 import { revalidatePath } from "next/cache";
 
 export async function upsertCustomer(input: {
@@ -44,6 +45,12 @@ export async function upsertCustomer(input: {
       .eq("id", input.id)
       .eq("organization_id", active.org.id);
     if (error) return { error: error.message };
+    if (input.smsConsent)
+      await recordConsent({
+        orgId: active.org.id,
+        phone,
+        source: "owner_attested",
+      });
     revalidatePath(`/dashboard/customers/${input.id}`);
     return { ok: true, id: input.id };
   }
@@ -61,5 +68,11 @@ export async function upsertCustomer(input: {
     .select("id")
     .single();
   if (error) return { error: error.message };
+  if (input.smsConsent)
+    await recordConsent({
+      orgId: active.org.id,
+      phone,
+      source: "owner_attested",
+    });
   return { ok: true, id: data?.id as string };
 }

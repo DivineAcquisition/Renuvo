@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyTelnyxSignature } from "@/lib/telnyx/verify";
 import { onInboundMessage } from "@/lib/agent/hooks"; // real in Prompt 18
+import { recordOptOut } from "@/lib/consent";
 import { log } from "@/lib/log";
 
 export async function POST(req: NextRequest) {
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
     const isStop = /^\s*(stop|unsubscribe|cancel|end|quit)\s*$/i.test(text);
     if (customer && isStop) {
       await admin.rpc("mark_opted_out", { p_customer_id: customer.id });
+      await recordOptOut({ orgId: org.id, phone: fromPhone });
       await admin.rpc("record_event", {
         p_org_id: org.id,
         p_type: "opted_out",

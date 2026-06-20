@@ -12,6 +12,7 @@ const NAV = [
   { href: "/dashboard/settings/payments", label: "Billing & payments" },
   { href: "/dashboard/settings/calendar", label: "Calendar" },
   { href: "/dashboard/settings/team", label: "Team" },
+  { href: "/dashboard/settings/data", label: "Data & privacy" },
 ];
 
 export default function SettingsLayout({
