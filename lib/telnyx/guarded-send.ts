@@ -17,6 +17,7 @@ export type GuardedSendResult =
         | "not_sendable"
         | "no_number"
         | "a2p_not_ready"
+        | "messaging_suspended"
         | "insufficient_funds"
         | "send_failed";
     };
@@ -50,10 +51,16 @@ export async function sendGuardedSms(args: {
   // 2) deliverability gate
   const { data: org } = await admin
     .from("organizations")
-    .select("telnyx_phone_number, telnyx_messaging_profile_id, a2p_status")
+    .select(
+      "telnyx_phone_number, telnyx_messaging_profile_id, a2p_status, messaging_suspended"
+    )
     .eq("id", args.orgId)
     .single();
   if (!org?.telnyx_phone_number) return { ok: false, reason: "no_number" };
+
+  // ISV kill-switch: a suspended tenant sends nothing (Prompt 31).
+  if ((org as { messaging_suspended?: boolean }).messaging_suspended)
+    return { ok: false, reason: "messaging_suspended" };
   // Until Renuvo's A2P 10DLC campaigns are registered/approved, allow sending on
   // the available (verified) Telnyx numbers by setting TELNYX_ALLOW_UNREGISTERED
   // = "true". Default is strict: production sends require a2p_status='approved'.

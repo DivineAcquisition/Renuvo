@@ -5,11 +5,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   createBrand,
   createCampaign,
+  requestBrandVetting,
   getBrand,
   getCampaign,
   assignNumberToCampaign,
 } from "@/lib/telnyx/a2p";
 import { buildCampaignDefaults } from "@/lib/telnyx/campaign-defaults";
+import { ensureRegistrationFunded } from "@/lib/billing/a2p-fees";
 import { resolveTemplate } from "@/lib/templates/queries";
 import { renderTemplate } from "@/lib/templates/render";
 import { revalidatePath } from "next/cache";
@@ -42,6 +44,11 @@ export async function submitBrand(input: {
   if (!active || active.role !== "owner") return { error: "Not allowed." };
   const admin = createAdminClient();
 
+  // FEE GATE: registration triggers real charges on Renuvo's Telnyx account.
+  // Require funding (an active plan) before calling the API. Free in mock mode.
+  const funded = await ensureRegistrationFunded(active.org.id);
+  if (!funded.ok) return { error: funded.reason };
+
   try {
     const res = await createBrand({
       entityType: input.entityType,
@@ -59,6 +66,15 @@ export async function submitBrand(input: {
       vertical: input.vertical,
     });
     const brandId = res?.data?.brandId ?? res?.brandId;
+
+    // ISV: request ENHANCED vetting immediately (throughput depends on score >75)
+    let vettingRequested = false;
+    try {
+      await requestBrandVetting(brandId);
+      vettingRequested = true;
+    } catch {
+      /* non-fatal — can retry vetting later */
+    }
 
     await admin.from("a2p_registrations").upsert(
       {
@@ -78,6 +94,9 @@ export async function submitBrand(input: {
         telnyx_brand_id: brandId,
         brand_status: "PENDING",
         step: "brand_submitted",
+        vetting_requested: vettingRequested,
+        fees_paid_cents: funded.feeCents,
+        fees_charged_at: new Date().toISOString(),
         is_mock: process.env.A2P_MOCK_MODE === "true",
       },
       { onConflict: "organization_id" }
@@ -182,10 +201,12 @@ export async function syncA2pStatus() {
   let step = reg.step ?? "not_started";
   let brandStatus = reg.brand_status ?? null;
   let campaignStatus = reg.campaign_status ?? null;
+  let vettingScore = (reg.vetting_score as number | null | undefined) ?? null;
 
   if (reg.telnyx_brand_id && brandStatus !== "VERIFIED") {
     const b = await getBrand(reg.telnyx_brand_id);
     brandStatus = b?.data?.identityStatus ?? b?.data?.status ?? brandStatus;
+    vettingScore = b?.data?.vettingScore ?? vettingScore;
     if (brandStatus === "VERIFIED") step = "brand_verified";
     if (brandStatus === "FAILED") step = "brand_failed";
   }
@@ -224,6 +245,7 @@ export async function syncA2pStatus() {
     .update({
       brand_status: brandStatus,
       campaign_status: campaignStatus,
+      vetting_score: vettingScore,
       step,
       last_synced_at: new Date().toISOString(),
     })

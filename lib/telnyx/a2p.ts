@@ -48,15 +48,24 @@ export async function createBrand(input: {
 }
 
 export async function getBrand(brandId: string) {
-  if (MOCK) return { data: { brandId, identityStatus: "VERIFIED" } };
+  if (MOCK)
+    return { data: { brandId, identityStatus: "VERIFIED", vettingScore: 80 } };
   return telnyxFetch(`/10dlc/brand/${brandId}`);
+}
+
+// ---- BRAND VETTING (ISV: score > 75 unlocks usable throughput) -------------
+export async function requestBrandVetting(brandId: string) {
+  if (MOCK) return { data: { brandId, vettingStatus: "PENDING" } };
+  return telnyxFetch(`/10dlc/brand/${brandId}/vetting`, {
+    method: "POST",
+    body: JSON.stringify({ vettingClass: "ENHANCED" }),
+  });
 }
 
 // ---- CAMPAIGN -------------------------------------------------------------
 export async function createCampaign(input: {
   brandId: string;
-  vertical: string;
-  usecase: string;
+  usecase: string; // AGENTS_FRANCHISES for ISV
   description: string;
   messageFlow: string;
   sample1: string;
@@ -64,9 +73,7 @@ export async function createCampaign(input: {
   helpMessage: string;
   helpKeywords: string;
   optinKeywords?: string;
-  optinMessage: string;
   optoutKeywords: string;
-  optoutMessage: string;
   embeddedLink: boolean;
   embeddedPhone: boolean;
 }) {
@@ -74,7 +81,6 @@ export async function createCampaign(input: {
     return { data: { campaignId: rand("mockcampaign"), status: "PENDING" } };
   const body = {
     brandId: input.brandId,
-    vertical: input.vertical,
     usecase: input.usecase,
     description: input.description,
     messageFlow: input.messageFlow,
@@ -82,18 +88,16 @@ export async function createCampaign(input: {
     sample2: input.sample2,
     helpMessage: input.helpMessage,
     helpKeywords: input.helpKeywords,
-    optinKeywords: input.optinKeywords ?? "",
-    optinMessage: input.optinMessage,
+    optinKeywords: input.optinKeywords ?? "START,YES,SUBSCRIBE",
     optoutKeywords: input.optoutKeywords,
-    optoutMessage: input.optoutMessage,
-    embeddedLink: input.embeddedLink,
-    embeddedPhone: input.embeddedPhone,
+    numberPool: false,
     subscriberOptin: true,
     subscriberOptout: true,
     subscriberHelp: true,
+    embeddedLink: input.embeddedLink,
+    embeddedPhone: input.embeddedPhone,
   };
-  // endpoint name varies (campaignBuilder); confirm in current docs
-  return telnyxFetch("/10dlc/campaignBuilder", {
+  return telnyxFetch("/10dlc/campaign", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -104,15 +108,13 @@ export async function getCampaign(campaignId: string) {
   return telnyxFetch(`/10dlc/campaign/${campaignId}`);
 }
 
-// ---- NUMBER ASSIGNMENT ----------------------------------------------------
-/** Assign the tenant's number to the approved campaign so sends inherit it. */
+// ---- NUMBER ASSIGNMENT (one number → one campaign) ------------------------
 export async function assignNumberToCampaign(
   phoneNumber: string,
   campaignId: string
 ) {
   if (MOCK) return { data: { ok: true, phoneNumber, campaignId } };
-  // Confirm the exact endpoint in current docs (bulk phone number campaign).
-  return telnyxFetch(`/10dlc/phoneNumberCampaign`, {
+  return telnyxFetch(`/10dlc/phone_number_campaigns`, {
     method: "POST",
     body: JSON.stringify({ phoneNumber, campaignId }),
   });

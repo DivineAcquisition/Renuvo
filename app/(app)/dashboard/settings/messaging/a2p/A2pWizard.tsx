@@ -128,10 +128,12 @@ export function A2pWizard({
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           US carriers require every business to register before texts deliver
-          reliably. Renuvo fills in the messaging campaign for you — you only
-          provide your business identity. Fees: ~$4 one-time brand + a small
-          monthly campaign fee (billed by the carrier registry). Timing: brand
-          minutes–hours (sole proprietors up to ~24h), campaign hours–days.
+          reliably. Renuvo handles the carrier registration on your behalf and
+          fills in the messaging campaign — you only provide your business
+          identity. Registration fees are covered by your Renuvo plan. Timing:
+          brand minutes–hours (sole proprietors up to ~24h), brand vetting 1–7
+          business days, campaign review 5–10 business days. Start now — the
+          campaign review is the slow step.
         </p>
       </div>
 

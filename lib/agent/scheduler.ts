@@ -172,7 +172,8 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
       } else if (
         res.reason === "not_sendable" ||
         res.reason === "no_number" ||
-        res.reason === "a2p_not_ready"
+        res.reason === "a2p_not_ready" ||
+        res.reason === "messaging_suspended"
       ) {
         await setStatus(row.id, "skipped", { cancel_reason: res.reason });
         skipped++;
