@@ -29,7 +29,12 @@ export async function disconnectStripe(): Promise<void> {
   }
   await admin
     .from("organizations")
-    .update({ stripe_account_id: null })
+    .update({
+      stripe_account_id: null,
+      stripe_charges_enabled: false,
+      stripe_payouts_enabled: false,
+      stripe_details_submitted: false,
+    })
     .eq("id", active.org.id);
   revalidatePath("/dashboard/settings/payments");
 }
