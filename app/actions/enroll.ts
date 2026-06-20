@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { resolveSignupToken, consumeSignupToken } from "@/lib/capture/token";
 import { cancelPendingMessages } from "@/lib/agent/engine";
 import { activateRecurringPlan } from "@/lib/plans/activate"; // stub → Prompt 20
+import { recordConsent } from "@/lib/consent";
 
 export type EnrollResult =
   | { error: string; planId?: string }
@@ -33,6 +34,21 @@ export async function enrollRecurring(input: {
       sms_consent_source: input.smsConsent ? "recurring_signup" : null,
     })
     .eq("id", offer.customerId);
+
+  // A2P consent proof (HMAC, retained for years even if the customer is deleted)
+  if (input.smsConsent) {
+    const { data: cust } = await admin
+      .from("customers")
+      .select("phone")
+      .eq("id", offer.customerId)
+      .maybeSingle();
+    if (cust?.phone)
+      await recordConsent({
+        orgId: offer.orgId,
+        phone: cust.phone,
+        source: "capture_page",
+      });
+  }
 
   // 2) CREATE THE OWNED PLAN (pending) + plan_created retention event (Prompt 6).
   // The public page has no auth session, so we go through the service-role client
