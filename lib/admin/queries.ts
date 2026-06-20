@@ -48,6 +48,11 @@ export type TenantDetail = {
     subscriptionFeesMicro: number;
     saasFeesMicro: number;
   };
+  email: {
+    bounces: number;
+    complaints: number;
+    unsubscribes: number;
+  };
 };
 
 /**
@@ -68,8 +73,14 @@ export async function getTenantDetail(
     .maybeSingle();
   if (!org) return null;
 
-  const [{ data: wallet }, { data: a2p }, { data: owner }, { data: fin }, planAgg] =
-    await Promise.all([
+  const [
+    { data: wallet },
+    { data: a2p },
+    { data: owner },
+    { data: fin },
+    planAgg,
+    { data: suppressions },
+  ] = await Promise.all([
       admin
         .from("wallets")
         .select("balance_cents, auto_reload_enabled")
@@ -97,7 +108,21 @@ export async function getTenantDetail(
         .select("id", { count: "exact", head: true })
         .eq("organization_id", orgId)
         .eq("status", "active"),
+      admin
+        .from("email_suppressions")
+        .select("reason")
+        .eq("organization_id", orgId)
+        .limit(5000),
     ]);
+
+  // shared-domain reputation: spot a tenant generating bounces/complaints so an
+  // admin can use the kill-switch before it hurts everyone.
+  const emailRep = { bounces: 0, complaints: 0, unsubscribes: 0 };
+  for (const s of (suppressions ?? []) as { reason: string }[]) {
+    if (s.reason === "bounce") emailRep.bounces++;
+    else if (s.reason === "complaint") emailRep.complaints++;
+    else if (s.reason === "unsubscribe") emailRep.unsubscribes++;
+  }
 
   const economics = { smsMarginMicro: 0, subscriptionFeesMicro: 0, saasFeesMicro: 0 };
   for (const e of (fin ?? []) as {
@@ -143,6 +168,7 @@ export async function getTenantDetail(
     a2p: (a2p as TenantDetail["a2p"]) ?? null,
     activePlans: planAgg.count ?? 0,
     economics,
+    email: emailRep,
   };
 }
 

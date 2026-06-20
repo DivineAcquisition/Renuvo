@@ -119,6 +119,42 @@ export default async function AdminTenantDetail({
             </div>
           </CardContent>
         </Card>
+
+        <Card className={card}>
+          <CardHeader>
+            <CardTitle>Email reputation (shared domain)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-white/50">Hard bounces</span>
+              <span
+                className={
+                  t.email.bounces > 0 ? "text-amber-400" : "text-white/80"
+                }
+              >
+                {t.email.bounces}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-white/50">Spam complaints</span>
+              <span
+                className={
+                  t.email.complaints > 0 ? "text-rose-400" : "text-white/80"
+                }
+              >
+                {t.email.complaints}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-white/50">Unsubscribes</span>
+              <span className="text-white/80">{t.email.unsubscribes}</span>
+            </div>
+            <p className="pt-1 text-xs text-white/40">
+              High bounce/complaint counts degrade the shared domain — use the
+              kill-switch if a tenant is hurting deliverability.
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className={card}>

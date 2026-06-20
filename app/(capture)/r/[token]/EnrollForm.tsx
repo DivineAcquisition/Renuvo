@@ -158,8 +158,12 @@ function SuccessView({
 function InnerCard(props: Props & { customerId: string }) {
   const stripe = useStripe();
   const elements = useElements();
+  const emailChannelOn =
+    process.env.NEXT_PUBLIC_EMAIL_CHANNEL_ENABLED === "true";
   const [cadence, setCadence] = useState(props.defaultCadenceId);
   const [smsConsent, setSmsConsent] = useState(true);
+  const [email, setEmail] = useState("");
+  const [emailConsent, setEmailConsent] = useState(false);
   const [billingConsent, setBillingConsent] = useState(false);
   const [billingBlocked, setBillingBlocked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -192,6 +196,8 @@ function InnerCard(props: Props & { customerId: string }) {
       billingConsent,
       paymentMethodId: String(setupIntent!.payment_method),
       stripeCustomerId: props.customerId,
+      email: emailChannelOn ? email || undefined : undefined,
+      emailConsent: emailChannelOn ? emailConsent : false,
     });
     if ("error" in res) {
       setErr(
@@ -309,6 +315,28 @@ function InnerCard(props: Props & { customerId: string }) {
           </span>
           <ToggleSwitch checked={smsConsent} onChange={setSmsConsent} />
         </div>
+        {emailChannelOn && (
+          <>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium">
+                Email (optional)
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-sm text-muted-foreground">
+                Email me about my service. Unsubscribe anytime.
+              </span>
+              <ToggleSwitch checked={emailConsent} onChange={setEmailConsent} />
+            </div>
+          </>
+        )}
       </div>
 
       {err && <p className="mt-3 text-sm text-destructive">{err}</p>}

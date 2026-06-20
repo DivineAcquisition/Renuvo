@@ -12,12 +12,17 @@ export async function upsertCustomer(input: {
   phone: string;
   email?: string;
   smsConsent: boolean;
+  emailConsent?: boolean;
+  channelPreference?: "sms" | "email" | "any";
 }) {
   const active = await getActiveOrg();
   if (!active) return { error: "Not authenticated." };
   if (!input.fullName.trim()) return { error: "Enter a name." };
   const phone = toE164(input.phone);
   if (!phone) return { error: "Enter a valid phone number." };
+  const email = input.email?.trim() || null;
+  if (input.emailConsent && !email)
+    return { error: "Add an email address to grant email consent." };
 
   const admin = createAdminClient();
 
@@ -33,14 +38,31 @@ export async function upsertCustomer(input: {
       }
     : { sms_consent: false, sms_consent_source: null };
 
+  // EMAIL CONSENT (Prompt 42): a SEPARATE legal basis (CAN-SPAM, not A2P). Owner
+  // attestation grants email_sendable independently of SMS. email_sendable is a
+  // plain column (unlike the generated sms_sendable).
+  const emailConsentFields = input.emailConsent
+    ? {
+        email_sendable: true,
+        email_consent_at: new Date().toISOString(),
+        email_consent_source: "owner_attested",
+      }
+    : { email_sendable: false };
+
+  const prefField = input.channelPreference
+    ? { channel_preference: input.channelPreference }
+    : {};
+
   if (input.id) {
     const { error } = await admin
       .from("customers")
       .update({
         full_name: input.fullName.trim(),
         phone,
-        email: input.email?.trim() || null,
+        email,
         ...consentFields,
+        ...emailConsentFields,
+        ...prefField,
       })
       .eq("id", input.id)
       .eq("organization_id", active.org.id);
@@ -61,9 +83,11 @@ export async function upsertCustomer(input: {
       organization_id: active.org.id,
       full_name: input.fullName.trim(),
       phone,
-      email: input.email?.trim() || null,
+      email,
       source: "manual",
       ...consentFields,
+      ...emailConsentFields,
+      ...prefField,
     })
     .select("id")
     .single();
