@@ -101,6 +101,7 @@ export async function generateMessage(args: {
     customerId: args.customerId,
     jobId: args.jobId,
     planId: args.planId,
+    eventKey: args.eventKey,
   });
 
   const baseline = renderTemplate(rawTemplate ?? "", vars).trim();
