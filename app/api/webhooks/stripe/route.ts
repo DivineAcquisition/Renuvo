@@ -5,6 +5,7 @@ import { recordPayment } from "@/lib/payments/record";
 import { recordFinancialEntry } from "@/lib/money/ledger";
 import { fromStripeAmount } from "@/lib/money";
 import { getServerSecret } from "@/lib/secrets";
+import { notify } from "@/lib/notify/dispatch";
 import { log } from "@/lib/log";
 import type Stripe from "stripe";
 
@@ -205,6 +206,11 @@ export async function POST(req: NextRequest) {
         recurring_plan_id: plan.id,
         customer_id: plan.customer_id,
         type: "payment_failed",
+      });
+      void notify(plan.organization_id, "failed_payment", {
+        title: "A recurring payment failed",
+        body: "A client's card was declined. Their plan is now at risk.",
+        link: "/dashboard",
       });
     } else if (event.type === "invoice.payment_succeeded") {
       // only a meaningful "recovery" if the plan was previously at risk

@@ -27,6 +27,7 @@ type ClaimedRow = {
   recurring_plan_id: string | null;
   event_key: EventKey;
   attempts: number;
+  edited_body: string | null;
 };
 
 // mapEventKeyToEventType returns the full event_type union; sendGuardedSms only
@@ -131,15 +132,21 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
         continue;
       }
 
-      // generate copy (always returns a sendable string or empty)
-      const gen = await generateMessage({
-        orgId: row.organization_id,
-        customerId: row.customer_id,
-        eventKey: row.event_key,
-        jobId: row.job_id ?? undefined,
-        planId: row.recurring_plan_id ?? undefined,
-      });
-      if (!gen.text) {
+      // owner-edited draft (review mode) wins; otherwise generate copy
+      let body = row.edited_body ?? "";
+      let fallbackUsed = false;
+      if (!body) {
+        const gen = await generateMessage({
+          orgId: row.organization_id,
+          customerId: row.customer_id,
+          eventKey: row.event_key,
+          jobId: row.job_id ?? undefined,
+          planId: row.recurring_plan_id ?? undefined,
+        });
+        body = gen.text;
+        fallbackUsed = gen.fallbackUsed;
+      }
+      if (!body) {
         await setStatus(row.id, "skipped", { cancel_reason: "no_template" });
         skipped++;
         continue;
@@ -150,9 +157,9 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
         orgId: row.organization_id,
         customerId: row.customer_id,
         toPhone: customer.phone,
-        body: gen.text,
+        body,
         eventType: mapEventKeyToEventType(row.event_key) as SendEventType,
-        meta: { scheduled_message_id: row.id, fallback_used: gen.fallbackUsed },
+        meta: { scheduled_message_id: row.id, fallback_used: fallbackUsed },
       });
 
       if (res.ok) {

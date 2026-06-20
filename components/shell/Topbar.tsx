@@ -1,20 +1,42 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { Menu, Search, X } from "lucide-react";
+import { Menu, Search, X, Bell } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
+import { markNotificationsRead } from "@/app/actions/controls";
 import { SidebarContent } from "./SidebarContent";
+
+type Notif = {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read: boolean;
+};
 
 export function Topbar({
   orgName,
   walletBalanceCents,
+  notifications = { unread: 0, items: [] },
 }: {
   orgName: string;
   walletBalanceCents: number;
+  notifications?: { unread: number; items: Notif[] };
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [unread, setUnread] = useState(notifications.unread);
+
+  async function openBell() {
+    setBellOpen((v) => !v);
+    if (!bellOpen && unread > 0) {
+      setUnread(0);
+      await markNotificationsRead();
+    }
+  }
 
   const initials = orgName.slice(0, 2).toUpperCase() || "RV";
 
@@ -44,7 +66,51 @@ export function Topbar({
           </kbd>
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="relative flex items-center gap-2">
+          <button
+            onClick={openBell}
+            className="relative rounded-md p-2 text-muted-foreground hover:bg-secondary"
+            aria-label="Notifications"
+          >
+            <Bell className="h-5 w-5" />
+            {unread > 0 && (
+              <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
+                {unread}
+              </span>
+            )}
+          </button>
+          {bellOpen && (
+            <div className="glass absolute right-0 top-12 z-50 w-80 rounded-2xl p-2">
+              {notifications.items.length === 0 ? (
+                <p className="p-4 text-center text-sm text-muted-foreground">
+                  No notifications yet.
+                </p>
+              ) : (
+                notifications.items.map((n) =>
+                  n.link ? (
+                    <Link
+                      key={n.id}
+                      href={n.link}
+                      onClick={() => setBellOpen(false)}
+                      className="block rounded-lg p-3 text-sm hover:bg-secondary"
+                    >
+                      <p className="font-medium">{n.title}</p>
+                      {n.body && (
+                        <p className="text-xs text-muted-foreground">{n.body}</p>
+                      )}
+                    </Link>
+                  ) : (
+                    <div key={n.id} className="rounded-lg p-3 text-sm">
+                      <p className="font-medium">{n.title}</p>
+                      {n.body && (
+                        <p className="text-xs text-muted-foreground">{n.body}</p>
+                      )}
+                    </div>
+                  )
+                )
+              )}
+            </div>
+          )}
           <span className="hidden text-sm text-muted-foreground sm:inline">
             {orgName}
           </span>

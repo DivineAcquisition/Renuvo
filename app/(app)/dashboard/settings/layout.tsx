@@ -8,6 +8,7 @@ const NAV = [
   { href: "/dashboard/settings/profile", label: "Business profile" },
   { href: "/dashboard/settings/messaging", label: "Messaging" },
   { href: "/dashboard/settings/schedule", label: "Schedule" },
+  { href: "/dashboard/settings/controls", label: "Controls" },
   { href: "/dashboard/settings/payments", label: "Billing & payments" },
   { href: "/dashboard/settings/calendar", label: "Calendar" },
   { href: "/dashboard/settings/team", label: "Team" },

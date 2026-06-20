@@ -31,11 +31,28 @@ export default async function CapturePage({
   }
 
   const admin = createAdminClient();
-  const { data: cadences } = await admin
-    .from("cadence_profiles")
-    .select("id, label, interval_days")
-    .eq("vertical_id", offer.verticalId ?? "")
-    .order("interval_days");
+  const [{ data: cadencesRaw }, { data: offerCfg }] = await Promise.all([
+    admin
+      .from("cadence_profiles")
+      .select("id, label, interval_days, key")
+      .eq("vertical_id", offer.verticalId ?? "")
+      .order("interval_days"),
+    admin
+      .from("offer_configs")
+      .select("offered_cadences")
+      .eq("organization_id", offer.orgId ?? "")
+      .maybeSingle(),
+  ]);
+
+  // restrict to the org's offered cadences (Prompt 33), always keeping the one
+  // the offer link was created with so the link stays valid.
+  const offered = (offerCfg?.offered_cadences as string[] | undefined) ?? null;
+  const cadences = (cadencesRaw ?? []).filter(
+    (c: { id: string; key?: string | null }) =>
+      !offered ||
+      c.id === offer.cadenceProfileId ||
+      (c.key != null && offered.includes(c.key))
+  );
 
   return (
     <main className="wash-capture flex min-h-screen items-center justify-center p-6">

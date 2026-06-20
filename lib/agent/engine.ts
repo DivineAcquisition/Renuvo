@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { POST_PAYMENT_SEQUENCE } from "./sequence";
+import { getSequence, ACTIVATION_KEY } from "./sequence";
+import { notify } from "@/lib/notify/dispatch";
 
 /**
  * Schedule the post-payment conversion sequence for a paid one-time job.
@@ -32,14 +33,37 @@ export async function scheduleConversionSequence(args: {
     return { scheduled: 0, reason: "no_consent" as const };
   }
 
+  // org autonomy config (Prompt 33): review mode gates sends; cap follow-ups.
+  const { data: org } = await admin
+    .from("organizations")
+    .select("agent_mode, max_follow_ups")
+    .eq("id", args.orgId)
+    .single();
+  const reviewMode =
+    (org as { agent_mode?: string } | null)?.agent_mode === "review";
+  const maxFollowUps =
+    (org as { max_follow_ups?: number } | null)?.max_follow_ups ?? 3;
+
+  // data-driven sequence (falls back to the built-in default)
+  const sequence = await getSequence(args.orgId);
+  // keep the activation message + at most `maxFollowUps` follow-ups
+  let followUps = 0;
+  const capped = sequence.filter((step) => {
+    if (step.eventKey === ACTIVATION_KEY) return true;
+    if (followUps >= maxFollowUps) return false;
+    followUps++;
+    return true;
+  });
+
   const now = Date.now();
-  const rows = POST_PAYMENT_SEQUENCE.map((step) => ({
+  const rows = capped.map((step) => ({
     organization_id: args.orgId,
     customer_id: args.customerId,
     job_id: args.jobId,
     event_key: step.eventKey,
     send_at: new Date(now + step.offsetMinutes * 60_000).toISOString(),
     status: "pending" as const,
+    requires_approval: reviewMode,
   }));
 
   // upsert with ignore-on-conflict (idempotent on job_id+event_key)
@@ -61,6 +85,15 @@ export async function scheduleConversionSequence(args: {
       p_customer_id: args.customerId,
       p_job_id: args.jobId,
       p_payload: { event_key: r.event_key, scheduled_message_id: r.id },
+    });
+  }
+
+  // Review mode: tell the owner there are drafts waiting (once per enrollment).
+  if (reviewMode && (inserted?.length ?? 0) > 0) {
+    await notify(args.orgId, "approval_pending", {
+      title: "Messages are waiting for your approval",
+      body: "Review mode is on — approve drafts to let Renuvo send them.",
+      link: "/dashboard/approvals",
     });
   }
 

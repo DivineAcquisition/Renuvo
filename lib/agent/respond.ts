@@ -6,6 +6,7 @@ import { generateContextualReply } from "./contextual-reply";
 import { cancelPendingMessages } from "./engine";
 import { getSignupLink } from "@/lib/capture/links";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
+import { notify } from "@/lib/notify/dispatch";
 
 // LOOP GUARD: this is the ONLY entry point for agent replies and it runs solely
 // from the Telnyx inbound webhook (human → agent). NEVER call it from an
@@ -85,6 +86,11 @@ export async function handleInboundMessage(args: {
       p_source: "agent",
       p_customer_id: args.customerId,
       p_payload: { action: "handoff_needed", reason: "reply_throttle" },
+    });
+    void notify(args.orgId, "reply_needs_human", {
+      title: "A conversation needs a human",
+      body: "A customer is replying a lot — take over to keep it on track.",
+      link: `/dashboard/customers/${args.customerId}`,
     });
     return;
   }

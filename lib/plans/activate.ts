@@ -6,6 +6,7 @@ import { generateMessage } from "@/lib/agent/generate";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
 import { writeVisitsToCalendar } from "@/lib/calendar/sync";
 import { getEntitlement } from "@/lib/billing/entitlements";
+import { notify } from "@/lib/notify/dispatch";
 
 const FIRST_INSTANCES = 4;
 
@@ -202,6 +203,13 @@ export async function activateRecurringPlan(
   }
 
   // ---- SIDE EFFECTS (best-effort): never roll back a completed activation. ----
+
+  // notify the owner of a new conversion (Prompt 33)
+  void notify(plan.organization_id, "new_conversion", {
+    title: "New recurring conversion 🎉",
+    body: `${customer?.phone ? "A customer" : "A customer"} started recurring service.`,
+    link: "/dashboard",
+  });
 
   // confirmation SMS (guarded)
   try {
