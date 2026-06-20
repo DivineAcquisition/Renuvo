@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Activity,
   ArrowLeft,
+  Landmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const NAV = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/admin/tenants", label: "Tenants", icon: Building2 },
   { href: "/admin/revenue", label: "Revenue", icon: DollarSign },
+  { href: "/admin/finance", label: "Book portfolio", icon: Landmark },
   { href: "/admin/benchmarks", label: "Benchmarks", icon: BarChart3 },
   { href: "/admin/a2p", label: "A2P", icon: ShieldCheck },
   { href: "/admin/system", label: "System", icon: Activity },
