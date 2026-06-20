@@ -6,7 +6,7 @@ import {
 } from "@/lib/stripe/recurring";
 import { modifyPlan } from "@/lib/stripe/plan-modify";
 import { enrollWinback } from "@/lib/winback/enroll";
-import { getCardUpdateUrl } from "@/lib/winback/links";
+import { issuePortalLink } from "@/lib/portal/auth";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
 
 export type ItemResult = { status: "ok" } | { status: "skip"; reason: string };
@@ -118,9 +118,9 @@ export async function runBulkItem(
       return { status: "ok" };
     }
     case "request_payment_update": {
-      const link = getCardUpdateUrl(planId);
       if (!cust?.sms_sendable || !cust.phone)
         return { status: "skip", reason: "not_consented" };
+      const link = await issuePortalLink(orgId, plan.customer_id, "payment_update");
       const first =
         (cust.full_name ?? "there").trim().split(/\s+/)[0] || "there";
       const res = await sendGuardedSms({
