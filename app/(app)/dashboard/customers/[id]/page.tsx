@@ -8,6 +8,7 @@ import { Money } from "@/components/ui/money";
 import { RiskBadge } from "@/components/ui/risk-badge";
 import { fromCents } from "@/lib/money";
 import { DeleteCustomer } from "./DeleteCustomer";
+import { EnrollButton } from "./EnrollButton";
 
 const ACTIVITY_COPY: Record<string, string> = {
   plan_created: "Plan created",
@@ -87,6 +88,12 @@ export default async function CustomerDetail({
                   Edit
                 </Link>
               </Button>
+            )}
+            {isOwner && (
+              <EnrollButton
+                customerId={customer.id}
+                sendable={!!customer.sms_sendable}
+              />
             )}
             {isOwner && <DeleteCustomer customerId={customer.id} />}
           </div>

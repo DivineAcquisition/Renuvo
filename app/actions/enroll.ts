@@ -21,7 +21,8 @@ export async function enrollRecurring(input: {
   if (!input.billingConsent) return { error: "billing_consent_required" };
 
   const offer = await resolveSignupToken(input.token);
-  if (!offer) return { error: "invalid_or_expired" };
+  if (!offer || !offer.customerId) return { error: "invalid_or_expired" };
+  const customerId = offer.customerId;
 
   const admin = createAdminClient();
 
@@ -33,14 +34,14 @@ export async function enrollRecurring(input: {
       sms_consent_at: input.smsConsent ? new Date().toISOString() : null,
       sms_consent_source: input.smsConsent ? "recurring_signup" : null,
     })
-    .eq("id", offer.customerId);
+    .eq("id", customerId);
 
   // A2P consent proof (HMAC, retained for years even if the customer is deleted)
   if (input.smsConsent) {
     const { data: cust } = await admin
       .from("customers")
       .select("phone")
-      .eq("id", offer.customerId)
+      .eq("id", customerId)
       .maybeSingle();
     if (cust?.phone)
       await recordConsent({
@@ -57,7 +58,7 @@ export async function enrollRecurring(input: {
     "create_recurring_plan",
     {
       p_org: offer.orgId,
-      p_customer: offer.customerId,
+      p_customer: customerId,
       p_origin_job: offer.jobId ?? undefined,
       p_cadence: input.cadenceProfileId,
       p_price_cents: offer.priceCents,
@@ -78,13 +79,13 @@ export async function enrollRecurring(input: {
 
   // 4) consume the token (single-use) + stop the conversion sequence
   await consumeSignupToken(offer.linkId);
-  await cancelPendingMessages(offer.orgId, offer.customerId, "enrolled");
+  await cancelPendingMessages(offer.orgId, customerId, "enrolled");
 
   await admin.rpc("record_event", {
     p_org_id: offer.orgId,
     p_type: "agent_action",
     p_source: "system",
-    p_customer_id: offer.customerId,
+    p_customer_id: customerId,
     p_plan_id: plan.id,
     p_payload: {
       action: "enrollment_submitted",

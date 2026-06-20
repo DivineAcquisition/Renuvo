@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Home,
   Inbox,
+  Link2,
   Users,
   BarChart3,
   MessageSquare,
@@ -19,6 +20,7 @@ import { LogoMark } from "@/components/ui/logo";
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home, exact: true },
   { href: "/dashboard/inbox", label: "Inbox", icon: Inbox },
+  { href: "/dashboard/links", label: "Links", icon: Link2 },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   {
     href: "/dashboard/settings/messaging",

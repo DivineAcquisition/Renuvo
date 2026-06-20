@@ -3,6 +3,7 @@ import { resolveSignupToken } from "@/lib/capture/token";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgSettings } from "@/lib/settings/resolve";
 import { EnrollForm } from "./EnrollForm";
+import { GenericLeadForm } from "./GenericLeadForm";
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -49,23 +50,40 @@ export default async function CapturePage({
       (c.key != null && offered.includes(c.key))
   );
 
+  const isGeneric = offer.linkType === "generic" || !offer.customerId;
+
   return (
     <main className="wash-capture flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-[460px]">
-        <EnrollForm
-          token={token}
-          businessName={offer.businessName}
-          firstName={offer.firstName}
-          priceCents={offer.priceCents}
-          currency={offer.currency}
-          cadences={(cadences ?? []).map(
-            (c: { id: string; label: string }) => ({
-              id: c.id,
-              label: c.label,
-            })
-          )}
-          defaultCadenceId={offer.cadenceProfileId}
-        />
+        {isGeneric ? (
+          <div className="glass rounded-2xl p-7">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+              {offer.businessName}
+            </p>
+            <h1 className="mt-2 font-display text-2xl font-bold tracking-tight">
+              Set up recurring service
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Tell us who you are to get started.
+            </p>
+            <GenericLeadForm token={token} />
+          </div>
+        ) : (
+          <EnrollForm
+            token={token}
+            businessName={offer.businessName}
+            firstName={offer.firstName}
+            priceCents={offer.priceCents}
+            currency={offer.currency}
+            cadences={(cadences ?? []).map(
+              (c: { id: string; label: string }) => ({
+                id: c.id,
+                label: c.label,
+              })
+            )}
+            defaultCadenceId={offer.cadenceProfileId ?? ""}
+          />
+        )}
         <p className="mt-4 text-center text-[11px] text-muted-foreground">
           powered by{" "}
           <span className="font-display font-semibold">Renuvo</span>

@@ -7,10 +7,11 @@ export function newToken(): string {
 
 export type ResolvedOffer = {
   linkId: string;
+  linkType: "customer" | "generic";
   orgId: string;
-  customerId: string;
+  customerId: string | null;
   jobId: string | null;
-  cadenceProfileId: string;
+  cadenceProfileId: string | null;
   priceCents: number;
   currency: string;
   businessName: string;
@@ -18,7 +19,7 @@ export type ResolvedOffer = {
   verticalId: string | null;
 };
 
-/** Resolve a token to its offer, or null if missing/used/expired. Service-role. */
+/** Resolve a token to its offer, or null if missing/revoked/expired/converted. */
 export async function resolveSignupToken(
   token: string
 ): Promise<ResolvedOffer | null> {
@@ -26,53 +27,65 @@ export async function resolveSignupToken(
   const { data: link } = await admin
     .from("signup_links")
     .select(
-      "id, organization_id, customer_id, job_id, cadence_profile_id, price_cents, currency, status, expires_at"
+      "id, organization_id, link_type, customer_id, job_id, cadence_profile_id, price_cents, currency, status, expires_at, opened_at, open_count, converted_at, revoked_at"
     )
     .eq("token", token)
     .maybeSingle();
 
-  if (!link || link.status !== "active") return null;
-  if (new Date(link.expires_at).getTime() < Date.now()) {
-    await admin
-      .from("signup_links")
-      .update({ status: "expired" })
-      .eq("id", link.id);
+  if (!link) return null;
+  if (link.revoked_at) return null;
+  if (link.expires_at && new Date(link.expires_at).getTime() < Date.now())
     return null;
-  }
+  // customer links are single-use: once converted, refuse re-use
+  if (link.link_type === "customer" && (link.converted_at || link.status === "used"))
+    return null;
 
-  const [{ data: org }, { data: customer }] = await Promise.all([
+  // track the open (best-effort)
+  await admin
+    .from("signup_links")
+    .update({
+      opened_at: link.opened_at ?? new Date().toISOString(),
+      open_count: (link.open_count ?? 0) + 1,
+    })
+    .eq("id", link.id);
+
+  const [{ data: org }, customerRes] = await Promise.all([
     admin
       .from("organizations")
       .select("name, vertical_id")
       .eq("id", link.organization_id)
       .single(),
-    admin
-      .from("customers")
-      .select("full_name")
-      .eq("id", link.customer_id)
-      .single(),
+    link.customer_id
+      ? admin
+          .from("customers")
+          .select("full_name")
+          .eq("id", link.customer_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   return {
     linkId: link.id,
+    linkType: (link.link_type as "customer" | "generic") ?? "customer",
     orgId: link.organization_id,
     customerId: link.customer_id,
     jobId: link.job_id,
     cadenceProfileId: link.cadence_profile_id,
-    priceCents: link.price_cents,
+    priceCents: link.price_cents ?? 0,
     currency: link.currency,
     businessName: org?.name ?? "your provider",
-    firstName: (customer?.full_name ?? "").trim().split(/\s+/)[0] || "there",
+    firstName:
+      (customerRes.data?.full_name ?? "").trim().split(/\s+/)[0] || "there",
     verticalId: org?.vertical_id ?? null,
   };
 }
 
-/** Mark a token used (single-use). Service-role. */
+/** Mark a customer token converted + used (single-use). Service-role. */
 export async function consumeSignupToken(linkId: string) {
   const admin = createAdminClient();
+  const now = new Date().toISOString();
   await admin
     .from("signup_links")
-    .update({ status: "used", used_at: new Date().toISOString() })
-    .eq("id", linkId)
-    .eq("status", "active");
+    .update({ status: "used", used_at: now, converted_at: now })
+    .eq("id", linkId);
 }

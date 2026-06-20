@@ -8,7 +8,7 @@ import {
   MessageSquareText,
   CreditCard,
   BarChart3,
-  Wallet,
+  Link2 as LinkIcon,
   Upload,
   CheckCircle2,
   Circle,
@@ -411,12 +411,12 @@ export function HomeView({
               Icon: Upload,
               owner: true,
             },
-            { label: "Analytics", href: "/dashboard/analytics", Icon: BarChart3 },
             {
-              label: "Billing",
-              href: "/dashboard/settings/payments",
-              Icon: Wallet,
+              label: "Capture links",
+              href: "/dashboard/links",
+              Icon: LinkIcon,
             },
+            { label: "Analytics", href: "/dashboard/analytics", Icon: BarChart3 },
           ]
             .filter((a) => !a.owner || isOwner)
             .map(({ label, href, Icon }) => (
