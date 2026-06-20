@@ -2,14 +2,27 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { getPlanDetail } from "@/lib/plans/detail";
+import { getPlanTimeline, getOfferedCadences } from "@/lib/accounts/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Money } from "@/components/ui/money";
 import { RiskBadge } from "@/components/ui/risk-badge";
 import { fromCents } from "@/lib/money";
 import { PlanActions } from "./PlanActions";
+import { AccountTerms } from "./AccountTerms";
+import { AccountNotes } from "./AccountNotes";
 
 function date(iso: string | null) {
   return iso ? new Date(iso).toLocaleDateString() : "—";
+}
+
+function relTime(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const d = Math.floor(diff / 86400000);
+  if (d > 0) return `${d}d ago`;
+  const h = Math.floor(diff / 3600000);
+  if (h > 0) return `${h}h ago`;
+  const m = Math.floor(diff / 60000);
+  return m > 0 ? `${m}m ago` : "just now";
 }
 
 export default async function PlanDetail({
@@ -31,6 +44,12 @@ export default async function PlanDetail({
     label: string;
   } | null;
   const isOwner = active.role === "owner";
+
+  const [timeline, cadences] = await Promise.all([
+    getPlanTimeline(active.org.id, id),
+    isOwner ? getOfferedCadences(active.org.id) : Promise.resolve([]),
+  ]);
+  const pinned = timeline.filter((t) => t.kind === "note" && t.pinned);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -66,6 +85,60 @@ export default async function PlanDetail({
               <p className="mt-2 text-xs text-muted-foreground">
                 Pause and cancel affect future billing only, not past charges.
               </p>
+            </div>
+          )}
+          {pinned.length > 0 && (
+            <div className="mt-4 space-y-1 rounded-lg bg-amber-50 p-3">
+              {pinned.map((p) => (
+                <p key={p.id} className="text-xs text-amber-900">
+                  📌 {p.title.replace(/^Note: /, "")}
+                </p>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* deep control: cadence / price mid-plan + payment update */}
+      {isOwner && plan.status !== "cancelled" && (
+        <AccountTerms
+          planId={plan.id}
+          currentPriceCents={plan.price_cents}
+          currentCadenceId={plan.cadence_profile_id}
+          cadences={(cadences as { id: string; label: string }[]).map((c) => ({
+            id: c.id,
+            label: c.label,
+          }))}
+        />
+      )}
+
+      {/* notes + history timeline */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Notes &amp; history</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <AccountNotes planId={plan.id} />
+          {timeline.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No history yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {timeline.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-start justify-between gap-3 border-b py-2 text-sm last:border-0"
+                >
+                  <span>
+                    {t.title}
+                    {t.detail && (
+                      <span className="text-muted-foreground"> · {t.detail}</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {relTime(t.at)}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
