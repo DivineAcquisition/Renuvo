@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { changePlanTerms, requestPaymentUpdate } from "@/app/actions/account-control";
+import {
+  changePlanTerms,
+  requestPaymentUpdate,
+  sendManageLink,
+} from "@/app/actions/account-control";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +57,21 @@ export function AccountTerms({
       return;
     }
     if (res.sent) toast.success("Update link texted to the customer.");
+    else {
+      setLink(res.link ?? null);
+      toast.info("Customer isn't textable — copy the link to send it yourself.");
+    }
+  }
+
+  async function sendManage() {
+    setBusy(true);
+    const res = await sendManageLink(planId);
+    setBusy(false);
+    if ("error" in res) {
+      toast.error(res.error ?? "Could not send.");
+      return;
+    }
+    if (res.sent) toast.success("Manage link texted to the customer.");
     else {
       setLink(res.link ?? null);
       toast.info("Customer isn't textable — copy the link to send it yourself.");
@@ -115,6 +134,9 @@ export function AccountTerms({
           </Button>
           <Button variant="outline" onClick={reqPayment} disabled={busy}>
             Request payment update
+          </Button>
+          <Button variant="outline" onClick={sendManage} disabled={busy}>
+            Send manage link
           </Button>
         </div>
         {link && (

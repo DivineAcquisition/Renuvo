@@ -4,7 +4,7 @@ import { getActiveOrg } from "@/lib/auth/getActiveOrg";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { modifyPlan } from "@/lib/stripe/plan-modify";
-import { getCardUpdateUrl } from "@/lib/winback/links";
+import { issuePortalLink } from "@/lib/portal/auth";
 import { sendGuardedSms } from "@/lib/telnyx/guarded-send";
 import { revalidatePath } from "next/cache";
 
@@ -89,12 +89,17 @@ export async function requestPaymentUpdate(planId: string) {
     .single();
   if (!plan) return { error: "Plan not found." };
 
-  const link = getCardUpdateUrl(planId);
   const cust = plan.customers as unknown as {
     full_name: string | null;
     phone: string | null;
     sms_sendable: boolean;
   } | null;
+  // a scoped, single-use portal link (Prompt 46) — opens the card-update flow
+  const link = await issuePortalLink(
+    active.org.id,
+    plan.customer_id,
+    "payment_update"
+  );
 
   let sent = false;
   if (cust?.sms_sendable && cust.phone) {
@@ -121,5 +126,39 @@ export async function requestPaymentUpdate(planId: string) {
   });
 
   revalidatePath(`/dashboard/plans/${planId}`);
+  return { ok: true, sent, link };
+}
+
+/** Send the homeowner a self-service "manage your service" portal link. */
+export async function sendManageLink(planId: string) {
+  const active = await getActiveOrg();
+  if (!active) return { error: "Not authenticated." };
+  const admin = createAdminClient();
+  const { data: plan } = await admin
+    .from("recurring_plans")
+    .select("customer_id, customers(full_name, phone, sms_sendable)")
+    .eq("id", planId)
+    .eq("organization_id", active.org.id)
+    .single();
+  if (!plan) return { error: "Plan not found." };
+  const cust = plan.customers as unknown as {
+    full_name: string | null;
+    phone: string | null;
+    sms_sendable: boolean;
+  } | null;
+  const link = await issuePortalLink(active.org.id, plan.customer_id, "manage");
+  let sent = false;
+  if (cust?.sms_sendable && cust.phone) {
+    const first = (cust.full_name ?? "there").trim().split(/\s+/)[0] || "there";
+    const res = await sendGuardedSms({
+      orgId: active.org.id,
+      customerId: plan.customer_id,
+      toPhone: cust.phone,
+      body: `Hi ${first}, manage your service (skip, pause, change frequency) here: ${link}`,
+      eventType: "message_sent",
+      meta: { reason: "manage_link" },
+    });
+    sent = res.ok;
+  }
   return { ok: true, sent, link };
 }
