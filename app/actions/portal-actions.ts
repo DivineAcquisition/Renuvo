@@ -11,6 +11,7 @@ import {
   cancelStripeSubscription,
 } from "@/lib/stripe/recurring";
 import { enrollWinback } from "@/lib/winback/enroll";
+import { emitOutcome } from "@/lib/intelligence/emit";
 import { captureError } from "@/lib/observability/logger";
 
 async function session() {
@@ -170,5 +171,11 @@ export async function portalCancel(reason?: string) {
   // cancelling does NOT revoke SMS/email consent (separate basis); win-back may
   // re-engage later while still consented.
   await enrollWinback({ orgId, customerId, planId: plan.id, kind: "voluntary" });
+  await emitOutcome({
+    orgId,
+    type: "plan_canceled",
+    recurringPlanId: plan.id,
+    customerId,
+  });
   return { ok: true };
 }

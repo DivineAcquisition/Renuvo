@@ -14,6 +14,7 @@ import {
   Settings,
   HeartHandshake,
   Repeat,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CountUp } from "@/components/ui/count-up";
@@ -25,6 +26,7 @@ const NAV = [
   { href: "/dashboard/accounts", label: "Accounts", icon: Repeat },
   { href: "/dashboard/links", label: "Links", icon: Link2 },
   { href: "/dashboard/winback", label: "Win-back", icon: HeartHandshake },
+  { href: "/dashboard/intelligence", label: "Intelligence", icon: Sparkles },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   {
     href: "/dashboard/settings/messaging",

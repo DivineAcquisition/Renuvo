@@ -8,6 +8,7 @@ import {
   cancelStripeSubscription,
 } from "@/lib/stripe/recurring";
 import { enrollWinback } from "@/lib/winback/enroll";
+import { emitOutcome } from "@/lib/intelligence/emit";
 import { revalidatePath } from "next/cache";
 
 export async function pausePlan(planId: string) {
@@ -55,6 +56,12 @@ async function lifecycle(
         customerId: plan.customer_id,
         planId,
         kind: "voluntary",
+      });
+      await emitOutcome({
+        orgId: active.org.id,
+        type: "plan_canceled",
+        recurringPlanId: planId,
+        customerId: plan.customer_id,
       });
     }
     revalidatePath(`/dashboard/plans/${planId}`);

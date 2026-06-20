@@ -3,6 +3,7 @@ import { generateMessage, mapEventKeyToEventType } from "./generate";
 import { dispatchMessage } from "@/lib/messaging/dispatch";
 import { canSendNow } from "./guardrails";
 import { canRunAgent } from "@/lib/billing/entitlements";
+import { emitOutcome } from "@/lib/intelligence/emit";
 import { log } from "@/lib/log";
 import type { Database } from "@/types/database";
 
@@ -166,6 +167,16 @@ export async function runScheduler(batch = 100): Promise<SchedulerSummary> {
       if (res.ok) {
         await setStatus(row.id, "sent");
         sent++;
+        // intelligence spine: a conversion attempt went out (Prompt 48)
+        if (row.event_key === "conversion_offer") {
+          await emitOutcome({
+            orgId: row.organization_id,
+            type: "capture_sent",
+            messageTemplateKey: row.event_key,
+            recurringPlanId: row.recurring_plan_id ?? undefined,
+            customerId: row.customer_id,
+          });
+        }
       } else if (res.reason === "insufficient_funds") {
         // auto-reload already fired inside guarded send; retry shortly
         if (row.attempts + 1 >= MAX_ATTEMPTS) {

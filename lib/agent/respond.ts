@@ -7,6 +7,7 @@ import { cancelPendingMessages } from "./engine";
 import { getSignupLink } from "@/lib/capture/links";
 import { dispatchMessage } from "@/lib/messaging/dispatch";
 import { notify } from "@/lib/notify/dispatch";
+import { emitOutcome } from "@/lib/intelligence/emit";
 
 // LOOP GUARD: this is the ONLY entry point for agent replies and it runs solely
 // from the Telnyx inbound webhook (human → agent). NEVER call it from an
@@ -111,6 +112,14 @@ export async function handleInboundMessage(args: {
       body: m.body as string,
     }));
   const intent = await classifyIntent(args.text, convo);
+
+  // intelligence spine: inbound intent (Prompt 48)
+  void emitOutcome({
+    orgId: args.orgId,
+    type: "reply_classified",
+    customerId: args.customerId,
+    meta: { intent },
+  });
 
   // a live conversation has started → stop the canned sequence
   await cancelPendingMessages(args.orgId, args.customerId, `inbound_${intent}`);
