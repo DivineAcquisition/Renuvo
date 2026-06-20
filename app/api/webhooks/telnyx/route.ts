@@ -64,8 +64,13 @@ export async function POST(req: NextRequest) {
         p_body: text,
         p_external_id: payload?.id ?? undefined,
       });
-      // hand to the agent (Prompt 18 implements intent + response)
-      await onInboundMessage({ orgId: org.id, customerId: customer.id, text });
+      // hand to the agent (intent classification + reply, Prompt 19)
+      await onInboundMessage({
+        orgId: org.id,
+        customerId: customer.id,
+        text,
+        externalId: payload?.id ?? undefined,
+      });
     }
     return NextResponse.json({ received: true });
   }

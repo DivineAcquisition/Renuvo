@@ -1,4 +1,5 @@
 import { scheduleConversionSequence } from "./engine";
+import { handleInboundMessage } from "./respond";
 
 /**
  * Called once a payment is recorded for a messageable customer (Prompt 12).
@@ -15,14 +16,14 @@ export async function onPaymentRecorded(args: {
 
 /**
  * Called when a customer replies to an SMS (inbound webhook, Prompt 13).
- * Prompt 18 implements this: classify intent (interested / objection / question),
- * generate + send a reply via sendGuardedSms, advance the plan if accepted.
+ * Classifies intent, cancels the canned sequence, and replies via the guarded
+ * path (Prompt 19). STOP is handled upstream in the webhook and never gets here.
  */
 export async function onInboundMessage(args: {
   orgId: string;
   customerId: string;
   text: string;
+  externalId?: string;
 }) {
-  // TODO (Prompt 18): classify intent + respond via the agent.
-  console.log("[onInboundMessage]", args);
+  await handleInboundMessage(args);
 }
