@@ -1,4 +1,6 @@
-import { AuthCard, AuthScaffold } from "@/components/auth/auth-scaffold";
+import Link from "next/link";
+
+import { AuthCard } from "@/components/auth/auth-card";
 import { AuthForm } from "@/components/auth/auth-form";
 import { safeInternalPath } from "@/lib/auth/paths";
 
@@ -13,25 +15,20 @@ export default async function SignupPage({
   const redirectTo = safeInternalPath(params.redirect);
 
   return (
-    <AuthScaffold
-      eyebrow="Start free"
-      headline={
+    <AuthCard
+      title="Create your inbox"
+      subtitle="Free to start. Forward what you already get."
+      eyebrowLabel="Start seeing patterns"
+      footer={
         <>
-          Forward the noise.
-          <br />
-          We’ll show the pattern.
+          Already have an account?{" "}
+          <Link href="/login" className="font-medium text-brand-700 hover:underline">
+            Sign in
+          </Link>
         </>
       }
-      subline="No CRM. No new habit. Your Renuvo inbox is ready the moment you sign up."
     >
-      <AuthCard>
-        <p className="auth-eyebrow hidden lg:block">Start seeing patterns</p>
-        <h1 className="auth-title">Create your inbox</h1>
-        <p className="auth-subtitle">Free to start. Forward what you already get.</p>
-        <div className="auth-desk-body">
-          <AuthForm intent="signup" redirectTo={redirectTo} />
-        </div>
-      </AuthCard>
-    </AuthScaffold>
+      <AuthForm intent="signup" redirectTo={redirectTo} />
+    </AuthCard>
   );
 }

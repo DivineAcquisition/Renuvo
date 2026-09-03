@@ -55,21 +55,26 @@ export default function Logo({
   title?: string;
   onDark?: boolean;
 }) {
+  if (markOnly) {
+    return (
+      <span className={cn("inline-flex", className)}>
+        <LogoMark className="size-full" />
+        <span className="sr-only">{title || "Renuvo"}</span>
+      </span>
+    );
+  }
+
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <LogoMark className="size-8" />
-      {markOnly ? (
-        <span className="sr-only">{title}</span>
-      ) : (
-        <span
-          className={cn(
-            "font-heading text-[17px] tracking-tight",
-            onDark ? "text-white" : "text-ink-950",
-          )}
-        >
-          {title}
-        </span>
-      )}
+      <span
+        className={cn(
+          "font-heading text-[17px] tracking-tight",
+          onDark ? "text-white" : "text-ink-950",
+        )}
+      >
+        {title}
+      </span>
     </span>
   );
 }

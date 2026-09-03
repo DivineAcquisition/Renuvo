@@ -1,7 +1,6 @@
 "use client";
 
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
-import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { AuthField, AuthOrDivider } from "@/components/auth/auth-fields";
@@ -89,9 +88,9 @@ export function AuthForm({
         size="lg"
         pending={pending}
         loadingLabel="Working"
-        className="auth-submit mt-2 w-full rounded-xl"
+        className="auth-submit mt-2 w-full"
       >
-        {intent === "signup" ? "Start seeing your patterns" : "Continue"}
+        {intent === "signup" ? "Start seeing patterns" : "Continue"}
       </SubmitButton>
 
       <AuthOrDivider />
@@ -100,7 +99,7 @@ export function AuthForm({
         type="button"
         variant="outline"
         size="lg"
-        className="auth-alt w-full rounded-xl"
+        className="auth-alt w-full"
         onClick={() => {
           setMode((current) => (current === "password" ? "magic" : "password"));
           setShowPassword(false);
@@ -108,24 +107,6 @@ export function AuthForm({
       >
         {mode === "password" ? "Continue with a magic link" : "Continue with a password"}
       </Button>
-
-      <p className="auth-desk-foot text-center">
-        {intent === "signup" ? (
-          <>
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-brand-700 hover:underline">
-              Sign in
-            </Link>
-          </>
-        ) : (
-          <>
-            New here?{" "}
-            <Link href="/signup" className="font-medium text-brand-700 hover:underline">
-              Start free
-            </Link>
-          </>
-        )}
-      </p>
     </form>
   );
 }
