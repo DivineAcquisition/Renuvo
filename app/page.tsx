@@ -1,10 +1,22 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 
-// Render per request so the external redirect emits a real Location header
-// (a statically-prerendered redirect to an external URL omits it).
-export const dynamic = "force-dynamic";
+import { MarketingShell } from "@/components/marketing/chrome";
+import { LandingPage } from "@/components/marketing/landing";
+import { APP_NAME, SITE_DESCRIPTION, SITE_ORIGIN } from "@/lib/constants";
+import { HERO } from "@/lib/marketing/copy";
 
-export default function RootIndex() {
-  // app.renuvo.io/ has no marketing — bounce to the Framer site.
-  redirect(process.env.NEXT_PUBLIC_MARKETING_URL ?? "https://renuvo.io");
+export const metadata: Metadata = {
+  title: {
+    absolute: `${HERO.headline} · ${APP_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: SITE_ORIGIN },
+};
+
+export default function Home() {
+  return (
+    <MarketingShell>
+      <LandingPage />
+    </MarketingShell>
+  );
 }

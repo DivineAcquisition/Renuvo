@@ -4,340 +4,333 @@
 
 @layer base {
   :root {
-    /* Renuvo brand — WHITE theme, indigo/purple accents (default) */
-    --background: 0 0% 100%;          /* white */
-    --foreground: 250 14% 12%;        /* near-black, slight purple tint */
+    /* Vistrial palette, inverted onto a white canvas. */
+    --brand: #9a88fc;
+    --brand-rgb: 154, 136, 252;
+    --brand-deep: #6650d8;
+    --page: #fbfbfe;
+    --hairline: rgba(30, 25, 64, 0.08);
+
+    --background: 250 40% 99%;
+    --foreground: 255 20% 7%;
     --card: 0 0% 100%;
-    --card-foreground: 250 14% 12%;
+    --card-foreground: 255 20% 7%;
     --popover: 0 0% 100%;
-    --popover-foreground: 250 14% 12%;
-    --primary: 247 100% 61%;          /* #4F38FF */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 250 100% 96%;        /* pale lavender */
-    --secondary-foreground: 250 30% 20%;
-    --muted: 250 30% 96%;
-    --muted-foreground: 250 8% 45%;
-    --accent: 247 100% 95%;           /* #9A8CFF tint */
-    --accent-foreground: 247 60% 40%;
+    --popover-foreground: 255 20% 7%;
+    --primary: 249 95% 76%;
+    --primary-foreground: 255 20% 7%;
+    --secondary: 250 45% 96%;
+    --secondary-foreground: 255 22% 18%;
+    --muted: 250 33% 96%;
+    --muted-foreground: 250 8% 42%;
+    --accent: 249 100% 96%;
+    --accent-foreground: 255 32% 22%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 250 30% 91%;
-    --input: 250 30% 91%;
-    --ring: 247 100% 61%;
+    --border: 250 22% 90%;
+    --input: 250 22% 90%;
+    --ring: 249 95% 76%;
     --radius: 0.75rem;
-
-    /* Brand ramp — use directly via bg-[hsl(var(--brand-500))] etc. */
-    --brand-600: 247 100% 61%;        /* #4F38FF deepest */
-    --brand-500: 247 100% 67%;        /* #6A57FF mid */
-    --brand-400: 247 100% 77%;        /* #9A8CFF light */
   }
 
-  .dark {
-    /* Optional dark variant — keeps the purple identity on a deep indigo base */
-    --background: 250 30% 7%;
-    --foreground: 250 20% 96%;
-    --card: 250 28% 11%;
-    --card-foreground: 250 20% 96%;
-    --popover: 250 28% 11%;
-    --popover-foreground: 250 20% 96%;
-    --primary: 247 100% 67%;          /* lighter for contrast on dark */
-    --primary-foreground: 250 30% 7%;
-    --secondary: 250 22% 16%;
-    --secondary-foreground: 250 20% 96%;
-    --muted: 250 22% 16%;
-    --muted-foreground: 250 12% 60%;
-    --accent: 247 40% 22%;
-    --accent-foreground: 247 100% 85%;
-    --destructive: 0 62% 45%;
-    --destructive-foreground: 250 20% 96%;
-    --border: 250 22% 18%;
-    --input: 250 22% 18%;
-    --ring: 247 100% 67%;
-  }
-}
-
-@layer base {
   * {
     @apply border-border;
   }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-padding-top: 6rem;
+  }
+
+  html,
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
-    /* use the Inter "Display" optical cut at large sizes, "Text" at small */
+    max-width: 100vw;
+    overflow-x: clip;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-feature-settings: "ss01", "ss02";
     font-optical-sizing: auto;
-  }
-  /* headlines: tighter tracking for the display cut */
-  .font-display {
-    letter-spacing: -0.02em;
+    background-color: var(--page);
   }
 
-  /* ==========================================================================
-     PREMIUM FORM CONTROLS — applies app-wide, even to raw <input>/<select>/
-     <textarea> that don't use the <Input/> component. Utility classes still win
-     (base layer < utilities), so bespoke fields can override freely.
-     ========================================================================== */
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]),
-  textarea,
-  select {
-    transition: border-color 0.2s ease, box-shadow 0.2s ease,
-      background-color 0.2s ease;
-  }
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):hover:not(:disabled),
-  textarea:hover:not(:disabled),
-  select:hover:not(:disabled) {
-    border-color: hsl(var(--primary) / 0.32);
-  }
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):focus,
-  textarea:focus,
-  select:focus {
-    outline: none;
-    border-color: hsl(var(--primary) / 0.7);
-    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.13);
-  }
-  textarea {
-    resize: vertical;
-  }
-
-  /* brand-tinted native controls for a cohesive identity */
-  input[type="checkbox"],
-  input[type="radio"],
-  input[type="range"] {
-    accent-color: hsl(var(--primary));
-    cursor: pointer;
-  }
-
-  /* custom chevron on selects (kills the inconsistent native arrow) */
-  select {
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b889c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.7rem center;
-    background-size: 1rem;
-    padding-right: 2.25rem;
-  }
-
-  ::placeholder {
-    color: hsl(var(--muted-foreground) / 0.7);
+  ::selection {
+    background: rgba(154, 136, 252, 0.22);
   }
 }
 
-/* ============================================================================
-   RENUVO — high-end UI system (glass, motion, ambient wash)
-   purple as a scalpel · depth via shadow · ONE signature glass per view
-   ============================================================================ */
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, #7e67f2 0%, #9a88fc 45%, #c3b6fe 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 
-/* Single ambient radial wash for the whole app (one blob, never flooded). */
-.ambient-wash::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(900px 600px at 88% -8%, hsl(247 100% 61% / 0.07), transparent 60%),
-    radial-gradient(700px 500px at -6% 8%, hsl(247 100% 67% / 0.05), transparent 55%);
+  .hairline-glow {
+    box-shadow: 0 1px 0 0 rgba(154, 136, 252, 0.18);
+  }
+
+  .animate-rise {
+    animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .delay-1 {
+    animation-delay: 0.08s;
+  }
+
+  .panel {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%);
+    border: 1px solid rgba(30, 25, 64, 0.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 24px 60px -32px rgba(30, 25, 64, 0.28);
+  }
 }
 
-/* Capture page wash: top-right purple + bottom-left b400 (one ambient wash). */
-.wash-capture::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(820px 560px at 92% -6%, hsl(247 100% 61% / 0.08), transparent 60%),
-    radial-gradient(680px 520px at -6% 106%, hsl(247 100% 77% / 0.07), transparent 60%);
-}
-
-/* Frosted glass surface — the signature element. */
-.glass {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+/* Vistrial filled/gradient actions — inset highlight, brand ramp, near-black type. */
+.btn-gradient {
+  border-color: #9a88fc;
+  background: linear-gradient(180deg, #ae9dfd 0%, #9a88fc 52%, #7e67f2 100%);
+  color: #07070b;
   box-shadow:
-    0 1px 0 0 rgba(255, 255, 255, 0.6) inset,
-    0 20px 50px -20px hsl(247 60% 30% / 0.28),
-    0 8px 24px -16px hsl(247 60% 30% / 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 12px 28px -14px rgba(154, 136, 252, 0.72);
+}
+.btn-gradient:hover {
+  background: linear-gradient(180deg, #c3b6fe 0%, #ae9dfd 48%, #9a88fc 100%);
+}
+.btn-gradient:active {
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+.btn-primary-solid {
+  border-color: #9a88fc;
+  background: #9a88fc;
+  color: #07070b;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 18px -10px rgba(154, 136, 252, 0.55);
+}
+.btn-primary-solid:hover {
+  background: #ae9dfd;
 }
 
-.glass-dark {
-  background: linear-gradient(160deg, hsl(250 30% 12%), hsl(250 35% 8%));
-  border: 1px solid hsl(250 30% 22%);
-  box-shadow: 0 20px 50px -24px hsl(250 60% 6% / 0.7);
-}
-
-/* Gradient-bordered accent card (mask technique). */
-.accent-border {
+/*
+ * Auth stage. White canvas, Vistrial desk, moving shine, brand wash.
+ */
+.auth-stage {
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100svh;
+  background: #fbfbfe;
+  color: #07070b;
+}
+
+.auth-stage-atmosphere {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.auth-stage-glow {
+  position: absolute;
+  top: -18%;
+  left: 50%;
+  height: 34rem;
+  width: 46rem;
+  translate: -50% 0;
+  background: radial-gradient(ellipse at center, rgba(154, 136, 252, 0.28) 0%, transparent 68%);
+  filter: blur(72px);
+}
+
+.auth-stage-glow-aux {
+  position: absolute;
+  right: -12%;
+  bottom: 8%;
+  height: 22rem;
+  width: 22rem;
+  background: radial-gradient(ellipse at center, rgba(126, 103, 242, 0.16) 0%, transparent 70%);
+  filter: blur(56px);
+}
+
+.auth-stage-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(30, 25, 64, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 25, 64, 0.045) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 42%, black 18%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 42%, black 18%, transparent 78%);
+}
+
+.auth-eyebrow {
+  margin-bottom: 0.85rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
+  text-transform: uppercase;
+  color: #7e67f2;
+}
+
+.auth-title {
+  font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(1.85rem, 3vw, 2.45rem);
+  font-weight: 400;
+  letter-spacing: -0.038em;
+  line-height: 1.08;
+  color: #07070b;
+}
+
+.auth-subtitle {
+  margin-top: 0.7rem;
+  max-width: 28rem;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(7, 7, 11, 0.48);
+}
+
+.auth-desk-body {
+  margin-top: 1.75rem;
+  text-align: left;
+}
+
+.auth-desk-foot {
+  margin-top: 1.5rem;
+  font-size: 12px;
+  color: rgba(7, 7, 11, 0.38);
+}
+
+.auth-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.auth-field-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(102, 80, 216, 0.86);
+}
+
+.auth-notice {
+  padding: 0.35rem 0 0.25rem;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(7, 7, 11, 0.62);
+}
+
+.auth-field {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 0.75rem;
+}
+
+.auth-field:focus-within {
+  box-shadow:
+    0 0 0 3px rgba(154, 136, 252, 0.18),
+    0 0 24px -8px rgba(154, 136, 252, 0.4);
+}
+
+.auth-input {
+  display: block;
+  width: 100%;
+  height: 3.15rem;
+  min-height: 3.15rem;
+  padding: 0 1.25rem 0 3rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(30, 25, 64, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 246, 255, 0.92) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: #07070b;
+  font-size: 14.5px;
+  line-height: 1.25;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.auth-input--with-action {
+  padding-right: 3.15rem;
+}
+
+.auth-input::placeholder {
+  color: rgba(107, 107, 118, 0.7);
+}
+
+.auth-input:hover:not(:disabled) {
+  border-color: rgba(154, 136, 252, 0.4);
+}
+
+.auth-input:focus,
+.auth-input:focus-visible {
+  outline: none;
+  border-color: rgba(154, 136, 252, 0.72);
   background: #fff;
 }
-.accent-border::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1.5px;
-  background: linear-gradient(135deg, #6a57ff, #4f38ff 55%, #9a8cff);
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
+
+.auth-field-icon {
   pointer-events: none;
+  position: absolute;
+  top: 50%;
+  left: 1rem;
+  z-index: 1;
+  width: 1rem;
+  height: 1rem;
+  translate: 0 -50%;
+  color: #7e67f2;
 }
-/* diagonal sheen sweep across the accent card */
-.accent-sheen::after {
+
+.auth-field-action {
+  position: absolute;
+  top: 50%;
+  right: 0.65rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  translate: 0 -50%;
+  border-radius: 0.5rem;
+  color: #6b6b76;
+}
+.auth-field-action:hover {
+  color: #07070b;
+  background: rgba(154, 136, 252, 0.08);
+}
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: rgba(7, 7, 11, 0.38);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.auth-or::before,
+.auth-or::after {
   content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    115deg,
-    transparent 30%,
-    rgba(255, 255, 255, 0.55) 48%,
-    transparent 66%
-  );
-  background-size: 250% 250%;
-  animation: sheen 6s ease-in-out infinite;
-  pointer-events: none;
+  height: 1px;
+  flex: 1;
+  background: rgba(30, 25, 64, 0.1);
 }
 
-.gradient-text {
-  background: linear-gradient(135deg, #6a57ff, #4f38ff 60%, #9a8cff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.auth-submit,
+.auth-alt {
+  min-height: 2.85rem;
 }
 
-.hover-lift {
-  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.hover-lift:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 24px 48px -24px hsl(247 60% 30% / 0.35);
-}
-
-/* self-drawing SVG lines (charts + sparklines) */
-.draw-line {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 1.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-.draw-fill {
-  opacity: 0;
-  animation: fadeIn 0.9s ease-out 0.9s forwards;
-}
-
-/* pulsing live dot */
-.live-dot {
-  position: relative;
-}
-.live-dot::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 9999px;
-  background: hsl(145 65% 45% / 0.5);
-  animation: pulse 2s ease-out infinite;
-}
-
-.badge-float {
-  animation: bob 3.5s ease-in-out infinite;
-}
-
-.shimmer {
-  background: linear-gradient(
-    90deg,
-    hsl(250 30% 94%) 25%,
-    hsl(250 30% 97%) 37%,
-    hsl(250 30% 94%) 63%
-  );
-  background-size: 400% 100%;
-  animation: shimmer 1.4s ease infinite;
-}
-
-/* Aurora — a soft, slow brand-gradient backdrop (re-tokenized; one signature per
-   surface). Used on auth + first-impression panels. Static under reduced-motion. */
-.aurora-bg {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.aurora-bg::before {
-  content: "";
-  position: absolute;
-  inset: -45%;
-  /* defaults to the Renuvo ramp; tenant surfaces override --aurora-* with their
-     brand accent so customer-facing pages carry the business brand, not purple. */
-  background:
-    radial-gradient(38% 48% at 22% 28%, var(--aurora-1, rgba(106, 87, 255, 0.55)), transparent 60%),
-    radial-gradient(40% 44% at 80% 22%, var(--aurora-2, rgba(154, 140, 255, 0.45)), transparent 60%),
-    radial-gradient(48% 52% at 62% 82%, var(--aurora-3, rgba(79, 56, 255, 0.5)), transparent 60%);
-  filter: blur(44px);
-  animation: aurora 20s ease-in-out infinite alternate;
-}
-@keyframes aurora {
-  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
-  50% { transform: translate3d(-4%, 3%, 0) rotate(8deg); }
-  100% { transform: translate3d(3%, -3%, 0) rotate(-6deg); }
-}
-
-@keyframes pulse {
-  0% { transform: scale(0.8); opacity: 0.8; }
-  70% { transform: scale(2.2); opacity: 0; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-@keyframes sheen {
-  0% { background-position: 200% 0; }
-  60%, 100% { background-position: -120% 0; }
-}
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-@keyframes draw {
-  to { stroke-dashoffset: 0; }
-}
-@keyframes fadeIn {
-  to { opacity: 1; }
-}
-@keyframes shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
-
-/* capture card mount + success choreography */
-@keyframes up {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes halo {
-  from { transform: scale(0.6); opacity: 0.6; }
-  to { transform: scale(1.5); opacity: 0; }
-}
-.animate-up {
-  animation: up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.success-circle {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 0.7s ease 0.1s forwards;
-}
-.success-check {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 0.4s ease 0.6s forwards;
-}
-.success-halo {
-  animation: halo 1s ease 0.3s forwards;
-}
-
-/* ---- reduced motion: disable everything, show final states, no shift ---- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -346,13 +339,5 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
-  }
-  .draw-line,
-  .success-circle,
-  .success-check {
-    stroke-dashoffset: 0;
-  }
-  .draw-fill {
-    opacity: 1;
   }
 }
