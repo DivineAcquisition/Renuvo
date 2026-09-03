@@ -1,9 +1,7 @@
 import { ArrowRight, CalendarClock, Forward, Inbox, PlugZap, Repeat, ScanSearch, Tags, Unplug } from "lucide-react";
 import Link from "next/link";
 
-import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
-import { NumberTicker } from "@/components/magicui/number-ticker";
 import { Particles } from "@/components/magicui/particles";
 import { FaqList } from "@/components/marketing/faq";
 import { FinalCta } from "@/components/marketing/final-cta";
@@ -42,11 +40,7 @@ export function LandingPage() {
         <Particles className="absolute inset-0 z-0" quantity={52} color="#9A88FC" ease={80} size={0.5} />
         <div className={cn(marketingShell, "relative z-10 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16")}>
           <div className="animate-rise">
-            <StatusPill>
-              <AnimatedShinyText className="mx-0 max-w-none text-[11px] font-semibold tracking-[0.16em] uppercase">
-                No CRM · no new habit
-              </AnimatedShinyText>
-            </StatusPill>
+            <StatusPill>No CRM · no new habit</StatusPill>
             <h1 className={cn(marketingHeroTitle, "mt-6")}>
               {before}
               <span className="text-gradient">{HERO.headlineAccent}</span>
@@ -80,7 +74,7 @@ export function LandingPage() {
           {TRUST.promises.map((item) => (
             <div key={item.label} className="text-center">
               <p className="font-heading text-4xl tracking-tight text-ink-950 sm:text-5xl">
-                <NumberTicker value={item.value} />
+                {item.value}
               </p>
               <p className="mt-2 text-[13px] font-medium text-silver sm:text-sm">{item.label}</p>
             </div>
@@ -106,7 +100,7 @@ export function LandingPage() {
               className="pointer-events-none absolute left-[8%] right-[8%] top-10 hidden h-px bg-gradient-to-r from-transparent via-brand-400/50 to-transparent md:block"
             />
             {HOW_IT_WORKS.steps.map((step, index) => (
-              <BlurFade key={step.title} delay={0.08 * index} inView>
+              <BlurFade key={step.title} delay={0.08 * index}>
                 <FeatureCard
                   step={String(index + 1).padStart(2, "0")}
                   icon={STEP_ICONS[index]}
@@ -134,7 +128,7 @@ export function LandingPage() {
           </div>
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {WHY.items.map((item, index) => (
-              <BlurFade key={item.title} delay={0.05 * index} inView>
+              <BlurFade key={item.title} delay={0.05 * index}>
                 <IconCard icon={WHY_ICONS[index]} title={item.title}>
                   {item.body}
                 </IconCard>

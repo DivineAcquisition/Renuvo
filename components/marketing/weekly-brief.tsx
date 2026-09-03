@@ -3,7 +3,6 @@
 import { ArrowUpRight } from "lucide-react";
 
 import { BorderBeam } from "@/components/magicui/border-beam";
-import { NumberTicker } from "@/components/magicui/number-ticker";
 import { ShineBorder } from "@/components/magicui/shine-border";
 
 const THEMES = [
@@ -43,11 +42,8 @@ export function WeeklyBrief() {
             <p className="text-[12px] font-medium text-dim">This week’s lead theme</p>
             <p className="mt-2 font-heading text-3xl tracking-tight text-ink-950">Wait time</p>
             <p className="mt-2 text-[15px] leading-relaxed text-silver">
-              Up{" "}
-              <span className="font-semibold text-ink-950">
-                <NumberTicker value={41} />%
-              </span>{" "}
-              versus last week — before it becomes a pattern of lost customers.
+              Up <span className="font-semibold text-ink-950">41%</span> versus last week —
+              before it becomes a pattern of lost customers.
             </p>
             <p className="mt-5 inline-flex items-center gap-1 text-[13px] font-medium text-brand-700">
               Sample week · wait time is the story

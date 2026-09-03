@@ -3,7 +3,6 @@
 import { ArrowUpRight, Inbox, MessageSquareWarning, Tag } from "lucide-react";
 
 import { BorderBeam } from "@/components/magicui/border-beam";
-import { NumberTicker } from "@/components/magicui/number-ticker";
 import { ShineBorder } from "@/components/magicui/shine-border";
 
 const THREADS = [
@@ -84,11 +83,8 @@ export function ProductPreview() {
             </p>
             <p className="mt-3 font-heading text-lg tracking-tight text-ink-950">Wait time</p>
             <p className="mt-1 text-[13px] leading-relaxed text-silver">
-              Mentions up{" "}
-              <span className="font-semibold text-ink-950">
-                <NumberTicker value={41} />%
-              </span>{" "}
-              vs last week — three reviews, two texts, one voicemail.
+              Mentions up <span className="font-semibold text-ink-950">41%</span> vs last week —
+              three reviews, two texts, one voicemail.
             </p>
             <div className="mt-5 flex h-16 items-end gap-1.5" aria-hidden>
               {[28, 34, 31, 46, 42, 58, 72].map((h, i) => (

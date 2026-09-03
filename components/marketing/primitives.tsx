@@ -19,7 +19,7 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 
 export function StatusPill({ children }: { children: ReactNode }) {
   return (
-    <p className="inline-flex items-center gap-2 rounded-full border border-brand-500/20 bg-white/75 px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.16em] text-brand-700 uppercase shadow-sm backdrop-blur-md">
+    <p className="inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-brand-500/20 bg-white/75 px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.16em] text-brand-700 uppercase shadow-sm backdrop-blur-md">
       <span className="relative flex size-1.5">
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand-500 opacity-70" />
         <span className="relative inline-flex size-1.5 rounded-full bg-brand-500" />
