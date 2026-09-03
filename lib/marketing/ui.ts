@@ -1,7 +1,7 @@
 import { buttonVariants } from "@/components/ui/button-variants";
 
 export const marketingHeroTitle =
-  "font-sans font-medium text-[2.5rem] leading-[1.08] tracking-tight text-ink-950 sm:text-5xl md:text-[3.55rem] md:leading-[1.06]";
+  "font-sans font-normal text-[2.5rem] leading-[1.08] tracking-tight text-ink-950 sm:text-5xl md:text-[3.55rem] md:leading-[1.06]";
 
 export const marketingSectionTitle =
   "font-heading font-normal max-w-3xl text-[1.7rem] tracking-tight text-ink-950 sm:text-[2.15rem] sm:leading-tight";
