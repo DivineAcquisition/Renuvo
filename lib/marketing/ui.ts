@@ -1,10 +1,10 @@
 import { buttonVariants } from "@/components/ui/button-variants";
 
 export const marketingHeroTitle =
-  "font-heading text-[2.35rem] leading-[1.08] tracking-tight text-ink-950 sm:text-5xl md:text-[3.35rem] md:leading-[1.05]";
+  "font-heading text-[2.5rem] leading-[1.06] tracking-tight text-ink-950 sm:text-5xl md:text-[3.55rem] md:leading-[1.04]";
 
 export const marketingSectionTitle =
-  "font-heading max-w-3xl text-2xl tracking-tight text-ink-950 sm:text-[2rem] sm:leading-tight";
+  "font-heading max-w-3xl text-[1.7rem] tracking-tight text-ink-950 sm:text-[2.15rem] sm:leading-tight";
 
 export const marketingSubhead = "text-[15px] leading-relaxed text-silver sm:text-lg";
 

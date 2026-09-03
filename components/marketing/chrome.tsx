@@ -11,7 +11,7 @@ function MarketingBackdrop() {
         className="absolute -top-[24%] left-1/2 h-[640px] w-[920px] -translate-x-1/2"
         style={{
           background:
-            "radial-gradient(ellipse at center, rgba(154,136,252,0.22) 0%, transparent 68%)",
+            "radial-gradient(ellipse at center, rgba(154,136,252,0.24) 0%, transparent 68%)",
           filter: "blur(72px)",
         }}
       />
@@ -19,7 +19,7 @@ function MarketingBackdrop() {
         className="absolute top-[22%] right-[-10%] h-[420px] w-[420px]"
         style={{
           background:
-            "radial-gradient(ellipse at center, rgba(154,136,252,0.12) 0%, transparent 70%)",
+            "radial-gradient(ellipse at center, rgba(154,136,252,0.14) 0%, transparent 70%)",
           filter: "blur(64px)",
         }}
       />
@@ -27,7 +27,7 @@ function MarketingBackdrop() {
         className="absolute bottom-[-8%] left-[-8%] h-[320px] w-[320px]"
         style={{
           background:
-            "radial-gradient(ellipse at center, rgba(126,103,242,0.1) 0%, transparent 70%)",
+            "radial-gradient(ellipse at center, rgba(126,103,242,0.12) 0%, transparent 70%)",
           filter: "blur(70px)",
         }}
       />
@@ -42,6 +42,7 @@ function MarketingBackdrop() {
             "radial-gradient(ellipse 85% 55% at 50% -5%, black 20%, transparent 75%)",
         }}
       />
+      <div className="page-grain" />
     </div>
   );
 }

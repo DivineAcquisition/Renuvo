@@ -1,17 +1,24 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, CalendarClock, Forward, Inbox, PlugZap, Repeat, ScanSearch, Tags, Unplug } from "lucide-react";
 import Link from "next/link";
 
 import { AnimatedShinyText } from "@/components/magicui/animated-shiny-text";
 import { BlurFade } from "@/components/magicui/blur-fade";
-import { MagicCard } from "@/components/magicui/magic-card";
-import { Marquee } from "@/components/magicui/marquee";
+import { NumberTicker } from "@/components/magicui/number-ticker";
 import { Particles } from "@/components/magicui/particles";
-import { ProductPreview } from "@/components/marketing/product-preview";
-import { Button } from "@/components/ui/button";
-import { HERO, HOW_IT_WORKS, SOURCES, TRUST } from "@/lib/marketing/copy";
+import { FaqList } from "@/components/marketing/faq";
+import { FinalCta } from "@/components/marketing/final-cta";
 import {
-  marketingBody,
-  marketingCardTitle,
+  Eyebrow,
+  FeatureCard,
+  IconCard,
+  StatusPill,
+} from "@/components/marketing/primitives";
+import { ProductPreview } from "@/components/marketing/product-preview";
+import { SourceMarquee } from "@/components/marketing/source-marquee";
+import { WeeklyBrief } from "@/components/marketing/weekly-brief";
+import { Button } from "@/components/ui/button";
+import { FAQ, HERO, HOW_IT_WORKS, PATTERNS, TRUST, WHY } from "@/lib/marketing/copy";
+import {
   marketingHeroTitle,
   marketingPageGutter,
   marketingSectionTitle,
@@ -21,17 +28,8 @@ import {
 } from "@/lib/marketing/ui";
 import { cn } from "@/lib/utils";
 
-function StatusPill({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="inline-flex items-center gap-2 rounded-full border border-brand-500/20 bg-white/70 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-brand-700 uppercase shadow-sm backdrop-blur">
-      <span className="relative flex size-1.5">
-        <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand-500 opacity-70" />
-        <span className="relative inline-flex size-1.5 rounded-full bg-brand-500" />
-      </span>
-      {children}
-    </p>
-  );
-}
+const STEP_ICONS = [Forward, ScanSearch, CalendarClock] as const;
+const WHY_ICONS = [Unplug, Repeat, PlugZap, Tags, CalendarClock, Inbox] as const;
 
 export function LandingPage() {
   const accentAt = HERO.headline.indexOf(HERO.headlineAccent);
@@ -40,77 +38,114 @@ export function LandingPage() {
 
   return (
     <>
-      <section className={cn(marketingPageGutter, "relative overflow-hidden pb-20 pt-14 sm:pb-28 sm:pt-24")}>
-        <Particles className="absolute inset-0 z-0" quantity={42} color="#9A88FC" ease={80} size={0.45} />
-        <div className={cn(marketingShell, "relative z-10 grid items-center gap-12 lg:grid-cols-2 lg:gap-16")}>
-          <div className="animate-rise">
-            <StatusPill>
-              <AnimatedShinyText className="mx-0 max-w-none text-[11px] font-semibold tracking-[0.16em] text-brand-700 uppercase">
-                No CRM · no new habit
-              </AnimatedShinyText>
-            </StatusPill>
-            <h1 className={cn(marketingHeroTitle, "mt-6")}>
-              {before}
-              <span className="text-gradient">{HERO.headlineAccent}</span>
-              {after}
-            </h1>
-            <p className={cn(marketingSubhead, "mt-6 max-w-xl")}>{HERO.subhead}</p>
-            <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-              <Button variant="gradient" size="xl" className="rounded-xl px-5" asChild>
-                <Link href="/signup">
-                  {HERO.cta}
-                  <ArrowRight aria-hidden />
-                </Link>
-              </Button>
-              <a
-                href="#how"
-                className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-silver transition-colors hover:text-ink-950"
-              >
-                See how it works
-              </a>
-            </div>
-            <p className="mt-5 max-w-md text-[13px] leading-relaxed text-dim">{TRUST.line}</p>
+      <section className={cn(marketingPageGutter, "relative overflow-hidden pb-16 pt-12 sm:pb-28 sm:pt-24")}>
+        <Particles className="absolute inset-0 z-0" quantity={52} color="#9A88FC" ease={80} size={0.5} />
+        <div className={cn(marketingShell, "relative z-10 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16")}>
+          <div>
+            <BlurFade delay={0.04} inView>
+              <StatusPill>
+                <AnimatedShinyText className="mx-0 max-w-none text-[11px] font-semibold tracking-[0.16em] uppercase">
+                  No CRM · no new habit
+                </AnimatedShinyText>
+              </StatusPill>
+            </BlurFade>
+            <BlurFade delay={0.1} inView>
+              <h1 className={cn(marketingHeroTitle, "mt-6")}>
+                {before}
+                <span className="text-gradient">{HERO.headlineAccent}</span>
+                {after}
+              </h1>
+            </BlurFade>
+            <BlurFade delay={0.16} inView>
+              <p className={cn(marketingSubhead, "mt-6 max-w-xl")}>{HERO.subhead}</p>
+            </BlurFade>
+            <BlurFade delay={0.22} inView>
+              <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                <Button variant="gradient" size="xl" className="rounded-xl px-6" asChild>
+                  <Link href="/signup">
+                    {HERO.cta}
+                    <ArrowRight aria-hidden />
+                  </Link>
+                </Button>
+                <a
+                  href="#how"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-sm font-medium text-silver transition-colors hover:text-ink-950"
+                >
+                  {HERO.secondaryCta}
+                </a>
+              </div>
+              <p className="mt-5 max-w-md text-[13px] leading-relaxed text-dim">{TRUST.line}</p>
+            </BlurFade>
           </div>
-          <div className="relative animate-rise delay-1">
+          <BlurFade delay={0.14} inView className="lg:[transform:perspective(1600px)_rotateY(-7deg)_rotateX(2deg)]">
             <ProductPreview />
-          </div>
+          </BlurFade>
         </div>
       </section>
 
-      <div className="relative overflow-hidden border-y border-ink-950/[0.06] bg-white/50">
-        <Marquee pauseOnHover className="[--duration:36s]">
-          {SOURCES.map((source) => (
-            <span
-              key={source}
-              className="mx-4 text-[13px] font-medium tracking-wide text-silver"
-            >
-              {source}
-            </span>
+      <section className="border-y border-ink-950/[0.06] bg-white/55">
+        <div className={cn(marketingShell, marketingPageGutter, "grid gap-8 py-10 sm:grid-cols-3 sm:py-14")}>
+          {TRUST.promises.map((item, index) => (
+            <BlurFade key={item.label} delay={0.04 * index} inView className="text-center">
+              <p className="font-heading text-4xl tracking-tight text-ink-950 sm:text-5xl">
+                <NumberTicker value={item.value} />
+              </p>
+              <p className="mt-2 text-[13px] font-medium text-silver sm:text-sm">{item.label}</p>
+            </BlurFade>
           ))}
-        </Marquee>
-      </div>
+        </div>
+      </section>
+
+      <SourceMarquee />
 
       <section
         id="how"
         className={cn("scroll-mt-24 border-t border-ink-950/[0.06]", marketingPageGutter, marketingSectionY)}
       >
-        <div className={marketingShell}>
-          <p className="mb-3 text-[11px] font-semibold tracking-[0.16em] text-brand-700 uppercase">
-            {HOW_IT_WORKS.eyebrow}
-          </p>
-          <h2 className={marketingSectionTitle}>{HOW_IT_WORKS.headline}</h2>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
+        <div className={cn(marketingShell, "max-w-5xl")}>
+          <div className="mx-auto max-w-2xl text-center">
+            <Eyebrow>{HOW_IT_WORKS.eyebrow}</Eyebrow>
+            <h2 className={cn(marketingSectionTitle, "mx-auto")}>{HOW_IT_WORKS.headline}</h2>
+            <p className={cn(marketingSubhead, "mx-auto mt-3")}>{HOW_IT_WORKS.lead}</p>
+          </div>
+          <div className="relative mt-12 grid gap-4 md:grid-cols-3 md:gap-6">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-[8%] right-[8%] top-10 hidden h-px bg-gradient-to-r from-transparent via-brand-400/50 to-transparent md:block"
+            />
             {HOW_IT_WORKS.steps.map((step, index) => (
               <BlurFade key={step.title} delay={0.08 * index} inView>
-                <div className="panel relative flex h-full flex-col overflow-hidden rounded-2xl">
-                  <MagicCard className="flex h-full flex-col rounded-2xl p-6 sm:p-7">
-                    <p className="mb-5 text-4xl font-semibold leading-none tracking-tight text-brand-500/30 tabular-nums">
-                      {String(index + 1).padStart(2, "0")}
-                    </p>
-                    <h3 className={marketingCardTitle}>{step.title}</h3>
-                    <p className={cn(marketingBody, "mt-3")}>{step.body}</p>
-                  </MagicCard>
-                </div>
+                <FeatureCard
+                  step={String(index + 1).padStart(2, "0")}
+                  icon={STEP_ICONS[index]}
+                  title={step.title}
+                >
+                  {step.body}
+                </FeatureCard>
+              </BlurFade>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        className={cn(
+          "border-t border-ink-950/[0.06] bg-white/40",
+          marketingPageGutter,
+          marketingSectionY,
+        )}
+      >
+        <div className={marketingShell}>
+          <div className="mx-auto max-w-2xl text-center">
+            <Eyebrow>{WHY.eyebrow}</Eyebrow>
+            <h2 className={cn(marketingSectionTitle, "mx-auto")}>{WHY.headline}</h2>
+          </div>
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {WHY.items.map((item, index) => (
+              <BlurFade key={item.title} delay={0.05 * index} inView>
+                <IconCard icon={WHY_ICONS[index]} title={item.title}>
+                  {item.body}
+                </IconCard>
               </BlurFade>
             ))}
           </div>
@@ -119,62 +154,38 @@ export function LandingPage() {
 
       <section
         id="patterns"
+        className={cn("scroll-mt-24 border-t border-ink-950/[0.06]", marketingPageGutter, marketingSectionY)}
+      >
+        <div className={cn(marketingShell, "grid items-center gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-16")}>
+          <div>
+            <Eyebrow>{PATTERNS.eyebrow}</Eyebrow>
+            <h2 className={marketingSectionTitle}>{PATTERNS.headline}</h2>
+            <p className={cn(marketingSubhead, "mt-4 max-w-lg")}>{PATTERNS.body}</p>
+          </div>
+          <WeeklyBrief />
+        </div>
+      </section>
+
+      <section
+        id="faq"
         className={cn(
           "scroll-mt-24 border-t border-ink-950/[0.06] bg-white/40",
           marketingPageGutter,
           marketingSectionY,
         )}
       >
-        <div className={cn(marketingShell, "grid items-center gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16")}>
-          <div>
-            <p className="mb-3 text-[11px] font-semibold tracking-[0.16em] text-brand-700 uppercase">
-              Weekly, not noisy
-            </p>
-            <h2 className={marketingSectionTitle}>See the pattern before it becomes churn.</h2>
-            <p className={cn(marketingSubhead, "mt-4 max-w-lg")}>
-              One forwarded inbox. Every complaint tagged. A quiet briefing that tells you what
-              shifted this week — wait time, billing, staff, product — before it hardens into lost
-              customers.
-            </p>
+        <div className={marketingShell}>
+          <div className="mx-auto max-w-2xl text-center">
+            <Eyebrow>{FAQ.eyebrow}</Eyebrow>
+            <h2 className={cn(marketingSectionTitle, "mx-auto")}>{FAQ.headline}</h2>
           </div>
-          <ProductPreview />
+          <div className="mt-10">
+            <FaqList />
+          </div>
         </div>
       </section>
 
-      <section
-        id="start"
-        className={cn("scroll-mt-24 border-t border-ink-950/[0.06]", marketingPageGutter, marketingSectionY)}
-      >
-        <div className={cn(marketingShell, "relative overflow-hidden rounded-[1.75rem] px-6 py-14 text-center sm:px-12 sm:py-20")}>
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(ellipse at 50% 0%, rgba(154,136,252,0.22), transparent 55%), linear-gradient(180deg, #0b0a11 0%, #16151f 100%)",
-            }}
-          />
-          <div className="relative">
-            <p className="text-[11px] font-semibold tracking-[0.18em] text-brand-300 uppercase">
-              Free to start
-            </p>
-            <h2 className="mx-auto mt-4 max-w-2xl font-heading text-3xl tracking-tight text-white sm:text-4xl">
-              {HERO.cta}
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-white/60">
-              {TRUST.line}
-            </p>
-            <div className="mt-8 flex justify-center">
-              <Button variant="gradient" size="xl" className="rounded-xl px-6" asChild>
-                <Link href="/signup">
-                  {HERO.cta}
-                  <ArrowRight aria-hidden />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <FinalCta />
     </>
   );
 }

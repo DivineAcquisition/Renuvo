@@ -46,6 +46,11 @@ export function SiteHeader() {
                   {NAV.patterns}
                 </a>
               </li>
+              <li>
+                <a href="#faq" className={marketingNavLink}>
+                  {NAV.faq}
+                </a>
+              </li>
             </ul>
           </nav>
         </div>
@@ -88,6 +93,13 @@ export function SiteHeader() {
               onClick={() => setOpen(false)}
             >
               {NAV.patterns}
+            </a>
+            <a
+              href="#faq"
+              className="rounded-xl px-3 py-3 text-base font-medium text-ink-950"
+              onClick={() => setOpen(false)}
+            >
+              {NAV.faq}
             </a>
             <Link
               href="/login"

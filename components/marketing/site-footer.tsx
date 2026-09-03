@@ -30,6 +30,16 @@ export function SiteFooter() {
                 </a>
               </li>
               <li>
+                <a href="#patterns" className={footerLink}>
+                  Patterns
+                </a>
+              </li>
+              <li>
+                <a href="#faq" className={footerLink}>
+                  FAQ
+                </a>
+              </li>
+              <li>
                 <Link href="/signup" className={footerLink}>
                   Start free
                 </Link>

@@ -3,12 +3,17 @@ import { Forward, Inbox, ScanSearch } from "lucide-react";
 import Logo from "@/components/brand/logo";
 import { Particles } from "@/components/magicui/particles";
 import { ShineBorder } from "@/components/magicui/shine-border";
-import { APP_NAME } from "@/lib/constants";
 
 const FEATURES = [
   { icon: Forward, label: "Forward what you already get", desc: "Reviews, texts, complaints — no new inbox habit." },
   { icon: ScanSearch, label: "Tagged automatically", desc: "Wait time, billing, staff, product. The moment it lands." },
   { icon: Inbox, label: "Weekly patterns", desc: "See what’s rising before it becomes lost customers." },
+] as const;
+
+const STATS = [
+  { value: "0", label: "CRM" },
+  { value: "0", label: "Setup" },
+  { value: "1", label: "Inbox" },
 ] as const;
 
 function BrandPanel({
@@ -40,6 +45,15 @@ function BrandPanel({
         <div className="nv-auth-a absolute -left-24 top-8 h-80 w-80 rounded-full blur-3xl" style={{ background: "rgba(154,136,252,.4)" }} />
         <div className="nv-auth-b absolute -bottom-10 right-0 h-96 w-96 rounded-full blur-3xl" style={{ background: "rgba(126,103,242,.4)" }} />
         <Particles className="absolute inset-0" quantity={36} color="#9A88FC" ease={70} size={0.4} />
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage:
+              "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)",
+            backgroundSize: "44px 44px",
+            maskImage: "radial-gradient(ellipse at center, #000 40%, transparent 85%)",
+          }}
+        />
       </div>
       <div className="relative">
         <Logo onDark />
@@ -61,7 +75,14 @@ function BrandPanel({
           ))}
         </ul>
       </div>
-      <p className="relative text-[11px] uppercase tracking-[0.18em] text-white/40">{APP_NAME}</p>
+      <div className="relative flex items-center gap-9">
+        {STATS.map((stat) => (
+          <div key={stat.label}>
+            <p className="font-mono text-2xl font-semibold tabular-nums tracking-tight">{stat.value}</p>
+            <p className="mt-1 text-[11px] uppercase tracking-wider text-white/45">{stat.label}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
