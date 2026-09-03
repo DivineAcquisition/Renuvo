@@ -41,57 +41,49 @@ export function LandingPage() {
       <section className={cn(marketingPageGutter, "relative overflow-hidden pb-16 pt-12 sm:pb-28 sm:pt-24")}>
         <Particles className="absolute inset-0 z-0" quantity={52} color="#9A88FC" ease={80} size={0.5} />
         <div className={cn(marketingShell, "relative z-10 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16")}>
-          <div>
-            <BlurFade delay={0.04} inView>
-              <StatusPill>
-                <AnimatedShinyText className="mx-0 max-w-none text-[11px] font-semibold tracking-[0.16em] uppercase">
-                  No CRM · no new habit
-                </AnimatedShinyText>
-              </StatusPill>
-            </BlurFade>
-            <BlurFade delay={0.1} inView>
-              <h1 className={cn(marketingHeroTitle, "mt-6")}>
-                {before}
-                <span className="text-gradient">{HERO.headlineAccent}</span>
-                {after}
-              </h1>
-            </BlurFade>
-            <BlurFade delay={0.16} inView>
-              <p className={cn(marketingSubhead, "mt-6 max-w-xl")}>{HERO.subhead}</p>
-            </BlurFade>
-            <BlurFade delay={0.22} inView>
-              <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-                <Button variant="gradient" size="xl" className="rounded-xl px-6" asChild>
-                  <Link href="/signup">
-                    {HERO.cta}
-                    <ArrowRight aria-hidden />
-                  </Link>
-                </Button>
-                <a
-                  href="#how"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-sm font-medium text-silver transition-colors hover:text-ink-950"
-                >
-                  {HERO.secondaryCta}
-                </a>
-              </div>
-              <p className="mt-5 max-w-md text-[13px] leading-relaxed text-dim">{TRUST.line}</p>
-            </BlurFade>
+          <div className="animate-rise">
+            <StatusPill>
+              <AnimatedShinyText className="mx-0 max-w-none text-[11px] font-semibold tracking-[0.16em] uppercase">
+                No CRM · no new habit
+              </AnimatedShinyText>
+            </StatusPill>
+            <h1 className={cn(marketingHeroTitle, "mt-6")}>
+              {before}
+              <span className="text-gradient">{HERO.headlineAccent}</span>
+              {after}
+            </h1>
+            <p className={cn(marketingSubhead, "mt-6 max-w-xl")}>{HERO.subhead}</p>
+            <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+              <Button variant="gradient" size="xl" className="rounded-xl px-6" asChild>
+                <Link href="/signup">
+                  {HERO.cta}
+                  <ArrowRight aria-hidden />
+                </Link>
+              </Button>
+              <a
+                href="#how"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-sm font-medium text-silver transition-colors hover:text-ink-950"
+              >
+                {HERO.secondaryCta}
+              </a>
+            </div>
+            <p className="mt-5 max-w-md text-[13px] leading-relaxed text-dim">{TRUST.line}</p>
           </div>
-          <BlurFade delay={0.14} inView className="lg:[transform:perspective(1600px)_rotateY(-7deg)_rotateX(2deg)]">
+          <div className="relative animate-rise delay-1">
             <ProductPreview />
-          </BlurFade>
+          </div>
         </div>
       </section>
 
       <section className="border-y border-ink-950/[0.06] bg-white/55">
         <div className={cn(marketingShell, marketingPageGutter, "grid gap-8 py-10 sm:grid-cols-3 sm:py-14")}>
-          {TRUST.promises.map((item, index) => (
-            <BlurFade key={item.label} delay={0.04 * index} inView className="text-center">
+          {TRUST.promises.map((item) => (
+            <div key={item.label} className="text-center">
               <p className="font-heading text-4xl tracking-tight text-ink-950 sm:text-5xl">
                 <NumberTicker value={item.value} />
               </p>
               <p className="mt-2 text-[13px] font-medium text-silver sm:text-sm">{item.label}</p>
-            </BlurFade>
+            </div>
           ))}
         </div>
       </section>
