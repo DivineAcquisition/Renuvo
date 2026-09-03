@@ -1,7 +1,6 @@
 import { ArrowRight, CalendarClock, Forward, Inbox, PlugZap, Repeat, ScanSearch, Tags, Unplug } from "lucide-react";
 import Link from "next/link";
 
-import { BlurFade } from "@/components/magicui/blur-fade";
 import { Particles } from "@/components/magicui/particles";
 import { FaqList } from "@/components/marketing/faq";
 import { FinalCta } from "@/components/marketing/final-cta";
@@ -100,15 +99,14 @@ export function LandingPage() {
               className="pointer-events-none absolute left-[8%] right-[8%] top-10 hidden h-px bg-gradient-to-r from-transparent via-brand-400/50 to-transparent md:block"
             />
             {HOW_IT_WORKS.steps.map((step, index) => (
-              <BlurFade key={step.title} delay={0.08 * index}>
-                <FeatureCard
-                  step={String(index + 1).padStart(2, "0")}
-                  icon={STEP_ICONS[index]}
-                  title={step.title}
-                >
-                  {step.body}
-                </FeatureCard>
-              </BlurFade>
+              <FeatureCard
+                key={step.title}
+                step={String(index + 1).padStart(2, "0")}
+                icon={STEP_ICONS[index]}
+                title={step.title}
+              >
+                {step.body}
+              </FeatureCard>
             ))}
           </div>
         </div>
@@ -128,11 +126,9 @@ export function LandingPage() {
           </div>
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {WHY.items.map((item, index) => (
-              <BlurFade key={item.title} delay={0.05 * index}>
-                <IconCard icon={WHY_ICONS[index]} title={item.title}>
-                  {item.body}
-                </IconCard>
-              </BlurFade>
+              <IconCard key={item.title} icon={WHY_ICONS[index]} title={item.title}>
+                {item.body}
+              </IconCard>
             ))}
           </div>
         </div>
