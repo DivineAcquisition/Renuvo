@@ -54,8 +54,11 @@ export function SiteHeader() {
           <Button variant="ghost" size="sm" className="hidden sm:inline-flex" asChild>
             <Link href="/login">{NAV.signIn}</Link>
           </Button>
-          <Button variant="gradient" size="lg" asChild>
+          <Button variant="gradient" size="lg" className="hidden sm:inline-flex" asChild>
             <Link href="/signup">{HERO.cta}</Link>
+          </Button>
+          <Button variant="gradient" size="sm" className="sm:hidden" asChild>
+            <Link href="/signup">Start free</Link>
           </Button>
           <Button
             variant="ghost"
