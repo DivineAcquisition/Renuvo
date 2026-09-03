@@ -26,7 +26,7 @@ export function AuthCard({
   return (
     <div className="auth-stage">
       <div className="auth-stage-atmosphere" aria-hidden>
-        <Particles className="absolute inset-0" quantity={56} color="#9A88FC" ease={70} size={0.45} />
+        <Particles className="absolute inset-0" quantity={40} color="#9A88FC" ease={70} size={0.4} />
         <div className="auth-stage-glow" />
         <div className="auth-stage-glow-aux" />
         <div className="auth-stage-grid" />

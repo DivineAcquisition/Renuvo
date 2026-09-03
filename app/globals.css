@@ -222,18 +222,18 @@
   min-height: 100svh;
   align-items: center;
   justify-content: center;
-  padding: 2.5rem 1.35rem 3rem;
+  padding: 2rem 1.25rem 2.25rem;
 }
 
 .auth-desk-inner {
   position: relative;
   overflow: hidden;
-  width: min(32rem, 100%);
+  width: min(26.5rem, 100%);
   margin-inline: auto;
-  padding: 2.35rem 1.85rem 1.85rem;
+  padding: 1.75rem 1.45rem 1.4rem;
   text-align: center;
   border: 1px solid rgba(30, 25, 64, 0.08);
-  border-radius: 1.25rem;
+  border-radius: 1.1rem;
   background:
     linear-gradient(180deg, #ffffff 0%, #fbfbfe 100%);
   box-shadow:
@@ -245,13 +245,13 @@
 .auth-mark-link {
   display: block;
   width: fit-content;
-  margin: 0 auto 1.75rem;
+  margin: 0 auto 1.2rem;
 }
 
 .auth-mark {
   display: flex;
-  height: 4.5rem;
-  width: 4.5rem;
+  height: 3.25rem;
+  width: 3.25rem;
 }
 
 .auth-eyebrow {
@@ -266,7 +266,7 @@
 
 .auth-title {
   font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(1.85rem, 3vw, 2.55rem);
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
   font-weight: 400;
   letter-spacing: -0.038em;
   line-height: 1.08;
@@ -274,21 +274,21 @@
 }
 
 .auth-subtitle {
-  margin-top: 0.7rem;
+  margin-top: 0.5rem;
   margin-inline: auto;
-  max-width: 28rem;
-  font-size: 14px;
-  line-height: 1.55;
+  max-width: 24rem;
+  font-size: 13.5px;
+  line-height: 1.5;
   color: rgba(7, 7, 11, 0.48);
 }
 
 .auth-desk-body {
-  margin-top: 2rem;
+  margin-top: 1.4rem;
   text-align: left;
 }
 
 .auth-desk-foot {
-  margin-top: 2rem;
+  margin-top: 1.35rem;
   font-size: 12px;
   letter-spacing: 0.01em;
   color: rgba(7, 7, 11, 0.38);
@@ -331,8 +331,8 @@
 .auth-input {
   display: block;
   width: 100%;
-  height: 3.15rem;
-  min-height: 3.15rem;
+  height: 2.85rem;
+  min-height: 2.85rem;
   padding: 0 1.25rem 0 3rem;
   border-radius: 0.75rem;
   border: 1px solid rgba(30, 25, 64, 0.12);
@@ -431,8 +431,8 @@
 }
 
 .auth-submit {
-  height: 3.15rem;
-  min-height: 3.15rem;
+  height: 2.85rem;
+  min-height: 2.85rem;
   border-radius: 0.75rem;
   font-size: 14px;
   font-weight: 600;
@@ -451,8 +451,8 @@
 }
 
 .auth-alt {
-  height: 3.15rem;
-  min-height: 3.15rem;
+  height: 2.85rem;
+  min-height: 2.85rem;
   border-radius: 0.75rem;
   border-color: rgba(30, 25, 64, 0.12);
   background: transparent;

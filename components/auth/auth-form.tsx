@@ -41,7 +41,7 @@ export function AuthForm({
   }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form action={action} className="flex flex-col gap-3.5">
       <input type="hidden" name="redirectTo" value={redirectTo} />
       {error ? <p className="text-sm font-medium text-destructive">{error}</p> : null}
 
