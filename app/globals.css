@@ -57,6 +57,21 @@
     background-color: var(--page);
   }
 
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: -0.022em;
+  }
+
+  h1 {
+    letter-spacing: -0.032em;
+  }
+
   ::selection {
     background: rgba(154, 136, 252, 0.22);
   }
