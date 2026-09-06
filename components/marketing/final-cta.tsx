@@ -40,7 +40,7 @@ export function FinalCta() {
           <p className="text-[11px] font-semibold tracking-[0.18em] text-brand-300 uppercase">
             Free to start
           </p>
-          <h2 className="mx-auto mt-4 max-w-2xl font-heading font-normal text-3xl tracking-tight text-white sm:text-5xl sm:leading-[1.08]">
+          <h2 className="mx-auto mt-4 max-w-2xl font-heading font-semibold text-3xl tracking-tight text-white sm:text-5xl sm:leading-[1.08]">
             {HERO.cta}
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-[15px] leading-relaxed text-white/60 sm:text-lg">

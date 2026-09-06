@@ -64,12 +64,19 @@
   h5,
   h6 {
     font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif;
-    font-weight: 400;
+    font-optical-sizing: none;
+    font-variation-settings: "opsz" 32;
+    font-weight: 600;
     letter-spacing: -0.022em;
   }
 
   h1 {
     letter-spacing: -0.032em;
+  }
+
+  .font-heading {
+    font-optical-sizing: none;
+    font-variation-settings: "opsz" 32;
   }
 
   ::selection {
@@ -266,8 +273,10 @@
 
 .auth-title {
   font-family: var(--font-heading), ui-sans-serif, system-ui, sans-serif;
+  font-optical-sizing: none;
+  font-variation-settings: "opsz" 32;
   font-size: clamp(1.5rem, 2.6vw, 2rem);
-  font-weight: 400;
+  font-weight: 600;
   letter-spacing: -0.038em;
   line-height: 1.08;
   color: #07070b;

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Cal_Sans, Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
 
 import { APP_NAME, SITE_DESCRIPTION, SITE_ORIGIN } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -12,12 +12,12 @@ const geistSans = Geist({
   display: "swap",
 });
 
-const calSans = Cal_Sans({
+/** Inter Display = Inter at optical size 32. Applied via `--font-heading`. */
+const interDisplay = Inter({
   subsets: ["latin"],
-  weight: "400",
   variable: "--font-heading",
   display: "swap",
-  adjustFontFallback: false,
+  axes: ["opsz"],
 });
 
 const geistMono = Geist_Mono({
@@ -61,7 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={cn(geistSans.variable, calSans.variable, geistMono.variable)}
+      className={cn(geistSans.variable, interDisplay.variable, geistMono.variable)}
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         {children}

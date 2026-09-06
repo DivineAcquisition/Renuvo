@@ -11,7 +11,12 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
-        heading: ["var(--font-heading)", "ui-sans-serif", "system-ui", "sans-serif"],
+        heading: [
+          "var(--font-heading)",
+          {
+            fontVariationSettings: '"opsz" 32',
+          },
+        ],
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
