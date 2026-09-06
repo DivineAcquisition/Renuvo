@@ -1,0 +1,21 @@
+# Renuvo — local / linked project
+project_id = "renuvo"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+
+[db]
+port = 54322
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://renuvo.io", "https://renuvo.io/**"]
+enable_signup = true

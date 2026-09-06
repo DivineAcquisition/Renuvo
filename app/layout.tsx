@@ -1,37 +1,71 @@
-import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
+
+import { APP_NAME, SITE_DESCRIPTION, SITE_ORIGIN } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+
 import "./globals.css";
 
-// Inter is the core SaaS typeface. The `opsz` (optical size) axis gives the
-// "Inter Display" cut at large sizes (headlines) and the text cut at small —
-// enabled via `font-optical-sizing: auto` in globals. One family, body + display.
-const sans = Inter({
+const geistSans = Geist({
   subsets: ["latin"],
   variable: "--font-sans",
-  axes: ["opsz"],
   display: "swap",
 });
-// Data — mono for dollar figures, stats, metrics (the operator-grade touch)
-const mono = JetBrains_Mono({
+
+/** Inter Display = Inter at optical size 32. Applied via `--font-heading`. */
+const interDisplay = Inter({
+  subsets: ["latin"],
+  variable: "--font-heading",
+  display: "swap",
+  axes: ["opsz"],
+});
+
+const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
-  weight: ["500", "600"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Renuvo — Turn One-Time Jobs Into Recurring Clients",
-  description:
-    "AI that helps home service businesses convert one-time jobs into recurring revenue — automatically. Plugs into your existing tools. Join the waitlist.",
+  metadataBase: new URL(SITE_ORIGIN),
+  applicationName: APP_NAME,
+  title: {
+    default: `${APP_NAME} — What are your customers really saying?`,
+    template: `%s · ${APP_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  alternates: { canonical: SITE_ORIGIN },
+  openGraph: {
+    title: "What are your customers really saying about you?",
+    description: SITE_DESCRIPTION,
+    url: SITE_ORIGIN,
+    siteName: APP_NAME,
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "What are your customers really saying about you?",
+    description: SITE_DESCRIPTION,
+  },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export const viewport: Viewport = {
+  themeColor: "#fbfbfe",
+  colorScheme: "light",
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body className="font-body">{children}</body>
+    <html
+      lang="en"
+      className={cn(geistSans.variable, interDisplay.variable, geistMono.variable)}
+    >
+      <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+        {children}
+      </body>
     </html>
   );
 }
