@@ -1,25 +1,25 @@
 import type { ReactNode } from "react";
 
-import { AgentFlow } from "@/components/marketing/agent-flow";
 import { AutonomyDial } from "@/components/marketing/autonomy-dial";
-import { BookCall, outlineCta } from "@/components/marketing/chrome";
-import { LandingFaq } from "@/components/marketing/faq";
-import { GuardedRun } from "@/components/marketing/guarded-run";
-import { HeroQueue } from "@/components/marketing/hero-queue";
-import { BeamFrame, ShinyLabel, SpotlightCard } from "@/components/marketing/saas-frame";
-import { AgentsGrid, AlwaysAPerson, ControlRules, LoopMap, PainList, Scorecard, WhoGrid } from "@/components/marketing/sections";
-import { WaitlistForm } from "@/components/marketing/waitlist-form";
+import { EarlyAccessLink, outlineCta } from "@/components/marketing/chrome";
+import { CoordinationMap } from "@/components/marketing/coordination-map";
+import { EarlyAccessForm } from "@/components/marketing/early-access-form";
+import { HomeScreen } from "@/components/marketing/home-screen";
+import { OwnerDecision } from "@/components/marketing/owner-decision";
+import { BeamFrame, ShinyLabel } from "@/components/marketing/saas-frame";
+import { AgentsGrid, ControlCards, LooseEnds } from "@/components/marketing/sections";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/button";
-import { WAITLIST_ANCHOR } from "@/lib/marketing/config";
-import { AGENTS_SECTION, CONTROL, FAQ, FINAL_CTA, HERO, LOOP, PRICING, PROBLEM, WHO } from "@/lib/marketing/content";
+import { AGENTS_SECTION, CONTROL, COORDINATION, FINAL_CTA, HERO, PHILOSOPHY, PROBLEM } from "@/lib/marketing/content";
 import { marketingDisplayTitle, marketingLead, marketingPageGutter, marketingSectionTitle, marketingShell, marketingSubhead } from "@/lib/marketing/ui";
 import { sectionLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
+const sectionFrame = cn(marketingPageGutter, "scroll-mt-24 border-t border-border py-20 sm:py-28");
+
 function Section({ id, eyebrow, headline, lead, children }: { id?: string; eyebrow?: string; headline: string; lead?: string; children: ReactNode }) {
   return (
-    <section id={id} className={cn(marketingPageGutter, "scroll-mt-24 border-t border-border py-20 sm:py-28")}>
+    <section id={id} className={sectionFrame}>
       <BlurFade inView offset={12} blur="2px" duration={0.55} className={marketingShell}>
         {eyebrow ? <p className={cn(sectionLabel, "mb-4")}>{eyebrow}</p> : null}
         <h2 className={marketingSectionTitle}>{headline}</h2>
@@ -36,87 +36,75 @@ export function LandingPage() {
       <section className={cn(marketingPageGutter, "relative pb-16 pt-14 sm:pb-24 sm:pt-20")}>
         <div className={cn(marketingShell, "grid items-start gap-10 lg:grid-cols-[1.05fr_0.95fr]")}>
           <div>
-            <ShinyLabel>{HERO.label}</ShinyLabel>
+            <ShinyLabel>{HERO.eyebrow}</ShinyLabel>
             <h1 className={marketingDisplayTitle}>{HERO.headline}</h1>
             <p className={cn(marketingSubhead, "mt-6 max-w-xl")}>{HERO.supporting}</p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <BookCall position="hero">{HERO.primaryCta}</BookCall>
-              <Button variant="outline" size="xl" className={outlineCta} render={<a href={WAITLIST_ANCHOR} data-cta-position="hero-waitlist" />}>
+              <EarlyAccessLink position="hero">{HERO.primaryCta}</EarlyAccessLink>
+              <Button variant="outline" size="xl" className={outlineCta} render={<a href={`#${AGENTS_SECTION.id}`} data-cta-position="hero-agents" />}>
                 {HERO.secondaryCta}
               </Button>
             </div>
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">{HERO.trust}</p>
+            <p className="mt-5 max-w-xl text-sm leading-relaxed font-medium text-strong">{HERO.trust}</p>
           </div>
           <BeamFrame glow>
-            <HeroQueue />
+            <HomeScreen />
           </BeamFrame>
         </div>
       </section>
 
-      <AgentFlow />
-
       <Section id={PROBLEM.id} headline={PROBLEM.headline}>
-        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-10">
-          <div className="space-y-4 text-[15px] leading-relaxed text-muted-foreground sm:text-base">
-            <p>{PROBLEM.opening}</p>
-            <p className="text-strong">{PROBLEM.bridge}</p>
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-12">
+          <LooseEnds />
+          <div className="space-y-4 text-[15px] leading-relaxed sm:text-base">
+            <p className="text-muted-foreground">{PROBLEM.together}</p>
+            <p className="text-strong">{PROBLEM.answer}</p>
           </div>
-          <PainList />
         </div>
       </Section>
 
-      <Section id={AGENTS_SECTION.id} eyebrow={AGENTS_SECTION.eyebrow} headline={AGENTS_SECTION.headline} lead={AGENTS_SECTION.lead}>
+      <Section id={AGENTS_SECTION.id} headline={AGENTS_SECTION.headline}>
         <AgentsGrid />
       </Section>
 
-      <Section id={LOOP.id} eyebrow={LOOP.eyebrow} headline={LOOP.headline} lead={LOOP.lead}>
-        <LoopMap />
+      <Section id={COORDINATION.id} headline={COORDINATION.headline} lead={COORDINATION.lead}>
+        <CoordinationMap />
       </Section>
 
-      <Section id={CONTROL.id} eyebrow={CONTROL.eyebrow} headline={CONTROL.headline} lead={CONTROL.lead}>
-        <div className="grid items-start gap-4 lg:grid-cols-[1.25fr_0.75fr]">
+      <Section id={CONTROL.id} headline={CONTROL.headline}>
+        <ControlCards />
+        <div className="mt-6 grid items-start gap-4 lg:grid-cols-[1.15fr_0.85fr]">
           <AutonomyDial />
-          <AlwaysAPerson />
-        </div>
-        <div className="mt-14">
-          <GuardedRun />
-        </div>
-        <div className="mt-14">
-          <ControlRules />
-        </div>
-        <div className="mt-14">
-          <Scorecard />
+          <OwnerDecision />
         </div>
       </Section>
 
-      <Section id={WHO.id} eyebrow={WHO.eyebrow} headline={WHO.headline} lead={WHO.lead}>
-        <WhoGrid />
-      </Section>
+      <section id={PHILOSOPHY.id} className={sectionFrame}>
+        <BlurFade inView offset={12} blur="2px" duration={0.55} className={cn(marketingShell, "max-w-3xl")}>
+          <p className={cn(sectionLabel, "mb-4")}>{PHILOSOPHY.eyebrow}</p>
+          <h2 className={marketingSectionTitle}>{PHILOSOPHY.headline}</h2>
+          <div className="mt-8 space-y-5 text-base leading-relaxed text-muted-foreground sm:text-lg">
+            {PHILOSOPHY.paragraphs.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
+          <p className="mt-10 border-l-2 border-brand-500 pl-5 font-heading text-2xl leading-snug tracking-tight text-strong sm:text-3xl">{PHILOSOPHY.closing}</p>
+        </BlurFade>
+      </section>
 
-      <Section id={PRICING.id} headline={PRICING.headline}>
-        <SpotlightCard glow className="max-w-2xl p-6">
-          <h3 className="font-heading text-2xl text-strong">{PRICING.name}</h3>
-          <p className="mt-2 text-lg text-strong">{PRICING.price}</p>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">{PRICING.body}</p>
-          <BookCall position="pricing" className="mt-6">
-            {PRICING.cta}
-          </BookCall>
-        </SpotlightCard>
-      </Section>
-
-      <Section id={FAQ.id} headline={FAQ.headline}>
-        <LandingFaq />
-      </Section>
-
-      <section id={FINAL_CTA.id} className={cn(marketingPageGutter, "scroll-mt-24 border-t border-border py-20 sm:py-28")}>
+      <section id={FINAL_CTA.id} className={sectionFrame}>
         <BlurFade inView offset={12} blur="2px" duration={0.55} className={marketingShell}>
-          <BeamFrame glow beamDelay={1.4} className="mx-auto max-w-3xl">
-            <div className="text-center">
-              <h2 className={cn(marketingSectionTitle, "mx-auto")}>{FINAL_CTA.headline}</h2>
-              <p className={cn(marketingLead, "mx-auto mt-4")}>{FINAL_CTA.body}</p>
+          <BeamFrame glow beamDelay={1.4} className="mx-auto max-w-3xl sm:p-8">
+            <h2 className={marketingSectionTitle}>{FINAL_CTA.headline}</h2>
+            <div className="mt-4 space-y-3">
+              {FINAL_CTA.paragraphs.map((paragraph) => (
+                <p key={paragraph} className={marketingLead}>
+                  {paragraph}
+                </p>
+              ))}
             </div>
             <div className="mt-8 border-t border-border pt-8">
-              <WaitlistForm />
+              <EarlyAccessForm />
             </div>
           </BeamFrame>
         </BlurFade>

@@ -21,13 +21,7 @@ export function AgentMark({ id, size = "md", live = false }: { id: AgentId; size
   );
 }
 
-/** "Vera · Sales" */
+/** The agent's role name, as it is written everywhere: Sales, Recruiter, Dispatch, Retention. */
 export function AgentName({ id, className }: { id: AgentId; className?: string }) {
-  const agent = agentOf(id);
-  return (
-    <span className={className}>
-      <span className="font-medium text-strong">{agent.name}</span>
-      <span className="text-muted-foreground"> · {agent.role}</span>
-    </span>
-  );
+  return <span className={cn("font-medium text-strong", className)}>{agentOf(id).name}</span>;
 }

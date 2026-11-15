@@ -2,10 +2,10 @@ import { MapPin, MessagesSquare, RefreshCw, Users, type LucideIcon } from "@/com
 import { AGENTS, type AgentId } from "@/lib/marketing/content";
 
 export const AGENT_ICON: Record<AgentId, LucideIcon> = {
-  vera: MessagesSquare,
-  atlas: MapPin,
-  scout: Users,
-  loop: RefreshCw,
+  sales: MessagesSquare,
+  recruiter: Users,
+  dispatch: MapPin,
+  retention: RefreshCw,
 };
 
 const BY_ID = Object.fromEntries(AGENTS.map((agent) => [agent.id, agent])) as Record<AgentId, (typeof AGENTS)[number]>;

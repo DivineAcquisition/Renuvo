@@ -1,11 +1,14 @@
-# Renuvo
+# Selestial
 
-The agentic platform for cleaning companies. Four agents run the daily work
-inside one shared record: Vera (Sales), Atlas (Dispatch), Scout (Recruiter)
-and Loop (Retention). The owner sets the rules and approves what matters.
+The AI operating platform for cleaning companies. Four agents — Sales,
+Recruiter, Dispatch and Retention — work inside one shared operating system.
+The owner sets the standards. Selestial carries the work forward.
 
 The source of truth is
 [`docs/foundation/00-product-brief.md`](docs/foundation/00-product-brief.md).
+
+This repository and its Vercel project are still named Renuvo, which was the
+working name.
 
 ## What is here
 
@@ -17,10 +20,9 @@ Only the public landing page. The signed-in product is not built yet.
 2. `cp .env.local.example .env.local`
 3. `npm run dev` → http://localhost:3000
 
-`NEXT_PUBLIC_BOOKING_URL` is the scheduling link behind "Book a call". Until
-it is set, that button goes to the waitlist form. `WAITLIST_WEBHOOK_URL` is
-where a waitlist entry is sent. Until it is set, the form tells the visitor
-the waitlist is not open. It never reports an entry it did not send.
+`EARLY_ACCESS_WEBHOOK_URL` is where an early-access request is sent. Until it
+is set, the form tells the visitor that requests are not open. It never
+reports a request it did not send.
 
 ## Stack
 

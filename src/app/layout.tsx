@@ -2,20 +2,23 @@ import type { Metadata, Viewport } from "next";
 
 import { APP_NAME, SITE_ORIGIN } from "@/lib/constants";
 import { geistMono, interDisplay } from "@/lib/fonts";
-import { HERO, SITE_DESCRIPTION } from "@/lib/marketing/content";
+import { SITE_DESCRIPTION, TAGLINE } from "@/lib/marketing/content";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
 
+/** "The AI operating platform for cleaning companies", without the full stop. */
+const TITLE = TAGLINE.replace(/\.$/, "");
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
   applicationName: APP_NAME,
-  title: { default: `${HERO.headline.replace(/\.$/, "")} · ${APP_NAME}`, template: `%s · ${APP_NAME}` },
+  title: { default: `${APP_NAME} · ${TITLE}`, template: `%s · ${APP_NAME}` },
   description: SITE_DESCRIPTION,
   formatDetection: { telephone: false },
   robots: { index: true, follow: true },
-  openGraph: { siteName: APP_NAME, locale: "en_US", type: "website", title: HERO.headline, description: SITE_DESCRIPTION },
-  twitter: { card: "summary", title: HERO.headline, description: SITE_DESCRIPTION },
+  openGraph: { siteName: APP_NAME, locale: "en_US", type: "website", title: `${APP_NAME} · ${TITLE}`, description: SITE_DESCRIPTION },
+  twitter: { card: "summary", title: `${APP_NAME} · ${TITLE}`, description: SITE_DESCRIPTION },
 };
 
 export const viewport: Viewport = {

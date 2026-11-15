@@ -3,12 +3,13 @@
 import { useState } from "react";
 
 import { AgentMark, AgentName } from "@/components/marketing/agent-mark";
-import { CONTROL } from "@/lib/marketing/content";
+import { Badge } from "@/components/ui/badge";
+import { CONTROL, EXAMPLE_LABEL } from "@/lib/marketing/content";
 import { cn } from "@/lib/utils";
 
 const DIAL = CONTROL.dial;
 
-/** Pick an action and a level, and read what the agent would do. It changes nothing: it shows the setting. */
+/** Pick an action and a permission, and read what the agent would do. It changes nothing: it shows the setting. */
 export function AutonomyDial() {
   const [action, setAction] = useState(0);
   const [level, setLevel] = useState(1);
@@ -17,7 +18,12 @@ export function AutonomyDial() {
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
-      <h3 className="text-[11px] font-semibold tracking-[0.14em] text-brand-300 uppercase">{DIAL.title}</h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[11px] font-semibold tracking-[0.14em] text-brand-300 uppercase">{DIAL.title}</h3>
+        <Badge variant="outline" size="sm">
+          {EXAMPLE_LABEL}
+        </Badge>
+      </div>
 
       <fieldset className="mt-4">
         <legend className="text-xs font-medium text-muted-foreground">{DIAL.actionLabel}</legend>
@@ -61,7 +67,7 @@ export function AutonomyDial() {
         <p className="mt-1 text-sm font-medium text-strong">{chosen.label}</p>
         <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{chosenLevel.body}</p>
       </div>
-      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{DIAL.trust}</p>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{DIAL.note}</p>
     </div>
   );
 }

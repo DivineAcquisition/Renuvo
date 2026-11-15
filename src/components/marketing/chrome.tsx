@@ -4,23 +4,17 @@ import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/logo";
 import { Menu } from "@/components/icons";
 import { Button, type ButtonSize } from "@/components/ui/button";
-import { bookingHref, bookingIsExternal } from "@/lib/marketing/config";
-import { FOOTER, NAV } from "@/lib/marketing/content";
+import { APP_NAME } from "@/lib/constants";
+import { EARLY_ACCESS_ANCHOR, FOOTER, NAV } from "@/lib/marketing/content";
 import { marketingNavLink, marketingPageGutter, marketingShell } from "@/lib/marketing/ui";
 import { cn } from "@/lib/utils";
 
 const ctaShape = "h-12! rounded-[8px]! before:rounded-[7px]!";
 
-/** "Book a call". Goes to the scheduling link when one is set, and to the waitlist form until then. */
-export function BookCall({ position, size = "xl", className, children }: { position: string; size?: ButtonSize; className?: string; children: ReactNode }) {
-  const external = bookingIsExternal();
+/** "Get early access". Every one of these goes to the request form at the foot of the page. */
+export function EarlyAccessLink({ position, size = "xl", className, children }: { position: string; size?: ButtonSize; className?: string; children: ReactNode }) {
   return (
-    <Button
-      variant="gradient"
-      size={size}
-      className={cn(ctaShape, className)}
-      render={<a href={bookingHref()} data-cta-position={position} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})} />}
-    >
+    <Button variant="gradient" size={size} className={cn(ctaShape, className)} render={<a href={EARLY_ACCESS_ANCHOR} data-cta-position={position} />}>
       {children}
     </Button>
   );
@@ -46,24 +40,24 @@ export function SiteHeader() {
   return (
     <header className={cn("sticky top-0 z-50 border-b border-border bg-background", marketingPageGutter)}>
       <div className={cn(marketingShell, "flex h-[4.5rem] items-center justify-between gap-4")}>
-        <Link href="/" className="shrink-0 rounded-md" aria-label="Renuvo home">
+        <Link href="/" className="shrink-0 rounded-md" aria-label={`${APP_NAME} home`}>
           <Logo />
         </Link>
         <nav aria-label="On this page" className="hidden lg:block">
           <NavLinks className="flex items-center gap-1" />
         </nav>
-        <BookCall position="nav" size="lg" className="hidden shrink-0 lg:inline-flex">
-          {NAV.book}
-        </BookCall>
+        <EarlyAccessLink position="nav" size="lg" className="hidden shrink-0 lg:inline-flex">
+          {NAV.cta}
+        </EarlyAccessLink>
         <details className="relative shrink-0 lg:hidden">
           <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md border border-border bg-muted text-strong [&::-webkit-details-marker]:hidden">
             <span className="sr-only">{NAV.openMenu}</span>
             <Menu className="size-4" aria-hidden />
           </summary>
           <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-background p-3 shadow-xl">
-            <BookCall position="nav" size="lg" className="w-full">
-              {NAV.book}
-            </BookCall>
+            <EarlyAccessLink position="nav" size="lg" className="w-full">
+              {NAV.cta}
+            </EarlyAccessLink>
             <nav aria-label="On this page" className="mt-2">
               <NavLinks className="grid gap-1" />
             </nav>
@@ -76,13 +70,17 @@ export function SiteHeader() {
 
 export function SiteFooter() {
   return (
-    <footer className={cn("border-t border-border py-10", marketingPageGutter)}>
-      <div className={cn(marketingShell, "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between")}>
-        <Logo />
-        <p className="max-w-xl text-xs leading-relaxed text-muted-foreground sm:text-right">
+    <footer className={cn("border-t border-border py-12", marketingPageGutter)}>
+      <div className={cn(marketingShell, "grid gap-8 sm:grid-cols-[1fr_auto] sm:items-end")}>
+        <div>
+          <Logo />
+          <p className="mt-3 text-sm text-strong">{FOOTER.tagline}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{FOOTER.roles.join(" · ")}</p>
+        </div>
+        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground sm:text-right">
           {FOOTER.note}
           <span className="mt-1 block">
-            © {new Date().getFullYear()} {FOOTER.rights}
+            © {new Date().getFullYear()} {FOOTER.name}
           </span>
         </p>
       </div>
