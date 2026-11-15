@@ -2,14 +2,16 @@
 """
 Draws the Selestial logo files: the mark beside the name, and the mark above the name.
 
-The name is set in Inter, extra bold, capitals, and turned into outlines so the files look the
-same everywhere and need no font. Colours are the owner's palette. Run after the mark, the palette or
+The name is set in Plus Jakarta Sans, bold, and turned into outlines so the files look the same
+everywhere and need no font. That typeface is used for the logo only: the app's own type stays Inter,
+and the font file in scripts/fonts is never loaded by the site. Colours are the owner's palette. Run after the mark, the palette or
 the lettering changes, then run `node scripts/generate-logo-png.mjs` and commit the results:
 
     pip install fonttools brotli
     python3 scripts/generate-logo.py
 
-Writes public/brand/selestial-logo{,-violet,-white}.svg and selestial-logo-stacked{,-white}.svg.
+Writes public/brand/selestial-logo{,-violet,-white}.svg, selestial-logo-stacked{,-white}.svg, and
+src/components/brand/wordmark.ts (the name's outline, for the logo inside the app).
 """
 import re
 from pathlib import Path
@@ -27,17 +29,17 @@ DEEP_VIOLET = "#5126C7"
 PLUM = "#211A35"
 WHITE = "#FFFFFF"
 
-NAME = "SELESTIAL"
+NAME = "Selestial"
 MARK_W, MARK_H = 58.43, 100.0
-CAP = 44.0        # height of the capitals, against a mark 100 tall
-TRACK = 0.06      # space added after each letter, in ems
+CAP = 48.0        # height of the capital S, against a mark 100 tall
+TRACK = -0.02     # space added after each letter, in ems
 GAP = 24.0        # between the mark and the name
 PAD = 8.0
 
 # The mark is kept in one place: the icon script.
 MARK = max(re.findall(r'"(M[\d\s.,A-Za-z-]+Z)"', (ROOT / "scripts" / "generate-icons.mjs").read_text()), key=len)
 
-font = instancer.instantiateVariableFont(TTFont(ROOT / "src" / "fonts" / "InterVariable.woff2"), {"wght": 800})
+font = instancer.instantiateVariableFont(TTFont(ROOT / "scripts" / "fonts" / "PlusJakartaSans-latin.woff2"), {"wght": 700})
 glyphs, cmap, upm = font.getGlyphSet(), font.getBestCmap(), font["head"].unitsPerEm
 cap_units = font["OS/2"].sCapHeight
 scale = CAP / cap_units
@@ -99,6 +101,13 @@ FILES = {
     "selestial-logo-stacked.svg": stacked("url(#v)", PLUM, True),
     "selestial-logo-stacked-white.svg": stacked(WHITE, WHITE, False),
 }
+
+# The name alone, sitting on a box as tall as its capital, for the logo component in the app.
+_text, _end = name_paths(0, CAP)
+(ROOT / "src" / "components" / "brand" / "wordmark.ts").write_text(
+    "/** The name \"Selestial\" as an outline, drawn by scripts/generate-logo.py. Do not edit by hand. */\n"
+    f"export const WORDMARK = {{ width: {_end:.2f}, height: {CAP:.2f}, path: \"{_text}\" }} as const;\n"
+)
 
 OUT.mkdir(parents=True, exist_ok=True)
 for name, content in FILES.items():

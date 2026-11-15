@@ -1,5 +1,6 @@
 import { useId } from "react";
 
+import { WORDMARK } from "@/components/brand/wordmark";
 import { APP_NAME } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -46,12 +47,17 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-/** The mark beside the name, set the way the logo sets it: capitals, heavy, in the gradient. */
+/**
+ * The mark beside the name. The name is an outline in the logo's own typeface, so it looks the same as the
+ * logo files and loads no font. It takes the text colour: Deep Plum on light, white on dark.
+ */
 export function Logo({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
+    <span className={cn("inline-flex items-center gap-2 text-strong", className)}>
       <LogoGlyph className="h-8" />
-      <span className="logo-wordmark font-heading text-lg leading-none font-extrabold tracking-[0.04em] uppercase">{APP_NAME}</span>
+      <svg viewBox={`0 0 ${WORDMARK.width} ${WORDMARK.height}`} className="h-[1.05rem] w-auto overflow-visible" role="img" aria-label={APP_NAME}>
+        <path d={WORDMARK.path} fill="currentColor" />
+      </svg>
     </span>
   );
 }
