@@ -1,50 +1,44 @@
 "use server";
 
-import { EARLY_ACCESS } from "@/lib/marketing/content";
+import { createHash } from "node:crypto";
 
-export type EarlyAccessState = { status: "idle" } | { status: "done" } | { status: "error"; message: string };
+import { ConvexHttpClient } from "convex/browser";
+import { headers } from "next/headers";
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+import { submitEarlyAccess, type EarlyAccessState, type Save } from "@/lib/early-access";
 
-function text(form: FormData, key: string, max: number) {
-  const value = form.get(key);
-  return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
+import { api } from "../../convex/_generated/api";
 
 /**
- * Sends one early-access request to EARLY_ACCESS_WEBHOOK_URL. Nothing is stored in this app yet.
- * If the address is not set, the visitor is told requests are not open. It never reports success
- * for a request that went nowhere.
+ * Saving needs the Convex address and the secret this server shares with it. Without both, the form says
+ * requests are not open. The secret never leaves the server.
  */
-export async function requestEarlyAccess(_previous: EarlyAccessState, form: FormData): Promise<EarlyAccessState> {
-  // A field people never see. Only an automated form filler completes it.
-  if (text(form, "website", 200)) return { status: "done" };
-
-  const entry = {
-    name: text(form, "name", 120),
-    email: text(form, "email", 200).toLowerCase(),
-    company: text(form, "company", 160),
-    focus: text(form, "focus", 40),
-  };
-  const focusOk = (EARLY_ACCESS.focusOptions as readonly string[]).includes(entry.focus);
-  if (!entry.name || !entry.company || !EMAIL.test(entry.email) || !focusOk) {
-    return { status: "error", message: EARLY_ACCESS.errors.invalid };
-  }
-
-  const url = process.env.EARLY_ACCESS_WEBHOOK_URL?.trim();
-  if (!url || !/^https:\/\//.test(url)) return { status: "error", message: EARLY_ACCESS.errors.closed };
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...entry, source: "selestial-landing", at: new Date().toISOString() }),
-      signal: AbortSignal.timeout(8000),
-      cache: "no-store",
+function saver(): Save {
+  const url = process.env.NEXT_PUBLIC_CONVEX_URL?.trim();
+  const secret = process.env.PUBLIC_FORM_SECRET?.trim();
+  if (!url || !/^https:\/\//.test(url) || !secret) return null;
+  return async (entry) => {
+    const client = new ConvexHttpClient(url);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("timed out")), 8000);
     });
-    if (!response.ok) return { status: "error", message: EARLY_ACCESS.errors.failed };
-  } catch {
-    return { status: "error", message: EARLY_ACCESS.errors.failed };
-  }
-  return { status: "done" };
+    try {
+      return await Promise.race([client.mutation(api.earlyAccess.request, { ...entry, secret }), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+/** The visitor's address is only ever kept as a hash, and only to slow down a flood of requests. */
+async function visitorKey(): Promise<string> {
+  const list = await headers();
+  const address = list.get("x-forwarded-for")?.split(",")[0]?.trim() || list.get("x-real-ip")?.trim() || "unknown";
+  return createHash("sha256").update(address).digest("hex").slice(0, 32);
+}
+
+/** Stores one early-access request in Convex. It never reports success for a request that was not saved. */
+export async function requestEarlyAccess(_previous: EarlyAccessState, form: FormData): Promise<EarlyAccessState> {
+  return submitEarlyAccess(form, await visitorKey(), saver());
 }

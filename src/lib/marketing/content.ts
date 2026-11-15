@@ -209,6 +209,7 @@ export const EARLY_ACCESS = {
     invalid: "Check your name, work email and company name, choose what needs the most support, then try again.",
     closed: "Early access requests are not open yet. Please check back soon.",
     failed: "That did not go through. Please try again in a moment.",
+    limited: "Too many requests came from this connection. Please try again in an hour.",
   },
 } as const;
 

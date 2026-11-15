@@ -2,9 +2,10 @@
 
 import { useActionState } from "react";
 
-import { requestEarlyAccess, type EarlyAccessState } from "@/app/actions";
+import { requestEarlyAccess } from "@/app/actions";
 import { CheckCircle2 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import type { EarlyAccessState } from "@/lib/early-access";
 import { EARLY_ACCESS } from "@/lib/marketing/content";
 import { marketingField, marketingFieldControl, marketingFormLabel } from "@/lib/marketing/ui";
 

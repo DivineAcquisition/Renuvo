@@ -645,10 +645,10 @@ behavior the philosophy has to produce.
    code was removed from this repository on the owner's instruction and the
    build is on Convex, so this brief treats it as a reference to re-express,
    not code to run. To confirm.
-3. **Where early-access requests are sent.** The form on the public site has
-   no destination yet and tells visitors that requests are not open.
-4. **The domain** to connect, and the legal name and contact address for the
-   footer and legal pages.
+3. **Where early-access requests are sent.** Settled: they are saved in
+   Convex. The form opens once the deployment and its shared secret are set.
+4. **The domain** is selestial.io. Still open: connecting it, and the legal
+   name and contact address for the footer and legal pages.
 5. **Brand color.** Teal was chosen under the Renuvo name. To confirm for
    Selestial.
 6. **Legal review** of the Recruiter agent before it is sold.
