@@ -145,10 +145,17 @@ export async function noteLinkAction(ctx: MutationCtx, link: Doc<"actionLinks">,
   });
 }
 
-/** Where the cleaner pages live. */
+/**
+ * The host the link pages are served on, from one setting: LINK_ORIGIN on the deployment (for example
+ * https://link.selestial.io in production, http://localhost:3000 locally, a preview address on a preview).
+ * SITE_ORIGIN is used when LINK_ORIGIN is not set. Nothing else builds a link address.
+ */
 export function siteOrigin(): string {
-  const origin = process.env.SITE_ORIGIN?.trim().replace(/\/+$/, "");
-  return origin && /^https?:\/\//.test(origin) ? origin : "https://selestial.io";
+  for (const value of [process.env.LINK_ORIGIN, process.env.SITE_ORIGIN]) {
+    const origin = value?.trim().replace(/\/+$/, "");
+    if (origin && /^https?:\/\//.test(origin)) return origin;
+  }
+  return "https://selestial.io";
 }
 
 export function linkPath(purpose: "offer" | "job", token: string, path = ""): string {

@@ -48,7 +48,7 @@ To run it (never against a real deployment: the script removes `CONVEX_DEPLOY_KE
 env -u CONVEX_DEPLOY_KEY CONVEX_AGENT_MODE=anonymous npx convex dev      # local backend, leave running
 npx convex env set ACTION_LINK_SECRET <any 32+ characters>
 npx convex env set MESSAGING_PROVIDER mock
-npx convex env set SITE_ORIGIN http://localhost:3100
+npx convex env set LINK_ORIGIN http://localhost:3100
 npx convex env set CLERK_JWT_ISSUER_DOMAIN https://clerk.selestial.test
 npx next dev -p 3100
 node tests/e2e/cleaner-pages.mjs
@@ -80,5 +80,6 @@ It is not part of `npm test`: it needs a running backend and a browser.
 9. Day-before confirmation with the customer; capacity reports to Sales and Recruiter.
 10. Inbound texts ("running late" typed as a reply) need the model and the provider.
 
-Set on the Convex deployment before any of this can run for real: `ACTION_LINK_SECRET`, `SITE_ORIGIN`,
+Set on the Convex deployment before any of this can run for real: `ACTION_LINK_SECRET`, `LINK_ORIGIN`
+(the host the link pages are served on, planned as `https://link.selestial.io`; it falls back to `SITE_ORIGIN`),
 `MESSAGING_PROVIDER`.

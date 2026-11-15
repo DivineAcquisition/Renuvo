@@ -21,6 +21,9 @@ A cleaner does a job's tasks from their phone, from links in texts, without an a
   the handler then checks the assignment and the job as they are now.
 - **History.** `link.issued`, `link.action` (with the action), `link.revoked`, `link.revealed` events.
   Page visits are not recorded, so nothing claims a link was "opened".
+- **Host.** Every texted link is built from one setting, `LINK_ORIGIN` on the Convex deployment (planned:
+  `https://link.selestial.io`; a local or preview address works the same way). The pages live under `/c`,
+  outside the signed-in app, and load no sign-in code.
 - **Headers on `/c/*`.** `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`, `Cache-Control: no-store`.
 
 A manager can show a live link's address to pass on by hand (`revealActionLink`). That is recorded, and
