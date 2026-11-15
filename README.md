@@ -1,15 +1,13 @@
 # Renuvo
 
-AI recurring-conversion engine for home service businesses. Converts one-time
-jobs into recurring, monthly-billed clients — layered on top of the booking
-tools owners already use.
+The agentic operating platform for cleaning companies. Four agents — Sales,
+Dispatch, Retention and Recruiter — run the company's daily work inside one
+shared record. The owner sets the rules and approves what matters.
 
-## Setup
-1. `npm install`
-2. `cp .env.local.example .env.local` and fill in Supabase keys (Stripe/Telnyx/
-   Anthropic can stay blank until their prompts).
-3. `npm run dev` → http://localhost:3000
+This repository was cleared on November 15, 2026. The earlier build (a
+recurring-conversion engine on Next.js 14 and Supabase) is in git history
+before that date and is not carried forward.
 
-## Stack
-Next.js 14 (App Router) · TypeScript · Tailwind + shadcn/ui · Supabase (RLS,
-multi-tenant) · Stripe Connect · Telnyx · Anthropic. Deploy on Vercel.
+There is no application code yet. The source of truth is
+[`docs/foundation/00-product-brief.md`](docs/foundation/00-product-brief.md).
+Nothing is built until that brief is agreed.
