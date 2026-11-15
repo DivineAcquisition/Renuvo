@@ -44,6 +44,31 @@ export const aboutValidator = v.union(
   v.object({ table: v.literal("assignments"), id: v.id("assignments") }),
 );
 
+/**
+ * What approving an approval will do, as data the workflow can carry out and re-check. A proposal with
+ * no entry here is a recommendation a person carries out themselves.
+ */
+export const proposalValidator = v.union(
+  v.object({
+    kind: v.literal("offer_assignment"),
+    jobId: v.id("jobs"),
+    cleanerId: v.id("cleaners"),
+    payCents: v.number(),
+    /** How long the cleaner has to answer once the offer goes out. */
+    respondWithinMinutes: v.number(),
+  }),
+);
+
+/** How Dispatch works for this company. Every value is the owner's, with a default in code. */
+export const dispatchSettingsValidator = v.object({
+  /** Minutes a cleaner has to answer an offer. */
+  offerWindowMinutes: v.number(),
+  /** Minutes kept free between two jobs for the same cleaner. */
+  travelBufferMinutes: v.number(),
+  /** How many days ahead Dispatch looks for jobs without a cleaner. */
+  lookAheadDays: v.number(),
+});
+
 export default defineSchema({
   // ── Public site ────────────────────────────────────────────────────────────────────────────────
   earlyAccessRequests: defineTable({
@@ -67,6 +92,7 @@ export default defineSchema({
     timezone: v.string(),
     /** Agents the owner has paused. Pausing all four pauses everything. */
     pausedAgents: v.array(agentValidator),
+    dispatch: v.optional(dispatchSettingsValidator),
     createdAt: v.number(),
   }),
 
@@ -152,6 +178,8 @@ export default defineSchema({
     serviceType: v.string(),
     scope: v.string(),
     requiredSkills: v.array(v.string()),
+    /** The price of the service in cents, from the company's pricing. It is not a payment. */
+    priceCents: v.optional(v.number()),
     startsAt: v.number(),
     endsAt: v.number(),
     status: jobStatusValidator,
@@ -225,6 +253,11 @@ export default defineSchema({
     /** What the agent wants to do, and why, in words a person can check. */
     summary: v.string(),
     reason: v.string(),
+    /** Exactly what approving will authorize. */
+    authorizes: v.optional(v.string()),
+    /** What happens if nobody decides in time. */
+    ifWaiting: v.optional(v.string()),
+    proposal: v.optional(proposalValidator),
     about: v.optional(aboutValidator),
     taskId: v.optional(v.id("tasks")),
     status: approvalStatusValidator,

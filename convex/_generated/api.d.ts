@@ -22,6 +22,7 @@ import type * as lib_access from "../lib/access.js";
 import type * as lib_authority from "../lib/authority.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_builders from "../lib/builders.js";
+import type * as lib_departments from "../lib/departments.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_events from "../lib/events.js";
 import type * as lib_guard from "../lib/guard.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authority": typeof lib_authority;
   "lib/availability": typeof lib_availability;
   "lib/builders": typeof lib_builders;
+  "lib/departments": typeof lib_departments;
   "lib/errors": typeof lib_errors;
   "lib/events": typeof lib_events;
   "lib/guard": typeof lib_guard;

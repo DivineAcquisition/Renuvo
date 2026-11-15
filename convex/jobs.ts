@@ -11,7 +11,7 @@ import { companyMutation, companyQuery, type MemberAccess } from "./lib/builders
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { ACTIVE_ASSIGNMENT, assertChange, JOB_CHANGES, jobStatusValidator, type JobStatus } from "./lib/statuses";
-import { instant, tags, text } from "./lib/text";
+import { cents, instant, tags, text } from "./lib/text";
 
 export type Coverage = "covered" | "offered" | "uncovered";
 
@@ -72,6 +72,7 @@ export const create = companyMutation({
     serviceType: v.string(),
     scope: v.string(),
     requiredSkills: v.optional(v.array(v.string())),
+    priceCents: v.optional(v.number()),
     startsAt: v.number(),
     endsAt: v.number(),
   },
@@ -86,6 +87,7 @@ export const create = companyMutation({
       serviceType: text(args.serviceType, "Service type", 80),
       scope: text(args.scope, "Scope", 2000),
       requiredSkills: tags(args.requiredSkills ?? [], "Required skills"),
+      priceCents: args.priceCents === undefined ? undefined : cents(args.priceCents, "The price"),
       ...span(args.startsAt, args.endsAt),
       status: "scheduled",
       createdAt: Date.now(),
