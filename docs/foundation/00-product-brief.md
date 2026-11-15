@@ -1,9 +1,28 @@
 # Renuvo: product brief and agent design
 
-**Status: draft for the owner's review, November 15, 2026.** Nothing here is
-locked until the owner says so. Once locked, this document is the source of
-truth. If a build prompt and this document disagree, this document wins until
-we change it on purpose.
+**Status: decisions recorded November 15, 2026.** This document is the source
+of truth. If a build prompt and this document disagree, this document wins
+until we change it on purpose.
+
+**Decisions the owner made on November 15, 2026.** Where one conflicts with a
+later section, the decision wins.
+
+1. **Workers.** Contractors paid a share of the job and hourly employees are
+   both supported at launch.
+2. **Novara is a reference only.** It keeps its own system. Renuvo owes it no
+   feature parity.
+3. **Channels.** Text, email and web chat first. Voice follows.
+4. **Scope of the first release.** Homes, short-term rentals, property
+   managers, and offices and commercial.
+5. **Pricing.** A monthly plan that includes agent work and texting, with
+   top-ups beyond that.
+6. **Agent names.** Shown as name and role: Vera · Sales, Atlas · Dispatch,
+   Scout · Recruiter, Loop · Retention.
+7. **Planned next agents.** Quality, Books and Marketing. Not built.
+8. **Stack.** A fresh build on Convex. Nothing from the earlier Supabase build
+   is carried forward.
+9. **Public site.** Light, brand teal `#2CC5A8`, headline "The agentic platform
+   for cleaning companies." Two actions: book a call and join the waitlist.
 
 Two references sit behind it:
 
@@ -478,17 +497,19 @@ approvals, no billing or autonomy settings), Office (work the queue and
 conversations). Renuvo staff sit outside every company and enter only through
 a separate, logged path.
 
-## 12. Agents five and six
+## 12. Planned next agents
 
-The platform is designed for four to six agents. We start with four. Two
-candidates, not decided:
+The platform is designed for more agents on the same record. Three are
+planned and not built:
 
 - **Quality.** Owns checklists, inspections, cases and cleaner coaching.
-  Today this work is split between Dispatch and Retention.
+  Today this work is split between Atlas and Loop.
 - **Books.** Owns invoices, pay runs, tax forms and the profit view. Today
-  pay lines are locked by Dispatch and paid out by a person.
+  pay lines are locked by Atlas and paid out by a person.
+- **Marketing.** Owns ads, reviews, referrals and local search, and feeds
+  Vera.
 
-Either can be split out later without a rewrite, because agents share one
+Each can be split out later without a rewrite, because agents share one
 record and own skills, not data.
 
 ## 13. Stack and build pattern
@@ -526,20 +547,10 @@ and nothing else can speed it up.
 Each step is done when a real company is using it and one agent has acted on
 real data.
 
-## 15. Open decisions for the owner
+## 15. Still open
 
-1. **Worker model.** Novara assumes independent contractors paid a share of
-   the job. Do we also support hourly employees at launch? It changes pay,
-   onboarding and the wording rules in Recruiter.
-2. **First customer.** Is Novara the first company on Renuvo, moving off its
-   current system, or is it a reference only?
-3. **Voice at launch.** Does Sales answer calls from day one, or text and
-   email first with voice following?
-4. **Commercial and partner work.** Offices, short-term rentals and property
-   managers are a large part of Novara. In scope for the first release, or
-   after residential is solid?
-5. **Pricing of Renuvo itself.** Flat monthly, per cleaner, or usage-based
-   like Vistrial's credits.
-6. **Agent names.** Plain role names (Sales, Dispatch, Retention, Recruiter)
-   or given names.
-7. **Agents five and six.** Quality, Books, both, or something else.
+1. The scheduling link behind "Book a call" and where waitlist entries are
+   sent. Both are settings on the public site and are empty today.
+2. The legal name, domain and contact address for the footer and legal pages.
+3. Legal review of the Recruiter agent before it is sold.
+4. The price of the monthly plan.

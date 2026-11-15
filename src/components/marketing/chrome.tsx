@@ -1,0 +1,99 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+
+import { Logo } from "@/components/brand/logo";
+import { Menu } from "@/components/icons";
+import { Button, type ButtonSize } from "@/components/ui/button";
+import { bookingHref, bookingIsExternal } from "@/lib/marketing/config";
+import { FOOTER, NAV } from "@/lib/marketing/content";
+import { marketingNavLink, marketingPageGutter, marketingShell } from "@/lib/marketing/ui";
+import { cn } from "@/lib/utils";
+
+const ctaShape = "h-12! rounded-[8px]! before:rounded-[7px]!";
+
+/** "Book a call". Goes to the scheduling link when one is set, and to the waitlist form until then. */
+export function BookCall({ position, size = "xl", className, children }: { position: string; size?: ButtonSize; className?: string; children: ReactNode }) {
+  const external = bookingIsExternal();
+  return (
+    <Button
+      variant="gradient"
+      size={size}
+      className={cn(ctaShape, className)}
+      render={<a href={bookingHref()} data-cta-position={position} {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})} />}
+    >
+      {children}
+    </Button>
+  );
+}
+
+export const outlineCta = cn(ctaShape, "border-border bg-card hover:bg-muted");
+
+function NavLinks({ className }: { className?: string }) {
+  return (
+    <ul className={className}>
+      {NAV.links.map((link) => (
+        <li key={link.href}>
+          <a href={link.href} className={cn(marketingNavLink, "block")}>
+            {link.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function SiteHeader() {
+  return (
+    <header className={cn("sticky top-0 z-50 border-b border-border bg-background", marketingPageGutter)}>
+      <div className={cn(marketingShell, "flex h-[4.5rem] items-center justify-between gap-4")}>
+        <Link href="/" className="shrink-0 rounded-md" aria-label="Renuvo home">
+          <Logo />
+        </Link>
+        <nav aria-label="On this page" className="hidden lg:block">
+          <NavLinks className="flex items-center gap-1" />
+        </nav>
+        <BookCall position="nav" size="lg" className="hidden shrink-0 lg:inline-flex">
+          {NAV.book}
+        </BookCall>
+        <details className="relative shrink-0 lg:hidden">
+          <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md border border-border bg-muted text-strong [&::-webkit-details-marker]:hidden">
+            <span className="sr-only">{NAV.openMenu}</span>
+            <Menu className="size-4" aria-hidden />
+          </summary>
+          <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-background p-3 shadow-xl">
+            <BookCall position="nav" size="lg" className="w-full">
+              {NAV.book}
+            </BookCall>
+            <nav aria-label="On this page" className="mt-2">
+              <NavLinks className="grid gap-1" />
+            </nav>
+          </div>
+        </details>
+      </div>
+    </header>
+  );
+}
+
+export function SiteFooter() {
+  return (
+    <footer className={cn("border-t border-border py-10", marketingPageGutter)}>
+      <div className={cn(marketingShell, "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between")}>
+        <Logo />
+        <p className="max-w-xl text-xs leading-relaxed text-muted-foreground sm:text-right">
+          {FOOTER.note}
+          <span className="mt-1 block">
+            © {new Date().getFullYear()} {FOOTER.rights}
+          </span>
+        </p>
+      </div>
+    </footer>
+  );
+}
+
+export function SkipToContent() {
+  return (
+    <a href="#content" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:inline-flex focus:h-9 focus:items-center focus:rounded-lg focus:bg-primary focus:px-3.5 focus:text-[13px] focus:font-medium focus:text-primary-foreground">
+      {NAV.skipToContent}
+    </a>
+  );
+}
