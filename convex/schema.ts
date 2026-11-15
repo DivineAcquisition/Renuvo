@@ -7,6 +7,7 @@ import { v } from "convex/values";
 
 import { actorValidator, eventDataValidator, subjectValidator } from "./lib/events";
 import { levelValidator } from "./lib/permissionCatalog";
+import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { roleValidator } from "./lib/roles";
 import {
   agentValidator,
@@ -48,6 +49,9 @@ export const aboutValidator = v.union(
   v.object({ table: v.literal("cleaners"), id: v.id("cleaners") }),
   v.object({ table: v.literal("jobs"), id: v.id("jobs") }),
   v.object({ table: v.literal("assignments"), id: v.id("assignments") }),
+  v.object({ table: v.literal("hiringNeeds"), id: v.id("hiringNeeds") }),
+  v.object({ table: v.literal("applications"), id: v.id("applications") }),
+  v.object({ table: v.literal("mailboxConnections"), id: v.id("mailboxConnections") }),
 );
 
 /**
@@ -65,6 +69,15 @@ export const proposalValidator = v.union(
   }),
   /** Text the before-service reminder to the cleaner on this assignment. */
   v.object({ kind: v.literal("send_reminder"), assignmentId: v.id("assignments") }),
+  // Recruiter (convex/lib/recruiter/approvals.ts carries these out).
+  /** Email the application link to the applicant at the address recorded on the application. */
+  v.object({ kind: v.literal("send_invitation"), applicationId: v.id("applications") }),
+  v.object({ kind: v.literal("send_follow_up"), applicationId: v.id("applications"), attempt: v.number() }),
+  v.object({ kind: v.literal("request_information"), applicationId: v.id("applications"), question: v.string() }),
+  v.object({ kind: v.literal("invite_to_interview"), interviewId: v.id("interviews") }),
+  v.object({ kind: v.literal("send_hiring_offer"), offerId: v.id("hiringOffers") }),
+  v.object({ kind: v.literal("decline_application"), applicationId: v.id("applications"), criterion: v.string() }),
+  v.object({ kind: v.literal("urgent_outreach"), applicationId: v.id("applications"), taskId: v.id("tasks") }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -137,6 +150,7 @@ export default defineSchema({
     pausedAgents: v.array(agentValidator),
     dispatch: v.optional(dispatchSettingsValidator),
     dispatchPolicy: v.optional(dispatchPolicyValidator),
+    recruiter: v.optional(recruiterSettingsValidator),
     createdAt: v.number(),
   }),
 
@@ -380,7 +394,26 @@ export default defineSchema({
       v.literal("offer_withdrawn"),
       v.literal("assignment_ended"),
       v.literal("operator_alert"),
+      // Recruiter, to applicants.
+      v.literal("application_invitation"),
+      v.literal("application_follow_up"),
+      v.literal("information_request"),
+      v.literal("interview_invitation"),
+      v.literal("interview_confirmation"),
+      v.literal("interview_reminder"),
+      v.literal("hiring_offer"),
+      v.literal("application_decline"),
+      v.literal("urgent_outreach"),
     ),
+    /** Absent means a text. */
+    channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
+    subject: v.optional(v.string()),
+    replyTo: v.optional(v.string()),
+    applicationId: v.optional(v.id("applications")),
+    applicantId: v.optional(v.id("applicants")),
+    applicantLinkId: v.optional(v.id("applicantLinks")),
+    /** The provider reported that the address rejected the message. */
+    bouncedAt: v.optional(v.number()),
     cleanerId: v.optional(v.id("cleaners")),
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
@@ -407,6 +440,7 @@ export default defineSchema({
     .index("by_company_assignment", ["companyId", "assignmentId"])
     .index("by_company_job", ["companyId", "jobId"])
     .index("by_company_queued", ["companyId", "queuedAt"])
+    .index("by_company_application", ["companyId", "applicationId"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
 
@@ -521,10 +555,15 @@ export default defineSchema({
     result: v.string(),
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
+    applicationId: v.optional(v.id("applications")),
     at: v.number(),
   })
     .index("by_company_key", ["companyId", "idempotencyKey"])
+    .index("by_company_application", ["companyId", "applicationId", "at"])
     .index("by_company_job", ["companyId", "jobId", "at"]),
+
+  // ── Recruiter: hiring needs, applicants, applications and everything that hangs off them ───────
+  ...recruiterTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

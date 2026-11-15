@@ -14,6 +14,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "../_generated/
 import { requireIdentity, requireMember } from "./access";
 import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkState } from "./dispatch/links";
 import { notAllowed, notFound, userError } from "./errors";
+import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -213,6 +214,68 @@ export function linkMutation<V extends AnyValidators, R>(def: {
       if (!access.link.allowed.includes(def.action)) notAllowed();
       const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
       await noteLinkAction(ctx, access.link, def.action);
+      return result;
+    },
+  } as any);
+}
+
+// ── Applicant links: an applicant acting on one application without signing in ───────────────────
+
+export type ApplicantAccess = {
+  link: Doc<"applicantLinks">;
+  linkState: LinkState;
+  company: Doc<"companies">;
+  companyId: Id<"companies">;
+  application: Doc<"applications">;
+  applicant: Doc<"applicants">;
+};
+
+async function applicantAccess(ctx: QueryCtx | MutationCtx, token: string, purpose: ApplicantLinkPurpose): Promise<ApplicantAccess> {
+  const link = await applicantLinkForToken(ctx, token);
+  const company = link ? await ctx.db.get(link.companyId) : null;
+  const application = link ? await ctx.db.get(link.applicationId) : null;
+  const applicant = link ? await ctx.db.get(link.applicantId) : null;
+  // A token for another kind of page, or one whose records left its company, names nothing.
+  if (!link || !company || !application || !applicant || link.purpose !== purpose) notFound();
+  if (application.companyId !== link.companyId || applicant.companyId !== link.companyId || application.applicantId !== applicant._id) notFound();
+  return { link, linkState: applicantLinkState(link, Date.now()), company, companyId: link.companyId, application, applicant };
+}
+
+/**
+ * A read through an applicant link. The token is the only authorization, and the handler is given the
+ * link's own application and applicant and nothing else. A read changes nothing, so opening a link (or a
+ * mail scanner following it) submits nothing and accepts nothing.
+ */
+export function applicantQuery<V extends AnyValidators, R>(def: {
+  purpose: ApplicantLinkPurpose;
+  args: V;
+  handler: (ctx: QueryCtx & ApplicantAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await applicantAccess(ctx, token, def.purpose)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/** One named action through an applicant link. Refused unless the link is active and lists the action. */
+export function applicantMutation<V extends AnyValidators, R>(def: {
+  purpose: ApplicantLinkPurpose;
+  action: ApplicantAction;
+  args: V;
+  handler: (ctx: MutationCtx & ApplicantAccess, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const access = await applicantAccess(ctx, token, def.purpose);
+      if (access.linkState !== "active") throw userError(CLOSED_WORDS[access.linkState], "not_allowed");
+      if (!access.link.allowed.includes(def.action)) notAllowed();
+      const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
+      await noteApplicantAction(ctx, access.link, def.action);
       return result;
     },
   } as any);

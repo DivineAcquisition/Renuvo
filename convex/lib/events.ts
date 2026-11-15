@@ -15,6 +15,8 @@ export const actorValidator = v.union(
   v.object({ kind: v.literal("system") }),
   /** A cleaner acting through an action link. The link is the authorization; the cleaner id says who it was issued to. */
   v.object({ kind: v.literal("cleaner"), cleanerId: v.id("cleaners"), linkId: v.id("actionLinks") }),
+  /** An applicant acting through an applicant link. */
+  v.object({ kind: v.literal("applicant"), applicantId: v.id("applicants"), linkId: v.id("applicantLinks") }),
 );
 export type Actor = typeof actorValidator.type;
 
@@ -32,6 +34,16 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("messages"), id: v.id("messages") }),
   v.object({ table: v.literal("actionLinks"), id: v.id("actionLinks") }),
   v.object({ table: v.literal("coverageRequests"), id: v.id("coverageRequests") }),
+  v.object({ table: v.literal("hiringNeeds"), id: v.id("hiringNeeds") }),
+  v.object({ table: v.literal("applicants"), id: v.id("applicants") }),
+  v.object({ table: v.literal("applications"), id: v.id("applications") }),
+  v.object({ table: v.literal("mailboxConnections"), id: v.id("mailboxConnections") }),
+  v.object({ table: v.literal("sourceMessages"), id: v.id("sourceMessages") }),
+  v.object({ table: v.literal("applicantLinks"), id: v.id("applicantLinks") }),
+  v.object({ table: v.literal("screenings"), id: v.id("screenings") }),
+  v.object({ table: v.literal("interviews"), id: v.id("interviews") }),
+  v.object({ table: v.literal("hiringOffers"), id: v.id("hiringOffers") }),
+  v.object({ table: v.literal("onboardingHandoffs"), id: v.id("onboardingHandoffs") }),
 );
 export type Subject = typeof subjectValidator.type;
 

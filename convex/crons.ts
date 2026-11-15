@@ -17,4 +17,10 @@ crons.interval("dispatch watches the day of service", { minutes: 5 }, internal.d
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});
 
+// Recruiter: the hiring inbox, reminders that are due, interviews coming up, and records past their retention date.
+crons.interval("recruiter reads the hiring inboxes", { minutes: 10 }, internal.recruiterInbox.sweep, {});
+crons.interval("recruiter follows up on unfinished applications", { minutes: 30 }, internal.recruiter.followUps, {});
+crons.interval("recruiter sends interview reminders", { minutes: 15 }, internal.recruiter.interviewReminders, {});
+crons.interval("recruiter removes applicant details past retention", { hours: 24 }, internal.recruiter.retention, {});
+
 export default crons;
