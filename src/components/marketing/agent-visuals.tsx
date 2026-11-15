@@ -51,7 +51,7 @@ export function AgentVisual({ id }: { id: AgentId }) {
             return (
               <li key={row.text} className={cn("flex items-center gap-2.5 text-xs transition-colors duration-500 motion-reduce:transition-none", on ? "text-strong" : "text-muted-foreground")}>
                 <span className={cn("flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors duration-500 motion-reduce:transition-none", on ? "border-brand-500 bg-brand-500" : "border-border bg-background")} aria-hidden>
-                  {on ? <Check className="size-2.5" style={{ color: "#07070b" }} /> : null}
+                  {on ? <Check className="size-2.5" style={{ color: "#ffffff" }} /> : null}
                 </span>
                 {row.text}
               </li>

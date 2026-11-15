@@ -111,7 +111,7 @@ export function AgentDock({ departments, activity, now, timezone, onOpen }: { de
           needsYou ? "border-warning/60" : "border-brand-500/40",
         )}
       >
-        {needsYou || working ? <BorderBeam size={50} duration={needsYou ? 6 : 4} colorFrom={needsYou ? "#f0b45c" : "#2cc5a8"} colorTo="#6fdfc8" borderWidth={2} /> : null}
+        {needsYou || working ? <BorderBeam size={50} duration={needsYou ? 6 : 4} colorFrom={needsYou ? "#f0b45c" : "#7957ff"} colorTo="#9294ff" borderWidth={2} /> : null}
         <span className="flex -space-x-1.5">
           {agents.map((agent) => (
             <AgentAvatar key={agent.agent} agent={agent.agent} state={agent.state} size="sm" />

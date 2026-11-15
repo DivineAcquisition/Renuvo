@@ -26,11 +26,11 @@ export const buttonVariants = cva(
       },
       variant: {
         default:
-          "border-[#0f8372]/25 bg-gradient-to-b from-[#a8eede] via-[#6fdfc8] to-[#2cc5a8] text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] hover:from-[#d5f7ef] hover:via-[#a8eede] hover:to-[#3ccbb0] data-pressed:from-[#6fdfc8] data-pressed:to-[#14a48a] *:data-[slot=button-loading-indicator]:text-primary-foreground [:disabled,:active,[data-pressed]]:shadow-none",
+          "border-[#4a0ad1]/30 bg-gradient-to-r from-[#7957ff] to-[#5b0fff] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:from-[#8468ff] hover:to-[#6a34ff] data-pressed:from-[#6a34ff] data-pressed:to-[#4a0ad1] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         primary:
-          "border-[#0f8372]/25 bg-gradient-to-b from-[#a8eede] via-[#6fdfc8] to-[#2cc5a8] text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] hover:from-[#d5f7ef] hover:via-[#a8eede] hover:to-[#3ccbb0] data-pressed:from-[#6fdfc8] data-pressed:to-[#14a48a] *:data-[slot=button-loading-indicator]:text-primary-foreground [:disabled,:active,[data-pressed]]:shadow-none",
+          "border-[#4a0ad1]/30 bg-gradient-to-r from-[#7957ff] to-[#5b0fff] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] hover:from-[#8468ff] hover:to-[#6a34ff] data-pressed:from-[#6a34ff] data-pressed:to-[#4a0ad1] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         gradient:
-          "border-[#11685c]/35 bg-gradient-to-b from-[#6fdfc8] via-[#2cc5a8] to-[#14a48a] text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_10px_28px_-12px_rgba(44, 197, 168,0.88)] hover:from-[#a8eede] hover:via-[#3ccbb0] hover:to-[#2cc5a8] data-pressed:from-[#3ccbb0] data-pressed:via-[#2cc5a8] data-pressed:to-[#0f8372] *:data-[slot=button-loading-indicator]:text-primary-foreground [:disabled,:active,[data-pressed]]:shadow-none",
+          "border-[#4a0ad1]/35 bg-gradient-to-r from-[#8468ff] via-[#6a34ff] to-[#5b0fff] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_10px_28px_-12px_rgba(121,87,255,0.88)] hover:from-[#9294ff] hover:via-[#7957ff] hover:to-[#6a34ff] data-pressed:from-[#7957ff] data-pressed:via-[#5b0fff] data-pressed:to-[#4a0ad1] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         destructive:
           "border-[#991b1b]/30 bg-destructive bg-gradient-to-b from-[#fca5a5] to-[#dc2626] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:from-[#fecaca] hover:to-[#ef4444] data-pressed:from-[#f87171] data-pressed:to-[#b91c1c] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         "destructive-outline":

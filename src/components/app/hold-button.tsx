@@ -71,7 +71,7 @@ export function HoldButton({ label, holdingLabel, onConfirm, disabled, busy, cla
       onBlur={stop}
       onContextMenu={(event) => event.preventDefault()}
       className={cn(
-        "relative inline-flex h-9 touch-none items-center justify-center gap-2 overflow-hidden rounded-lg border border-brand-400/60 bg-brand-500 px-4 text-sm font-semibold text-brand-50 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-60",
+        "relative inline-flex h-9 touch-none items-center justify-center gap-2 overflow-hidden rounded-lg border border-brand-400/60 bg-brand-500 px-4 text-sm font-semibold text-white select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-60",
         className,
       )}
     >
