@@ -7,31 +7,38 @@
 @plugin "@tailwindcss/typography";
 
 /*
- * Selestial's palette, taken from the logo: a violet that runs from #9294ff
- * (brand-400) through #7957ff (brand-500) to #5b0fff (brand-700).
+ * Selestial's palette, set by the owner on November 15.
  *
- * The workspace is white by default with a dark theme a person can switch to.
- * The public site stays white. #7957ff (brand-500) is the prime colour in both
- * themes. Filled actions run from brand-500 to brand-700, the way the logo
- * does, and carry a white label: white clears 4.5:1 across that whole range.
- * Neutrals are slightly violet-shifted (ink-*) so the brand sits naturally on
- * top of them. Status green / amber / red never touch interface chrome.
+ *   Selestial Violet  #6838ef  brand-500   primary, every filled action
+ *   Deep Violet       #5126c7  brand-700   hover and pressed, links on light
+ *   Soft Lavender     #eee8ff  brand-50    selected backgrounds
+ *   Cloud White       #f8f9fc              the page
+ *   White             #ffffff              cards and panels
+ *   Deep Plum         #211a35              primary text
+ *   Slate             #667085              secondary text
+ *   Mist              #e4e7ef              borders
+ *
+ * The workspace is light by default with a dark theme a person can switch to.
+ * Filled actions carry a white label: white is 6.2:1 on Selestial Violet.
+ * The page is Cloud White and cards are white, so a card is not the page
+ * colour: use bg-card for a surface and bg-background for the page.
+ * Status green / amber / red never touch interface chrome.
  */
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-brand-50: #f4f3ff;
-  --color-brand-100: #e9e7ff;
-  --color-brand-200: #d3d0ff;
-  --color-brand-300: #b3afff; /* eyebrows, section labels, links */
-  --color-brand-400: #9294ff;
-  --color-brand-500: #7957ff; /* the prime colour and every filled action */
-  --color-brand-600: #6a34ff;
-  --color-brand-700: #5b0fff;
-  --color-brand-800: #4a0ad1;
-  --color-brand-900: #3a0c9e;
-  --color-brand-950: #1e0a52; /* table headers, active navigation */
+  --color-brand-50: #eee8ff;
+  --color-brand-100: #e2d9ff;
+  --color-brand-200: #cfc2ff;
+  --color-brand-300: #b39eff; /* eyebrows, section labels, links */
+  --color-brand-400: #8e6df6;
+  --color-brand-500: #6838ef; /* the prime colour and every filled action */
+  --color-brand-600: #5c2fdb;
+  --color-brand-700: #5126c7;
+  --color-brand-800: #3f1d9e;
+  --color-brand-900: #2f1777;
+  --color-brand-950: #1b0e45; /* table headers, active navigation */
 
   /* Neutrals, violet-shifted a touch so the brand sits naturally on top. */
   --color-ink-950: #07070b; /* page */
@@ -499,7 +506,7 @@
     height: 34rem;
     width: 46rem;
     translate: -50% 0;
-    background: radial-gradient(ellipse at center, rgba(121, 87, 255, 0.34) 0%, transparent 68%);
+    background: radial-gradient(ellipse at center, rgba(104, 56, 239, 0.34) 0%, transparent 68%);
     filter: blur(72px);
     animation: app-breathe 8s ease-in-out infinite;
   }
@@ -510,7 +517,7 @@
     bottom: 8%;
     height: 22rem;
     width: 22rem;
-    background: radial-gradient(ellipse at center, rgba(121, 87, 255, 0.14) 0%, transparent 70%);
+    background: radial-gradient(ellipse at center, rgba(104, 56, 239, 0.14) 0%, transparent 70%);
     filter: blur(56px);
   }
 
@@ -556,7 +563,7 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.07),
       0 28px 80px -32px rgba(0, 0, 0, 0.92),
-      0 0 90px -18px rgba(121, 87, 255, 0.42);
+      0 0 90px -18px rgba(104, 56, 239, 0.42);
   }
 
   .auth-desk-inner--wide {
@@ -641,8 +648,8 @@
 
   .auth-field:focus-within {
     box-shadow:
-      0 0 0 3px rgba(121, 87, 255, 0.18),
-      0 0 24px -8px rgba(121, 87, 255, 0.45);
+      0 0 0 3px rgba(104, 56, 239, 0.18),
+      0 0 24px -8px rgba(104, 56, 239, 0.45);
   }
 
   .auth-input {
@@ -687,9 +694,9 @@
   .auth-input:focus,
   .auth-input:focus-visible {
     outline: none;
-    border-color: rgba(121, 87, 255, 0.72);
+    border-color: rgba(104, 56, 239, 0.72);
     background:
-      linear-gradient(180deg, rgba(121, 87, 255, 0.12) 0%, transparent 48%),
+      linear-gradient(180deg, rgba(104, 56, 239, 0.12) 0%, transparent 48%),
       rgba(8, 8, 12, 0.88);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   }
@@ -732,7 +739,7 @@
   }
 
   .auth-field-action:hover {
-    background: rgba(121, 87, 255, 0.14);
+    background: rgba(104, 56, 239, 0.14);
     color: #fff;
   }
 
@@ -780,13 +787,13 @@
     color: var(--color-ink-950);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.32),
-      0 14px 32px -14px rgba(121, 87, 255, 0.85);
+      0 14px 32px -14px rgba(104, 56, 239, 0.85);
   }
 
   .auth-submit:hover:not(:disabled) {
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.34),
-      0 14px 32px -14px rgba(121, 87, 255, 0.8);
+      0 14px 32px -14px rgba(104, 56, 239, 0.8);
   }
 
   .auth-alt {
@@ -802,8 +809,8 @@
   }
 
   .auth-alt:hover:not(:disabled) {
-    border-color: rgba(121, 87, 255, 0.4);
-    background: rgba(121, 87, 255, 0.08);
+    border-color: rgba(104, 56, 239, 0.4);
+    background: rgba(104, 56, 239, 0.08);
     color: #fff;
   }
 
@@ -837,16 +844,16 @@
 
   /*
    * Reserved for the one action a screen is really about: connecting the CRM,
-   * going live, generating the report. Built from brand-500 to brand-700, the
-   * logo's own gradient, so it introduces no colour the palette did not have.
+   * going live, generating the report. Runs from Selestial Violet to Deep
+   * Violet, so it introduces no colour the palette did not already have.
    */
   /* Literal shades: the brand scale flips in the light theme, a gradient must not. */
   .action-gradient {
-    background-image: linear-gradient(90deg, #7957ff 0%, #5b0fff 100%);
+    background-image: linear-gradient(90deg, #6838ef 0%, #5126c7 100%);
   }
 
   .action-gradient:hover:not(:disabled) {
-    background-image: linear-gradient(90deg, #8468ff 0%, #6a34ff 100%);
+    background-image: linear-gradient(90deg, #5126c7 0%, #3f1d9e 100%);
   }
 
   /* Thin luminous rule used to separate major bands. */
@@ -933,13 +940,13 @@
   .field-input[data-popup-open],
   .field-input[data-open] {
     outline: none;
-    border-color: rgba(121, 87, 255, 0.55);
+    border-color: rgba(104, 56, 239, 0.55);
     background:
-      linear-gradient(180deg, rgba(121, 87, 255, 0.1) 0%, transparent 100%),
+      linear-gradient(180deg, rgba(104, 56, 239, 0.1) 0%, transparent 100%),
       var(--field-bg);
     box-shadow:
       inset 0 1px 0 var(--panel-edge),
-      0 0 0 4px rgba(121, 87, 255, 0.14);
+      0 0 0 4px rgba(104, 56, 239, 0.14);
   }
 
   .field-input[aria-invalid="true"] {
@@ -1068,7 +1075,7 @@
   }
 
   .field-select-item[data-highlighted] {
-    background: rgba(121, 87, 255, 0.14);
+    background: rgba(104, 56, 239, 0.14);
   }
 
   .field-select-item[data-state="checked"] {
@@ -1290,8 +1297,8 @@
   50% { transform: translateY(14px); }
 }
 @keyframes vistrial-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(121, 87, 255, 0.15); }
-  50% { box-shadow: 0 0 22px 0 rgba(121, 87, 255, 0.55); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(104, 56, 239, 0.15); }
+  50% { box-shadow: 0 0 22px 0 rgba(104, 56, 239, 0.55); }
 }
 @keyframes vistrial-grow {
   0%, 100% { width: 24%; }
@@ -1459,19 +1466,19 @@
  */
 :root {
   color-scheme: light;
-  --brand: #7957ff;
-  --brand-rgb: 121, 87, 255;
-  --brand-deep: #5b0fff;
+  --brand: #6838ef;
+  --brand-rgb: 104, 56, 239;
+  --brand-deep: #5126c7;
   /* Spotlight hues taken from the brand, success, warning, and danger tokens. */
-  --glow-hue-brand: 252;
-  --glow-sat-brand: 100;
-  --glow-light-brand: 67;
-  --glow-hue-brand-soft: 240;
+  --glow-hue-brand: 256;
+  --glow-sat-brand: 85;
+  --glow-light-brand: 58;
+  --glow-hue-brand-soft: 253;
   --glow-sat-brand-soft: 100;
-  --glow-light-brand-soft: 79;
-  --glow-hue-brand-deep: 259;
-  --glow-sat-brand-deep: 100;
-  --glow-light-brand-deep: 53;
+  --glow-light-brand-soft: 81;
+  --glow-hue-brand-deep: 256;
+  --glow-sat-brand-deep: 68;
+  --glow-light-brand-deep: 46;
   --glow-hue-success: 160;
   --glow-sat-success: 70;
   --glow-light-success: 58;
@@ -1485,90 +1492,90 @@
   --glow-spot-opacity: 0.28;
   --glow-border-opacity: 1;
   --glow-border-light-opacity: 0.4;
-  --page: #ffffff;
-  --hairline: rgba(11, 10, 17, 0.08);
-  --strong: #0b0a11;
-  --overlay: #0b0a11;
-  --selection-foreground: #0b0a11;
-  --scrollbar: #d9d8e0;
-  --scrollbar-hover: #c2c0cc;
+  --page: #f8f9fc;
+  --hairline: #e4e7ef;
+  --strong: #211a35;
+  --overlay: #211a35;
+  --selection-foreground: #211a35;
+  --scrollbar: #d5dae5;
+  --scrollbar-hover: #bcc3d2;
 
-  --background: #ffffff;
-  --foreground: #52525b;
+  --background: #f8f9fc;
+  --foreground: #211a35;
   --card: #ffffff;
-  --card-foreground: #0b0a11;
+  --card-foreground: #211a35;
   --popover: #ffffff;
-  --popover-foreground: #0b0a11;
-  --primary: #7957ff;
+  --popover-foreground: #211a35;
+  --primary: #6838ef;
   --primary-foreground: #ffffff;
-  --secondary: #f3f1ff;
-  --secondary-foreground: #4a0ad1;
-  --muted: #f6f6f9;
-  --muted-foreground: #6b6b76;
-  --accent: #f3f1ff;
-  --accent-foreground: #4a0ad1;
+  --secondary: #eee8ff;
+  --secondary-foreground: #5126c7;
+  --muted: #f1f3f8;
+  --muted-foreground: #667085;
+  --accent: #eee8ff;
+  --accent-foreground: #5126c7;
   --destructive: #dc2626;
   --destructive-foreground: #b91c1c;
   --success: #059669;
   --success-foreground: #047857;
   --warning: #d97706;
   --warning-foreground: #b45309;
-  --info: #6a34ff;
-  --info-foreground: #4a0ad1;
-  --border: rgba(11, 10, 17, 0.09);
-  --input: rgba(11, 10, 17, 0.14);
-  --ring: #7957ff;
+  --info: #6838ef;
+  --info-foreground: #5126c7;
+  --border: #e4e7ef;
+  --input: #d5dae5;
+  --ring: #6838ef;
   --radius: 0.75rem;
 
-  --chart-1: #6a34ff;
+  --chart-1: #5c2fdb;
   --chart-2: #10b981;
   --chart-3: #f59e0b;
   --chart-4: #ef4444;
-  --chart-5: #9294ff;
+  --chart-5: #8e6df6;
 
   --sidebar: #ffffff;
-  --sidebar-foreground: #52525b;
-  --sidebar-primary: #7957ff;
+  --sidebar-foreground: #667085;
+  --sidebar-primary: #6838ef;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f3f1ff;
-  --sidebar-accent-foreground: #4a0ad1;
-  --sidebar-border: rgba(11, 10, 17, 0.08);
-  --sidebar-ring: #7957ff;
+  --sidebar-accent: #eee8ff;
+  --sidebar-accent-foreground: #5126c7;
+  --sidebar-border: #e4e7ef;
+  --sidebar-ring: #6838ef;
 
   --panel-sheen: transparent;
   --panel-sheen-soft: transparent;
-  --panel-border: rgba(11, 10, 17, 0.08);
+  --panel-border: #e4e7ef;
   --panel-edge: rgba(255, 255, 255, 0);
-  --panel-shadow: 0 1px 2px rgba(11, 10, 17, 0.04), 0 12px 32px -22px rgba(11, 10, 17, 0.16);
+  --panel-shadow: 0 1px 2px rgba(33, 26, 53, 0.04), 0 12px 32px -22px rgba(33, 26, 53, 0.16);
   --panel-hover-glow: 0.28;
-  --raised-border: rgba(11, 10, 17, 0.1);
-  --raised-shadow: 0 1px 2px rgba(11, 10, 17, 0.05), 0 16px 40px -16px rgba(11, 10, 17, 0.2);
+  --raised-border: #dde1ea;
+  --raised-shadow: 0 1px 2px rgba(33, 26, 53, 0.05), 0 16px 40px -16px rgba(33, 26, 53, 0.2);
   --field-bg: #ffffff;
-  --field-border: rgba(11, 10, 17, 0.14);
-  --field-border-hover: rgba(11, 10, 17, 0.24);
-  --shadow-deep: rgba(11, 10, 17, 0.16);
+  --field-border: #d5dae5;
+  --field-border-hover: #b9c0cf;
+  --shadow-deep: rgba(33, 26, 53, 0.16);
 
-  --color-ink-950: #ffffff;
+  --color-ink-950: #f8f9fc;
   --color-ink-900: #ffffff;
-  --color-ink-850: #f7f7fa;
-  --color-ink-800: #f0f0f4;
-  --color-ink-700: #e6e6ec;
-  --color-silver: #52525b;
-  --color-dim: #6b6b76;
+  --color-ink-850: #f8f9fc;
+  --color-ink-800: #eef0f5;
+  --color-ink-700: #e4e7ef;
+  --color-silver: #667085;
+  --color-dim: #667085;
   --color-flag-good: #047857;
   --color-flag-warning: #b45309;
   --color-flag-critical: #dc2626;
 
-  --color-brand-50: #1e0a52;
-  --color-brand-100: #3a0c9e;
-  --color-brand-200: #4a0ad1;
-  --color-brand-300: #5b0fff;
-  --color-brand-400: #6a34ff;
-  --color-brand-600: #9294ff;
-  --color-brand-700: #b3afff;
-  --color-brand-800: #d3d0ff;
-  --color-brand-900: #e9e7ff;
-  --color-brand-950: #f4f3ff;
+  --color-brand-50: #1b0e45;
+  --color-brand-100: #2f1777;
+  --color-brand-200: #3f1d9e;
+  --color-brand-300: #5126c7;
+  --color-brand-400: #5c2fdb;
+  --color-brand-600: #8e6df6;
+  --color-brand-700: #b39eff;
+  --color-brand-800: #cfc2ff;
+  --color-brand-900: #e2d9ff;
+  --color-brand-950: #eee8ff;
 
   /* Course-design progress cards. Scoped to .course-design; not interface chrome. */
   --clr-blue: #1890ff;
@@ -1586,18 +1593,18 @@
 
 .dark {
   color-scheme: dark;
-  --brand: #7957ff;
-  --brand-rgb: 121, 87, 255;
-  --brand-deep: #5b0fff;
-  --glow-hue-brand: 252;
-  --glow-sat-brand: 100;
-  --glow-light-brand: 67;
-  --glow-hue-brand-soft: 240;
+  --brand: #6838ef;
+  --brand-rgb: 104, 56, 239;
+  --brand-deep: #5126c7;
+  --glow-hue-brand: 256;
+  --glow-sat-brand: 85;
+  --glow-light-brand: 58;
+  --glow-hue-brand-soft: 253;
   --glow-sat-brand-soft: 100;
-  --glow-light-brand-soft: 79;
-  --glow-hue-brand-deep: 259;
-  --glow-sat-brand-deep: 100;
-  --glow-light-brand-deep: 53;
+  --glow-light-brand-soft: 81;
+  --glow-hue-brand-deep: 256;
+  --glow-sat-brand-deep: 68;
+  --glow-light-brand-deep: 46;
   --glow-hue-success: 160;
   --glow-sat-success: 70;
   --glow-light-success: 58;
@@ -1625,41 +1632,41 @@
   --card-foreground: #ffffff;
   --popover: #100f18;
   --popover-foreground: #ffffff;
-  --primary: #7957ff;
+  --primary: #6838ef;
   --primary-foreground: #ffffff;
-  --secondary: #1e0a52;
-  --secondary-foreground: #b3afff;
+  --secondary: #1b0e45;
+  --secondary-foreground: #b39eff;
   --muted: #100f18;
   --muted-foreground: #858585;
-  --accent: #1e0a52;
-  --accent-foreground: #b3afff;
+  --accent: #1b0e45;
+  --accent-foreground: #b39eff;
   --destructive: #f87171;
   --destructive-foreground: #f87171;
   --success: #52d6a4;
   --success-foreground: #52d6a4;
   --warning: #f0b45c;
   --warning-foreground: #f0b45c;
-  --info: #9294ff;
-  --info-foreground: #b3afff;
+  --info: #8e6df6;
+  --info-foreground: #b39eff;
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.12);
-  --ring: #7957ff;
+  --ring: #8e6df6;
   --radius: 0.75rem;
 
-  --chart-1: #7957ff;
+  --chart-1: #6838ef;
   --chart-2: #52d6a4;
   --chart-3: #f0b45c;
   --chart-4: #f87171;
-  --chart-5: #b3afff;
+  --chart-5: #b39eff;
 
   --sidebar: #0b0a11;
   --sidebar-foreground: #a3a3a3;
-  --sidebar-primary: #7957ff;
+  --sidebar-primary: #6838ef;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1e0a52;
-  --sidebar-accent-foreground: #b3afff;
+  --sidebar-accent: #1b0e45;
+  --sidebar-accent-foreground: #b39eff;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: #7957ff;
+  --sidebar-ring: #8e6df6;
 
   --panel-sheen: rgba(255, 255, 255, 0.055);
   --panel-sheen-soft: rgba(255, 255, 255, 0.014);
@@ -1685,16 +1692,16 @@
   --color-flag-warning: #f0b45c;
   --color-flag-critical: #f87171;
 
-  --color-brand-50: #f4f3ff;
-  --color-brand-100: #e9e7ff;
-  --color-brand-200: #d3d0ff;
-  --color-brand-300: #b3afff;
-  --color-brand-400: #9294ff;
-  --color-brand-600: #6a34ff;
-  --color-brand-700: #5b0fff;
-  --color-brand-800: #4a0ad1;
-  --color-brand-900: #3a0c9e;
-  --color-brand-950: #1e0a52;
+  --color-brand-50: #eee8ff;
+  --color-brand-100: #e2d9ff;
+  --color-brand-200: #cfc2ff;
+  --color-brand-300: #b39eff;
+  --color-brand-400: #8e6df6;
+  --color-brand-600: #5c2fdb;
+  --color-brand-700: #5126c7;
+  --color-brand-800: #3f1d9e;
+  --color-brand-900: #2f1777;
+  --color-brand-950: #1b0e45;
 }
 
 /* ---------- Workflow canvas (AI Elements on React Flow) ----------
@@ -1877,7 +1884,7 @@ html[data-calm="true"] .live-shimmer-text {
 [data-slot="glow-card"] {
   --glow-border-size: calc(var(--glow-border-width, 3) * 1px);
   --glow-spotlight-size: calc(var(--glow-size, 200) * 1px);
-  --glow-hue: calc(var(--glow-base, var(--glow-hue-brand, 252)) + (var(--xp, 0) * var(--glow-spread, 24)));
+  --glow-hue: calc(var(--glow-base, var(--glow-hue-brand, 256)) + (var(--xp, 0) * var(--glow-spread, 24)));
   position: relative;
   isolation: isolate;
   border-radius: calc(var(--glow-radius, 14) * 1px);
@@ -2062,8 +2069,8 @@ html[data-calm="true"] .live-shimmer-text {
 }
 
 .course-design .card.violet {
-  --course-accent: #7957ff;
-  background: radial-gradient(ellipse at right top, color-mix(in srgb, #7957ff 55%, transparent) 0%, var(--bg-footer) 47%, var(--bg-footer) 100%);
+  --course-accent: #6838ef;
+  background: radial-gradient(ellipse at right top, color-mix(in srgb, #6838ef 55%, transparent) 0%, var(--bg-footer) 47%, var(--bg-footer) 100%);
 }
 
 .course-design .card.is-selected {
@@ -2440,7 +2447,7 @@ html[data-calm="true"] .live-shimmer-text {
 /* A literal gradient in both themes, so its icon is white in both. */
 .work-hero-skill {
   color: #ffffff;
-  background: linear-gradient(135deg, #7957ff 0%, #5b0fff 100%);
+  background: linear-gradient(135deg, #6838ef 0%, #5126c7 100%);
   box-shadow: 0 4px 12px -4px rgba(102, 80, 216, 0.6);
 }
 .work-hero-eyebrow {

@@ -47,7 +47,7 @@ export function DetailProvider({ children }: { children: React.ReactNode }) {
     <DetailContext.Provider value={value}>
       {children}
       <Sheet open={target !== null} onOpenChange={(next) => (next ? undefined : setTarget(null))}>
-        <SheetPopup side="right" className="max-w-xl bg-background">
+        <SheetPopup side="right" className="max-w-xl bg-card">
           <SheetTitle className="sr-only">Details</SheetTitle>
           <ScrollArea className="min-h-0 flex-1">{target ? <Body key={`${target.kind}:${target.id}`} target={target} onOpen={open} /> : null}</ScrollArea>
         </SheetPopup>

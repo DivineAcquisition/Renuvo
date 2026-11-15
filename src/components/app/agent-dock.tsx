@@ -42,7 +42,7 @@ export function AgentDock({ departments, activity, now, timezone, onOpen }: { de
   return (
     <div className="pointer-events-none fixed inset-x-3 bottom-3 z-30 flex flex-col items-end gap-2 sm:inset-x-auto sm:right-5 sm:bottom-5">
       {open ? (
-        <section aria-label="Your team" className="live-enter pointer-events-auto flex max-h-[min(34rem,calc(100dvh-7rem))] w-full flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-[0_24px_60px_-20px_rgba(15,131,114,0.35)] sm:w-[23rem]">
+        <section aria-label="Your team" className="live-enter pointer-events-auto flex max-h-[min(34rem,calc(100dvh-7rem))] w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-[0_24px_60px_-20px_rgba(81,38,199,0.35)] sm:w-[23rem]">
           <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
               <h2 className="font-heading text-base tracking-tight text-strong">Your team</h2>
@@ -107,11 +107,11 @@ export function AgentDock({ departments, activity, now, timezone, onOpen }: { de
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         className={cn(
-          "pointer-events-auto relative inline-flex h-12 items-center gap-2.5 overflow-hidden rounded-full border bg-background py-1.5 pr-3.5 pl-2 text-sm shadow-[0_12px_32px_-12px_rgba(15,131,114,0.45)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
+          "pointer-events-auto relative inline-flex h-12 items-center gap-2.5 overflow-hidden rounded-full border bg-card py-1.5 pr-3.5 pl-2 text-sm shadow-[0_12px_32px_-12px_rgba(81,38,199,0.45)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500",
           needsYou ? "border-warning/60" : "border-brand-500/40",
         )}
       >
-        {needsYou || working ? <BorderBeam size={50} duration={needsYou ? 6 : 4} colorFrom={needsYou ? "#f0b45c" : "#7957ff"} colorTo="#9294ff" borderWidth={2} /> : null}
+        {needsYou || working ? <BorderBeam size={50} duration={needsYou ? 6 : 4} colorFrom={needsYou ? "#f0b45c" : "#6838ef"} colorTo="#b39eff" borderWidth={2} /> : null}
         <span className="flex -space-x-1.5">
           {agents.map((agent) => (
             <AgentAvatar key={agent.agent} agent={agent.agent} state={agent.state} size="sm" />

@@ -156,7 +156,7 @@ function NotBuilt({ quiet }: { quiet?: boolean }) {
 
 const row = "flex min-h-9 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium";
 const linked = "text-muted-foreground hover:bg-muted hover:text-strong focus-visible:outline-2 focus-visible:outline-brand-500";
-const current = "bg-brand-500/12 text-brand-100";
+const current = "bg-brand-950 text-brand-300";
 
 /** A company-wide destination. One that is not built is listed and says so; it is not a link. */
 function ItemRow({ item, active, badge, onNavigate }: { item: NavItem; active: boolean; badge?: Badge | null; onNavigate?: () => void }) {
@@ -300,7 +300,7 @@ function BusinessSelector({ company, businesses, activeId, onSwitch }: { company
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       </button>
       {open ? (
-        <ul id={menu} role="menu" aria-label="Switch company" className="absolute inset-x-2 top-full z-20 mt-1 grid gap-0.5 rounded-xl border border-border bg-background p-1 shadow-lg">
+        <ul id={menu} role="menu" aria-label="Switch company" className="absolute inset-x-2 top-full z-20 mt-1 grid gap-0.5 rounded-xl border border-border bg-card p-1 shadow-lg">
           {businesses.map((business) => {
             const active = business.companyId === activeId;
             return (
@@ -362,7 +362,7 @@ function DepartmentTabs({ selected, onSelect, panelId }: { selected: DepartmentI
             aria-controls={panelId}
             tabIndex={on ? 0 : -1}
             onClick={() => onSelect(department.id)}
-            className={cn("min-h-8 rounded-[10px] px-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-brand-500", on ? "bg-background text-strong shadow-sm" : "text-muted-foreground hover:text-strong")}
+            className={cn("min-h-8 rounded-[10px] px-1.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-brand-500", on ? "bg-card text-strong shadow-sm" : "text-muted-foreground hover:text-strong")}
           >
             {department.label}
           </button>

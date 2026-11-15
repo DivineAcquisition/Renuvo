@@ -117,7 +117,7 @@ Convex · Clerk · Vercel.
 |---|---|
 | `src/lib/marketing/content.ts` | Every word on the public site |
 | `src/components/marketing` | The page's sections and pictures |
-| `src/app/globals.css` | Tokens. Brand violet from the logo, `#7957FF` (running `#9294FF` to `#5B0FFF`), light only on the public site |
+| `src/app/globals.css` | Tokens. The owner's palette: Selestial Violet `#6838EF`, Deep Violet `#5126C7`, Cloud White page `#F8F9FC`, Deep Plum text `#211A35`. Light only on the public site |
 | `src/components/ui` | Shared components |
 | `src/lib/app/navigation.ts` | The one navigation definition: departments, agents, work tabs, paths, availability |
 | `src/components/app/sidebar.tsx` | The sidebar, drawn from that definition |

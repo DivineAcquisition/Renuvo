@@ -37,10 +37,10 @@ export function AppShell({
   const schedule = linkTo("dispatch.schedule");
   return (
     <div className="flex min-h-dvh bg-muted/50">
-      <aside className="sticky top-0 hidden h-dvh w-[17rem] shrink-0 border-r border-border bg-background lg:block">{sidebar()}</aside>
+      <aside className="sticky top-0 hidden h-dvh w-[17rem] shrink-0 border-r border-border bg-card lg:block">{sidebar()}</aside>
 
       <Sheet open={menu} onOpenChange={setMenu}>
-        <SheetPopup side="left" className="max-w-[19rem] bg-background" showCloseButton={false}>
+        <SheetPopup side="left" className="max-w-[19rem] bg-card" showCloseButton={false}>
           <SheetTitle className="sr-only">Menu</SheetTitle>
           {menu ? sidebar(() => setMenu(false)) : null}
         </SheetPopup>
@@ -54,7 +54,7 @@ export function AppShell({
           <span className="truncate text-sm font-semibold text-strong lg:hidden">{company}</span>
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {schedule ? (
-              <Link href={schedule} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
+              <Link href={schedule} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
                 <ScheduleIcon className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Schedule</span>
               </Link>
@@ -64,7 +64,7 @@ export function AppShell({
                 href={approvals}
                 className={cn(
                   "inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500",
-                  decisionCount ? "border-warning/60 bg-warning/10 text-warning-foreground" : "border-border bg-background text-strong hover:border-brand-500/50",
+                  decisionCount ? "border-warning/60 bg-warning/10 text-warning-foreground" : "border-border bg-card text-strong hover:border-brand-500/50",
                 )}
               >
                 <Hand className="size-4" aria-hidden />

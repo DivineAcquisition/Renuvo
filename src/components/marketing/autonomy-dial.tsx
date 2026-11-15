@@ -52,7 +52,7 @@ export function AutonomyDial() {
               key={item.id}
               className={cn(
                 "cursor-pointer rounded-md px-2 py-2 text-center text-xs font-medium transition-colors has-focus-visible:outline-2 has-focus-visible:outline-brand-500",
-                index === level ? "bg-background text-strong shadow-sm" : "text-muted-foreground hover:text-strong",
+                index === level ? "bg-card text-strong shadow-sm" : "text-muted-foreground hover:text-strong",
               )}
             >
               <input type="radio" name="dial-level" className="sr-only" checked={index === level} onChange={() => setLevel(index)} />

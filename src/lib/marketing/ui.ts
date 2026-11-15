@@ -51,7 +51,7 @@ export const marketingFormLabel =
 export const marketingField = cn(
   "relative rounded-lg border border-border bg-background",
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] transition-colors",
-  "focus-within:border-brand-500/55 focus-within:shadow-[0_0_0_3px_rgba(121,87,255,0.18)]"
+  "focus-within:border-brand-500/55 focus-within:shadow-[0_0_0_3px_rgba(104,56,239,0.18)]"
 );
 
 export const marketingFieldControl = cn(
