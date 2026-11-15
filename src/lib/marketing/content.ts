@@ -185,29 +185,70 @@ export const PHILOSOPHY = {
 
 export const FINAL_CTA = {
   id: "early-access",
-  headline: "Build a business that follows through.",
+  headline: "Find out what your cleaning business can delegate.",
   paragraphs: [
-    "We’re building Selestial for cleaning company owners who want more capacity to lead—and fewer loose ends to chase.",
-    "Get early-access updates and tell us where your business needs the most support.",
+    "Tell us how your company operates. We’ll assess where Selestial could support sales, recruiting, dispatch, and retention—and what setup or migration would involve.",
   ],
 } as const;
 
+/**
+ * The operations assessment. Each option is [stored answer, the words shown]; the stored answers are the
+ * lists in convex/lib/assessment.ts, and a test keeps the two in step.
+ */
 export const EARLY_ACCESS = {
-  title: "Get early access",
+  title: "Request an operations assessment",
+  questions: [
+    { name: "role", label: "What best describes you?", options: [["owner", "Owner / co-owner"], ["operations_manager", "Operations manager"], ["other", "Other"]] },
+    {
+      name: "businessType",
+      label: "What type of cleaning business do you operate?",
+      options: [["residential", "Residential"], ["commercial", "Commercial"], ["short_term_rental", "Short-term rental / turnover"], ["combination", "A combination"]],
+    },
+    { name: "cleaners", label: "How many cleaners actively work with your company?", options: [["just_me", "Just me"], ["1_4", "1–4"], ["5_14", "5–14"], ["15_29", "15–29"], ["30_plus", "30+"]] },
+    {
+      name: "monthlyCleans",
+      label: "Approximately how many cleans do you complete each month?",
+      options: [["under_20", "Fewer than 20"], ["20_49", "20–49"], ["50_149", "50–149"], ["150_299", "150–299"], ["300_plus", "300+"]],
+    },
+    {
+      name: "bookingTool",
+      label: "What do you currently use to manage bookings?",
+      options: [["jobber", "Jobber"], ["housecall_pro", "Housecall Pro"], ["bookingkoala", "BookingKoala"], ["gohighlevel", "GoHighLevel"], ["another_platform", "Another platform"], ["manual", "Spreadsheets / calendar / mostly manual"]],
+    },
+    {
+      name: "help",
+      label: "Which responsibility needs the most help?",
+      options: [
+        ["sales", "Responding to inquiries and following up on quotes"],
+        ["recruiting", "Recruiting and onboarding cleaners"],
+        ["dispatch", "Assigning jobs and finding replacement coverage"],
+        ["retention", "Keeping customers and increasing recurring bookings"],
+      ],
+    },
+    {
+      name: "openTo",
+      label: "If there’s a fit, what are you open to?",
+      options: [["test_one_workflow", "Testing one workflow alongside my current system"], ["broader_move", "Planning a broader move to Selestial"], ["explore_later", "Exploring options for later"]],
+    },
+  ],
+  contactTitle: "Contact details",
   fields: {
-    name: "Name",
-    email: "Work email",
+    name: "Full name",
     company: "Company name",
-    focus: "What needs the most support?",
+    email: "Email",
+    phone: "Phone",
+    website: "Website or business page",
   },
-  focusOptions: ["Sales", "Recruiting", "Dispatch", "Retention"],
-  submit: "Request early access",
+  optional: "optional",
+  /** Its own box, unticked, and not needed to submit. It says only what is true today. */
+  smsConsent: "It’s OK to text me at this number about my assessment. Optional, and not needed to submit.",
+  submit: "Request My Operations Assessment",
   sending: "Sending",
-  consent: "We will only email you about Selestial early access.",
-  done: { title: "Request received.", body: "We will email you with early-access updates." },
+  consent: "Submitting requests contact about your assessment.",
+  done: { title: "Request received.", body: "We’ll be in touch about your operations assessment." },
   errors: {
-    invalid: "Check your name, work email and company name, choose what needs the most support, then try again.",
-    closed: "Early access requests are not open yet. Please check back soon.",
+    invalid: "Answer all seven questions and check your name, company name and email, then try again. Phone and website are optional, but must be valid if you add them.",
+    closed: "Assessment requests are not open yet. Please check back soon.",
     failed: "That did not go through. Please try again in a moment.",
     limited: "Too many requests came from this connection. Please try again in an hour.",
   },
