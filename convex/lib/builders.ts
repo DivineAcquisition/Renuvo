@@ -12,7 +12,8 @@ import { v, type ObjectType, type PropertyValidators } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireIdentity, requireMember } from "./access";
-import { notAllowed, notFound } from "./errors";
+import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkState } from "./dispatch/links";
+import { notAllowed, notFound, userError } from "./errors";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -148,6 +149,71 @@ export function serverMutation<V extends AnyValidators, R>(def: {
       const rest: Record<string, unknown> = { ...args };
       delete rest.secret;
       return def.handler(ctx, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+// ── Action links: a cleaner acting on one assignment without signing in ─────────────────────────
+
+export type LinkAccess = {
+  link: Doc<"actionLinks">;
+  linkState: LinkState;
+  company: Doc<"companies">;
+  companyId: Id<"companies">;
+};
+
+async function linkAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<LinkAccess> {
+  const link = await linkForToken(ctx, token);
+  const company = link ? await ctx.db.get(link.companyId) : null;
+  // A token that names nothing gets the same "Not found." whatever was wrong with it.
+  if (!link || !company) notFound();
+  return { link, linkState: linkState(link, Date.now()), company, companyId: link.companyId };
+}
+
+/**
+ * A read through an action link. The token is the only authorization: no id in the arguments is trusted,
+ * and everything the handler reads must hang off `ctx.link`. A read never changes anything, so opening a
+ * link (or a phone previewing it) does nothing. The handler is given the link even when it is expired
+ * or revoked, so the page can say so; it decides what such a link may still see.
+ */
+export function linkQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & LinkAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await linkAccess(ctx, token)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+const CLOSED_WORDS: Record<Exclude<LinkState, "active">, string> = {
+  expired: "This link has expired.",
+  revoked: "This link is no longer active.",
+};
+
+/**
+ * One named action through an action link. Refused unless the link is active right now and lists the
+ * action. The handler must still check the assignment itself: a link says who may ask, the record says
+ * whether it can be done. Every action carried out is recorded against the link.
+ */
+export function linkMutation<V extends AnyValidators, R>(def: {
+  action: LinkAction;
+  args: V;
+  handler: (ctx: MutationCtx & LinkAccess, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const access = await linkAccess(ctx, token);
+      if (access.linkState !== "active") throw userError(CLOSED_WORDS[access.linkState], "not_allowed");
+      if (!access.link.allowed.includes(def.action)) notAllowed();
+      const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
+      await noteLinkAction(ctx, access.link, def.action);
+      return result;
     },
   } as any);
 }

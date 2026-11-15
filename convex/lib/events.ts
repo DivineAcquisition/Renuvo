@@ -13,6 +13,8 @@ export const actorValidator = v.union(
   v.object({ kind: v.literal("member"), memberId: v.id("members") }),
   v.object({ kind: v.literal("agent"), agent: agentValidator }),
   v.object({ kind: v.literal("system") }),
+  /** A cleaner acting through an action link. The link is the authorization; the cleaner id says who it was issued to. */
+  v.object({ kind: v.literal("cleaner"), cleanerId: v.id("cleaners"), linkId: v.id("actionLinks") }),
 );
 export type Actor = typeof actorValidator.type;
 
@@ -27,6 +29,9 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("tasks"), id: v.id("tasks") }),
   v.object({ table: v.literal("approvals"), id: v.id("approvals") }),
   v.object({ table: v.literal("permissions"), id: v.id("permissions") }),
+  v.object({ table: v.literal("messages"), id: v.id("messages") }),
+  v.object({ table: v.literal("actionLinks"), id: v.id("actionLinks") }),
+  v.object({ table: v.literal("coverageRequests"), id: v.id("coverageRequests") }),
 );
 export type Subject = typeof subjectValidator.type;
 

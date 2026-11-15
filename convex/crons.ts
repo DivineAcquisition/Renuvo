@@ -11,4 +11,7 @@ crons.interval("expire undecided approvals", { minutes: 15 }, internal.approvals
 // Dispatch looks over the coming days for visits that still have no cleaner.
 crons.interval("dispatch looks for uncovered visits", { minutes: 15 }, internal.dispatch.sweep, {});
 
+// A text whose send started and never finished is marked unconfirmed, never quietly sent again.
+crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});
+
 export default crons;

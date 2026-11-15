@@ -71,6 +71,48 @@ export const TASK_CHANGES: Record<TaskStatus, readonly TaskStatus[]> = {
 export const WAITING_ON = ["customer", "cleaner", "applicant", "owner", "other"] as const;
 export const waitingOnValidator = literals(WAITING_ON);
 
+/** Why an assignment that ended as cancelled ended. Only some causes count against asking the same cleaner again. */
+export const END_CAUSES = ["released", "job_covered", "job_cancelled", "dropped", "no_show", "undelivered"] as const;
+export type EndCause = (typeof END_CAUSES)[number];
+export const endCauseValidator = literals(END_CAUSES);
+
+/** Lead or support on a job that needs more than one cleaner. */
+export const CREW_ROLES = ["lead", "support"] as const;
+export type CrewRole = (typeof CREW_ROLES)[number];
+export const crewRoleValidator = literals(CREW_ROLES);
+
+/**
+ * One outbound message. queued: planned. sending: handed to the provider, outcome not known yet.
+ * sent: the provider accepted it. delivered: the provider confirmed the handset got it. failed: it did
+ * not go. unconfirmed: a send was started and never settled, so nobody knows; it is not sent again
+ * without a person. not_sent: there was nothing to send to, or messaging is not connected.
+ */
+export const MESSAGE_STATUSES = ["queued", "sending", "sent", "delivered", "failed", "unconfirmed", "not_sent"] as const;
+export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
+export const messageStatusValidator = literals(MESSAGE_STATUSES);
+export const MESSAGE_CHANGES: Record<MessageStatus, readonly MessageStatus[]> = {
+  queued: ["sending", "not_sent", "failed"],
+  sending: ["sent", "delivered", "failed", "queued", "unconfirmed"],
+  sent: ["delivered", "failed"],
+  delivered: [],
+  failed: [],
+  unconfirmed: ["delivered", "failed"],
+  not_sent: [],
+};
+
+/** A slot that lost its cleaner and has to be filled again. unresolved means nobody could, and a person has it. */
+export const COVERAGE_STATUSES = ["open", "filled", "unresolved", "cancelled"] as const;
+export type CoverageStatus = (typeof COVERAGE_STATUSES)[number];
+export const coverageStatusValidator = literals(COVERAGE_STATUSES);
+export const COVERAGE_CAUSES = ["drop", "no_show", "delay", "released", "undelivered"] as const;
+export type CoverageCause = (typeof COVERAGE_CAUSES)[number];
+export const coverageCauseValidator = literals(COVERAGE_CAUSES);
+
+/** Where Dispatch hands work it does not own. Until those agents exist, each is a queue a person works. */
+export const HANDOFF_QUEUES = ["recruiter", "team_coordinator", "customer_care", "quality", "finance"] as const;
+export type HandoffQueue = (typeof HANDOFF_QUEUES)[number];
+export const handoffValidator = literals(HANDOFF_QUEUES);
+
 export const APPROVAL_STATUSES = ["pending", "approved", "changed", "skipped", "expired"] as const;
 export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
 export const approvalStatusValidator = literals(APPROVAL_STATUSES);

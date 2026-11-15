@@ -97,7 +97,9 @@ describe("Dispatch", () => {
     expect(after.coverage).toBe("uncovered");
     const [second] = await s.pending();
     expect(second.proposal).toMatchObject({ cleanerId: s.cleaners.Rosa });
-    expect(second.reason).toBe("Rosa is free then, works in 78701 and has no other visits that day. Nobody else is eligible.");
+    // Asking the next cleaner after a no is its own permission, and the proposal says why it is being asked.
+    expect(second.action).toBe("dispatch.send_replacement_offer");
+    expect(second.reason).toBe("An earlier offer for this visit ended without an acceptance. Rosa is free then, works in 78701 and has no other visits that day. Nobody else is eligible.");
     expect(await s.tasks("needs_decision")).toMatchObject([{ _id: task._id, openQuestion: `${second.summary}?` }]);
     const seen = await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId });
     expect(seen.excluded).toMatchObject([{ cleanerId: s.cleaners.Lena, code: "already_asked", reason: "already declined this visit" }]);
@@ -136,6 +138,8 @@ describe("Dispatch", () => {
   it("offers without asking once the owner allows it, and moves to the next cleaner when nobody answers", async () => {
     const s = await setup();
     await s.allow("execute");
+    // The first offer and the next one after a no are separate permissions. The owner allows both here.
+    await s.allow("execute", "dispatch.send_replacement_offer");
     const jobId = await dispatchJob(s.as, s.companyId, s.place);
 
     expect(await s.pending()).toEqual([]);

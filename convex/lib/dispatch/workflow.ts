@@ -14,10 +14,15 @@ import { requestApproval } from "../approvalQueue";
 import { authorityFor } from "../authority";
 import { recordEvent, type Actor } from "../events";
 import { liveTaskByKey, openTask, setTaskState } from "../taskState";
+import { jobCoverageRequests, settleCoverage } from "./coverage";
+import { requiredCrew, staffing } from "./crew";
 import { DISPATCH_RULES, isStaffingGap, rankCleaners, type Candidate, type Excluded } from "./eligibility";
 import { jobAssignments, jobFacts, jobHistory, readyCleanerFacts } from "./facts";
-import { offerProblem, placeOffer } from "./offers";
+import { handOff } from "./handoffs";
+import { carryOutReminder } from "./live";
+import { offerProblem, placeOffer, type OfferKind } from "./offers";
 import { money, payFor } from "./pay";
+import { dispatchPolicy } from "./policy";
 import { dispatchSettings, type DispatchSettings } from "./settings";
 
 export const DISPATCH: Actor = { kind: "agent", agent: "dispatch" };
@@ -27,6 +32,10 @@ const DAY = 24 * 60 * MINUTE;
 
 export const REQUEST_ACCEPTANCE = "dispatch.request_acceptance";
 export const REASSIGN = "dispatch.reassign_confirmed_visit";
+export const SEND_REPLACEMENT = "dispatch.send_replacement_offer";
+export const RUN_BACKUP = "dispatch.run_backup_coverage";
+export const BROADCAST = "dispatch.broadcast_offer";
+export const URGENT_HIRE = "dispatch.request_urgent_hire";
 
 export type CoverState =
   | "gone"
@@ -72,7 +81,9 @@ export async function jobApprovals(ctx: QueryCtx | MutationCtx, job: Doc<"jobs">
 }
 
 function skippedCleaners(approvals: Doc<"approvals">[]): Id<"cleaners">[] {
-  return approvals.filter((row) => row.status === "skipped" && row.proposal?.kind === "offer_assignment").map((row) => row.proposal!.cleanerId);
+  const out: Id<"cleaners">[] = [];
+  for (const row of approvals) if (row.status === "skipped" && row.proposal?.kind === "offer_assignment") out.push(row.proposal.cleanerId);
+  return out;
 }
 
 /** Who Dispatch could ask for this job right now, best first, and who it cannot ask with the reason. */
@@ -84,10 +95,34 @@ export async function candidatesFor(ctx: QueryCtx | MutationCtx, company: Doc<"c
   return { ...ranked, cleaners, assignments, history };
 }
 
-/** Which permission covers finding a cleaner now: a first request, or replacing a cleaner who had accepted. */
-export function coverAction(assignments: Doc<"assignments">[]): string {
+/**
+ * Which permission covers finding a cleaner now. Each is the Owner's to set on its own: a first offer,
+ * the next cleaner after a no or no answer, cover for a place whose cleaner dropped out or did not
+ * arrive, and replacing a cleaner a person took off a confirmed visit.
+ */
+export function coverAction(assignments: Doc<"assignments">[], backup = false): string {
+  if (backup) return RUN_BACKUP;
   const hadAccepted = assignments.some((row) => row.status === "cancelled" && row.endCause === "released" && row.respondedAt !== undefined);
-  return hadAccepted ? REASSIGN : REQUEST_ACCEPTANCE;
+  if (hadAccepted) return REASSIGN;
+  const hadNo = assignments.some((row) => row.status === "declined" || row.status === "expired" || (row.status === "cancelled" && row.endCause === "undelivered"));
+  return hadNo ? SEND_REPLACEMENT : REQUEST_ACCEPTANCE;
+}
+
+const ACTION_WORDS: Record<string, string> = {
+  [REQUEST_ACCEPTANCE]: "request acceptance",
+  [REASSIGN]: "reassign a confirmed visit",
+  [SEND_REPLACEMENT]: "offer a visit to the next cleaner",
+  [RUN_BACKUP]: "find cover for a visit",
+};
+
+function offerKindFor(action: string): OfferKind {
+  return action === REQUEST_ACCEPTANCE ? "initial" : action === RUN_BACKUP ? "backup" : "replacement";
+}
+
+/** The permission that applies to this job as it stands, reading whether a place is waiting for cover. */
+export async function currentCoverAction(ctx: QueryCtx | MutationCtx, job: Doc<"jobs">, assignments: Doc<"assignments">[]): Promise<string> {
+  const requests = await jobCoverageRequests(ctx, job);
+  return coverAction(assignments, requests.some((row) => row.status === "open" || row.status === "unresolved"));
 }
 
 function taskDeadline(job: Doc<"jobs">, settings: DispatchSettings, now: number): number {
@@ -118,7 +153,7 @@ export async function ensureCoverTask(ctx: MutationCtx, company: Doc<"companies"
     title,
     nextAction: "Find a cleaner for this visit",
     dueAt: taskDeadline(job, dispatchSettings(company), Date.now()),
-    completionCondition: "A cleaner accepted the visit",
+    completionCondition: requiredCrew(job) === 1 ? "A cleaner accepted the visit" : `All ${requiredCrew(job)} cleaners accepted the visit`,
     about: { table: "jobs", id: job._id },
     key: coverKey(job._id),
     actor: DISPATCH,
@@ -158,8 +193,18 @@ function fitWords(candidate: Candidate, others: number): string {
   return `${candidate.name} ${list}. ${rest}`;
 }
 
+/** What was tried for a place that lost its cleaner, what is left, and when a person has to have decided. */
+function unresolvedWords(job: Doc<"jobs">, assignments: Doc<"assignments">[], excluded: Excluded[], timezone: string): string {
+  const asked = assignments.filter((row) => row.status === "declined" || row.status === "expired" || (row.status === "cancelled" && row.endCause === "undelivered")).length;
+  const tried = asked === 0 ? "No other cleaner could be asked." : `${asked} ${asked === 1 ? "cleaner was" : "cleaners were"} asked and none accepted.`;
+  const why = excluded.slice(0, 4).map((entry) => `${entry.name} ${entry.reason}`).join("; ");
+  return `${tried}${why ? ` ${why}.` : ""} What is left: offer it yourself to a cleaner Dispatch may not ask, move the visit, or ask Recruiter for an urgent hire. Decide by ${whenWords(Math.max(job.startsAt, Date.now()), timezone)}.`;
+}
+
 /**
- * Looks at one job and does whatever is still missing to get it a cleaner. Safe to run again at any time.
+ * Looks at one job and does whatever is still missing to fill every place on it. Safe to run again at
+ * any time. A job with two places is covered only when two cleaners have accepted: one acceptance leaves
+ * it partially staffed and the work goes on.
  */
 export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<CoverState> {
   const job = await ctx.db.get(jobId);
@@ -167,12 +212,15 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
   const company = await ctx.db.get(job.companyId);
   if (!company) return "gone";
   const settings = dispatchSettings(company);
+  const policy = dispatchPolicy(company);
   const now = Date.now();
   const live = await liveTaskByKey(ctx, job.companyId, coverKey(job._id));
+  const requests = await jobCoverageRequests(ctx, job);
 
   if (job.status === "cancelled" || job.status === "completed") {
+    const cancelled = job.status === "cancelled";
+    for (const request of requests) await settleCoverage(ctx, request, "cancelled", SYSTEM);
     if (live) {
-      const cancelled = job.status === "cancelled";
       await closePending(ctx, await jobApprovals(ctx, job), cancelled ? "job_cancelled" : "job_completed", cancelled ? "The visit was cancelled." : "The visit was completed.");
       await setTaskState(ctx, live, cancelled ? "cancelled" : "done", { outcome: cancelled ? "The visit was cancelled." : "The visit was completed.", closedAt: now, withPersonSince: null }, DISPATCH);
     }
@@ -180,27 +228,36 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
   }
 
   const assignments = await jobAssignments(ctx, job);
-  const accepted = assignments.find((row) => row.status === "accepted");
-  if (accepted) {
+  const staff = staffing(job, assignments);
+  const crew = staff.required;
+  if (staff.open === 0) {
+    for (const request of requests) {
+      const by = assignments.find((row) => row.status === "accepted" && row.coverageRequestId === request._id);
+      await settleCoverage(ctx, request, "filled", DISPATCH, { filledByAssignmentId: by?._id });
+    }
     if (live) {
       await closePending(ctx, await jobApprovals(ctx, job), "job_covered", "A cleaner accepted this visit.");
-      const cleaner = await ctx.db.get(accepted.cleanerId);
-      await setTaskState(ctx, live, "done", { outcome: `${cleaner?.name ?? "A cleaner"} accepted the visit.`, closedAt: now, withPersonSince: null }, DISPATCH);
+      const names: string[] = [];
+      for (const row of assignments.filter((entry) => entry.status === "accepted")) names.push((await ctx.db.get(row.cleanerId))?.name ?? "A cleaner");
+      const outcome = crew === 1 ? `${names[0] ?? "A cleaner"} accepted the visit.` : `All ${crew} places are accepted: ${names.join(", ")}.`;
+      await setTaskState(ctx, live, "done", { outcome, closedAt: now, withPersonSince: null }, DISPATCH);
     }
     return "covered";
   }
 
-  // From here the job has no cleaner, so it has a task that says where it stands.
+  // From here the job is short at least one cleaner, so it has a task that says where it stands.
   const task = await ensureCoverTask(ctx, company, job);
   const same = { sameStatus: true };
+  const short = crew === 1 ? "" : ` ${staff.accepted} of ${crew} places are accepted.`;
 
   if (job.status === "in_progress") {
-    await setTaskState(ctx, task, "needs_decision", { openQuestion: "This visit is underway and has no cleaner on it. Decide what to do.", dueAt: job.startsAt }, DISPATCH, same);
+    const question = crew === 1 ? "This visit is underway and has no cleaner on it. Decide what to do." : `This visit is underway and is short ${staff.open} of ${crew} cleaners. Decide what to do.`;
+    await setTaskState(ctx, task, "needs_decision", { openQuestion: question, dueAt: job.startsAt }, DISPATCH, same);
     return "underway";
   }
 
   const offers = assignments.filter((row) => row.status === "offered");
-  if (offers.length > 0) {
+  if (offers.length >= staff.open) {
     const followUpAt = Math.min(...offers.map((row) => row.respondBy));
     await setTaskState(ctx, task, "waiting", { waitingOn: "cleaner", followUpAt, dueAt: job.startsAt }, DISPATCH, same);
     return "offer_out";
@@ -212,14 +269,14 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
   }
 
   const approvals = await jobApprovals(ctx, job);
-  const pending = approvals.find((row) => row.status === "pending");
-  if (pending) {
-    await setTaskState(ctx, task, "needs_decision", { openQuestion: `${pending.summary}?`, dueAt: pending.decideBy }, DISPATCH, same);
+  const pending = approvals.filter((row) => row.status === "pending" && row.proposal?.kind === "offer_assignment");
+  if (pending.length > 0 && offers.length + pending.length >= staff.open) {
+    await setTaskState(ctx, task, "needs_decision", { openQuestion: `${pending[0].summary}?`, dueAt: Math.min(...pending.map((row) => row.decideBy)) }, DISPATCH, same);
     return "awaiting_decision";
   }
 
   if (job.startsAt <= now) {
-    await setTaskState(ctx, task, "needs_decision", { openQuestion: "This visit's start time has passed and no cleaner accepted it. Decide what to do with it.", dueAt: job.startsAt }, DISPATCH, same);
+    await setTaskState(ctx, task, "needs_decision", { openQuestion: `This visit's start time has passed and ${crew === 1 ? "no cleaner accepted it" : `it is short ${staff.open} of ${crew} cleaners`}. Decide what to do with it.`, dueAt: job.startsAt }, DISPATCH, same);
     return "too_late";
   }
 
@@ -230,15 +287,16 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
     return "too_early";
   }
 
-  const action = coverAction(assignments);
+  const openRequests = requests.filter((row) => row.status === "open" || row.status === "unresolved");
+  const backup = openRequests.length > 0;
+  const action = coverAction(assignments, backup);
   const authority = await authorityFor(ctx, company._id, action);
   if (authority.kind === "paused") {
     await setTaskState(ctx, task, "open", { nextAction: "Dispatch is paused. Resume Dispatch, or offer this visit to a cleaner yourself.", dueAt: taskDeadline(job, settings, now) }, DISPATCH, same);
     return "paused";
   }
   if (authority.kind !== "level" || authority.level === "off") {
-    const what = action === REASSIGN ? "reassign a confirmed visit" : "request acceptance";
-    await setTaskState(ctx, task, "needs_decision", { openQuestion: `Dispatch is not allowed to ${what} for this company. Offer this visit to a cleaner yourself.`, dueAt: job.startsAt }, DISPATCH, same);
+    await setTaskState(ctx, task, "needs_decision", { openQuestion: `Dispatch is not allowed to ${ACTION_WORDS[action] ?? "do this"} for this company. Offer this visit to a cleaner yourself.`, dueAt: job.startsAt }, DISPATCH, same);
     return "off";
   }
 
@@ -246,59 +304,117 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
   const { cleaners, facts } = await readyCleanerFacts(ctx, job, history);
   const jobView = await jobFacts(ctx, company, job);
   const { candidates, excluded } = rankCleaners(facts, jobView, DISPATCH_RULES);
-  const respondBy = Math.min(now + settings.offerWindowMinutes * MINUTE, job.startsAt);
+  const windowMinutes = backup ? policy.backupOfferWindowMinutes : settings.offerWindowMinutes;
+  const respondBy = Math.min(now + windowMinutes * MINUTE, job.startsAt);
 
-  // The ranking and the offer check use the same rules. The check has the last word all the same.
-  let choice: { candidate: Candidate; cleaner: Doc<"cleaners">; payCents: number } | null = null;
-  for (const candidate of candidates) {
-    const cleaner = cleaners.find((row) => row._id === candidate.cleanerId);
-    if (!cleaner || !candidate.pay.ok) continue;
-    const problem = await offerProblem(ctx, { company, job, cleaner, respondBy, payCents: candidate.pay.payCents, rules: DISPATCH_RULES }, { assignments, history });
-    if (problem === null) {
-      choice = { candidate, cleaner, payCents: candidate.pay.payCents };
-      break;
+  // One offer or proposal per open place, unless the Owner allows asking several cleaners at once.
+  let wanted = staff.open - offers.length - pending.length;
+  if (policy.broadcastEnabled && authority.level !== "propose") {
+    const broadcast = await authorityFor(ctx, company._id, BROADCAST);
+    if (broadcast.kind === "level" && (broadcast.level === "execute" || broadcast.level === "execute_and_report")) {
+      wanted = Math.min(candidates.length, staff.open * policy.broadcastSize) - offers.length;
     }
   }
+  const taken = new Set<string>([
+    ...assignments.filter((row) => row.status === "offered" || row.status === "accepted").map((row) => row.cleanerId as string),
+    ...pending.map((row) => (row.proposal?.kind === "offer_assignment" ? (row.proposal.cleanerId as string) : "")),
+  ]);
+  const customer = await ctx.db.get(job.customerId);
+  const visit = `${customer?.name ?? "a customer"}'s ${job.serviceType} visit on ${whenWords(job.startsAt, company.timezone)}`;
+  const eligibleOthers = candidates.filter((row) => !taken.has(row.cleanerId)).length - 1;
+  const request = openRequests[0];
+  const proposals: { summary: string; decideBy: number }[] = pending.map((row) => ({ summary: row.summary, decideBy: row.decideBy }));
+  let offered = 0;
+  let proposed = 0;
 
-  if (!choice) {
-    await setTaskState(ctx, task, "needs_decision", { openQuestion: noCandidateWords(excluded), dueAt: job.startsAt }, DISPATCH, same);
-    if (isStaffingGap(excluded)) await ensureGapTask(ctx, company, job, jobView.postalCode);
+  for (const candidate of candidates) {
+    if (wanted <= 0) break;
+    if (taken.has(candidate.cleanerId)) continue;
+    const cleaner = cleaners.find((row) => row._id === candidate.cleanerId);
+    if (!cleaner || !candidate.pay.ok) continue;
+    const payCents = candidate.pay.payCents;
+    // The ranking and the offer check use the same rules. The check has the last word all the same.
+    const problem = await offerProblem(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES }, { assignments, history });
+    if (problem !== null) continue;
+    taken.add(candidate.cleanerId);
+    wanted -= 1;
+
+    if (authority.level === "propose") {
+      const latest = job.startsAt - windowMinutes * MINUTE;
+      const decideBy = latest > now ? Math.min(latest, now + DAY) : job.startsAt;
+      const reassigning = action === REASSIGN;
+      const summary = `${reassigning ? "Reassign" : backup ? "Offer cover for" : "Offer"} ${visit} to ${cleaner.name}`;
+      const lead =
+        reassigning ? "The cleaner who had accepted this visit is no longer on it. " : backup ? "A cleaner who had accepted this visit is no longer on it. " : action === SEND_REPLACEMENT ? "An earlier offer for this visit ended without an acceptance. " : "";
+      await requestApproval(ctx, {
+        companyId: job.companyId,
+        action,
+        summary,
+        reason: `${lead}${fitWords(candidate, Math.max(0, eligibleOthers))}${short}`,
+        authorizes:
+          `Dispatch will offer this visit to ${cleaner.name}: ${job.scope}. Their pay is ${money(payCents)} (${candidate.pay.basis}). ` +
+          `They get ${windowMinutes} minutes to answer, or until the visit starts if that is sooner. The visit is confirmed only if they accept.`,
+        ifWaiting: `The visit stays without a cleaner. This proposal expires ${whenWords(decideBy, company.timezone)}, and the visit then waits for you.`,
+        proposal: { kind: "offer_assignment", jobId: job._id, cleanerId: cleaner._id, payCents, respondWithinMinutes: windowMinutes },
+        decideBy,
+        about: { table: "jobs", id: job._id },
+        taskId: task._id,
+      });
+      proposals.push({ summary, decideBy });
+      proposed += 1;
+      continue;
+    }
+
+    const assignmentId = await placeOffer(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES }, DISPATCH, { action }, { kind: offerKindFor(action), coverageRequestId: request?._id });
+    assignments.push((await ctx.db.get(assignmentId))!);
+    if (authority.level === "execute_and_report") {
+      await recordEvent(ctx, { companyId: job.companyId, type: "dispatch.reported", actor: DISPATCH, subject: { table: "assignments", id: assignmentId }, data: { action, jobId: job._id, cleanerId: cleaner._id } });
+    }
+    offered += 1;
+  }
+
+  const inFlight = offers.length + offered + proposals.length;
+  // A place nobody can be asked for is a gap even while another place has an offer out.
+  if (wanted > 0 && inFlight < staff.open && isStaffingGap(excluded)) await ensureGapTask(ctx, company, job, jobView.postalCode);
+
+  if (inFlight === 0) {
+    let question = noCandidateWords(excluded);
+    if (crew > 1) question = `${question.replace(/ Decide how to cover it\.$/, "")}${short} Decide how to cover it.`;
+    if (backup) {
+      // Cover could not be found. It is marked unresolved, with what was tried and what is left: never quietly dropped.
+      const summary = unresolvedWords(job, assignments, excluded, company.timezone);
+      for (const row of openRequests) await settleCoverage(ctx, row, "unresolved", DISPATCH, { summary });
+      question = `Cover could not be found for this visit. ${summary}`.slice(0, 1000);
+      const urgent = await authorityFor(ctx, company._id, URGENT_HIRE);
+      if (urgent.kind === "level" && (urgent.level === "execute" || urgent.level === "execute_and_report")) {
+        await handOff(ctx, {
+          companyId: job.companyId,
+          to: "recruiter",
+          key: `recruiter.urgent_hire:${job._id}`,
+          title: `Urgent hire: nobody can cover the visit on ${whenWords(job.startsAt, company.timezone)}`,
+          question: "Find a cleaner who can be made ready in time for this visit, or say that nobody can",
+          trigger: "A cleaner left this visit and no ready cleaner could cover it.",
+          completionCondition: "A ready cleaner can take this visit, or the owner is told nobody can",
+          escalation: "If nobody is found before the visit starts, the owner decides whether to move or cancel it.",
+          dueAt: Math.max(job.startsAt, now),
+          about: { table: "jobs", id: job._id },
+          actor: DISPATCH,
+        });
+      }
+    }
+    await setTaskState(ctx, task, "needs_decision", { openQuestion: question, dueAt: job.startsAt }, DISPATCH, same);
     return "no_candidate";
   }
 
-  const { candidate, cleaner, payCents } = choice;
-  const customer = await ctx.db.get(job.customerId);
-  const visit = `${customer?.name ?? "a customer"}'s ${job.serviceType} visit on ${whenWords(job.startsAt, company.timezone)}`;
+  if (backup) for (const row of openRequests) await settleCoverage(ctx, row, "open", DISPATCH);
 
-  if (authority.level === "propose") {
-    const latest = job.startsAt - settings.offerWindowMinutes * MINUTE;
-    const decideBy = latest > now ? Math.min(latest, now + DAY) : job.startsAt;
-    const reassigning = action === REASSIGN;
-    const summary = `${reassigning ? "Reassign" : "Offer"} ${visit} to ${cleaner.name}`;
-    await requestApproval(ctx, {
-      companyId: job.companyId,
-      action,
-      summary,
-      reason: `${reassigning ? "The cleaner who had accepted this visit is no longer on it. " : ""}${fitWords(candidate, candidates.length - 1)}`,
-      authorizes:
-        `Dispatch will offer this visit to ${cleaner.name}: ${job.scope}. Their pay is ${money(payCents)} (${candidate.pay.ok ? candidate.pay.basis : ""}). ` +
-        `They get ${settings.offerWindowMinutes} minutes to answer, or until the visit starts if that is sooner. The visit is confirmed only if they accept.`,
-      ifWaiting: `The visit stays without a cleaner. This proposal expires ${whenWords(decideBy, company.timezone)}, and the visit then waits for you.`,
-      proposal: { kind: "offer_assignment", jobId: job._id, cleanerId: cleaner._id, payCents, respondWithinMinutes: settings.offerWindowMinutes },
-      decideBy,
-      about: { table: "jobs", id: job._id },
-      taskId: task._id,
-    });
-    await setTaskState(ctx, task, "needs_decision", { openQuestion: `${summary}?`, dueAt: decideBy }, DISPATCH, same);
-    return "proposed";
+  if (proposals.length > 0) {
+    await setTaskState(ctx, task, "needs_decision", { openQuestion: `${proposals[0].summary}?`, dueAt: Math.min(...proposals.map((row) => row.decideBy)) }, DISPATCH, same);
+    return proposed > 0 ? "proposed" : "awaiting_decision";
   }
-
-  const assignmentId = await placeOffer(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES }, DISPATCH, { action });
-  if (authority.level === "execute_and_report") {
-    await recordEvent(ctx, { companyId: job.companyId, type: "dispatch.reported", actor: DISPATCH, subject: { table: "assignments", id: assignmentId }, data: { action, jobId: job._id, cleanerId: cleaner._id } });
-  }
-  await setTaskState(ctx, task, "waiting", { waitingOn: "cleaner", followUpAt: respondBy, dueAt: job.startsAt }, DISPATCH, same);
-  return "offered";
+  const out = assignments.filter((row) => row.status === "offered");
+  await setTaskState(ctx, task, "waiting", { waitingOn: "cleaner", followUpAt: Math.min(...out.map((row) => row.respondBy)), dueAt: job.startsAt }, DISPATCH, same);
+  return offered > 0 ? "offered" : "offer_out";
 }
 
 /** A proposal about the old time is withdrawn when a visit moves, and Dispatch looks at the new time. */
@@ -326,6 +442,7 @@ export type CarriedOut = { ok: boolean; detail: string };
  */
 export async function afterDecision(ctx: MutationCtx, approval: Doc<"approvals">, decision: "approved" | "changed" | "skipped", decidedBy: Actor): Promise<CarriedOut | null> {
   const proposal = approval.proposal;
+  if (proposal?.kind === "send_reminder") return decision === "approved" ? carryOutReminder(ctx, approval, proposal.assignmentId) : null;
   if (!proposal || proposal.kind !== "offer_assignment") return null;
   const job = await ctx.db.get(proposal.jobId);
   const cleaner = await ctx.db.get(proposal.cleanerId);
@@ -349,9 +466,9 @@ export async function afterDecision(ctx: MutationCtx, approval: Doc<"approvals">
     problem = "The visit or the cleaner no longer exists.";
   } else if (company.pausedAgents.includes("dispatch")) {
     problem = "Dispatch is paused, so it made no offer.";
-  } else if ((await jobAssignments(ctx, job)).some((row) => row.status === "offered")) {
-    // Dispatch asks one cleaner at a time. A person may already have asked someone since this was proposed.
-    problem = "An offer for this visit is already out to a cleaner.";
+  } else if (staffing(job, await jobAssignments(ctx, job)).open <= (await jobAssignments(ctx, job)).filter((row) => row.status === "offered").length) {
+    // Dispatch keeps one offer out per open place. A person may already have asked someone since this was proposed.
+    problem = requiredCrew(job) === 1 ? "An offer for this visit is already out to a cleaner." : "An offer is already out for every open place on this visit.";
   } else {
     const pay = payFor(cleaner, job);
     if (!pay.ok) problem = `${cleaner.name} ${pay.reason}.`;
@@ -370,7 +487,14 @@ export async function afterDecision(ctx: MutationCtx, approval: Doc<"approvals">
     return { ok: false, detail };
   }
 
-  const assignmentId = await placeOffer(ctx, { company, job, cleaner, respondBy, payCents: proposal.payCents, rules: DISPATCH_RULES }, DISPATCH, { action: approval.action, approvalId: approval._id });
+  const coverRequest = (await jobCoverageRequests(ctx, job)).find((row) => row.status === "open" || row.status === "unresolved");
+  const assignmentId = await placeOffer(
+    ctx,
+    { company, job, cleaner, respondBy, payCents: proposal.payCents, rules: DISPATCH_RULES },
+    DISPATCH,
+    { action: approval.action, approvalId: approval._id },
+    { kind: offerKindFor(approval.action), coverageRequestId: approval.action === RUN_BACKUP ? coverRequest?._id : undefined },
+  );
   const detail = `Offered to ${cleaner.name}. Their answer is due ${whenWords(respondBy, company.timezone)}.`;
   await ctx.db.patch(approval._id, { carriedOut: { ok: true, detail, at: now } });
   await recordEvent(ctx, { companyId: approval.companyId, type: "approval.carried_out", actor: DISPATCH, subject: { table: "approvals", id: approval._id }, data: { action: approval.action, assignmentId } });

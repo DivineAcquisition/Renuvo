@@ -7,41 +7,19 @@
  */
 import { v } from "convex/values";
 
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, type MemberAccess } from "./lib/builders";
+import { answerOffer, endAssignment } from "./lib/dispatch/assignmentState";
+import { expireOffer } from "./lib/dispatch/delivery";
 import { offerProblem, personRules, placeOffer } from "./lib/dispatch/offers";
 import { coverJob, holdForPerson } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
-import { byMember, recordEvent, type Actor } from "./lib/events";
-import { assertChange, ASSIGNMENT_CHANGES, type AssignmentStatus } from "./lib/statuses";
+import { byMember } from "./lib/events";
 import { cents, instant, text } from "./lib/text";
 
-type EndCause = NonNullable<Doc<"assignments">["endCause"]>;
-
-async function end(
-  ctx: MutationCtx,
-  assignment: Doc<"assignments">,
-  to: AssignmentStatus,
-  actor: Actor,
-  extra: { endReason?: string; endCause?: EndCause; data?: Record<string, string> } = {},
-) {
-  assertChange(ASSIGNMENT_CHANGES, assignment.status, to, "assignment");
-  await ctx.db.patch(assignment._id, {
-    status: to,
-    ...(to === "accepted" || to === "declined" ? { respondedAt: Date.now() } : {}),
-    ...(extra.endReason ? { endReason: extra.endReason } : {}),
-    ...(extra.endCause ? { endCause: extra.endCause } : {}),
-  });
-  await recordEvent(ctx, {
-    companyId: assignment.companyId,
-    type: `assignment.${to}`,
-    actor,
-    subject: { table: "assignments", id: assignment._id },
-    data: { from: assignment.status, jobId: assignment.jobId, cleanerId: assignment.cleanerId, ...extra.data },
-  });
-}
+const end = endAssignment;
 
 /**
  * A person offers a job to a cleaner they chose. The time between jobs applies to them too; they may set
@@ -77,35 +55,9 @@ export const offer = companyMutation({
 
 async function respond(ctx: MutationCtx & MemberAccess, assignmentId: Id<"assignments">, answer: "accepted" | "declined") {
   const assignment = await owned(ctx, assignmentId);
-  if (assignment.status !== "offered") throw userError(`This offer is ${assignment.status}, so it can no longer be answered.`);
-  const actor = byMember(ctx);
-  // An answer after the deadline does not count. The offer is recorded as expired and the caller is told.
-  if (Date.now() > assignment.respondBy) {
-    await end(ctx, assignment, "expired", actor, { endReason: "The response deadline passed." });
-    await coverJob(ctx, assignment.jobId);
-    return { status: "expired" as const };
-  }
-  if (answer === "accepted") {
-    const job = await ctx.db.get(assignment.jobId);
-    if (!job || job.status !== "scheduled") throw userError("This job is no longer scheduled.");
-    const others = await ctx.db
-      .query("assignments")
-      .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", assignment.jobId))
-      .take(100);
-    if (others.some((row) => row.status === "accepted")) throw userError("Another cleaner has already accepted this job.");
-    await end(ctx, assignment, "accepted", actor, { data: { recordedFor: "cleaner" } });
-    // The job has its cleaner, so every other open offer for it is withdrawn.
-    for (const other of others) {
-      if (other._id !== assignment._id && other.status === "offered") {
-        await end(ctx, other, "cancelled", actor, { endReason: "Another cleaner accepted the job.", endCause: "job_covered", data: { cause: "job_covered" } });
-      }
-    }
-    await coverJob(ctx, assignment.jobId);
-    return { status: "accepted" as const };
-  }
-  await end(ctx, assignment, "declined", actor, { data: { recordedFor: "cleaner" } });
-  await coverJob(ctx, assignment.jobId);
-  return { status: "declined" as const };
+  const result = await answerOffer(ctx, assignment, answer, byMember(ctx), { recordedFor: "cleaner" });
+  if (result.status === "refused") throw userError(result.message);
+  return { status: result.status };
 }
 
 /**
@@ -146,10 +98,7 @@ export const expireDue = internalMutation({
       .query("assignments")
       .withIndex("by_status_respondBy", (q) => q.eq("status", "offered").lt("respondBy", Date.now()))
       .take(100);
-    for (const assignment of due) {
-      await end(ctx, assignment, "expired", { kind: "system" }, { endReason: "The response deadline passed." });
-      await coverJob(ctx, assignment.jobId);
-    }
+    for (const assignment of due) await expireOffer(ctx, assignment);
     return due.length;
   },
 });

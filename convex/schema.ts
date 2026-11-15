@@ -12,6 +12,12 @@ import {
   agentValidator,
   approvalStatusValidator,
   assignmentStatusValidator,
+  coverageCauseValidator,
+  coverageStatusValidator,
+  crewRoleValidator,
+  endCauseValidator,
+  handoffValidator,
+  messageStatusValidator,
   cleanerStatusValidator,
   jobStatusValidator,
   memberStatusValidator,
@@ -57,6 +63,8 @@ export const proposalValidator = v.union(
     /** How long the cleaner has to answer once the offer goes out. */
     respondWithinMinutes: v.number(),
   }),
+  /** Text the before-service reminder to the cleaner on this assignment. */
+  v.object({ kind: v.literal("send_reminder"), assignmentId: v.id("assignments") }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -67,6 +75,41 @@ export const dispatchSettingsValidator = v.object({
   travelBufferMinutes: v.number(),
   /** How many days ahead Dispatch looks for jobs without a cleaner. */
   lookAheadDays: v.number(),
+});
+
+/**
+ * The rest of how Dispatch works for this company: messaging, the day of service and recovery. Every
+ * value is optional and the Owner's; the defaults are in convex/lib/dispatch/policy.ts.
+ */
+export const dispatchPolicyValidator = v.object({
+  /** More offers than open slots may go out at once, first to accept gets the slot. Off unless the Owner turns it on. */
+  broadcastEnabled: v.optional(v.boolean()),
+  /** The most cleaners asked at once for one open slot when broadcasting. */
+  broadcastSize: v.optional(v.number()),
+  /** Minutes a cleaner has to answer a backup offer after a drop or no-show. */
+  backupOfferWindowMinutes: v.optional(v.number()),
+  /** Minutes before the start that the reminder goes out. */
+  reminderLeadMinutes: v.optional(v.number()),
+  /** Minutes after the arrival window closes with no check-in before the cleaner is asked. */
+  contactAfterMinutes: v.optional(v.number()),
+  /** Minutes after the arrival window closes before the operator is alerted. */
+  alertAfterMinutes: v.optional(v.number()),
+  /** Minutes after the arrival window closes before a no-show can be declared. */
+  noShowAfterMinutes: v.optional(v.number()),
+  /** Hours the assigned-job link keeps working after the job's end time, for photos and completion. */
+  jobAccessGraceHours: v.optional(v.number()),
+  beforePhotosRequired: v.optional(v.number()),
+  afterPhotosRequired: v.optional(v.number()),
+  /** Text the before-photo link after check-in. */
+  sendBeforePhotoLink: v.optional(v.boolean()),
+});
+
+export const checkInValidator = v.object({
+  at: v.number(),
+  /** Where the phone said it was, when the cleaner allowed it. Absent means not given, not "at the property". */
+  lat: v.optional(v.number()),
+  lng: v.optional(v.number()),
+  accuracyM: v.optional(v.number()),
 });
 
 export default defineSchema({
@@ -93,6 +136,7 @@ export default defineSchema({
     /** Agents the owner has paused. Pausing all four pauses everything. */
     pausedAgents: v.array(agentValidator),
     dispatch: v.optional(dispatchSettingsValidator),
+    dispatchPolicy: v.optional(dispatchPolicyValidator),
     createdAt: v.number(),
   }),
 
@@ -184,6 +228,16 @@ export default defineSchema({
     endsAt: v.number(),
     status: jobStatusValidator,
     cancelReason: v.optional(v.string()),
+    /** How many cleaners the job needs. Absent means one. Accepted crew is counted from assignments, never stored. */
+    requiredCrew: v.optional(v.number()),
+    /** The cleaner may arrive any time from startsAt until this many minutes later. Absent means at startsAt. */
+    arrivalWindowMinutes: v.optional(v.number()),
+    /** The service must be finished by this time, for example a guest check-in. */
+    hardDeadlineAt: v.optional(v.number()),
+    /** What the crew needs to know that is not the scope. Shown to a cleaner only after they accept. */
+    instructions: v.optional(v.string()),
+    /** When the crew reported the service complete. It is a report: not a quality approval, not a payment. */
+    completionReportedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
@@ -204,7 +258,26 @@ export default defineSchema({
     respondedAt: v.optional(v.number()),
     endReason: v.optional(v.string()),
     /** Why a cancelled assignment ended. Only "released" counts against offering the same cleaner again. */
-    endCause: v.optional(v.union(v.literal("released"), v.literal("job_covered"), v.literal("job_cancelled"))),
+    endCause: v.optional(endCauseValidator),
+    role: v.optional(crewRoleValidator),
+    /** Why this offer was made: a first offer, the next cleaner after a no, or cover for a slot that lost its cleaner. */
+    offerKind: v.optional(v.union(v.literal("initial"), v.literal("replacement"), v.literal("backup"))),
+    coverageRequestId: v.optional(v.id("coverageRequests")),
+    // The day of service, for an accepted assignment. Each is a recorded fact with its own time.
+    checkIn: v.optional(checkInValidator),
+    /** The cleaner said they are running late. A communicated delay is not silence. */
+    late: v.optional(v.object({ reportedAt: v.number(), etaAt: v.number(), reason: v.optional(v.string()) })),
+    /** How far the no-check-in ladder has gone. Absent means it has not started. */
+    contact: v.optional(
+      v.object({
+        stage: v.union(v.literal("contacted"), v.literal("operator_alerted"), v.literal("no_show_suspected")),
+        contactedAt: v.number(),
+        alertedAt: v.optional(v.number()),
+        suspectedAt: v.optional(v.number()),
+      }),
+    ),
+    reminderQueuedAt: v.optional(v.number()),
+    completion: v.optional(v.object({ submittedAt: v.number(), incomplete: v.boolean(), note: v.optional(v.string()) })),
     /** The job's start when this was offered, so an answer about an old time is not held against a new one. */
     jobStartsAt: v.optional(v.number()),
   })
@@ -236,6 +309,12 @@ export default defineSchema({
     openQuestion: v.optional(v.string()),
     /** Set when done or cancelled. */
     outcome: v.optional(v.string()),
+    /** What started this work, in words. */
+    trigger: v.optional(v.string()),
+    /** What happens, and who is told, if the deadline passes. */
+    escalation: v.optional(v.string()),
+    /** Set when Dispatch handed this to another agent's queue. A person works it until that agent exists. */
+    handoffTo: v.optional(handoffValidator),
     createdAt: v.number(),
     closedAt: v.optional(v.number()),
   })
@@ -283,6 +362,169 @@ export default defineSchema({
     .index("by_company_status_decideBy", ["companyId", "status", "decideBy"])
     .index("by_company_task", ["companyId", "taskId"])
     .index("by_status_decideBy", ["status", "decideBy"]),
+
+  // ── Dispatch: messages, links, coverage and the service itself ─────────────────────────────────
+  /**
+   * One outbound text. The body is stored with the link left out ("{link}"), so no token is ever at rest.
+   * Delivery here is only what the provider reported. Nothing records "opened" or "read": nobody knows.
+   */
+  messages: defineTable({
+    companyId: v.id("companies"),
+    purpose: v.union(
+      v.literal("offer"),
+      v.literal("backup_offer"),
+      v.literal("assignment_confirmed"),
+      v.literal("reminder"),
+      v.literal("before_photos"),
+      v.literal("check_in_nudge"),
+      v.literal("offer_withdrawn"),
+      v.literal("assignment_ended"),
+      v.literal("operator_alert"),
+    ),
+    cleanerId: v.optional(v.id("cleaners")),
+    jobId: v.optional(v.id("jobs")),
+    assignmentId: v.optional(v.id("assignments")),
+    linkId: v.optional(v.id("actionLinks")),
+    /** Where on the cleaner pages the link opens, for example "/delay". */
+    linkPath: v.optional(v.string()),
+    to: v.optional(v.string()),
+    body: v.string(),
+    /** Names this one message, so a retry or a repeated event never queues it twice. */
+    dedupeKey: v.string(),
+    status: messageStatusValidator,
+    attempts: v.number(),
+    provider: v.optional(v.string()),
+    providerMessageId: v.optional(v.string()),
+    /** Why it failed or was not sent, in words. Never a provider's raw response. */
+    problem: v.optional(v.string()),
+    queuedAt: v.number(),
+    attemptedAt: v.optional(v.number()),
+    sentAt: v.optional(v.number()),
+    deliveredAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+  })
+    .index("by_company_dedupe", ["companyId", "dedupeKey"])
+    .index("by_company_assignment", ["companyId", "assignmentId"])
+    .index("by_company_job", ["companyId", "jobId"])
+    .index("by_company_queued", ["companyId", "queuedAt"])
+    .index("by_provider_message", ["provider", "providerMessageId"])
+    .index("by_status_attempted", ["status", "attemptedAt"]),
+
+  /** A provider's delivery report, kept by its id so the same report delivered twice changes nothing twice. */
+  providerReceipts: defineTable({ provider: v.string(), eventId: v.string(), receivedAt: v.number() }).index("by_provider_event", ["provider", "eventId"]),
+
+  /**
+   * A link that lets one cleaner do named things for one assignment without signing in. The token is
+   * never stored: it is the public id plus a signature made with the deployment's secret.
+   */
+  actionLinks: defineTable({
+    companyId: v.id("companies"),
+    publicId: v.string(),
+    purpose: v.union(v.literal("offer"), v.literal("job")),
+    cleanerId: v.id("cleaners"),
+    jobId: v.id("jobs"),
+    assignmentId: v.id("assignments"),
+    /** The only actions this link may perform. */
+    allowed: v.array(v.string()),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+    revokeReason: v.optional(v.string()),
+    issuedAt: v.number(),
+    /** The last time an action was carried out through this link. Page views are not recorded. */
+    lastActionAt: v.optional(v.number()),
+    lastAction: v.optional(v.string()),
+  })
+    .index("by_publicId", ["publicId"])
+    .index("by_company_assignment", ["companyId", "assignmentId"])
+    .index("by_company_job", ["companyId", "jobId"])
+    .index("by_company_issued", ["companyId", "issuedAt"]),
+
+  coverageRequests: defineTable({
+    companyId: v.id("companies"),
+    jobId: v.id("jobs"),
+    /** The assignment whose slot is open again. */
+    fromAssignmentId: v.id("assignments"),
+    cause: coverageCauseValidator,
+    detail: v.optional(v.string()),
+    status: coverageStatusValidator,
+    openedAt: v.number(),
+    /** When a person has to have decided if nobody can cover. */
+    decideBy: v.number(),
+    filledByAssignmentId: v.optional(v.id("assignments")),
+    resolvedAt: v.optional(v.number()),
+    /** What was tried and what is left, written when it becomes unresolved. */
+    summary: v.optional(v.string()),
+  })
+    .index("by_company_job", ["companyId", "jobId"])
+    .index("by_company_status", ["companyId", "status", "openedAt"]),
+
+  /** The job's checklist. The whole crew works the same items; each records who did it. */
+  checklistItems: defineTable({
+    companyId: v.id("companies"),
+    jobId: v.id("jobs"),
+    order: v.number(),
+    section: v.optional(v.string()),
+    label: v.string(),
+    requiresPhoto: v.boolean(),
+    state: v.union(v.literal("pending"), v.literal("done"), v.literal("skipped")),
+    skipReason: v.optional(v.string()),
+    byCleanerId: v.optional(v.id("cleaners")),
+    at: v.optional(v.number()),
+  }).index("by_company_job", ["companyId", "jobId", "order"]),
+
+  /** A photo a cleaner uploaded for a job. */
+  evidence: defineTable({
+    companyId: v.id("companies"),
+    jobId: v.id("jobs"),
+    assignmentId: v.id("assignments"),
+    cleanerId: v.id("cleaners"),
+    kind: v.union(v.literal("before"), v.literal("after"), v.literal("item"), v.literal("issue")),
+    checklistItemId: v.optional(v.id("checklistItems")),
+    storageId: v.id("_storage"),
+    /** Chosen by the phone for each photo, so an upload retried on a bad connection is kept once. */
+    clientKey: v.string(),
+    uploadedAt: v.number(),
+  })
+    .index("by_company_job", ["companyId", "jobId"])
+    .index("by_company_assignment_key", ["companyId", "assignmentId", "clientKey"]),
+
+  /**
+   * Something a cleaner reported from the job: an unexpected condition, work left incomplete, or a
+   * request to add to the scope. A request is only a request. Nothing here charges a customer.
+   */
+  jobReports: defineTable({
+    companyId: v.id("companies"),
+    jobId: v.id("jobs"),
+    assignmentId: v.id("assignments"),
+    cleanerId: v.id("cleaners"),
+    kind: v.union(v.literal("condition"), v.literal("addon_request"), v.literal("incomplete")),
+    text: v.string(),
+    status: v.union(v.literal("awaiting_decision"), v.literal("acknowledged"), v.literal("approved"), v.literal("declined")),
+    decidedBy: v.optional(v.id("members")),
+    decidedAt: v.optional(v.number()),
+    decisionNote: v.optional(v.string()),
+    taskId: v.optional(v.id("tasks")),
+    createdAt: v.number(),
+  }).index("by_company_job", ["companyId", "jobId"]),
+
+  /** One use of one Dispatch tool: who or what allowed it, what went in, what came out, what it touched. */
+  toolRuns: defineTable({
+    companyId: v.id("companies"),
+    tool: v.string(),
+    /** Names this one use, so the same call made twice is carried out once. */
+    idempotencyKey: v.string(),
+    actor: actorValidator,
+    /** The permission it ran under and the level at that moment, or "read" for a tool that changes nothing. */
+    authorization: v.string(),
+    input: v.string(),
+    outcome: v.union(v.literal("done"), v.literal("proposed"), v.literal("refused")),
+    result: v.string(),
+    jobId: v.optional(v.id("jobs")),
+    assignmentId: v.optional(v.id("assignments")),
+    at: v.number(),
+  })
+    .index("by_company_key", ["companyId", "idempotencyKey"])
+    .index("by_company_job", ["companyId", "jobId", "at"]),
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

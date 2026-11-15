@@ -9,6 +9,8 @@ import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, type MemberAccess } from "./lib/builders";
+import { endAssignment } from "./lib/dispatch/assignmentState";
+import { requiredCrew, staffing } from "./lib/dispatch/crew";
 import { afterReschedule, coverJob } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
@@ -18,8 +20,8 @@ import { cents, instant, tags, text } from "./lib/text";
 export type Coverage = "covered" | "offered" | "uncovered";
 
 /** Covered means a cleaner accepted. An offer that is still out is not coverage. */
-export function coverageOf(assignments: Pick<Doc<"assignments">, "status">[]): Coverage {
-  if (assignments.some((row) => row.status === "accepted")) return "covered";
+export function coverageOf(assignments: Pick<Doc<"assignments">, "status">[], job: Pick<Doc<"jobs">, "requiredCrew"> = {}): Coverage {
+  if (staffing(job, assignments).open === 0) return "covered";
   if (assignments.some((row) => row.status === "offered")) return "offered";
   return "uncovered";
 }
@@ -53,7 +55,7 @@ export const list = companyQuery({
           .withIndex("by_company_start", (q) => q.eq("companyId", ctx.companyId).gte("startsAt", args.from).lt("startsAt", args.to))
           .take(200);
     const out = [];
-    for (const job of rows) out.push({ ...job, coverage: coverageOf(await assignmentsOf(ctx, job)) });
+    for (const job of rows) out.push({ ...job, coverage: coverageOf(await assignmentsOf(ctx, job), job), requiredCrew: requiredCrew(job) });
     return out;
   },
 });
@@ -63,7 +65,7 @@ export const get = companyQuery({
   handler: async (ctx, args) => {
     const job = await owned(ctx, args.jobId);
     const assignments = await assignmentsOf(ctx, job);
-    return { job, assignments, coverage: coverageOf(assignments) };
+    return { job, assignments, coverage: coverageOf(assignments, job), staffing: staffing(job, assignments) };
   },
 });
 
@@ -77,9 +79,17 @@ export const create = companyMutation({
     priceCents: v.optional(v.number()),
     startsAt: v.number(),
     endsAt: v.number(),
+    requiredCrew: v.optional(v.number()),
+    arrivalWindowMinutes: v.optional(v.number()),
+    hardDeadlineAt: v.optional(v.number()),
+    instructions: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const customer = await owned(ctx, args.customerId);
+    const crew = args.requiredCrew ?? 1;
+    if (!Number.isInteger(crew) || crew < 1 || crew > 12) throw userError("A job needs a whole number of cleaners, from 1 to 12.");
+    const arrival = args.arrivalWindowMinutes ?? 0;
+    if (!Number.isInteger(arrival) || arrival < 0 || arrival > 12 * 60) throw userError("The arrival window must be a whole number of minutes, up to 12 hours.");
     const property = await owned(ctx, args.propertyId);
     if (property.customerId !== customer._id) throw userError("That property belongs to a different customer.");
     const jobId = await ctx.db.insert("jobs", {
@@ -92,6 +102,10 @@ export const create = companyMutation({
       priceCents: args.priceCents === undefined ? undefined : cents(args.priceCents, "The price"),
       ...span(args.startsAt, args.endsAt),
       status: "scheduled",
+      ...(crew > 1 ? { requiredCrew: crew } : {}),
+      ...(arrival > 0 ? { arrivalWindowMinutes: arrival } : {}),
+      ...(args.hardDeadlineAt !== undefined ? { hardDeadlineAt: instant(args.hardDeadlineAt, "The deadline") } : {}),
+      ...(args.instructions?.trim() ? { instructions: text(args.instructions, "Instructions", 4000) } : {}),
       createdAt: Date.now(),
     });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: byMember(ctx), subject: { table: "jobs", id: jobId } });
@@ -132,7 +146,9 @@ export const start = companyMutation({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
     const job = await owned(ctx, args.jobId);
-    if (coverageOf(await assignmentsOf(ctx, job)) !== "covered") throw userError("No cleaner has accepted this job yet, so it cannot start.");
+    if (coverageOf(await assignmentsOf(ctx, job), job) !== "covered") {
+      throw userError(requiredCrew(job) === 1 ? "No cleaner has accepted this job yet, so it cannot start." : "Not every place on this job has an accepted cleaner yet, so it cannot start.");
+    }
     await change(ctx, job, "in_progress");
     return null;
   },
@@ -158,8 +174,7 @@ export const cancel = companyMutation({
     await ctx.db.patch(job._id, { cancelReason: reason });
     for (const assignment of await assignmentsOf(ctx, job)) {
       if (!ACTIVE_ASSIGNMENT.includes(assignment.status)) continue;
-      await ctx.db.patch(assignment._id, { status: "cancelled", endReason: "The job was cancelled.", endCause: "job_cancelled" });
-      await recordEvent(ctx, { companyId: ctx.companyId, type: "assignment.cancelled", actor: byMember(ctx), subject: { table: "assignments", id: assignment._id }, data: { from: assignment.status, cause: "job_cancelled" } });
+      await endAssignment(ctx, assignment, "cancelled", byMember(ctx), { endReason: "The job was cancelled.", endCause: "job_cancelled", data: { cause: "job_cancelled" } });
     }
     await coverJob(ctx, job._id);
     return null;

@@ -27,9 +27,15 @@ export async function jobFacts(ctx: Db, company: Doc<"companies">, job: Doc<"job
 }
 
 /** The times this cleaner is already holding: every other job they have an offer on or have accepted. */
-export async function heldSpans(ctx: Db, companyId: Id<"companies">, cleanerId: Id<"cleaners">, exceptJob: Id<"jobs">): Promise<Span[]> {
+export async function heldSpans(
+  ctx: Db,
+  companyId: Id<"companies">,
+  cleanerId: Id<"cleaners">,
+  exceptJob: Id<"jobs">,
+  statuses: readonly ("offered" | "accepted")[] = ["offered", "accepted"],
+): Promise<Span[]> {
   const spans: Span[] = [];
-  for (const status of ["offered", "accepted"] as const) {
+  for (const status of statuses) {
     const rows = await ctx.db
       .query("assignments")
       .withIndex("by_company_cleaner_status", (q) => q.eq("companyId", companyId).eq("cleanerId", cleanerId).eq("status", status))
@@ -62,6 +68,9 @@ export async function jobHistory(ctx: Db, job: Doc<"jobs">, assignments: Doc<"as
     if (row.status === "declined") ended.set(row.cleanerId, "declined");
     else if (row.status === "expired") ended.set(row.cleanerId, "expired");
     else if (row.status === "cancelled" && row.endCause === "released") ended.set(row.cleanerId, "released");
+    else if (row.status === "cancelled" && row.endCause === "dropped") ended.set(row.cleanerId, "dropped");
+    else if (row.status === "cancelled" && row.endCause === "no_show") ended.set(row.cleanerId, "no_show");
+    else if (row.status === "cancelled" && row.endCause === "undelivered") ended.set(row.cleanerId, "unreachable");
   }
 
   const prior = new Map<string, number>();

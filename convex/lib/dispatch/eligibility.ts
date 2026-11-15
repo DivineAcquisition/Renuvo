@@ -21,7 +21,7 @@ export type JobFacts = {
 };
 
 /** Why this cleaner was already ruled out for this visit at this time. */
-export type Ended = "declined" | "expired" | "released" | "skipped";
+export type Ended = "declined" | "expired" | "released" | "skipped" | "dropped" | "no_show" | "unreachable";
 
 export type CleanerFacts = {
   id: string;
@@ -62,6 +62,9 @@ const ENDED_WORDS: Record<Ended, string> = {
   expired: "did not answer an earlier offer for this visit",
   released: "was released from this visit",
   skipped: "was passed over for this visit by a person",
+  dropped: "said they cannot attend this visit",
+  no_show: "did not arrive for this visit",
+  unreachable: "could not be reached: the offer message for this visit was not delivered",
 };
 
 /** The first rule this cleaner fails for this job, or null when they can be asked. */

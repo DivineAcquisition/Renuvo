@@ -38,7 +38,12 @@ const action = (key: string, agent: Agent, label: string, standard: Level, optio
 });
 
 export const ACTIONS: readonly ActionDef[] = [
-  action("dispatch.request_acceptance", "dispatch", "Request acceptance and re-offer a visit", "execute"),
+  action("dispatch.request_acceptance", "dispatch", "Send the first offers for a visit", "execute"),
+  action("dispatch.send_replacement_offer", "dispatch", "Offer a visit to the next cleaner after a no or no answer", "execute"),
+  action("dispatch.run_backup_coverage", "dispatch", "Find cover when a cleaner drops out or does not arrive", "execute_and_report"),
+  action("dispatch.broadcast_offer", "dispatch", "Ask several cleaners at once for one opening", "propose"),
+  action("dispatch.declare_no_show", "dispatch", "Declare a no-show once the contact steps have run", "propose", { outsider: false }),
+  action("dispatch.request_urgent_hire", "dispatch", "Ask Recruiter for an urgent hire", "execute", { outsider: false }),
   action("dispatch.send_reminder", "dispatch", "Send reminders and confirmations", "execute"),
   action("dispatch.notify_running_late", "dispatch", "Tell a customer a visit is running late", "execute_and_report"),
   action("dispatch.close_visit", "dispatch", "Close a visit on clean evidence", "execute_and_report", { outsider: false }),
