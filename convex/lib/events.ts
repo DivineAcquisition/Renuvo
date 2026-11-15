@@ -1,0 +1,53 @@
+/**
+ * The append-only event log (brief, section 9). This is the only place that writes an event, and nothing
+ * changes or removes one; convex/guard.test.ts checks both. Rows hold ids, kinds and small facts, never
+ * message text.
+ */
+import { v } from "convex/values";
+
+import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
+import { agentValidator } from "./statuses";
+
+export const actorValidator = v.union(
+  v.object({ kind: v.literal("member"), memberId: v.id("members") }),
+  v.object({ kind: v.literal("agent"), agent: agentValidator }),
+  v.object({ kind: v.literal("system") }),
+);
+export type Actor = typeof actorValidator.type;
+
+export const subjectValidator = v.union(
+  v.object({ table: v.literal("companies"), id: v.id("companies") }),
+  v.object({ table: v.literal("members"), id: v.id("members") }),
+  v.object({ table: v.literal("customers"), id: v.id("customers") }),
+  v.object({ table: v.literal("properties"), id: v.id("properties") }),
+  v.object({ table: v.literal("cleaners"), id: v.id("cleaners") }),
+  v.object({ table: v.literal("jobs"), id: v.id("jobs") }),
+  v.object({ table: v.literal("assignments"), id: v.id("assignments") }),
+  v.object({ table: v.literal("tasks"), id: v.id("tasks") }),
+  v.object({ table: v.literal("approvals"), id: v.id("approvals") }),
+  v.object({ table: v.literal("permissions"), id: v.id("permissions") }),
+);
+export type Subject = typeof subjectValidator.type;
+
+export const eventDataValidator = v.record(v.string(), v.union(v.string(), v.number(), v.boolean(), v.null()));
+export type EventData = typeof eventDataValidator.type;
+
+export function byMember(ctx: { member: Doc<"members"> }): Actor {
+  return { kind: "member", memberId: ctx.member._id };
+}
+
+export async function recordEvent(
+  ctx: MutationCtx,
+  event: { companyId: Id<"companies">; type: string; actor: Actor; subject: Subject; data?: EventData },
+): Promise<Id<"events">> {
+  return ctx.db.insert("events", {
+    companyId: event.companyId,
+    type: event.type,
+    actor: event.actor,
+    subject: event.subject,
+    subjectId: event.subject.id,
+    data: event.data,
+    at: Date.now(),
+  });
+}
