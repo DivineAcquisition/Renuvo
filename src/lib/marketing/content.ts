@@ -218,3 +218,62 @@ export const FOOTER = {
   roles: ["Sales", "Recruiting", "Dispatch", "Retention"],
   note: "Selestial is in development. Product screens on this page are examples of the design, with made-up names and figures.",
 } as const;
+
+/** Small pictures inside each agent card. Every name, price and time is made up. */
+export const AGENT_VISUALS = {
+  sales: {
+    kind: "chat",
+    title: "New inquiry",
+    rows: [
+      { who: "them", text: "3 bed, 2 bath, and a very dirty oven. Friday?" },
+      { who: "agent", text: "Quote from your pricing rules: $285, oven included." },
+      { who: "agent", text: "Friday 9:00 has confirmed capacity." },
+      { who: "state", text: "Waiting on reply · follow-up set for tomorrow" },
+    ],
+  },
+  recruiter: {
+    kind: "stages",
+    title: "Applicant: Dana K.",
+    rows: [
+      { text: "Application received" },
+      { text: "Meets your requirements" },
+      { text: "Interview coordinated" },
+      { text: "Onboarding: 4 of 6 steps" },
+      { text: "Sent to you for approval" },
+    ],
+  },
+  dispatch: {
+    kind: "rank",
+    title: "Thursday 9:00 · needs a cleaner",
+    rows: [
+      { text: "Maria R.", detail: "Usual cleaner · 4 miles", state: "Accepted" },
+      { text: "Priya S.", detail: "Available · 6 miles", state: "Next" },
+      { text: "Jo T.", detail: "Not enough time between jobs", state: "Ruled out" },
+    ],
+  },
+  retention: {
+    kind: "stages",
+    title: "After the visit",
+    rows: [
+      { text: "Visit completed and verified" },
+      { text: "Feedback requested" },
+      { text: "Concern raised: missed oven" },
+      { text: "Re-clean agreed, issue closed" },
+      { text: "Recurring plan offered" },
+    ],
+  },
+} as const;
+
+/** The philosophy picture: one task followed until it reaches a clear state. */
+export const TASK_TRAIL = {
+  title: "One task, followed through",
+  task: "Quote for a 3-bedroom home",
+  steps: [
+    { label: "Quote sent", note: "An action, not a result." },
+    { label: "Waiting on reply", note: "Follow-up set for Thursday." },
+    { label: "Followed up", note: "No answer by the deadline." },
+    { label: "Customer replied", note: "Asked for a later start." },
+    { label: "Booked", note: "Capacity confirmed. Task closed." },
+  ],
+  fields: { owner: "Owner", ownerValue: "Sales", next: "Next action", deadline: "Deadline", closed: "Closed" },
+} as const;

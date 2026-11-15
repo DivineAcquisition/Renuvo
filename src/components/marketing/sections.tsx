@@ -1,5 +1,6 @@
 import { ArrowRight, Hand, ListChecks, ScrollTextIcon, ShieldCheck, type LucideIcon } from "@/components/icons";
 import { AgentMark } from "@/components/marketing/agent-mark";
+import { AgentVisual } from "@/components/marketing/agent-visuals";
 import { SpotlightCard } from "@/components/marketing/saas-frame";
 import { AGENTS, CONTROL, PROBLEM } from "@/lib/marketing/content";
 
@@ -30,6 +31,9 @@ export function AgentsGrid() {
             </div>
             <h3 className="mt-5 font-heading text-xl tracking-tight text-strong sm:text-2xl">{agent.headline}</h3>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-[15px]">{agent.body}</p>
+            <div className="mt-5">
+              <AgentVisual id={agent.id} />
+            </div>
             <div className="mt-auto pt-6">
               <p className="flex items-start gap-2 border-t border-border pt-4 text-sm font-medium text-strong">
                 <ArrowRight className="mt-0.5 size-4 shrink-0 text-brand-300" aria-hidden />

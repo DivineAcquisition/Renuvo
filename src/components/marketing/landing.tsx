@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { TaskTrail } from "@/components/marketing/agent-visuals";
 import { AutonomyDial } from "@/components/marketing/autonomy-dial";
 import { EarlyAccessLink, outlineCta } from "@/components/marketing/chrome";
 import { CoordinationMap } from "@/components/marketing/coordination-map";
@@ -80,7 +81,7 @@ export function LandingPage() {
       </Section>
 
       <section id={PHILOSOPHY.id} className={sectionFrame}>
-        <BlurFade inView offset={12} blur="2px" duration={0.55} className={cn(marketingShell, "max-w-3xl")}>
+        <BlurFade inView offset={12} blur="2px" duration={0.55} className={cn(marketingShell, "max-w-4xl")}>
           <p className={cn(sectionLabel, "mb-4")}>{PHILOSOPHY.eyebrow}</p>
           <h2 className={marketingSectionTitle}>{PHILOSOPHY.headline}</h2>
           <div className="mt-8 space-y-5 text-base leading-relaxed text-muted-foreground sm:text-lg">
@@ -89,6 +90,9 @@ export function LandingPage() {
             ))}
           </div>
           <p className="mt-10 border-l-2 border-brand-500 pl-5 font-heading text-2xl leading-snug tracking-tight text-strong sm:text-3xl">{PHILOSOPHY.closing}</p>
+          <div className="mt-12">
+            <TaskTrail />
+          </div>
         </BlurFade>
       </section>
 
