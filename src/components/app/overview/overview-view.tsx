@@ -82,7 +82,7 @@ export function OverviewView({
               </h2>
             </div>
             {decisions && decisions.length > MAX_DECISIONS ? (
-              <Link href="/app/decisions" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 underline-offset-4 hover:underline">
+              <Link href="/app/decisions" className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
                 See all {decisions.length}
                 <ArrowRight className="size-3" aria-hidden />
               </Link>
@@ -112,7 +112,7 @@ export function OverviewView({
           </div>
         </section>
 
-        <div id="schedule" className="order-2 scroll-mt-20 xl:order-1">
+        <div id="schedule" className="order-2 grid scroll-mt-20 gap-5 xl:order-1">
           <Panel title="Service schedule" action={<ViewSwitch view={view} onChange={onView} />} flush>
             {schedule ? (
               <ScheduleTable
@@ -122,7 +122,7 @@ export function OverviewView({
                 timezone={timezone}
                 onOpen={onOpen}
                 emptyHint={
-                  <Link href="/app/schedule" className="font-medium text-brand-700 underline-offset-4 hover:underline">
+                  <Link href="/app/schedule" className="font-medium text-brand-300 underline-offset-4 hover:underline">
                     Add a visit on the Schedule page
                   </Link>
                 }
@@ -134,6 +134,9 @@ export function OverviewView({
                 <Skeleton className="h-10" />
               </div>
             )}
+          </Panel>
+          <Panel title="Live activity" action={<span className="flex items-center gap-1.5 text-xs text-muted-foreground"><span className="live-pulse size-2 rounded-full bg-success" aria-hidden />Every action, as it happens</span>}>
+            {activity ? <ActivityFeed events={activity} now={now} timezone={timezone} onOpen={onOpen} /> : <Skeleton className="h-40" />}
           </Panel>
         </div>
       </div>
@@ -148,26 +151,22 @@ export function OverviewView({
         {team ? <TeamAtWork departments={team} now={now} timezone={timezone} onOpen={onOpen} /> : <Skeleton className="h-44 rounded-2xl" />}
       </section>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <section aria-labelledby="week-title">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <p className={eyebrow}>Is the business improving</p>
-              <h2 id="week-title" className="mt-1 font-heading text-xl tracking-tight text-strong">
-                This week
-              </h2>
-            </div>
-            <Link href="/app/insights" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 underline-offset-4 hover:underline">
-              Open Insights
-              <ArrowRight className="size-3" aria-hidden />
-            </Link>
+      <section aria-labelledby="week-title">
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div>
+            <p className={eyebrow}>Is the business improving</p>
+            <h2 id="week-title" className="mt-1 font-heading text-xl tracking-tight text-strong">
+              This week
+            </h2>
           </div>
-          {week ? <WeekMeasures measures={week} compact /> : <Skeleton className="h-28 rounded-2xl" />}
-          <p className="mt-2 text-xs text-muted-foreground">The last seven days against the seven before. Booked revenue, completed revenue and cash collected are kept apart; only completed revenue can be measured so far.</p>
-        </section>
-
-        <Panel title="Live activity">{activity ? <ActivityFeed events={activity} now={now} timezone={timezone} onOpen={onOpen} /> : <Skeleton className="h-40" />}</Panel>
-      </div>
+          <Link href="/app/insights" className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
+            Open Insights
+            <ArrowRight className="size-3" aria-hidden />
+          </Link>
+        </div>
+        {week ? <WeekMeasures measures={week} /> : <Skeleton className="h-28 rounded-2xl" />}
+        <p className="mt-2 text-xs text-muted-foreground">The last seven days against the seven before. Booked revenue, completed revenue and cash collected are kept apart; only completed revenue can be measured so far.</p>
+      </section>
     </div>
   );
 }

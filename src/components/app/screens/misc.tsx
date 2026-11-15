@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
+import { DispatchSettings } from "@/components/app/dispatch-view";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { WeekMeasures } from "@/components/app/overview/week-measures";
 import { NotBuilt, PageHeader, Panel } from "@/components/app/shell";
@@ -167,6 +168,7 @@ export function SettingsScreen({ extra }: { extra?: React.ReactNode }) {
       <div className="grid gap-5">
         <CompanyDetails />
         <People />
+        <DispatchSettings />
         {extra}
         <NotBuilt title="Services, pricing, coverage and policies are not built yet" body="Before Sales and Retention act, the company's rules are saved here as values the system can enforce: services and durations, pricing and discount limits, service areas and hours, cancellation and refund policies." />
       </div>

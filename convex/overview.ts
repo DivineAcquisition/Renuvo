@@ -84,15 +84,14 @@ async function openDecisions(ctx: Ctx) {
     .query("tasks")
     .withIndex("by_company_status_due", (q) => q.eq("companyId", ctx.companyId).eq("status", "needs_decision"))
     .take(200);
+  const pending = await ctx.db
+    .query("approvals")
+    .withIndex("by_company_status_decideBy", (q) => q.eq("companyId", ctx.companyId).eq("status", "pending"))
+    .take(200);
+  // A task that is only waiting on one of these approvals is the same decision, shown once: as the approval.
+  const covered = new Set(pending.map((row) => row.taskId).filter(Boolean));
   // Approvals belong to Owners and Managers. Office sees the tasks handed to a person, not the approval queue.
-  const approvals = isManager(ctx.role)
-    ? await ctx.db
-        .query("approvals")
-        .withIndex("by_company_status_decideBy", (q) => q.eq("companyId", ctx.companyId).eq("status", "pending"))
-        .take(200)
-    : [];
-  // A task that is only waiting on one of these approvals is the same decision, shown once.
-  const covered = new Set(approvals.map((row) => row.taskId).filter(Boolean));
+  const approvals = isManager(ctx.role) ? pending : [];
   return { approvals, tasks: tasks.filter((task) => !covered.has(task._id)) };
 }
 

@@ -155,7 +155,7 @@ export function TeamScreen() {
                     <h2 className="font-heading text-lg tracking-tight text-strong">{agent.name}</h2>
                     <p className="text-sm text-muted-foreground">
                       {STATE[agent.state].label} ·{" "}
-                      <Link href={departmentPath(agent.department.id)} className="font-medium text-brand-700 underline-offset-4 hover:underline">
+                      <Link href={departmentPath(agent.department.id)} className="font-medium text-brand-300 underline-offset-4 hover:underline">
                         {agent.department.name}
                       </Link>
                     </p>

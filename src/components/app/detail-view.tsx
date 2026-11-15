@@ -73,7 +73,7 @@ export function DetailView({ detail, now, timezone, onOpen, actions }: { detail:
                 <dt className="text-muted-foreground">{fact.label}</dt>
                 <dd className={cn("min-w-0 break-words", fact.missing ? "text-muted-foreground italic" : "text-strong")}>
                   {ref ? (
-                    <button type="button" onClick={() => onOpen(ref)} className="text-left font-medium text-brand-700 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500">
+                    <button type="button" onClick={() => onOpen(ref)} className="text-left font-medium text-brand-300 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500">
                       {fact.value}
                     </button>
                   ) : (

@@ -21,7 +21,7 @@ export function NotSetUp({ title, body, items }: { title: string; body: string; 
             ))}
           </ul>
         ) : null}
-        <Link href="/" className="mt-6 inline-block text-sm font-medium text-brand-700 underline-offset-4 hover:underline">
+        <Link href="/" className="mt-6 inline-block text-sm font-medium text-brand-300 underline-offset-4 hover:underline">
           Back to selestial.io
         </Link>
       </div>

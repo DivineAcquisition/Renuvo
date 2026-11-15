@@ -56,8 +56,8 @@ export function AgentWork({ agent, now, timezone, onOpen, limit = 3 }: { agent: 
             {agent.lines.slice(0, limit).map((line) => (
               <li key={line.taskId}>
                 <button type="button" onClick={() => onOpen({ kind: "task", id: line.taskId })} className="-mx-1.5 block w-[calc(100%+0.75rem)] rounded-md px-1.5 py-1 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand-500">
-                  <span className="block truncate text-sm text-strong">{line.title}</span>
-                  <span className={cn("block truncate text-xs", line.status === "needs_decision" ? "text-warning-foreground" : "text-muted-foreground")}>{workLine(line, now, timezone)}</span>
+                  <span className="block text-sm text-strong">{line.title}</span>
+                  <span className={cn("block text-xs leading-relaxed", line.status === "needs_decision" ? "text-warning-foreground" : "text-muted-foreground")}>{workLine(line, now, timezone)}</span>
                 </button>
               </li>
             ))}
@@ -84,7 +84,7 @@ export function TeamAtWork({ departments, now, timezone, onOpen }: { departments
               <AgentWork key={agent.agent} agent={agent} now={now} timezone={timezone} onOpen={onOpen} />
             ))}
           </div>
-          <Link href={departmentPath(department.id)} className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-brand-700 underline-offset-4 hover:underline">
+          <Link href={departmentPath(department.id)} className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
             Open {department.name}
             <ArrowRight className="size-3" aria-hidden />
           </Link>

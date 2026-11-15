@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { canManage, useCompany } from "@/components/app/company";
+import { DispatchView } from "@/components/app/dispatch-view";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { HoldButton } from "@/components/app/hold-button";
 import { Button } from "@/components/ui/button";
@@ -150,13 +151,14 @@ function JobActions({ detail, now }: { detail: Detail; now: number }) {
           </Button>
         </div>
       ) : null}
+      {job.status === "scheduled" && !accepted ? <DispatchView jobId={jobId} now={now} canOffer /> : null}
       {job.status === "scheduled" && !accepted ? (
         offering ? (
           <OfferForm jobId={jobId} now={now} />
         ) : (
           <div>
-            <Button variant={offered.length > 0 ? "outline" : "primary"} size="sm" onClick={() => setOffering(true)}>
-              Offer this visit to a cleaner
+            <Button variant="ghost" size="sm" onClick={() => setOffering(true)}>
+              Offer to someone else, with pay I enter
             </Button>
           </div>
         )
@@ -168,7 +170,7 @@ function JobActions({ detail, now }: { detail: Detail; now: number }) {
   );
 }
 
-function ApprovalActions({ detail }: { detail: Detail }) {
+function ApprovalActions({ detail, now }: { detail: Detail; now: number }) {
   const { companyId, role } = useCompany();
   const decide = useMutation(api.approvals.decide);
   const { busy, error, run } = useRun();
@@ -185,8 +187,22 @@ function ApprovalActions({ detail }: { detail: Detail }) {
       <div className="flex flex-wrap items-start gap-2">
         <HoldButton label="Hold to approve" holdingLabel="Keep holding" busy={busy} onConfirm={() => void run(() => decide({ companyId, approvalId, decision: "approved" }))} />
         <WithWords label="Handle myself" placeholder="What will you do instead?" confirm="I will handle it" onSubmit={(note) => decide({ companyId, approvalId, decision: "changed", note })} />
-        <WithWords label="Skip this proposal" placeholder="Why skip it? (optional)" confirm="Skip" required={false} variant="ghost" onSubmit={(note) => decide({ companyId, approvalId, decision: "skipped", note: note || undefined })} />
+        <WithWords
+          label={approval.jobId ? "Skip this cleaner, try the next" : "Skip this proposal"}
+          placeholder="Why skip it? (optional)"
+          confirm="Skip"
+          required={false}
+          variant="ghost"
+          onSubmit={(note) => decide({ companyId, approvalId, decision: "skipped", note: note || undefined })}
+        />
       </div>
+      <p className="text-xs leading-relaxed text-muted-foreground">Handling it yourself keeps the visit with you until you hand it back. Skipping tells the agent not to ask this cleaner for this visit and to try the next one.</p>
+      {approval.jobId ? (
+        <div className="border-t border-border pt-3">
+          <p className="mb-2 text-sm font-medium text-strong">Alternatives</p>
+          <DispatchView jobId={approval.jobId} now={now} canOffer={false} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -256,7 +272,7 @@ function TaskActions({ detail, timezone }: { detail: Detail; timezone: string })
 /** The ways a person can step in, for whatever the panel is showing. */
 export function DetailActions({ detail, now, timezone }: { detail: Detail; now: number; timezone: string }) {
   if (detail.job) return <JobActions detail={detail} now={now} />;
-  if (detail.approval) return <ApprovalActions detail={detail} />;
+  if (detail.approval) return <ApprovalActions detail={detail} now={now} />;
   if (detail.task) return <TaskActions detail={detail} timezone={timezone} />;
   return null;
 }

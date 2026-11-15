@@ -71,11 +71,11 @@ export function HoldButton({ label, holdingLabel, onConfirm, disabled, busy, cla
       onBlur={stop}
       onContextMenu={(event) => event.preventDefault()}
       className={cn(
-        "relative inline-flex h-9 touch-none items-center justify-center gap-2 overflow-hidden rounded-lg border border-brand-600/60 bg-brand-500 px-4 text-sm font-semibold text-brand-950 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-60",
+        "relative inline-flex h-9 touch-none items-center justify-center gap-2 overflow-hidden rounded-lg border border-brand-400/60 bg-brand-500 px-4 text-sm font-semibold text-brand-50 select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-60",
         className,
       )}
     >
-      <span aria-hidden className="absolute inset-y-0 left-0 bg-brand-700/40" style={{ width: `${progress * 100}%` }} />
+      <span aria-hidden className="absolute inset-y-0 left-0 bg-brand-300/40" style={{ width: `${progress * 100}%` }} />
       <span className="relative inline-flex items-center gap-2">
         {busy || progress > 0 ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden /> : <Hand className="size-4" aria-hidden />}
         {progress > 0 ? holdingLabel : label}

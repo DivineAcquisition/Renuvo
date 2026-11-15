@@ -183,7 +183,7 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
         </Field>
       </div>
       <label className="flex items-start gap-2 text-sm text-strong">
-        <input type="checkbox" checked={ready} onChange={(event) => setReady(event.target.checked)} className="mt-1 size-4 accent-[var(--color-brand-600)]" />
+        <input type="checkbox" checked={ready} onChange={(event) => setReady(event.target.checked)} className="mt-1 size-4 accent-[var(--color-brand-400)]" />
         <span>
           Ready for work now
           <span className="block text-xs text-muted-foreground">Only a cleaner a person marked ready is offered visits.</span>

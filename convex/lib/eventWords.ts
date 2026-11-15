@@ -60,7 +60,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
       ref = { kind: "job", id: subject.id };
       const label = await visit(subject.id);
       text =
-        { created: `scheduled ${label}`, rescheduled: `moved ${label}`, in_progress: `started ${label}`, completed: `marked ${label} complete`, cancelled: `cancelled ${label}` }[what] ?? null;
+        { created: `scheduled ${label}`, rescheduled: `moved ${label}`, in_progress: `started ${label}`, completed: `marked ${label} complete`, cancelled: `cancelled ${label}`, taken_over: `took ${label} over from Dispatch`, handed_back: `handed ${label} back to Dispatch` }[what] ?? null;
     } else if (subject.table === "assignments") {
       const assignment = await doc(subject.id);
       if (assignment) {
@@ -70,6 +70,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
         text =
           {
             offered: `offered ${label} to ${name}`,
+            reported: `reports that it offered ${label} to ${name} without asking first, as its permission allows`,
             accepted: `recorded that ${name} accepted ${label}`,
             declined: `recorded that ${name} declined ${label}`,
             expired: `closed the offer to ${name} for ${label}: no answer in time`,
@@ -86,6 +87,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
           opened: `opened ${title}`,
           open: `picked ${title} back up`,
           next_action_set: `set the next step on ${title}`,
+          updated: `updated ${title}`,
           waiting: `is waiting on a response for ${title}`,
           needs_decision: `handed ${title} to a person`,
           done: `closed ${title}`,
@@ -95,7 +97,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
       const approval = await doc(subject.id);
       ref = { kind: "approval", id: subject.id };
       const summary = approval ? `"${approval.summary}"` : "a proposal";
-      text = { requested: `proposed ${summary}`, approved: `approved ${summary}`, changed: `changed ${summary}`, skipped: `skipped ${summary}`, expired: `closed ${summary}: nobody decided in time` }[what] ?? null;
+      text = { requested: `proposed ${summary}`, approved: `approved ${summary}`, changed: `changed ${summary}`, skipped: `skipped ${summary}`, expired: `closed ${summary}: nobody decided in time`, carried_out: `carried out ${summary}`, not_carried_out: `could not carry out ${summary} because it was no longer valid` }[what] ?? null;
     } else if (subject.table === "cleaners") {
       const name = await cleanerName(subject.id);
       text =
@@ -120,7 +122,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
       const def = typeof data.action === "string" ? actionDef(data.action) : undefined;
       text = def ? `set "${def.label}" to ${LEVEL_WORDS[String(data.to)] ?? String(data.to)}` : "changed a permission";
     } else if (subject.table === "companies") {
-      text = { created: "created the company", updated: "updated the company's details", agents_paused_changed: data.paused ? `paused ${String(data.paused)}` : "resumed every agent" }[what] ?? null;
+      text = { created: "created the company", updated: "updated the company's details", agents_paused_changed: data.paused ? `paused ${String(data.paused)}` : "resumed every agent", dispatch_settings_changed: "changed how Dispatch works" }[what] ?? null;
     }
 
     out.push({ id: event._id, at: event.at, type: event.type, actor, text: text ?? `${thing} ${what?.replace(/_/g, " ") ?? ""}`.trim(), ref });

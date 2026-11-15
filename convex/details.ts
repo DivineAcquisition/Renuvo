@@ -11,8 +11,10 @@ import { companyQuery, type MemberAccess } from "./lib/builders";
 import { AGENT_PROFILES, departmentOf } from "./lib/departments";
 import { notAllowed } from "./lib/errors";
 import { describeEvents, type Described, type EventRef } from "./lib/eventWords";
+import { coverKey } from "./lib/dispatch/workflow";
 import { isManager } from "./lib/roles";
 import type { Agent } from "./lib/statuses";
+import { liveTaskByKey } from "./lib/taskState";
 import { when } from "./lib/time";
 
 type Ctx = QueryCtx & MemberAccess;
@@ -39,6 +41,8 @@ export type Detail = {
   history: Described[];
   job: null | {
     status: Doc<"jobs">["status"];
+    /** True while a person holds this visit's coverage and Dispatch leaves it alone. */
+    withPerson: boolean;
     assignments: { id: Id<"assignments">; cleaner: string; status: Doc<"assignments">["status"]; respondBy: number; payCents: number; endReason: string | null }[];
   };
   approval: null | { status: Doc<"approvals">["status"]; canDecide: boolean; carriesOut: boolean; note: string | null; authorizes: string | null; ifWaiting: string | null; jobId: Id<"jobs"> | null };
@@ -55,20 +59,14 @@ async function history(ctx: Ctx, subjectIds: string[], asOf: number): Promise<De
         .take(200)),
     );
   }
-  events.sort((a, b) => b.at - a.at);
+  // Events written in one step share a time; the order they were written in breaks the tie.
+  events.sort((a, b) => b.at - a.at || b._creationTime - a._creationTime);
   return describeEvents(ctx, ctx.company, events.slice(0, 100), asOf);
 }
 
+/** The Dispatch task that carries this visit's coverage, if one is open. */
 async function taskFor(ctx: Ctx, jobId: Id<"jobs">): Promise<Doc<"tasks"> | null> {
-  for (const status of ["needs_decision", "open", "waiting"] as const) {
-    const rows = await ctx.db
-      .query("tasks")
-      .withIndex("by_company_agent_status", (q) => q.eq("companyId", ctx.companyId).eq("agent", "dispatch").eq("status", status))
-      .take(300);
-    const found = rows.find((row) => row.about?.table === "jobs" && row.about.id === jobId);
-    if (found) return found;
-  }
-  return null;
+  return liveTaskByKey(ctx, ctx.companyId, coverKey(jobId));
 }
 
 async function jobDetail(ctx: Ctx, jobId: Id<"jobs">, asOf: number): Promise<Detail> {
@@ -136,13 +134,13 @@ async function jobDetail(ctx: Ctx, jobId: Id<"jobs">, asOf: number): Promise<Det
     ref: { kind: "job", id: job._id },
     title: `${customer?.name ?? "Unknown customer"} · ${job.serviceType}`,
     subtitle: `${when(job.startsAt, asOf, tz)} to ${when(job.endsAt, asOf, tz).replace(/^.* at /, "")}`,
-    responsible: task ? { label: "Dispatch", agent: "dispatch" } : accepted ? { label: accepted.cleaner, agent: null } : { label: "Your team. No agent is working on this yet.", agent: null },
+    responsible: task?.withPersonSince !== undefined ? { label: "You. Dispatch is leaving this visit alone until you hand it back.", agent: null } : task ? { label: "Dispatch", agent: "dispatch" } : accepted ? { label: accepted.cleaner, agent: null } : { label: "Your team. No agent is working on this yet.", agent: null },
     status,
     situation,
     context,
     next,
     history: await history(ctx, [job._id, ...rows.map((row) => row._id)], asOf),
-    job: { status: job.status, assignments },
+    job: { status: job.status, withPerson: task?.withPersonSince !== undefined, assignments },
     approval: null,
     task: null,
   };

@@ -25,7 +25,7 @@ export function AgentAvatar({ agent, state, size = "md" }: { agent: AgentId; sta
   return (
     <span
       className={cn(
-        "relative flex shrink-0 items-center justify-center rounded-lg border bg-brand-500/10 text-brand-700",
+        "relative flex shrink-0 items-center justify-center rounded-lg border bg-brand-500/10 text-brand-300",
         state === "not_built" ? "border-dashed border-border bg-muted text-muted-foreground" : "border-brand-500/30",
         size === "xs" && "size-5 rounded-md",
         size === "sm" && "size-7",
@@ -51,4 +51,4 @@ export function ActorAvatar({ label }: { label: string }) {
   );
 }
 
-export const eyebrow = "text-[11px] font-semibold tracking-[0.14em] text-brand-700 uppercase";
+export const eyebrow = "text-[11px] font-semibold tracking-[0.14em] text-brand-300 uppercase";

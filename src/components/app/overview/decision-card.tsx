@@ -10,6 +10,14 @@ import { cn } from "@/lib/utils";
 
 import type { Decision, RecordRef } from "../../../../convex/overview";
 
+/** The agent's reason, one sentence to a line, so it reads as the steps it took. */
+function steps(text: string): string[] {
+  return text
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 /**
  * One decision brought to a person: the problem, the proposed response, what approving authorizes, and
  * what waiting costs. Approving takes a held press.
@@ -74,12 +82,21 @@ export function DecisionCard({
         </ul>
       ) : null}
 
-      <p className="mt-3 text-sm leading-relaxed text-foreground">{decision.situation}</p>
+      <div className="mt-3">
+        <p className="text-xs font-semibold text-muted-foreground">{proposal ? `${decision.agentName}’s reasoning` : "Why this is with you"}</p>
+        <ol className="mt-1.5 grid gap-1.5 border-l-2 border-brand-500/30 pl-3">
+          {steps(decision.situation).map((step) => (
+            <li key={step} className="text-sm leading-relaxed text-foreground">
+              {step}
+            </li>
+          ))}
+        </ol>
+      </div>
 
       {proposal ? (
         <dl className="mt-3 grid gap-2 text-sm">
           <div className="rounded-xl border border-brand-500/30 bg-brand-500/5 px-3 py-2.5">
-            <dt className="flex items-center gap-1.5 text-xs font-semibold text-brand-800">
+            <dt className="flex items-center gap-1.5 text-xs font-semibold text-brand-200">
               <ShieldCheck className="size-3.5" aria-hidden />
               Approving authorizes
             </dt>
