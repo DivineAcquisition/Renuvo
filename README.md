@@ -8,6 +8,8 @@ The source of truth is
 [`docs/foundation/00-product-brief.md`](docs/foundation/00-product-brief.md).
 The sidebar, the route map and the navigation rules are in
 [`docs/foundation/01-navigation.md`](docs/foundation/01-navigation.md).
+Which host shows what (public site, workspace, link pages) is in
+[`docs/foundation/02-hosts.md`](docs/foundation/02-hosts.md).
 
 This repository and its Vercel project are still named Renuvo, which was the
 working name.
