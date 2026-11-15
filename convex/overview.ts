@@ -9,6 +9,9 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { companyQuery, type MemberAccess } from "./lib/builders";
 import { AGENT_PROFILES, departmentOf, DEPARTMENTS } from "./lib/departments";
+import { coverRun, type RunStep } from "./lib/dispatch/run";
+import { coverKey, jobApprovals } from "./lib/dispatch/workflow";
+import { liveTaskByKey } from "./lib/taskState";
 import { isManager } from "./lib/roles";
 import { AGENTS, type Agent } from "./lib/statuses";
 import { addLocalDays, clock, startOfLocalDay, when } from "./lib/time";
@@ -19,7 +22,13 @@ export type RecordRef = { kind: "job"; id: Id<"jobs"> } | { kind: "approval"; id
 export type Link = RecordRef | { kind: "view"; view: "schedule_today" | "schedule_tomorrow" | "decisions" };
 
 /** confirmed: the record says so. pending: waiting on someone's answer. attention: needs a person. */
-export type Statement = { text: string; certainty: "confirmed" | "pending" | "attention"; link: Link | null };
+export type Statement = {
+  text: string;
+  certainty: "confirmed" | "pending" | "attention";
+  link: Link | null;
+  /** The agent on it, and where its work stands, when an agent is carrying this. */
+  handling?: { agent: Agent; text: string };
+};
 
 export type VisitState = "completed" | "in_progress" | "accepted" | "awaiting_acceptance" | "needs_coverage" | "cancelled";
 
@@ -95,6 +104,21 @@ async function openDecisions(ctx: Ctx) {
   return { approvals, tasks: tasks.filter((task) => !covered.has(task._id)) };
 }
 
+/** Where Dispatch's work on an uncovered visit stands, in one clause. */
+async function handlingOf(ctx: Ctx, jobId: Id<"jobs">): Promise<Statement["handling"]> {
+  const job = await ctx.db.get(jobId);
+  if (!job) return undefined;
+  const task = await liveTaskByKey(ctx, ctx.companyId, coverKey(jobId));
+  if (!task) return undefined;
+  if (task.withPersonSince !== undefined) return { agent: "dispatch", text: "You are handling it; Dispatch is standing by." };
+  if (ctx.company.pausedAgents.includes("dispatch")) return { agent: "dispatch", text: "Dispatch is paused." };
+  if (task.status === "needs_decision") {
+    const pending = (await jobApprovals(ctx, job)).some((row) => row.status === "pending");
+    return { agent: "dispatch", text: pending ? "Dispatch proposed a cleaner and is waiting for your approval." : "Dispatch could not cover it and handed it to you." };
+  }
+  return { agent: "dispatch", text: "Dispatch is finding a cleaner." };
+}
+
 export const today = companyQuery({
   args: { asOf: v.number() },
   handler: async (ctx, args) => {
@@ -128,13 +152,14 @@ export const today = companyQuery({
       });
     }
     for (const visit of visits.filter((row) => row.state === "needs_coverage").slice(0, 3)) {
-      briefing.push({ text: `The ${clock(visit.startsAt, tz)} visit for ${visit.customer} has no cleaner.`, certainty: "attention", link: { kind: "job", id: visit.jobId } });
+      briefing.push({ text: `The ${clock(visit.startsAt, tz)} visit for ${visit.customer} has no cleaner.`, certainty: "attention", link: { kind: "job", id: visit.jobId }, handling: await handlingOf(ctx, visit.jobId) });
     }
     for (const visit of visits.filter((row) => row.state === "awaiting_acceptance").slice(0, 3)) {
       briefing.push({
         text: `The ${clock(visit.startsAt, tz)} visit for ${visit.customer} is waiting on ${visit.cleaner}'s answer${visit.respondBy ? `, due ${when(visit.respondBy, args.asOf, tz)}` : ""}.`,
         certainty: "pending",
         link: { kind: "job", id: visit.jobId },
+        handling: { agent: "dispatch", text: "Dispatch follows up when the answer is due." },
       });
     }
     const tomorrowOpen = tomorrow.filter((row) => row.state === "needs_coverage" || row.state === "awaiting_acceptance").length;
@@ -238,7 +263,15 @@ export type Decision = {
   canDecide: boolean;
   /** True when approving carries the action out, not only records the decision. */
   carriesOut: boolean;
+  /** The agent's work so far on the visit this is about, step by step. Empty when it is not about a visit. */
+  run: RunStep[];
 };
+
+async function runFor(ctx: Ctx, agent: Agent, about: Doc<"tasks">["about"], asOf: number): Promise<RunStep[]> {
+  if (agent !== "dispatch" || about?.table !== "jobs") return [];
+  const job = await ctx.db.get(about.id);
+  return job && job.companyId === ctx.companyId ? coverRun(ctx, ctx.company, job, asOf) : [];
+}
 
 export const decisions = companyQuery({
   args: { asOf: v.number() },
@@ -265,6 +298,7 @@ export const decisions = companyQuery({
         context,
         canDecide: true,
         carriesOut: Boolean(approval.proposal),
+        run: await runFor(ctx, approval.agent, approval.about, args.asOf),
       });
     }
     for (const task of tasks) {
@@ -282,6 +316,7 @@ export const decisions = companyQuery({
         context: await aboutContext(ctx, task.about, args.asOf),
         canDecide: true,
         carriesOut: false,
+        run: await runFor(ctx, task.agent, task.about, args.asOf),
       });
     }
     return items.sort((a, b) => a.deadline - b.deadline);

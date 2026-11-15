@@ -4,11 +4,14 @@ import { RedirectToSignIn, useAuth, UserButton } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { CompanyProvider, type Role } from "@/components/app/company";
-import { DetailProvider } from "@/components/app/detail-panel";
+import { AgentDock } from "@/components/app/agent-dock";
+import { CompanyProvider, type Role, useCompany } from "@/components/app/company";
+import { DetailProvider, useDetail } from "@/components/app/detail-panel";
 import { Field, FormError, TextInput, useRun } from "@/components/app/form";
 import { missingSetup, NotSetUp } from "@/components/app/not-set-up";
+import type { TeamDepartment } from "@/components/app/overview/team-at-work";
 import { AppShell } from "@/components/app/shell";
+import { useNow } from "@/components/app/use-now";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,7 +50,8 @@ function Onboarding() {
   const create = useMutation(api.companies.create);
   const join = useMutation(api.members.join);
   const [name, setName] = useState("");
-  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago");
+  // Starts at the zone this browser reports. Nothing is assumed when it reports none.
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "");
   const { busy, error, run } = useRun();
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-12">
@@ -84,10 +88,10 @@ function Onboarding() {
           }}
         >
           <Field label="Company name">
-            <TextInput value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} autoComplete="organization" placeholder="Sparkle Cleaning Co." />
+            <TextInput value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} autoComplete="organization" />
           </Field>
-          <Field label="Time zone" hint="Schedules, availability and deadlines are shown on this clock.">
-            <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} required placeholder="America/Chicago" />
+          <Field label="Time zone" hint="The IANA name of your zone. Schedules, availability and deadlines are shown on this clock.">
+            <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} required />
           </Field>
           <FormError message={error} />
           <Button type="submit" variant="primary" loading={busy}>
@@ -99,6 +103,16 @@ function Onboarding() {
   );
 }
 
+/** The team console with the live record behind it. */
+function Dock({ departments }: { departments?: TeamDepartment[] }) {
+  const { companyId, timezone } = useCompany();
+  const now = useNow();
+  const open = useDetail();
+  const activity = useQuery(api.details.activity, now ? { companyId, asOf: now, limit: 6 } : "skip");
+  if (!departments) return null;
+  return <AgentDock departments={departments} activity={activity} now={now} timezone={timezone} onOpen={open} />;
+}
+
 function Workspace({ companyId, role, children }: { companyId: Id<"companies">; role: Role; children: React.ReactNode }) {
   const company = useQuery(api.companies.get, { companyId });
   const count = useQuery(api.overview.decisionCount, { companyId });
@@ -107,7 +121,7 @@ function Workspace({ companyId, role, children }: { companyId: Id<"companies">; 
   return (
     <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
       <DetailProvider>
-        <AppShell company={company.name} decisionCount={count} departments={team?.departments} userSlot={<UserButton />}>
+        <AppShell company={company.name} decisionCount={count} departments={team?.departments} userSlot={<UserButton />} dock={<Dock departments={team?.departments} />}>
           {children}
         </AppShell>
       </DetailProvider>

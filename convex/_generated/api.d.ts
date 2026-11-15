@@ -30,6 +30,7 @@ import type * as lib_dispatch_eligibility from "../lib/dispatch/eligibility.js";
 import type * as lib_dispatch_facts from "../lib/dispatch/facts.js";
 import type * as lib_dispatch_offers from "../lib/dispatch/offers.js";
 import type * as lib_dispatch_pay from "../lib/dispatch/pay.js";
+import type * as lib_dispatch_run from "../lib/dispatch/run.js";
 import type * as lib_dispatch_settings from "../lib/dispatch/settings.js";
 import type * as lib_dispatch_workflow from "../lib/dispatch/workflow.js";
 import type * as lib_errors from "../lib/errors.js";
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dispatch/facts": typeof lib_dispatch_facts;
   "lib/dispatch/offers": typeof lib_dispatch_offers;
   "lib/dispatch/pay": typeof lib_dispatch_pay;
+  "lib/dispatch/run": typeof lib_dispatch_run;
   "lib/dispatch/settings": typeof lib_dispatch_settings;
   "lib/dispatch/workflow": typeof lib_dispatch_workflow;
   "lib/errors": typeof lib_errors;

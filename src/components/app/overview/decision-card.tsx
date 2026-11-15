@@ -2,6 +2,8 @@
 
 import { AgentAvatar } from "@/components/app/agent";
 import { HoldButton } from "@/components/app/hold-button";
+import { RunTrace } from "@/components/app/run-trace";
+import { BorderBeam } from "@/components/ui/border-beam";
 import { Clock, LightningIcon, ShieldCheck } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,12 +44,17 @@ export function DecisionCard({
   const due = until(decision.deadline, now);
   const proposal = decision.ref.kind === "approval";
   return (
-    <article className={cn("live-enter rounded-2xl border bg-card p-4 sm:p-5", due.late ? "border-destructive/50" : due.soon ? "border-warning/60" : "border-border")}>
+    <article className={cn("live-enter relative overflow-hidden rounded-2xl border bg-card p-4 sm:p-5", due.late ? "border-destructive/50" : due.soon ? "border-warning/60" : "border-border")}>
+      {/* The agent is waiting on a person: the edge keeps moving until someone decides. */}
+      {due.soon ? <BorderBeam size={90} duration={7} colorFrom="#f0b45c" colorTo="#2cc5a8" borderWidth={2} /> : null}
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-2 text-xs text-muted-foreground">
-          <AgentAvatar agent={decision.agent} size="xs" />
+        <span className="flex items-center gap-2.5 text-xs text-muted-foreground">
+          <AgentAvatar agent={decision.agent} state="needs_you" size="sm" />
           <span>
-            <span className="font-medium text-strong">{decision.agentName}</span> {proposal ? "proposes" : "handed this to you"} · {decision.department}
+            <span className="block text-sm font-semibold text-strong">
+              {decision.agentName} {proposal ? "proposes" : "handed this to you"}
+            </span>
+            <span className="block">{decision.department} · waiting on you</span>
           </span>
         </span>
         <Badge variant={due.late ? "error" : due.soon ? "warning" : "outline"} size="sm">
@@ -92,6 +99,13 @@ export function DecisionCard({
           ))}
         </ol>
       </div>
+
+      {decision.run.length > 0 ? (
+        <div className="mt-4 rounded-xl border border-border bg-muted/60 px-3 py-3">
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">What {decision.agentName} did, and where it stopped</p>
+          <RunTrace steps={decision.run} compact />
+        </div>
+      ) : null}
 
       {proposal ? (
         <dl className="mt-3 grid gap-2 text-sm">

@@ -53,6 +53,17 @@ describe("the Overview", () => {
     expect(decision.authorizes).toContain("Rosa");
     expect(decision.ifWaiting).toBeTruthy();
     expect(decision.context.map((row) => row.label)).toEqual(["Visit", "Customer", "Cleaner"]);
+    // The agent's run is the steps it took, and it stops where it is waiting on a person.
+    expect(decision.run.map((step) => [step.key, step.state])).toEqual([
+      ["read", "done"],
+      ["check", "done"],
+      ["choose", "done"],
+      ["permission", "needs_you"],
+      ["ask", "todo"],
+      ["accept", "todo"],
+    ]);
+    expect(decision.run[1].detail).toBe("1 can take it, 0 cannot.");
+    expect(decision.run[2].detail).toMatch(/^Rosa first: Rosa /);
     expect((await as.query(api.overview.team, { companyId })).departments.find((row) => row.id === "operations")).toMatchObject({
       summary: "1 item needs your decision.",
       agents: [{ agent: "recruiter", state: "not_built" }, { agent: "dispatch", state: "needs_you" }],
@@ -72,6 +83,8 @@ describe("the Overview", () => {
     expect(detail.responsible).toEqual({ label: "Dispatch", agent: "dispatch" });
     expect(detail.next).toMatchObject({ action: "Wait for Rosa's answer.", when: offered.respondBy });
     expect(detail.context.find((row) => row.label === "Payment")).toMatchObject({ missing: true });
+    expect(detail.job!.run.map((step) => step.state)).toEqual(["done", "done", "done", "done", "waiting", "todo"]);
+    expect(detail.job!.run[4].detail).toMatch(/^Offer out to Rosa; answer due /);
     const assignmentId = detail.job!.assignments[0].id;
 
     // Rosa accepts. On Tuesday morning the briefing can say today is covered, and nothing waits on the owner.
@@ -87,6 +100,12 @@ describe("the Overview", () => {
 
     const done = await as.query(api.details.get, { ...s.at(TUESDAY_MORNING), ref: { kind: "job", id: s.jobId } });
     expect(done.status.label).toBe("Accepted");
+    expect(done.job!.run.map((step) => [step.key, step.state])).toEqual([
+      ["read", "done"],
+      ["ask", "done"],
+      ["accept", "done"],
+    ]);
+    expect(done.job!.run[2].detail).toBe("Rosa accepted. The visit is covered.");
     // The history reads as sentences, newest first, with the agent named where the agent acted.
     const told = done.history.map((row) => `${row.actor.label} ${row.text}`);
     expect(told[0]).toBe("owner-a recorded that Rosa accepted the visit today at 10:00 AM for Dana Whitfield");
@@ -98,6 +117,27 @@ describe("the Overview", () => {
     expect(dispatch).toMatchObject({ state: "clear", department: { id: "operations" } });
     expect(dispatch.recentOutcomes[0].outcome).toContain("Rosa");
     expect(team.agents.filter((row) => row.state === "not_built").map((row) => row.agent)).toEqual(["sales", "recruiter", "retention"]);
+  });
+
+  it("says who is on an uncovered visit today, and stops the run where nobody can be asked", async () => {
+    const t = start();
+    const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+    const place = await dispatchPlace(as, companyId);
+    await dispatchCleaner(as, companyId, "Rosa");
+    vi.setSystemTime(TUESDAY_MORNING - HOUR);
+    const proposed = await dispatchJob(as, companyId, place);
+    const at = { companyId, asOf: TUESDAY_MORNING - HOUR };
+    const briefing = (await as.query(api.overview.today, at)).briefing;
+    expect(briefing[1]).toMatchObject({ text: "The 10:00 AM visit for Dana Whitfield has no cleaner.", handling: { agent: "dispatch", text: "Dispatch proposed a cleaner and is waiting for your approval." } });
+
+    // A visit that needs a skill nobody has: the run stops at choosing, and says why.
+    await as.mutation(api.jobs.cancel, { companyId, jobId: proposed, reason: "Customer cancelled" });
+    const stuck = await dispatchJob(as, companyId, place, { requiredSkills: ["move-out"] });
+    const detail = await as.query(api.details.get, { ...at, ref: { kind: "job", id: stuck } });
+    expect(detail.job!.run.map((step) => step.state)).toEqual(["done", "done", "blocked", "todo", "todo", "todo"]);
+    expect(detail.job!.run[2].detail).toMatch(/^Nobody can be asked\. Rosa /);
+    expect((await as.query(api.overview.today, at)).briefing[1].handling).toEqual({ agent: "dispatch", text: "Dispatch could not cover it and handed it to you." });
+    expect((await as.query(api.details.get, { ...at, ref: { kind: "job", id: proposed } })).job!.run).toEqual([]);
   });
 
   it("measures only what it can and says what is not set up", async () => {

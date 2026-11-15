@@ -20,17 +20,6 @@ const DEPARTMENT_NAMES = [
   { id: "customer_success", name: "Customer Success" },
 ];
 
-/** One line for the top bar: what the team as a whole is doing right now. */
-function teamLine(departments: TeamDepartment[]): string {
-  const agents = departments.flatMap((department) => department.agents).filter((agent) => agent.state !== "not_built");
-  if (agents.length === 0) return "No agent is working yet";
-  const total = (key: "open" | "waiting" | "needsDecision") => agents.reduce((sum, agent) => sum + agent.counts[key], 0);
-  const parts = [total("open") ? `${total("open")} in progress` : "", total("waiting") ? `${total("waiting")} waiting on a response` : "", total("needsDecision") ? `${total("needsDecision")} for you` : ""].filter(Boolean);
-  const paused = agents.filter((agent) => agent.state === "paused").length;
-  if (paused === agents.length) return "Your team is paused";
-  return parts.length > 0 ? parts.join(" · ") : "Nothing open right now";
-}
-
 function NavLink({ href, icon: Icon, label, badge, exact, onNavigate }: { href: string; icon: LucideIcon; label: string; badge?: number; exact?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const active = exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
@@ -108,6 +97,7 @@ export function AppShell({
   departments,
   userSlot,
   banner,
+  dock,
   children,
 }: {
   company: string;
@@ -115,6 +105,8 @@ export function AppShell({
   departments?: TeamDepartment[];
   userSlot?: React.ReactNode;
   banner?: React.ReactNode;
+  /** The team console, floating over every page. */
+  dock?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [menu, setMenu] = useState(false);
@@ -148,18 +140,6 @@ export function AppShell({
             <Menu className="size-5" aria-hidden />
           </button>
           <span className="truncate text-sm font-semibold text-strong lg:hidden">{company}</span>
-          {departments ? (
-            <div className="hidden items-center gap-2 lg:flex" aria-label="Your team">
-              <span className="flex -space-x-1">
-                {departments.flatMap((department) => department.agents).map((agent) => (
-                  <span key={agent.agent} title={`${agent.name}: ${STATE[agent.state].label}`}>
-                    <AgentAvatar agent={agent.agent} state={agent.state} size="sm" />
-                  </span>
-                ))}
-              </span>
-              <span className="text-xs text-muted-foreground">{teamLine(departments)}</span>
-            </div>
-          ) : null}
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             <Link href="/app/schedule" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
               <ScheduleIcon className="size-4" aria-hidden />
@@ -182,8 +162,9 @@ export function AppShell({
           </div>
         </header>
         {banner}
-        <main className="mx-auto w-full max-w-[1500px] flex-1 px-3 py-5 sm:px-6 sm:py-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1500px] flex-1 px-3 pt-5 pb-24 sm:px-6 sm:pt-6">{children}</main>
       </div>
+      {dock}
     </div>
   );
 }

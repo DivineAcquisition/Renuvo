@@ -10,7 +10,7 @@ import { text } from "./lib/text";
 
 function timezone(value: string): string {
   const zone = value.trim();
-  if (!isTimezone(zone)) throw userError("Choose a time zone, for example America/Chicago.");
+  if (!isTimezone(zone)) throw userError("That is not a time zone. Enter the IANA name of your zone.");
   return zone;
 }
 

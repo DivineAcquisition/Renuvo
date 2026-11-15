@@ -84,17 +84,17 @@ function PermissionRow({ action, canEdit }: { action: Action; canEdit: boolean }
           onSubmit={(event) => {
             event.preventDefault();
             const [perActionCents, perDayCents] = [centsFrom(perAction), centsFrom(perDay)];
-            if (perActionCents === null || perDayCents === null) return setError("Enter both limits as amounts, for example 25.00 and 100.00.");
+            if (perActionCents === null || perDayCents === null) return setError("Enter both limits as amounts in dollars and cents.");
             void save(pending, { perActionCents, perDayCents });
           }}
         >
           <p className="text-xs text-muted-foreground">This moves money. Set how much {LEVELS[rank(pending)]?.label.toLowerCase()} may spend before it has to ask.</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Limit per action">
-              <TextInput inputMode="decimal" value={perAction} onChange={(event) => setPerAction(event.target.value)} placeholder="25.00" required />
+              <TextInput inputMode="decimal" value={perAction} onChange={(event) => setPerAction(event.target.value)} placeholder="0.00" required />
             </Field>
             <Field label="Limit per day">
-              <TextInput inputMode="decimal" value={perDay} onChange={(event) => setPerDay(event.target.value)} placeholder="100.00" required />
+              <TextInput inputMode="decimal" value={perDay} onChange={(event) => setPerDay(event.target.value)} placeholder="0.00" required />
             </Field>
           </div>
           <div className="flex gap-2">

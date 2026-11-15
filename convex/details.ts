@@ -11,6 +11,7 @@ import { companyQuery, type MemberAccess } from "./lib/builders";
 import { AGENT_PROFILES, departmentOf } from "./lib/departments";
 import { notAllowed } from "./lib/errors";
 import { describeEvents, type Described, type EventRef } from "./lib/eventWords";
+import { coverRun, type RunStep } from "./lib/dispatch/run";
 import { coverKey } from "./lib/dispatch/workflow";
 import { isManager } from "./lib/roles";
 import type { Agent } from "./lib/statuses";
@@ -43,6 +44,8 @@ export type Detail = {
     status: Doc<"jobs">["status"];
     /** True while a person holds this visit's coverage and Dispatch leaves it alone. */
     withPerson: boolean;
+    /** Dispatch's work on this visit, step by step, read from the record. */
+    run: RunStep[];
     assignments: { id: Id<"assignments">; cleaner: string; status: Doc<"assignments">["status"]; respondBy: number; payCents: number; endReason: string | null }[];
   };
   approval: null | { status: Doc<"approvals">["status"]; canDecide: boolean; carriesOut: boolean; note: string | null; authorizes: string | null; ifWaiting: string | null; jobId: Id<"jobs"> | null };
@@ -140,7 +143,7 @@ async function jobDetail(ctx: Ctx, jobId: Id<"jobs">, asOf: number): Promise<Det
     context,
     next,
     history: await history(ctx, [job._id, ...rows.map((row) => row._id)], asOf),
-    job: { status: job.status, withPerson: task?.withPersonSince !== undefined, assignments },
+    job: { status: job.status, withPerson: task?.withPersonSince !== undefined, run: await coverRun(ctx, ctx.company, job, asOf), assignments },
     approval: null,
     task: null,
   };

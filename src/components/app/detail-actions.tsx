@@ -58,7 +58,11 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
   const offer = useMutation(api.assignments.offer);
   const [cleanerId, setCleanerId] = useState("");
   const [pay, setPay] = useState("");
-  const [minutes, setMinutes] = useState("120");
+  const settings = useQuery(api.dispatch.settings, { companyId });
+  const [typed, setTyped] = useState<string | null>(null);
+  // The time to answer starts at the company's own setting, not a number written into this form.
+  const minutes = typed ?? (settings ? String(settings.offerWindowMinutes) : "");
+  const setMinutes = setTyped;
   const { busy, error, run, setError } = useRun();
   if (cleaners === undefined) return <p className="text-sm text-muted-foreground">Loading cleaners…</p>;
   if (cleaners.length === 0) return <p className="text-sm text-muted-foreground">No cleaner is marked ready for work yet. Add one under Records, then offer this visit.</p>;
@@ -70,7 +74,7 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
         const payCents = centsFrom(pay);
         const window = Number(minutes);
         if (!cleanerId) return setError("Choose a cleaner.");
-        if (payCents === null) return setError("Enter the cleaner's pay for this visit, for example 72.00.");
+        if (payCents === null) return setError("Enter the cleaner's pay for this visit as an amount in dollars and cents.");
         if (!Number.isInteger(window) || window < 5) return setError("Give the cleaner at least 5 minutes to answer.");
         void run(() => offer({ companyId, jobId, cleanerId: cleanerId as Id<"cleaners">, payCents, respondBy: now + window * 60_000 }));
       }}
@@ -87,7 +91,7 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Their pay for this visit">
-          <TextInput inputMode="decimal" value={pay} onChange={(event) => setPay(event.target.value)} placeholder="72.00" required />
+          <TextInput inputMode="decimal" value={pay} onChange={(event) => setPay(event.target.value)} placeholder="0.00" required />
         </Field>
         <Field label="Minutes to answer">
           <TextInput inputMode="numeric" value={minutes} onChange={(event) => setMinutes(event.target.value)} required />
@@ -216,7 +220,7 @@ function TaskActions({ detail, timezone }: { detail: Detail; timezone: string })
   const [open, setOpen] = useState(false);
   const [action, setAction] = useState("");
   const [date, setDate] = useState("");
-  const [time, setTime] = useState("17:00");
+  const [time, setTime] = useState("");
   const { busy, error, run, setError } = useRun();
   const status = detail.task!.status;
   if (status === "done" || status === "cancelled") return <p className="text-sm text-muted-foreground">This task is closed.</p>;

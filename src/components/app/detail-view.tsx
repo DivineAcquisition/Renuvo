@@ -1,5 +1,6 @@
 import { ActorAvatar, AgentAvatar, eyebrow } from "@/components/app/agent";
 import { ActivityFeed } from "@/components/app/overview/activity-feed";
+import { RunTrace } from "@/components/app/run-trace";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { money, until, whenLabel } from "@/lib/app/format";
 import { cn } from "@/lib/utils";
@@ -99,6 +100,12 @@ export function DetailView({ detail, now, timezone, onOpen, actions }: { detail:
           </p>
         ) : null}
       </Section>
+
+      {detail.job && detail.job.run.length > 0 ? (
+        <Section title="Dispatch’s run on this visit">
+          <RunTrace steps={detail.job.run} />
+        </Section>
+      ) : null}
 
       {actions ? <Section title="Step in">{actions}</Section> : null}
 

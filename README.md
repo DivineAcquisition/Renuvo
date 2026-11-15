@@ -29,9 +29,6 @@ Sales, Recruiter and Retention are not built. Screens say "not built yet"
 where they will be. There is no texting, so an offer is a record: someone
 tells the cleaner, and the office records their answer.
 
-`/dev/overview` shows the Overview's layout with made-up data, for design
-review. It does not exist on the production site.
-
 ## Setup
 
 1. `npm install`
@@ -96,6 +93,10 @@ joins one they were invited to by email.
   feed and the detail panel are built in code from events and records
   (`convex/overview.ts`, `convex/details.ts`, `convex/lib/eventWords.ts`).
   What is not connected says "not set up yet".
+- **No sample data in the app.** There is no demo mode, no seeded company and
+  no pre-filled form. A screen shows the company's record or says it is empty.
+  An agent's "run" on a visit (`convex/lib/dispatch/run.ts`) is the steps it
+  actually took, read from the record.
 - **The event log is append-only.** Only `convex/lib/events.ts` writes to it.
 - **Numbers come from code.** Money is whole cents; times are checked
   instants.
@@ -122,7 +123,6 @@ Convex · Clerk · Vercel.
 | `convex/lib` | Access builders, roles, statuses, permissions, events |
 | `tests/harness.ts` | Helpers for the Convex tests |
 | `docs/screenshots/landing` | The page at 1280 and 390 pixels wide |
-| `docs/screenshots/app` | The Overview and detail panel, with made-up data |
 
 The earlier build (Next.js 14 and Supabase) was removed on November 15, 2026
 and is in git history before that date.

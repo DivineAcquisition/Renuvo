@@ -81,7 +81,7 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
         </Field>
       </div>
       <Field label="Property address">
-        <TextInput value={form.line1} onChange={set("line1")} required placeholder="12 Elm St" autoComplete="address-line1" />
+        <TextInput value={form.line1} onChange={set("line1")} required autoComplete="address-line1" />
       </Field>
       <div className="grid grid-cols-3 gap-3">
         <Field label="City">
@@ -116,9 +116,9 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
   const setWeek = useMutation(api.availability.setWeek);
   const setStatus = useMutation(api.cleaners.setStatus);
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ name: "", engagement: "contractor" as "contractor" | "employee", phone: "", skills: "", areas: "", from: "08:00", to: "17:00" });
-  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [ready, setReady] = useState(true);
+  const [form, setForm] = useState({ name: "", engagement: "contractor" as "contractor" | "employee", phone: "", skills: "", areas: "", from: "", to: "" });
+  const [days, setDays] = useState<number[]>([]);
+  const [ready, setReady] = useState(false);
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
   return (
     <form
@@ -126,10 +126,11 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
       onSubmit={(event) => {
         event.preventDefault();
         const [startMinute, endMinute] = [minutesOf(form.from), minutesOf(form.to)];
-        if (startMinute === null || endMinute === null || startMinute >= endMinute) return setError("The hours need a start time before the end time.");
+        // Hours are recorded only as the cleaner gave them. With no days chosen, none are recorded.
+        if (days.length > 0 && (startMinute === null || endMinute === null || startMinute >= endMinute)) return setError("Give the hours for the chosen days, with the start before the end.");
         void run(async () => {
           const cleanerId = await create({ companyId, name: form.name, engagement: form.engagement, phone: form.phone || undefined, skills: list(form.skills), serviceAreas: list(form.areas) });
-          await setWeek({ companyId, cleanerId, windows: days.map((weekday) => ({ weekday, startMinute, endMinute })) });
+          if (days.length > 0 && startMinute !== null && endMinute !== null) await setWeek({ companyId, cleanerId, windows: days.map((weekday) => ({ weekday, startMinute, endMinute })) });
           if (ready) await setStatus({ companyId, cleanerId, status: "ready" });
           onDone();
         });
@@ -148,15 +149,16 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
         <Field label="Phone (optional)">
           <TextInput type="tel" value={form.phone} onChange={set("phone")} />
         </Field>
-        <Field label="Skills (optional)" hint="Separate with commas, for example: deep clean, move-out">
+        <Field label="Skills (optional)" hint="Separate with commas.">
           <TextInput value={form.skills} onChange={set("skills")} />
         </Field>
       </div>
       <Field label="Postal codes they work in" hint="Separate with commas. Dispatch only offers visits in these areas.">
-        <TextInput value={form.areas} onChange={set("areas")} placeholder="78701, 78702" />
+        <TextInput value={form.areas} onChange={set("areas")} />
       </Field>
       <fieldset>
         <legend className="text-sm font-medium text-strong">Days they said they can work</legend>
+        <p className="text-xs text-muted-foreground">Choose only what the cleaner told you. With none chosen, no hours are recorded and they cannot be offered visits yet.</p>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {DAYS.map((day, index) => {
             const on = days.includes(index);
@@ -176,10 +178,10 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
       </fieldset>
       <div className="grid grid-cols-2 gap-3">
         <Field label="From">
-          <TextInput type="time" value={form.from} onChange={set("from")} required />
+          <TextInput type="time" value={form.from} onChange={set("from")} required={days.length > 0} />
         </Field>
         <Field label="Until">
-          <TextInput type="time" value={form.to} onChange={set("to")} required />
+          <TextInput type="time" value={form.to} onChange={set("to")} required={days.length > 0} />
         </Field>
       </div>
       <label className="flex items-start gap-2 text-sm text-strong">
@@ -216,7 +218,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const customers = useQuery(api.customers.list, { companyId });
   const create = useMutation(api.jobs.create);
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceType: "Standard clean", scope: "", skills: "", date: "", from: "09:00", to: "11:00", price: "" });
+  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
   if (customers && customers.length === 0) return <p className="text-sm text-muted-foreground">Add a customer under Records first, then schedule their visit here.</p>;
   return (
@@ -227,7 +229,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
         const [startsAt, endsAt] = [zonedInstant(form.date, form.from, timezone), zonedInstant(form.date, form.to, timezone)];
         if (startsAt === null || endsAt === null) return setError("Choose the day, the start time and the end time.");
         const priceCents = form.price.trim() ? centsFrom(form.price) : undefined;
-        if (priceCents === null) return setError("Enter the price as an amount, for example 180.00, or leave it empty.");
+        if (priceCents === null) return setError("Enter the price as an amount in dollars and cents, or leave it empty.");
         void run(async () => {
           await create({
             companyId,
@@ -268,11 +270,11 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
           <TextInput value={form.serviceType} onChange={set("serviceType")} required maxLength={80} />
         </Field>
         <Field label="Price (optional)" hint="The price of the service. It is not a payment.">
-          <TextInput inputMode="decimal" value={form.price} onChange={set("price")} placeholder="180.00" />
+          <TextInput inputMode="decimal" value={form.price} onChange={set("price")} placeholder="0.00" />
         </Field>
       </div>
       <Field label="Scope" hint="What the cleaner will be told to do.">
-        <TextArea value={form.scope} onChange={set("scope")} required rows={2} placeholder="3 bed, 2 bath standard clean" />
+        <TextArea value={form.scope} onChange={set("scope")} required rows={2} />
       </Field>
       <Field label="Skills needed (optional)" hint="Separate with commas. Only cleaners with these skills can be offered the visit.">
         <TextInput value={form.skills} onChange={set("skills")} />

@@ -37,6 +37,28 @@ export function presenceLine(agent: TeamAgent, now: number, timezone: string): s
   return `${first.title} — ${workLine(first, now, timezone)}`;
 }
 
+/** Where an agent's open work sits: in its own hands, with someone outside, or with you. */
+function Flow({ counts }: { counts: TeamAgent["counts"] }) {
+  const stages = [
+    { label: "In progress", count: counts.open, on: "border-success/40 bg-success/10 text-success-foreground" },
+    { label: "Waiting on a response", count: counts.waiting, on: "border-info/40 bg-info/10 text-info-foreground" },
+    { label: "With you", count: counts.needsDecision, on: "border-warning/50 bg-warning/15 text-warning-foreground" },
+  ];
+  return (
+    <ol className="mt-1.5 flex flex-wrap items-center gap-1" aria-label="Where this agent's work stands">
+      {stages.map((stage, index) => (
+        <li key={stage.label} className="flex items-center gap-1">
+          {index > 0 ? <span className="h-px w-2 bg-border" aria-hidden /> : null}
+          <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium", stage.count > 0 ? stage.on : "border-border text-muted-foreground")}>
+            <span className="tabular-nums">{stage.count}</span>
+            {stage.label}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export function AgentWork({ agent, now, timezone, onOpen, limit = 3 }: { agent: TeamAgent; now: number; timezone: string; onOpen: (ref: RecordRef) => void; limit?: number }) {
   const look = STATE[agent.state];
   return (
@@ -47,12 +69,13 @@ export function AgentWork({ agent, now, timezone, onOpen, limit = 3 }: { agent: 
           <span className="font-medium text-strong">{agent.name}</span>
           <span className={cn("text-xs", agent.state === "needs_you" ? "font-medium text-warning-foreground" : "text-muted-foreground")}>{look.label}</span>
         </p>
+        {agent.state !== "not_built" ? <Flow counts={agent.counts} /> : null}
         {agent.state === "not_built" ? (
           <p className="mt-0.5 text-xs text-muted-foreground">{agent.responsibility} Not built yet.</p>
         ) : agent.lines.length === 0 ? (
           <p className="mt-0.5 text-xs text-muted-foreground">No open work. {agent.responsibility}</p>
         ) : (
-          <ul className="mt-1 grid gap-1">
+          <ul className="mt-2 grid gap-1">
             {agent.lines.slice(0, limit).map((line) => (
               <li key={line.taskId}>
                 <button type="button" onClick={() => onOpen({ kind: "task", id: line.taskId })} className="-mx-1.5 block w-[calc(100%+0.75rem)] rounded-md px-1.5 py-1 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand-500">
