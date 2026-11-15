@@ -49,6 +49,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
     let actor: Described["actor"];
     if (event.actor.kind === "member") actor = { kind: "member", label: (await doc(event.actor.memberId))?.name ?? "A team member", agent: null };
     else if (event.actor.kind === "agent") actor = { kind: "agent", label: AGENT_PROFILES[event.actor.agent].name, agent: event.actor.agent };
+    else if (event.actor.kind === "cleaner") actor = { kind: "system", label: `${await cleanerName(event.actor.cleanerId)} (by link)`, agent: null };
     else actor = { kind: "system", label: "Selestial", agent: null };
 
     let text: string | null = null;
@@ -74,8 +75,22 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
             accepted: `recorded that ${name} accepted ${label}`,
             declined: `recorded that ${name} declined ${label}`,
             expired: `closed the offer to ${name} for ${label}: no answer in time`,
+            checked_in: `recorded ${name}'s check-in for ${label}`,
+            delay_reported: `recorded that ${name} is running late for ${label}`,
+            delay_recorded: `recorded that ${name} is running late for ${label}`,
+            completion_submitted: `received ${name}'s completion of ${label}, for review`,
+            no_check_in_contacted: `asked ${name} about the missing check-in for ${label}`,
+            no_check_in_alerted: `alerted the operator: ${name} has not checked in for ${label}`,
+            no_show_suspected: `flagged a possible no-show by ${name} for ${label}, for a person to confirm`,
+            no_show_confirmed: `confirmed ${name} as a no-show for ${label}`,
             cancelled:
-              cause === "job_cancelled" ? `ended ${name}'s assignment because the job was cancelled` : cause === "job_covered" ? `withdrew the offer to ${name}: another cleaner accepted` : `released ${name} from ${label}`,
+              cause === "dropped"
+                ? `took ${name} off ${label}: they said they cannot attend`
+                : cause === "no_show"
+                  ? `took ${name} off ${label}: no-show`
+                  : cause === "undelivered"
+                    ? `ended the offer to ${name} for ${label}: the text was not delivered`
+                    : cause === "job_cancelled" ? `ended ${name}'s assignment because the job was cancelled` : cause === "job_covered" ? `withdrew the offer to ${name}: another cleaner accepted` : `released ${name} from ${label}`,
           }[what] ?? null;
       }
     } else if (subject.table === "tasks") {

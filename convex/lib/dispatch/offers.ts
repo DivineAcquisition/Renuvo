@@ -20,6 +20,8 @@ export type OfferRequest = {
   respondBy: number;
   payCents: number;
   rules: Rules;
+  /** Cover for a place that lost its cleaner may be offered after the start time, until the job's end. */
+  afterStart?: boolean;
 };
 
 /**
@@ -35,7 +37,7 @@ export async function offerProblem(ctx: QueryCtx | MutationCtx, request: OfferRe
   const { company, job, cleaner, respondBy, rules } = request;
   if (job.status !== "scheduled") return "Only a scheduled job can be offered.";
   if (respondBy <= Date.now()) return "The response deadline must be in the future.";
-  if (respondBy > job.startsAt) return "The response deadline must be before the job starts.";
+  if (request.afterStart ? respondBy > job.endsAt : respondBy > job.startsAt) return request.afterStart ? "The response deadline must be before the job ends." : "The response deadline must be before the job starts.";
 
   const assignments = known?.assignments ?? (await jobAssignments(ctx, job));
   const facts = await cleanerFacts(ctx, job, cleaner, known?.history ?? (await jobHistory(ctx, job, assignments)));

@@ -275,7 +275,11 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
     return "awaiting_decision";
   }
 
-  if (job.startsAt <= now) {
+  const openRequests = requests.filter((row) => row.status === "open" || row.status === "unresolved");
+  const backup = openRequests.length > 0;
+  // A place that lost its cleaner is still worth covering after the start time, until the job would have ended.
+  const lateCover = backup && job.startsAt <= now && now < job.endsAt;
+  if (job.startsAt <= now && !lateCover) {
     await setTaskState(ctx, task, "needs_decision", { openQuestion: `This visit's start time has passed and ${crew === 1 ? "no cleaner accepted it" : `it is short ${staff.open} of ${crew} cleaners`}. Decide what to do with it.`, dueAt: job.startsAt }, DISPATCH, same);
     return "too_late";
   }
@@ -287,8 +291,6 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
     return "too_early";
   }
 
-  const openRequests = requests.filter((row) => row.status === "open" || row.status === "unresolved");
-  const backup = openRequests.length > 0;
   const action = coverAction(assignments, backup);
   const authority = await authorityFor(ctx, company._id, action);
   if (authority.kind === "paused") {
@@ -305,7 +307,7 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
   const jobView = await jobFacts(ctx, company, job);
   const { candidates, excluded } = rankCleaners(facts, jobView, DISPATCH_RULES);
   const windowMinutes = backup ? policy.backupOfferWindowMinutes : settings.offerWindowMinutes;
-  const respondBy = Math.min(now + windowMinutes * MINUTE, job.startsAt);
+  const respondBy = Math.min(now + windowMinutes * MINUTE, lateCover ? job.endsAt : job.startsAt);
 
   // One offer or proposal per open place, unless the Owner allows asking several cleaners at once.
   let wanted = staff.open - offers.length - pending.length;
@@ -334,14 +336,14 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
     if (!cleaner || !candidate.pay.ok) continue;
     const payCents = candidate.pay.payCents;
     // The ranking and the offer check use the same rules. The check has the last word all the same.
-    const problem = await offerProblem(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES }, { assignments, history });
+    const problem = await offerProblem(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES, afterStart: lateCover }, { assignments, history });
     if (problem !== null) continue;
     taken.add(candidate.cleanerId);
     wanted -= 1;
 
     if (authority.level === "propose") {
       const latest = job.startsAt - windowMinutes * MINUTE;
-      const decideBy = latest > now ? Math.min(latest, now + DAY) : job.startsAt;
+      const decideBy = lateCover ? Math.min(now + windowMinutes * MINUTE, job.endsAt) : latest > now ? Math.min(latest, now + DAY) : job.startsAt;
       const reassigning = action === REASSIGN;
       const summary = `${reassigning ? "Reassign" : backup ? "Offer cover for" : "Offer"} ${visit} to ${cleaner.name}`;
       const lead =
@@ -365,7 +367,7 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
       continue;
     }
 
-    const assignmentId = await placeOffer(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES }, DISPATCH, { action }, { kind: offerKindFor(action), coverageRequestId: request?._id });
+    const assignmentId = await placeOffer(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES, afterStart: lateCover }, DISPATCH, { action }, { kind: offerKindFor(action), coverageRequestId: request?._id });
     assignments.push((await ctx.db.get(assignmentId))!);
     if (authority.level === "execute_and_report") {
       await recordEvent(ctx, { companyId: job.companyId, type: "dispatch.reported", actor: DISPATCH, subject: { table: "assignments", id: assignmentId }, data: { action, jobId: job._id, cleanerId: cleaner._id } });
@@ -462,6 +464,7 @@ export async function afterDecision(ctx: MutationCtx, approval: Doc<"approvals">
 
   let problem: string | null = null;
   let respondBy = 0;
+  let afterStart = false;
   if (!company || !job || !cleaner || job.companyId !== approval.companyId || cleaner.companyId !== approval.companyId) {
     problem = "The visit or the cleaner no longer exists.";
   } else if (company.pausedAgents.includes("dispatch")) {
@@ -474,8 +477,9 @@ export async function afterDecision(ctx: MutationCtx, approval: Doc<"approvals">
     if (!pay.ok) problem = `${cleaner.name} ${pay.reason}.`;
     else if (pay.payCents !== proposal.payCents) problem = `${cleaner.name}'s pay for this visit changed from ${money(proposal.payCents)} to ${money(pay.payCents)} after this was proposed.`;
     else {
-      respondBy = Math.min(now + proposal.respondWithinMinutes * MINUTE, job.startsAt);
-      problem = await offerProblem(ctx, { company, job, cleaner, respondBy, payCents: proposal.payCents, rules: DISPATCH_RULES });
+      afterStart = approval.action === RUN_BACKUP && job.startsAt <= now && now < job.endsAt;
+      respondBy = Math.min(now + proposal.respondWithinMinutes * MINUTE, afterStart ? job.endsAt : job.startsAt);
+      problem = await offerProblem(ctx, { company, job, cleaner, respondBy, payCents: proposal.payCents, rules: DISPATCH_RULES, afterStart });
     }
   }
 
@@ -490,7 +494,7 @@ export async function afterDecision(ctx: MutationCtx, approval: Doc<"approvals">
   const coverRequest = (await jobCoverageRequests(ctx, job)).find((row) => row.status === "open" || row.status === "unresolved");
   const assignmentId = await placeOffer(
     ctx,
-    { company, job, cleaner, respondBy, payCents: proposal.payCents, rules: DISPATCH_RULES },
+    { company, job, cleaner, respondBy, payCents: proposal.payCents, rules: DISPATCH_RULES, afterStart },
     DISPATCH,
     { action: approval.action, approvalId: approval._id },
     { kind: offerKindFor(approval.action), coverageRequestId: approval.action === RUN_BACKUP ? coverRequest?._id : undefined },
