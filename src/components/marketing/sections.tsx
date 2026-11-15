@@ -2,7 +2,7 @@ import { ArrowRight, Hand, ListChecks, ScrollTextIcon, ShieldCheck, type LucideI
 import { AgentMark } from "@/components/marketing/agent-mark";
 import { AgentVisual } from "@/components/marketing/agent-visuals";
 import { SpotlightCard } from "@/components/marketing/saas-frame";
-import { AGENTS, CONTROL, PROBLEM } from "@/lib/marketing/content";
+import { AGENTS, CONTROL, INTEGRATIONS, PROBLEM } from "@/lib/marketing/content";
 
 /** The four loose ends from the problem section, each beside the agent that will carry it. */
 export function LooseEnds() {
@@ -70,5 +70,43 @@ export function ControlCards() {
         );
       })}
     </ul>
+  );
+}
+
+/** The planned connections, grouped by what they are for, each with its own mark. */
+export function IntegrationsGrid() {
+  return (
+    <div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {INTEGRATIONS.groups.map((group) => (
+          <div key={group.title} className="rounded-xl border border-border bg-card p-5">
+            <h3 className="text-[11px] font-semibold tracking-[0.14em] text-brand-300 uppercase">{group.title}</h3>
+            <ul className="mt-4 grid gap-3">
+              {group.items.map((item) => (
+                <li key={item.name} className="flex items-start gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background" aria-hidden>
+                    {item.icon ? (
+                      // Plain img: tiny static SVGs, which next/image does not optimize.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`/brand/integrations/${item.icon}.svg`} alt="" width={20} height={20} className="size-5 object-contain" />
+                    ) : (
+                      <span className="text-sm font-semibold text-muted-foreground">{item.name.charAt(0)}</span>
+                    )}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="text-sm font-medium text-strong">{item.name}</span>
+                      <span className="rounded-full border border-border px-1.5 py-px text-[10px] font-medium text-muted-foreground">{INTEGRATIONS.status}</span>
+                    </span>
+                    <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">{item.body}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-xs text-muted-foreground">{INTEGRATIONS.note}</p>
+    </div>
   );
 }
