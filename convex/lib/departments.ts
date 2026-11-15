@@ -16,26 +16,31 @@ export const DEPARTMENTS: readonly Department[] = [
   { id: "customer_success", name: "Customer Success", purpose: "Earn repeat business through consistent care.", agents: ["retention"] },
 ];
 
-export const AGENT_PROFILES: Record<Agent, { name: string; responsibility: string; completion: string }> = {
+/** `built` is false until the agent's first workflow exists. Screens say "not built yet" instead of showing an idle agent. */
+export const AGENT_PROFILES: Record<Agent, { name: string; responsibility: string; completion: string; built: boolean }> = {
   sales: {
     name: "Sales",
     responsibility: "Inquiries, quotes, follow-ups and bookings.",
     completion: "A suitable booking the company can fulfill, a clear decline, or a documented next step.",
+    built: false,
   },
   recruiter: {
     name: "Recruiter",
     responsibility: "Applicants, interviews and onboarding.",
     completion: "An owner-approved cleaner ready for appropriate work, with availability and onboarding confirmed.",
+    built: false,
   },
   dispatch: {
     name: "Dispatch",
     responsibility: "Assignments, coverage and service status.",
     completion: "An accepted assignment, communicated expectations and verified service status, with exceptions resolved or escalated.",
+    built: true,
   },
   retention: {
     name: "Retention",
     responsibility: "Feedback, service concerns and recurring service.",
     completion: "Feedback addressed, service issues followed through, and an appropriate next service agreed.",
+    built: false,
   },
 };
 

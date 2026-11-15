@@ -10,7 +10,7 @@ const eslintConfig = defineConfig([
     files: ["convex/lib/builders.ts"],
     rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "convex/_generated/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "convex/_generated/**", ".claude/**"]),
 ]);
 
 export default eslintConfig;

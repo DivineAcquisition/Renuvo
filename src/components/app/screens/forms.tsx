@@ -1,0 +1,296 @@
+"use client";
+
+import { useMutation, useQuery } from "convex/react";
+import { useState } from "react";
+
+import { useCompany } from "@/components/app/company";
+import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
+import { Button } from "@/components/ui/button";
+import { centsFrom, zonedInstant } from "@/lib/app/format";
+
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
+
+const KINDS = [
+  { id: "home", label: "Home" },
+  { id: "short_term_rental", label: "Short-term rental" },
+  { id: "property_manager", label: "Property manager" },
+  { id: "commercial", label: "Office or commercial" },
+] as const;
+type Kind = (typeof KINDS)[number]["id"];
+
+const list = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+
+function Submit({ busy, label, onCancel }: { busy: boolean; label: string; onCancel: () => void }) {
+  return (
+    <div className="flex gap-2 pt-1">
+      <Button type="submit" variant="primary" loading={busy}>
+        {label}
+      </Button>
+      <Button variant="ghost" onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
+/** A customer and their first property, saved together so a visit can be scheduled straight away. */
+export function NewCustomerForm({ onDone }: { onDone: () => void }) {
+  const { companyId } = useCompany();
+  const createCustomer = useMutation(api.customers.create);
+  const createProperty = useMutation(api.properties.create);
+  const { busy, error, run } = useRun();
+  const [form, setForm] = useState({ name: "", kind: "home" as Kind, email: "", phone: "", line1: "", city: "", region: "", postalCode: "", access: "" });
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void run(async () => {
+          const customerId = await createCustomer({ companyId, name: form.name, kind: form.kind, email: form.email || undefined, phone: form.phone || undefined });
+          await createProperty({
+            companyId,
+            customerId,
+            kind: form.kind,
+            address: { line1: form.line1, city: form.city, region: form.region, postalCode: form.postalCode },
+            accessInstructions: form.access || undefined,
+          });
+          onDone();
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name">
+          <TextInput value={form.name} onChange={set("name")} required maxLength={160} />
+        </Field>
+        <Field label="Kind of work">
+          <SelectInput value={form.kind} onChange={set("kind")}>
+            {KINDS.map((kind) => (
+              <option key={kind.id} value={kind.id}>
+                {kind.label}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Email (optional)">
+          <TextInput type="email" value={form.email} onChange={set("email")} />
+        </Field>
+        <Field label="Phone (optional)">
+          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+        </Field>
+      </div>
+      <Field label="Property address">
+        <TextInput value={form.line1} onChange={set("line1")} required placeholder="12 Elm St" autoComplete="address-line1" />
+      </Field>
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="City">
+          <TextInput value={form.city} onChange={set("city")} required />
+        </Field>
+        <Field label="State">
+          <TextInput value={form.region} onChange={set("region")} required />
+        </Field>
+        <Field label="Postal code">
+          <TextInput value={form.postalCode} onChange={set("postalCode")} required />
+        </Field>
+      </div>
+      <Field label="Access instructions (optional)" hint="Door codes, parking, pets. Cleaners see this with the visit.">
+        <TextArea value={form.access} onChange={set("access")} rows={2} />
+      </Field>
+      <FormError message={error} />
+      <Submit busy={busy} label="Add customer" onCancel={onDone} />
+    </form>
+  );
+}
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const minutesOf = (time: string) => {
+  const match = /^(\d{2}):(\d{2})$/.exec(time);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+};
+
+/** A cleaner with the hours they said they can work. Nobody is offered a visit outside those hours. */
+export function NewCleanerForm({ onDone }: { onDone: () => void }) {
+  const { companyId } = useCompany();
+  const create = useMutation(api.cleaners.create);
+  const setWeek = useMutation(api.availability.setWeek);
+  const setStatus = useMutation(api.cleaners.setStatus);
+  const { busy, error, run, setError } = useRun();
+  const [form, setForm] = useState({ name: "", engagement: "contractor" as "contractor" | "employee", phone: "", skills: "", areas: "", from: "08:00", to: "17:00" });
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [ready, setReady] = useState(true);
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const [startMinute, endMinute] = [minutesOf(form.from), minutesOf(form.to)];
+        if (startMinute === null || endMinute === null || startMinute >= endMinute) return setError("The hours need a start time before the end time.");
+        void run(async () => {
+          const cleanerId = await create({ companyId, name: form.name, engagement: form.engagement, phone: form.phone || undefined, skills: list(form.skills), serviceAreas: list(form.areas) });
+          await setWeek({ companyId, cleanerId, windows: days.map((weekday) => ({ weekday, startMinute, endMinute })) });
+          if (ready) await setStatus({ companyId, cleanerId, status: "ready" });
+          onDone();
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name">
+          <TextInput value={form.name} onChange={set("name")} required maxLength={160} />
+        </Field>
+        <Field label="Works as">
+          <SelectInput value={form.engagement} onChange={set("engagement")}>
+            <option value="contractor">Contractor, paid a share of the job</option>
+            <option value="employee">Employee, paid hourly</option>
+          </SelectInput>
+        </Field>
+        <Field label="Phone (optional)">
+          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+        </Field>
+        <Field label="Skills (optional)" hint="Separate with commas, for example: deep clean, move-out">
+          <TextInput value={form.skills} onChange={set("skills")} />
+        </Field>
+      </div>
+      <Field label="Postal codes they work in" hint="Separate with commas. Dispatch only offers visits in these areas.">
+        <TextInput value={form.areas} onChange={set("areas")} placeholder="78701, 78702" />
+      </Field>
+      <fieldset>
+        <legend className="text-sm font-medium text-strong">Days they said they can work</legend>
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {DAYS.map((day, index) => {
+            const on = days.includes(index);
+            return (
+              <button
+                key={day}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setDays((current) => (on ? current.filter((value) => value !== index) : [...current, index].sort()))}
+                className={`min-h-9 rounded-lg border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500 ${on ? "border-brand-500/60 bg-brand-500/10 text-strong" : "border-border bg-background text-muted-foreground"}`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="From">
+          <TextInput type="time" value={form.from} onChange={set("from")} required />
+        </Field>
+        <Field label="Until">
+          <TextInput type="time" value={form.to} onChange={set("to")} required />
+        </Field>
+      </div>
+      <label className="flex items-start gap-2 text-sm text-strong">
+        <input type="checkbox" checked={ready} onChange={(event) => setReady(event.target.checked)} className="mt-1 size-4 accent-[var(--color-brand-600)]" />
+        <span>
+          Ready for work now
+          <span className="block text-xs text-muted-foreground">Only a cleaner a person marked ready is offered visits.</span>
+        </span>
+      </label>
+      <FormError message={error} />
+      <Submit busy={busy} label="Add cleaner" onCancel={onDone} />
+    </form>
+  );
+}
+
+function PropertySelect({ customerId, value, onChange }: { customerId: Id<"customers">; value: string; onChange: (value: string) => void }) {
+  const { companyId } = useCompany();
+  const found = useQuery(api.customers.get, { companyId, customerId });
+  return (
+    <SelectInput value={value} onChange={(event) => onChange(event.target.value)} required disabled={!found}>
+      <option value="">{found ? "Choose a property" : "Loading…"}</option>
+      {found?.properties.map((property) => (
+        <option key={property._id} value={property._id}>
+          {property.label ?? `${property.address.line1}, ${property.address.city}`}
+        </option>
+      ))}
+    </SelectInput>
+  );
+}
+
+/** A visit for a customer at one of their properties, on the company's clock. */
+export function NewVisitForm({ onDone }: { onDone: () => void }) {
+  const { companyId, timezone } = useCompany();
+  const customers = useQuery(api.customers.list, { companyId });
+  const create = useMutation(api.jobs.create);
+  const { busy, error, run, setError } = useRun();
+  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceType: "Standard clean", scope: "", skills: "", date: "", from: "09:00", to: "11:00", price: "" });
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  if (customers && customers.length === 0) return <p className="text-sm text-muted-foreground">Add a customer under Records first, then schedule their visit here.</p>;
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const [startsAt, endsAt] = [zonedInstant(form.date, form.from, timezone), zonedInstant(form.date, form.to, timezone)];
+        if (startsAt === null || endsAt === null) return setError("Choose the day, the start time and the end time.");
+        const priceCents = form.price.trim() ? centsFrom(form.price) : undefined;
+        if (priceCents === null) return setError("Enter the price as an amount, for example 180.00, or leave it empty.");
+        void run(async () => {
+          await create({
+            companyId,
+            customerId: form.customerId as Id<"customers">,
+            propertyId: form.propertyId as Id<"properties">,
+            serviceType: form.serviceType,
+            scope: form.scope,
+            requiredSkills: list(form.skills),
+            priceCents,
+            startsAt,
+            endsAt,
+          });
+          onDone();
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Customer">
+          <SelectInput value={form.customerId} onChange={(event) => setForm((current) => ({ ...current, customerId: event.target.value, propertyId: "" }))} required>
+            <option value="">{customers ? "Choose a customer" : "Loading…"}</option>
+            {customers?.map((customer) => (
+              <option key={customer._id} value={customer._id}>
+                {customer.name}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Property">
+          {form.customerId ? (
+            <PropertySelect customerId={form.customerId as Id<"customers">} value={form.propertyId} onChange={(propertyId) => setForm((current) => ({ ...current, propertyId }))} />
+          ) : (
+            <SelectInput disabled>
+              <option>Choose a customer first</option>
+            </SelectInput>
+          )}
+        </Field>
+        <Field label="Service">
+          <TextInput value={form.serviceType} onChange={set("serviceType")} required maxLength={80} />
+        </Field>
+        <Field label="Price (optional)" hint="The price of the service. It is not a payment.">
+          <TextInput inputMode="decimal" value={form.price} onChange={set("price")} placeholder="180.00" />
+        </Field>
+      </div>
+      <Field label="Scope" hint="What the cleaner will be told to do.">
+        <TextArea value={form.scope} onChange={set("scope")} required rows={2} placeholder="3 bed, 2 bath standard clean" />
+      </Field>
+      <Field label="Skills needed (optional)" hint="Separate with commas. Only cleaners with these skills can be offered the visit.">
+        <TextInput value={form.skills} onChange={set("skills")} />
+      </Field>
+      <div className="grid grid-cols-3 gap-3">
+        <Field label="Day">
+          <TextInput type="date" value={form.date} onChange={set("date")} required />
+        </Field>
+        <Field label="Starts">
+          <TextInput type="time" value={form.from} onChange={set("from")} required />
+        </Field>
+        <Field label="Ends">
+          <TextInput type="time" value={form.to} onChange={set("to")} required />
+        </Field>
+      </div>
+      <p className="text-xs text-muted-foreground">Times are on the company’s clock ({timezone}). A new visit has no cleaner until one accepts it.</p>
+      <FormError message={error} />
+      <Submit busy={busy} label="Schedule the visit" onCancel={onDone} />
+    </form>
+  );
+}

@@ -130,6 +130,31 @@ import {
   Wrench as PhWrench,
   X as PhX,
   XCircle as PhXCircle,
+  CalendarCheck as PhNCalendarCheck,
+  CalendarDots as PhNCalendarDots,
+  ChartLine as PhNChartLine,
+  ChatCircleText as PhNChatCircleText,
+  ClockCounterClockwise as PhNClockCounterClockwise,
+  Funnel as PhNFunnel,
+  GearSix as PhNGearSix,
+  HandCoins as PhNHandCoins,
+  HandHeart as PhNHandHeart,
+  Handshake as PhNHandshake,
+  House as PhNHouse,
+  IdentificationCard as PhNIdentificationCard,
+  Key as PhNKey,
+  Lightning as PhNLightning,
+  PauseCircle as PhNPauseCircle,
+  SignOut as PhNSignOut,
+  Siren as PhNSiren,
+  SquaresFour as PhNSquaresFour,
+  Table as PhNTable,
+  UserCheck as PhNUserCheck,
+  UserPlus as PhNUserPlus,
+  UsersThree as PhNUsersThree,
+  Broom as PhNBroom,
+  Buildings as PhNBuildings,
+  PaperPlaneTilt as PhNPaperPlaneTilt,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon, IconProps } from "@phosphor-icons/react";
 
@@ -300,3 +325,33 @@ export const XCircle = wrap(PhXCircle, "XCircle", true);
 export const XIcon = wrap(PhX, "XIcon", false);
 export const Zap = wrap(PhLightning, "Zap", true);
 
+
+/*
+ * The Novara set: the same Phosphor icons the Novara app uses for the same ideas, duotone for objects
+ * and people, regular for controls.
+ */
+export const HouseIcon = wrap(PhNHouse, "HouseIcon", true);
+export const DashboardIcon = wrap(PhNSquaresFour, "DashboardIcon", true);
+export const ScheduleIcon = wrap(PhNCalendarDots, "ScheduleIcon", true);
+export const CalendarCheckIcon = wrap(PhNCalendarCheck, "CalendarCheckIcon", true);
+export const TeamIcon = wrap(PhNUsersThree, "TeamIcon", true);
+export const HandshakeIcon = wrap(PhNHandshake, "HandshakeIcon", true);
+export const HandCoinsIcon = wrap(PhNHandCoins, "HandCoinsIcon", true);
+export const HandHeartIcon = wrap(PhNHandHeart, "HandHeartIcon", true);
+export const SirenIcon = wrap(PhNSiren, "SirenIcon", true);
+export const LightningIcon = wrap(PhNLightning, "LightningIcon", true);
+export const ChatIcon = wrap(PhNChatCircleText, "ChatIcon", true);
+export const InsightsIcon = wrap(PhNChartLine, "InsightsIcon", true);
+export const GearIcon = wrap(PhNGearSix, "GearIcon", true);
+export const HistoryIcon = wrap(PhNClockCounterClockwise, "HistoryIcon", true);
+export const PauseCircleIcon = wrap(PhNPauseCircle, "PauseCircleIcon", true);
+export const UserCheckIcon = wrap(PhNUserCheck, "UserCheckIcon", true);
+export const UserPlusIcon = wrap(PhNUserPlus, "UserPlusIcon", true);
+export const IdCardIcon = wrap(PhNIdentificationCard, "IdCardIcon", true);
+export const KeyIcon = wrap(PhNKey, "KeyIcon", true);
+export const TableIcon = wrap(PhNTable, "TableIcon", true);
+export const FunnelIcon = wrap(PhNFunnel, "FunnelIcon", false);
+export const SignOutIcon = wrap(PhNSignOut, "SignOutIcon", true);
+export const BroomIcon = wrap(PhNBroom, "BroomIcon", true);
+export const BuildingsIcon = wrap(PhNBuildings, "BuildingsIcon", true);
+export const PaperPlaneIcon = wrap(PhNPaperPlaneTilt, "PaperPlaneIcon", true);

@@ -1,0 +1,162 @@
+"use client";
+
+import { RedirectToSignIn, useAuth, UserButton } from "@clerk/nextjs";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useState } from "react";
+
+import { CompanyProvider, type Role } from "@/components/app/company";
+import { DetailProvider } from "@/components/app/detail-panel";
+import { Field, FormError, TextInput, useRun } from "@/components/app/form";
+import { missingSetup, NotSetUp } from "@/components/app/not-set-up";
+import { AppShell } from "@/components/app/shell";
+import { Logo } from "@/components/brand/logo";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+
+const STORED = "selestial.company";
+
+function Loading() {
+  return (
+    <div className="flex min-h-dvh bg-muted/50" aria-busy="true" aria-label="Loading">
+      <div className="hidden w-64 shrink-0 border-r border-border bg-background p-4 lg:block">
+        <Skeleton className="h-8 w-36" />
+        <div className="mt-8 grid gap-2">
+          {Array.from({ length: 8 }, (_, index) => (
+            <Skeleton key={index} className="h-8 w-full" />
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 p-6">
+        <Skeleton className="h-40 w-full rounded-2xl" />
+        <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {Array.from({ length: 4 }, (_, index) => (
+            <Skeleton key={index} className="h-24 rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A signed-in person with no company yet: create one, or join one they were invited to. */
+function Onboarding() {
+  const invitations = useQuery(api.members.invitations, {});
+  const create = useMutation(api.companies.create);
+  const join = useMutation(api.members.join);
+  const [name, setName] = useState("");
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago");
+  const { busy, error, run } = useRun();
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="flex items-center justify-between">
+          <Logo />
+          <UserButton />
+        </div>
+        <h1 className="mt-8 font-heading text-2xl tracking-tight text-strong">Set up your company</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">You set the standards. Your team starts on review: nothing reaches a customer or a cleaner until you approve it.</p>
+
+        {invitations && invitations.length > 0 ? (
+          <div className="mt-6 grid gap-2">
+            <p className="text-sm font-medium text-strong">You have been invited</p>
+            {invitations.map((invitation) => (
+              <div key={invitation.companyId} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+                <span className="text-sm">
+                  <span className="font-medium text-strong">{invitation.companyName}</span> <span className="text-muted-foreground">· as {invitation.role}</span>
+                </span>
+                <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => join({ companyId: invitation.companyId as Id<"companies"> }))}>
+                  Join
+                </Button>
+              </div>
+            ))}
+            <p className="mt-2 text-xs text-muted-foreground">Or start a new company below.</p>
+          </div>
+        ) : null}
+
+        <form
+          className="mt-6 grid gap-4 rounded-2xl border border-border bg-card p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(() => create({ name, timezone }));
+          }}
+        >
+          <Field label="Company name">
+            <TextInput value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} autoComplete="organization" placeholder="Sparkle Cleaning Co." />
+          </Field>
+          <Field label="Time zone" hint="Schedules, availability and deadlines are shown on this clock.">
+            <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} required placeholder="America/Chicago" />
+          </Field>
+          <FormError message={error} />
+          <Button type="submit" variant="primary" loading={busy}>
+            Create company
+          </Button>
+        </form>
+      </div>
+    </main>
+  );
+}
+
+function Workspace({ companyId, role, children }: { companyId: Id<"companies">; role: Role; children: React.ReactNode }) {
+  const company = useQuery(api.companies.get, { companyId });
+  const count = useQuery(api.overview.decisionCount, { companyId });
+  const team = useQuery(api.overview.team, { companyId });
+  if (company === undefined) return <Loading />;
+  return (
+    <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
+      <DetailProvider>
+        <AppShell company={company.name} decisionCount={count} departments={team?.departments} userSlot={<UserButton />}>
+          {children}
+        </AppShell>
+      </DetailProvider>
+    </CompanyProvider>
+  );
+}
+
+function Companies({ children }: { children: React.ReactNode }) {
+  const mine = useQuery(api.companies.mine, {});
+  const [chosen] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(STORED);
+    } catch {
+      return null;
+    }
+  });
+  if (mine === undefined) return <Loading />;
+  if (mine.length === 0) return <Onboarding />;
+  const current = mine.find((row) => row.companyId === chosen) ?? mine[0];
+  return (
+    <Workspace companyId={current.companyId as Id<"companies">} role={current.role as Role}>
+      {children}
+    </Workspace>
+  );
+}
+
+function SignedIn({ children }: { children: React.ReactNode }) {
+  const { isLoading, isAuthenticated } = useConvexAuth();
+  const { isLoaded, isSignedIn } = useAuth();
+  if (isLoading || !isLoaded) return <Loading />;
+  if (!isSignedIn) return <RedirectToSignIn />;
+  if (!isAuthenticated) {
+    // Clerk knows this person, but the record did not accept their session. That is a setup gap, and the screen says which.
+    return (
+      <NotSetUp
+        title="You are signed in, but the record did not accept it"
+        body="Clerk and Convex are not connected to each other yet. Two settings finish it:"
+        items={["Clerk dashboard: turn on the Convex integration", "Convex: set CLERK_JWT_ISSUER_DOMAIN to this Clerk instance"]}
+      />
+    );
+  }
+  return <Companies>{children}</Companies>;
+}
+
+/** Everything under /app passes through here: set up, signed in, accepted by the record, and inside a company. */
+export function AppGate({ children }: { children: React.ReactNode }) {
+  const missing = missingSetup();
+  if (missing.length > 0) {
+    return <NotSetUp title="The app is not set up yet" body="Sign-in and the live record need these settings on this deployment before anyone can come in:" items={missing} />;
+  }
+  return <SignedIn>{children}</SignedIn>;
+}
