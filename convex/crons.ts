@@ -8,4 +8,7 @@ const crons = cronJobs();
 crons.interval("expire unanswered offers", { minutes: 5 }, internal.assignments.expireDue, {});
 crons.interval("expire undecided approvals", { minutes: 15 }, internal.approvals.expireDue, {});
 
+// Dispatch looks over the coming days for visits that still have no cleaner.
+crons.interval("dispatch looks for uncovered visits", { minutes: 15 }, internal.dispatch.sweep, {});
+
 export default crons;

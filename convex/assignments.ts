@@ -1,8 +1,9 @@
 /**
  * Assignments: one offer of one job to one cleaner. A job is covered only when the cleaner accepts.
- * The checks that protect a cleaner's time are here in code, so nothing can offer around them:
- * ready for work, has the skills, said they can work then, not on time off, not already holding that time.
- * Travel time between jobs arrives with Dispatch.
+ * The checks that protect a cleaner's time live in convex/lib/dispatch/offers.ts and are the same for a
+ * person and for Dispatch: ready for work, has the skills, said they can work then, not on time off,
+ * not already holding that time, and not closer to another job than the company's time between jobs.
+ * Whenever an offer ends without an acceptance, Dispatch looks at the job again in the same step.
  */
 import { v } from "convex/values";
 
@@ -10,35 +11,28 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, type MemberAccess } from "./lib/builders";
-import { availabilityFor, UNAVAILABLE_WORDS, type Span } from "./lib/availability";
+import { offerProblem, personRules, placeOffer } from "./lib/dispatch/offers";
+import { coverJob, holdForPerson } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent, type Actor } from "./lib/events";
 import { assertChange, ASSIGNMENT_CHANGES, type AssignmentStatus } from "./lib/statuses";
 import { cents, instant, text } from "./lib/text";
 
-/** The times this cleaner is already holding: every job they have an offer on or have accepted. */
-async function heldSpans(ctx: MutationCtx, companyId: Id<"companies">, cleanerId: Id<"cleaners">, exceptJob: Id<"jobs">): Promise<Span[]> {
-  const spans: Span[] = [];
-  for (const status of ["offered", "accepted"] as const) {
-    const rows = await ctx.db
-      .query("assignments")
-      .withIndex("by_company_cleaner_status", (q) => q.eq("companyId", companyId).eq("cleanerId", cleanerId).eq("status", status))
-      .take(500);
-    for (const row of rows) {
-      if (row.jobId === exceptJob) continue;
-      const job = await ctx.db.get(row.jobId);
-      if (job && (job.status === "scheduled" || job.status === "in_progress")) spans.push({ startsAt: job.startsAt, endsAt: job.endsAt });
-    }
-  }
-  return spans;
-}
+type EndCause = NonNullable<Doc<"assignments">["endCause"]>;
 
-async function end(ctx: MutationCtx, assignment: Doc<"assignments">, to: AssignmentStatus, actor: Actor, extra: { endReason?: string; data?: Record<string, string> } = {}) {
+async function end(
+  ctx: MutationCtx,
+  assignment: Doc<"assignments">,
+  to: AssignmentStatus,
+  actor: Actor,
+  extra: { endReason?: string; endCause?: EndCause; data?: Record<string, string> } = {},
+) {
   assertChange(ASSIGNMENT_CHANGES, assignment.status, to, "assignment");
   await ctx.db.patch(assignment._id, {
     status: to,
     ...(to === "accepted" || to === "declined" ? { respondedAt: Date.now() } : {}),
     ...(extra.endReason ? { endReason: extra.endReason } : {}),
+    ...(extra.endCause ? { endCause: extra.endCause } : {}),
   });
   await recordEvent(ctx, {
     companyId: assignment.companyId,
@@ -49,63 +43,34 @@ async function end(ctx: MutationCtx, assignment: Doc<"assignments">, to: Assignm
   });
 }
 
+/**
+ * A person offers a job to a cleaner they chose. The time between jobs applies to them too; they may set
+ * it aside for one offer by saying so, and the event records that they did.
+ */
 export const offer = companyMutation({
-  args: { jobId: v.id("jobs"), cleanerId: v.id("cleaners"), respondBy: v.number(), payCents: v.number() },
+  args: {
+    jobId: v.id("jobs"),
+    cleanerId: v.id("cleaners"),
+    respondBy: v.number(),
+    payCents: v.number(),
+    allowTightSchedule: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const job = await owned(ctx, args.jobId);
     const cleaner = await owned(ctx, args.cleanerId);
-    const now = Date.now();
-    const respondBy = instant(args.respondBy, "The response deadline");
-    const payCents = cents(args.payCents, "The cleaner's pay");
-
-    if (job.status !== "scheduled") throw userError("Only a scheduled job can be offered.");
-    if (respondBy <= now) throw userError("The response deadline must be in the future.");
-    if (respondBy > job.startsAt) throw userError("The response deadline must be before the job starts.");
-    if (cleaner.status !== "ready") throw userError("This cleaner is not marked ready for work.");
-    const missing = job.requiredSkills.filter((skill) => !cleaner.skills.includes(skill));
-    if (missing.length > 0) throw userError(`This cleaner does not have a skill the job needs: ${missing.join(", ")}.`);
-
-    const existing = await ctx.db
-      .query("assignments")
-      .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
-      .take(100);
-    if (existing.some((row) => row.status === "accepted")) throw userError("A cleaner has already accepted this job.");
-    if (existing.some((row) => row.status === "offered" && row.cleanerId === cleaner._id)) throw userError("This cleaner already has an open offer for this job.");
-
-    const windows = await ctx.db
-      .query("availabilityWindows")
-      .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id))
-      .take(100);
-    const timeOff = await ctx.db
-      .query("timeOff")
-      .withIndex("by_company_cleaner_end", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id).gt("endsAt", job.startsAt))
-      .take(200);
-    const answer = availabilityFor({
-      windows,
-      timeOff,
-      booked: await heldSpans(ctx, ctx.companyId, cleaner._id, job._id),
-      span: { startsAt: job.startsAt, endsAt: job.endsAt },
-      timezone: ctx.company.timezone,
-    });
-    if (!answer.available) throw userError(UNAVAILABLE_WORDS[answer.reason]);
-
-    const assignmentId = await ctx.db.insert("assignments", {
-      companyId: ctx.companyId,
-      jobId: job._id,
-      cleanerId: cleaner._id,
-      status: "offered",
-      scope: job.scope,
-      payCents,
-      offeredAt: now,
-      respondBy,
-    });
-    await recordEvent(ctx, {
-      companyId: ctx.companyId,
-      type: "assignment.offered",
-      actor: byMember(ctx),
-      subject: { table: "assignments", id: assignmentId },
-      data: { jobId: job._id, cleanerId: cleaner._id, respondBy, payCents },
-    });
+    const tight = args.allowTightSchedule === true;
+    const request = {
+      company: ctx.company,
+      job,
+      cleaner,
+      respondBy: instant(args.respondBy, "The response deadline"),
+      payCents: cents(args.payCents, "The cleaner's pay"),
+      rules: personRules(tight),
+    };
+    const problem = await offerProblem(ctx, request);
+    if (problem) throw userError(problem);
+    const assignmentId = await placeOffer(ctx, request, byMember(ctx), tight ? { timeBetweenJobsSetAside: true } : {});
+    await coverJob(ctx, job._id);
     return assignmentId;
   },
 });
@@ -117,6 +82,7 @@ async function respond(ctx: MutationCtx & MemberAccess, assignmentId: Id<"assign
   // An answer after the deadline does not count. The offer is recorded as expired and the caller is told.
   if (Date.now() > assignment.respondBy) {
     await end(ctx, assignment, "expired", actor, { endReason: "The response deadline passed." });
+    await coverJob(ctx, assignment.jobId);
     return { status: "expired" as const };
   }
   if (answer === "accepted") {
@@ -131,12 +97,14 @@ async function respond(ctx: MutationCtx & MemberAccess, assignmentId: Id<"assign
     // The job has its cleaner, so every other open offer for it is withdrawn.
     for (const other of others) {
       if (other._id !== assignment._id && other.status === "offered") {
-        await end(ctx, other, "cancelled", actor, { endReason: "Another cleaner accepted the job.", data: { cause: "job_covered" } });
+        await end(ctx, other, "cancelled", actor, { endReason: "Another cleaner accepted the job.", endCause: "job_covered", data: { cause: "job_covered" } });
       }
     }
+    await coverJob(ctx, assignment.jobId);
     return { status: "accepted" as const };
   }
   await end(ctx, assignment, "declined", actor, { data: { recordedFor: "cleaner" } });
+  await coverJob(ctx, assignment.jobId);
   return { status: "declined" as const };
 }
 
@@ -149,25 +117,39 @@ export const recordAnswer = companyMutation({
   handler: async (ctx, args) => respond(ctx, args.assignmentId, args.answer),
 });
 
-/** Withdraws an offer, or releases a cleaner who accepted. The job is uncovered again, and says so. */
+/**
+ * Withdraws an offer, or releases a cleaner who accepted. The job is uncovered again, and says so.
+ * Dispatch then looks for the next cleaner, unless the person keeps the visit (`keepWithMe`), for
+ * example to move it to another time first.
+ */
 export const release = companyMutation({
-  args: { assignmentId: v.id("assignments"), reason: v.string() },
+  args: { assignmentId: v.id("assignments"), reason: v.string(), keepWithMe: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const assignment = await owned(ctx, args.assignmentId);
-    await end(ctx, assignment, "cancelled", byMember(ctx), { endReason: text(args.reason, "The reason", 500) });
+    await end(ctx, assignment, "cancelled", byMember(ctx), { endReason: text(args.reason, "The reason", 500), endCause: "released" });
+    if (args.keepWithMe) {
+      const job = await ctx.db.get(assignment.jobId);
+      if (job && job.status === "scheduled") {
+        await holdForPerson(ctx, job, "You released the cleaner and kept this visit. Offer it to a cleaner yourself, or hand it back to Dispatch.", byMember(ctx));
+      }
+    }
+    await coverJob(ctx, assignment.jobId);
     return null;
   },
 });
 
-/** Run on a schedule: offers nobody answered in time become expired. */
+/** Run on a schedule: offers nobody answered in time become expired, and Dispatch looks at each job again. */
 export const expireDue = internalMutation({
   args: {},
   handler: async (ctx) => {
     const due = await ctx.db
       .query("assignments")
       .withIndex("by_status_respondBy", (q) => q.eq("status", "offered").lt("respondBy", Date.now()))
-      .take(200);
-    for (const assignment of due) await end(ctx, assignment, "expired", { kind: "system" }, { endReason: "The response deadline passed." });
+      .take(100);
+    for (const assignment of due) {
+      await end(ctx, assignment, "expired", { kind: "system" }, { endReason: "The response deadline passed." });
+      await coverJob(ctx, assignment.jobId);
+    }
     return due.length;
   },
 });

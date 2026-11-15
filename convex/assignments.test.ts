@@ -111,9 +111,14 @@ describe("jobs and assignments", () => {
     await s.offer(s.cleanerId);
     expect(await refusal(s.offer(s.cleanerId))).toContain("already has an open offer");
     expect(await refusal(s.offer(s.cleanerId, overlapping))).toContain("overlaps");
-    // Back to back is allowed here; time between jobs arrives with Dispatch.
+    // Back to back leaves no time between jobs. A person may set that rule aside for one offer, by saying so.
     const after = await as.mutation(api.jobs.create, { companyId, customerId: s.customerId, propertyId: s.propertyId, serviceType: "standard", scope: "Later", startsAt: JOB_END, endsAt: JOB_END + HOUR });
-    await s.offer(s.cleanerId, after);
+    expect(await refusal(s.offer(s.cleanerId, after))).toContain("within 30 minutes");
+    const tight = await as.mutation(api.assignments.offer, { companyId, jobId: after, cleanerId: s.cleanerId, respondBy, payCents: 7200, allowTightSchedule: true });
+    const offered = (await as.query(api.events.forSubject, { companyId, subject: { table: "assignments", id: tight } }))[0];
+    expect(offered.data).toMatchObject({ timeBetweenJobsSetAside: true });
+    // Setting the time between jobs aside never allows a real overlap.
+    expect(await refusal(as.mutation(api.assignments.offer, { companyId, jobId: overlapping, cleanerId: s.cleanerId, respondBy, payCents: 7200, allowTightSchedule: true }))).toContain("overlaps");
 
     // Deadlines and pay are checked numbers.
     const lena = await readyCleaner(as, companyId, "Lena");

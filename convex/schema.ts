@@ -188,7 +188,8 @@ export default defineSchema({
   })
     .index("by_company_start", ["companyId", "startsAt"])
     .index("by_company_status_start", ["companyId", "status", "startsAt"])
-    .index("by_company_customer", ["companyId", "customerId"]),
+    .index("by_company_customer", ["companyId", "customerId"])
+    .index("by_status_start", ["status", "startsAt"]),
 
   assignments: defineTable({
     companyId: v.id("companies"),
@@ -202,6 +203,10 @@ export default defineSchema({
     respondBy: v.number(),
     respondedAt: v.optional(v.number()),
     endReason: v.optional(v.string()),
+    /** Why a cancelled assignment ended. Only "released" counts against offering the same cleaner again. */
+    endCause: v.optional(v.union(v.literal("released"), v.literal("job_covered"), v.literal("job_cancelled"))),
+    /** The job's start when this was offered, so an answer about an old time is not held against a new one. */
+    jobStartsAt: v.optional(v.number()),
   })
     .index("by_company_job", ["companyId", "jobId"])
     .index("by_company_cleaner_status", ["companyId", "cleanerId", "status"])
@@ -214,6 +219,10 @@ export default defineSchema({
     agent: agentValidator,
     title: v.string(),
     about: v.optional(aboutValidator),
+    /** Names the one piece of work this is (for example dispatch.cover:<job id>), so it is not opened twice. */
+    key: v.optional(v.string()),
+    /** Set while a person holds the task. The agent does not act on it until it is handed back. */
+    withPersonSince: v.optional(v.number()),
     completionCondition: v.string(),
     status: taskStatusValidator,
     /** Set while open. */
@@ -231,7 +240,8 @@ export default defineSchema({
     closedAt: v.optional(v.number()),
   })
     .index("by_company_status_due", ["companyId", "status", "dueAt"])
-    .index("by_company_agent_status", ["companyId", "agent", "status"]),
+    .index("by_company_agent_status", ["companyId", "agent", "status"])
+    .index("by_company_key", ["companyId", "key"]),
 
   // ── Authority (brief, section 7) ───────────────────────────────────────────────────────────────
   /** One row per action the owner has changed. An action with no row is at its starting level. */
@@ -266,9 +276,12 @@ export default defineSchema({
     decidedAt: v.optional(v.number()),
     /** What the person changed, or why they skipped it. */
     note: v.optional(v.string()),
+    /** Whether an approved proposal was carried out, checked again at that moment, and why not if not. */
+    carriedOut: v.optional(v.object({ ok: v.boolean(), detail: v.string(), at: v.number() })),
     createdAt: v.number(),
   })
     .index("by_company_status_decideBy", ["companyId", "status", "decideBy"])
+    .index("by_company_task", ["companyId", "taskId"])
     .index("by_status_decideBy", ["status", "decideBy"]),
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────

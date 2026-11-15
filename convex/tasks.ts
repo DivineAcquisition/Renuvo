@@ -5,51 +5,21 @@
  */
 import { v } from "convex/values";
 
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, type MemberAccess } from "./lib/builders";
-import { notFound, userError } from "./lib/errors";
-import { byMember, recordEvent, type Actor } from "./lib/events";
-import { agentValidator, assertChange, TASK_CHANGES, taskStatusValidator, waitingOnValidator, type Agent, type TaskStatus } from "./lib/statuses";
+import { userError } from "./lib/errors";
+import { byMember, recordEvent } from "./lib/events";
+import { agentValidator, taskStatusValidator, waitingOnValidator, type TaskStatus } from "./lib/statuses";
+import { openTask, setTaskState, type TaskStateFields } from "./lib/taskState";
 import { instant, text } from "./lib/text";
 import { aboutValidator } from "./schema";
 
-type About = typeof aboutValidator.type;
+export { checkAbout, openTask } from "./lib/taskState";
 
-/** What a task is about must be in the same company. Another company's record is "Not found.". */
-export async function checkAbout(ctx: MutationCtx, companyId: Id<"companies">, about: About | undefined) {
-  if (!about) return;
-  const doc = await ctx.db.get(about.id);
-  if (!doc || doc.companyId !== companyId) notFound();
-}
-
-/** Opens a task. Agents will call this from their workflows; people call it through `create`. */
-export async function openTask(
-  ctx: MutationCtx,
-  input: { companyId: Id<"companies">; agent: Agent; title: string; nextAction: string; dueAt: number; completionCondition: string; about?: About; actor: Actor },
-): Promise<Id<"tasks">> {
-  await checkAbout(ctx, input.companyId, input.about);
-  const taskId = await ctx.db.insert("tasks", {
-    companyId: input.companyId,
-    agent: input.agent,
-    title: text(input.title, "The title", 200),
-    about: input.about,
-    completionCondition: text(input.completionCondition, "The completion condition", 500),
-    status: "open",
-    nextAction: text(input.nextAction, "The next action", 500),
-    dueAt: instant(input.dueAt, "The deadline"),
-    createdAt: Date.now(),
-  });
-  await recordEvent(ctx, { companyId: input.companyId, type: "task.opened", actor: input.actor, subject: { table: "tasks", id: taskId }, data: { agent: input.agent } });
-  return taskId;
-}
-
-async function move(ctx: MutationCtx & MemberAccess, task: Doc<"tasks">, to: TaskStatus, fields: Partial<Doc<"tasks">>) {
-  assertChange(TASK_CHANGES, task.status, to, "task");
-  // Each state holds only its own fields, so a waiting task never keeps a stale next action.
-  await ctx.db.patch(task._id, { nextAction: undefined, waitingOn: undefined, followUpAt: undefined, openQuestion: undefined, ...fields, status: to });
-  await recordEvent(ctx, { companyId: ctx.companyId, type: `task.${to}`, actor: byMember(ctx), subject: { table: "tasks", id: task._id }, data: { from: task.status } });
+async function move(ctx: MutationCtx & MemberAccess, task: Doc<"tasks">, to: TaskStatus, fields: TaskStateFields) {
+  await setTaskState(ctx, task, to, fields, byMember(ctx));
 }
 
 export const list = companyQuery({

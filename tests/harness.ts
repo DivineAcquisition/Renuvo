@@ -88,3 +88,65 @@ export async function readyCleaner(as: ReturnType<T["withIdentity"]>, companyId:
   await as.mutation(api.availability.setWeek, { companyId, cleanerId, windows: [{ weekday: TUESDAY, startMinute: 8 * 60, endMinute: 17 * 60 }] });
   return cleanerId;
 }
+
+// ── Dispatch ────────────────────────────────────────────────────────────────────────────────────
+
+export const AREA = "78701";
+/** The price of the seeded visit: $160.00. */
+export const PRICE = 16000;
+
+/**
+ * A cleaner Dispatch can ask: ready, works Tuesdays 8:00 to 17:00 in the seeded area, and paid half of
+ * the job unless `shareBps` says otherwise (null leaves pay unset).
+ */
+export async function dispatchCleaner(
+  as: ReturnType<T["withIdentity"]>,
+  companyId: Id<"companies">,
+  name: string,
+  options: { skills?: string[]; areas?: string[]; shareBps?: number | null; hourlyCents?: number } = {},
+) {
+  const employee = options.hourlyCents !== undefined;
+  const cleanerId = await as.mutation(api.cleaners.create, {
+    companyId,
+    name,
+    engagement: employee ? "employee" : "contractor",
+    skills: options.skills ?? [],
+    serviceAreas: options.areas ?? [AREA],
+  });
+  await as.mutation(api.cleaners.setStatus, { companyId, cleanerId, status: "ready" });
+  await as.mutation(api.availability.setWeek, { companyId, cleanerId, windows: [{ weekday: TUESDAY, startMinute: 8 * 60, endMinute: 17 * 60 }] });
+  if (employee) await as.mutation(api.cleaners.setPay, { companyId, cleanerId, pay: { kind: "hourly", hourlyCents: options.hourlyCents! } });
+  else if (options.shareBps !== null) await as.mutation(api.cleaners.setPay, { companyId, cleanerId, pay: { kind: "share", shareBps: options.shareBps ?? 5000 } });
+  return cleanerId;
+}
+
+/** A customer and their home in the seeded area. */
+export async function dispatchPlace(as: ReturnType<T["withIdentity"]>, companyId: Id<"companies">) {
+  const customerId = await as.mutation(api.customers.create, { companyId, name: "Dana Whitfield", kind: "home" });
+  const propertyId = await as.mutation(api.properties.create, {
+    companyId,
+    customerId,
+    kind: "home",
+    address: { line1: "12 Elm St", city: "Austin", region: "TX", postalCode: AREA },
+  });
+  return { customerId, propertyId };
+}
+
+/** A priced visit on the seeded Tuesday. Creating it is what first sets Dispatch to work on it. */
+export async function dispatchJob(
+  as: ReturnType<T["withIdentity"]>,
+  companyId: Id<"companies">,
+  place: { customerId: Id<"customers">; propertyId: Id<"properties"> },
+  fields: { startsAt?: number; endsAt?: number; priceCents?: number | null; requiredSkills?: string[] } = {},
+) {
+  return as.mutation(api.jobs.create, {
+    companyId,
+    ...place,
+    serviceType: "standard",
+    scope: "3 bed, 2 bath standard clean",
+    startsAt: fields.startsAt ?? JOB_START,
+    endsAt: fields.endsAt ?? JOB_END,
+    requiredSkills: fields.requiredSkills,
+    ...(fields.priceCents === null ? {} : { priceCents: fields.priceCents ?? PRICE }),
+  });
+}

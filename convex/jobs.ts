@@ -1,6 +1,7 @@
 /**
  * Jobs: the service a customer is due. A job's status is only about the service. Whether a cleaner has
- * accepted it is read from its assignments, and nothing here knows about payment.
+ * accepted it is read from its assignments, and nothing here knows about payment. Whenever a job is
+ * created, moved, cancelled or completed, Dispatch looks at it in the same step.
  */
 import { v } from "convex/values";
 
@@ -8,6 +9,7 @@ import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, type MemberAccess } from "./lib/builders";
+import { afterReschedule, coverJob } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { ACTIVE_ASSIGNMENT, assertChange, JOB_CHANGES, jobStatusValidator, type JobStatus } from "./lib/statuses";
@@ -93,6 +95,7 @@ export const create = companyMutation({
       createdAt: Date.now(),
     });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: byMember(ctx), subject: { table: "jobs", id: jobId } });
+    await coverJob(ctx, jobId);
     return jobId;
   },
 });
@@ -113,6 +116,7 @@ export const reschedule = companyMutation({
     const next = span(args.startsAt, args.endsAt);
     await ctx.db.patch(job._id, next);
     await recordEvent(ctx, { companyId: ctx.companyId, type: "job.rescheduled", actor: byMember(ctx), subject: { table: "jobs", id: job._id }, data: { from: job.startsAt, to: next.startsAt } });
+    await afterReschedule(ctx, { ...job, ...next });
     return null;
   },
 });
@@ -137,7 +141,9 @@ export const start = companyMutation({
 export const complete = companyMutation({
   args: { jobId: v.id("jobs") },
   handler: async (ctx, args) => {
-    await change(ctx, await owned(ctx, args.jobId), "completed");
+    const job = await owned(ctx, args.jobId);
+    await change(ctx, job, "completed");
+    await coverJob(ctx, job._id);
     return null;
   },
 });
@@ -152,9 +158,10 @@ export const cancel = companyMutation({
     await ctx.db.patch(job._id, { cancelReason: reason });
     for (const assignment of await assignmentsOf(ctx, job)) {
       if (!ACTIVE_ASSIGNMENT.includes(assignment.status)) continue;
-      await ctx.db.patch(assignment._id, { status: "cancelled", endReason: "The job was cancelled." });
+      await ctx.db.patch(assignment._id, { status: "cancelled", endReason: "The job was cancelled.", endCause: "job_cancelled" });
       await recordEvent(ctx, { companyId: ctx.companyId, type: "assignment.cancelled", actor: byMember(ctx), subject: { table: "assignments", id: assignment._id }, data: { from: assignment.status, cause: "job_cancelled" } });
     }
+    await coverJob(ctx, job._id);
     return null;
   },
 });
