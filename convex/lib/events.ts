@@ -21,6 +21,7 @@ export type Actor = typeof actorValidator.type;
 export const subjectValidator = v.union(
   v.object({ table: v.literal("companies"), id: v.id("companies") }),
   v.object({ table: v.literal("members"), id: v.id("members") }),
+  v.object({ table: v.literal("invitations"), id: v.id("invitations") }),
   v.object({ table: v.literal("customers"), id: v.id("customers") }),
   v.object({ table: v.literal("properties"), id: v.id("properties") }),
   v.object({ table: v.literal("cleaners"), id: v.id("cleaners") }),

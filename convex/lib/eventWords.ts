@@ -30,7 +30,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
     if (!cache.has(id)) cache.set(id, await read());
     return cache.get(id) as T;
   };
-  const doc = async <T extends "jobs" | "cleaners" | "customers" | "assignments" | "tasks" | "approvals" | "members" | "properties">(id: Id<T>) => {
+  const doc = async <T extends "jobs" | "cleaners" | "customers" | "assignments" | "tasks" | "approvals" | "members" | "properties" | "invitations">(id: Id<T>) => {
     const found = (await get(id, () => ctx.db.get(id))) as unknown as (Doc<T> & { companyId: Id<"companies"> }) | null;
     // An id that points outside the company is treated as missing.
     return found && found.companyId === company._id ? (found as Doc<T>) : null;
@@ -133,6 +133,18 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
     } else if (subject.table === "members") {
       const name = (await doc(subject.id))?.name ?? "a person";
       text = { invited: `invited ${name}`, joined: "joined the company", role_changed: `changed ${name}'s role to ${String(data.role ?? "")}`, removed: `removed ${name}` }[what] ?? null;
+    } else if (subject.table === "invitations") {
+      const invitation = await doc(subject.id);
+      const name = (invitation ? await doc(invitation.memberId) : null)?.name ?? "a person";
+      text =
+        {
+          revoked: `revoked the invitation for ${name}`,
+          reissued: `sent ${name} a new invitation link`,
+          accepted: `accepted the invitation for ${name} while already in the company`,
+          link_copied: `copied the invitation link for ${name}`,
+          email_sent: `emailed the invitation to ${name}`,
+          email_failed: `could not email the invitation to ${name}`,
+        }[what] ?? null;
     } else if (subject.table === "permissions") {
       const def = typeof data.action === "string" ? actionDef(data.action) : undefined;
       text = def ? `set "${def.label}" to ${LEVEL_WORDS[String(data.to)] ?? String(data.to)}` : "changed a permission";

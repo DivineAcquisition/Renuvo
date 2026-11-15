@@ -7,7 +7,7 @@ import { v } from "convex/values";
 
 import { actorValidator, eventDataValidator, subjectValidator } from "./lib/events";
 import { levelValidator } from "./lib/permissionCatalog";
-import { roleValidator } from "./lib/roles";
+import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import {
   agentValidator,
   approvalStatusValidator,
@@ -17,6 +17,8 @@ import {
   crewRoleValidator,
   endCauseValidator,
   handoffValidator,
+  invitationDeliveryStateValidator,
+  invitationStatusValidator,
   messageStatusValidator,
   cleanerStatusValidator,
   jobStatusValidator,
@@ -149,8 +151,12 @@ export default defineSchema({
     pausedAgents: v.array(agentValidator),
     dispatch: v.optional(dispatchSettingsValidator),
     dispatchPolicy: v.optional(dispatchPolicyValidator),
+    /** The sign-in subject of whoever created the company. */
+    createdBy: v.optional(v.string()),
+    /** Chosen by the creator's browser for one setup, so a create that is sent twice makes one company. */
+    setupKey: v.optional(v.string()),
     createdAt: v.number(),
-  }),
+  }).index("by_creator_setupKey", ["createdBy", "setupKey"]),
 
   members: defineTable({
     companyId: v.id("companies"),
@@ -167,6 +173,35 @@ export default defineSchema({
     .index("by_company", ["companyId"])
     .index("by_user", ["userId"])
     .index("by_email_status", ["email", "status"]),
+
+  /**
+   * An invitation to join a company. It points at the invited members row it will make active. The
+   * link's token is never stored: it is the public id plus a signature made with the deployment's
+   * secret. Expired is not a status; it is read from expiresAt.
+   */
+  invitations: defineTable({
+    companyId: v.id("companies"),
+    /** The invited members row this invitation turns into a membership. */
+    memberId: v.id("members"),
+    email: v.string(),
+    /** The role the person gets on joining. It is never taken from the person accepting. */
+    role: grantableRoleValidator,
+    /** 128 random bits. Changed on every reissue, which is what stops the old link. */
+    publicId: v.string(),
+    status: invitationStatusValidator,
+    expiresAt: v.number(),
+    invitedBy: v.id("members"),
+    createdAt: v.number(),
+    acceptedAt: v.optional(v.number()),
+    acceptedUserId: v.optional(v.string()),
+    revokedAt: v.optional(v.number()),
+    /** The invitation email. `problem` is words for a person, never a provider's raw response. */
+    delivery: v.object({ state: invitationDeliveryStateValidator, at: v.optional(v.number()), problem: v.optional(v.string()) }),
+  })
+    .index("by_publicId", ["publicId"])
+    .index("by_company", ["companyId", "createdAt"])
+    .index("by_company_member", ["companyId", "memberId"])
+    .index("by_email_status", ["email", "status", "expiresAt"]),
 
   // ── Customers and properties ───────────────────────────────────────────────────────────────────
   customers: defineTable({

@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { addMember, company, HOUR, JOB_END, JOB_START, NOW, person, refusal, seedVisit, start } from "../tests/harness";
+import { addMember, company, HOUR, JOB_END, JOB_START, NOW, person, refusal, seedVisit, start, withLinkSecret } from "../tests/harness";
 import { api, internal } from "./_generated/api";
 import { NOT_ALLOWED, NOT_FOUND } from "./lib/errors";
 
@@ -91,7 +91,7 @@ describe("company isolation", () => {
     const t = start();
     const a = await company(t, "owner-a", "Alpha Cleaning");
     const A = a.companyId;
-    await a.as.mutation(api.members.invite, { companyId: A, email: "Mia@Example.com", name: "Mia", role: "office" });
+    await withLinkSecret(() => a.as.mutation(api.invitations.create, { companyId: A, email: "Mia@Example.com", name: "Mia", role: "office" }));
 
     const stranger = t.withIdentity(person("stranger"));
     expect(await refusal(stranger.mutation(api.members.join, { companyId: A }))).toBe(NOT_FOUND);
@@ -105,7 +105,7 @@ describe("company isolation", () => {
     const memberId = await mia.mutation(api.members.join, { companyId: A });
     expect((await mia.query(api.companies.get, { companyId: A })).role).toBe("office");
     expect(await refusal(mia.mutation(api.members.join, { companyId: A }))).toBe(NOT_FOUND);
-    expect(await refusal(a.as.mutation(api.members.invite, { companyId: A, email: "mia@example.com", name: "Mia", role: "manager" }))).toContain("already");
+    expect(await refusal(withLinkSecret(() => a.as.mutation(api.invitations.create, { companyId: A, email: "mia@example.com", name: "Mia", role: "manager" })))).toContain("already");
 
     await a.as.mutation(api.members.remove, { companyId: A, memberId });
     expect(await refusal(mia.query(api.companies.get, { companyId: A }))).toBe(NOT_FOUND);
@@ -137,7 +137,7 @@ describe("company isolation", () => {
     const managerRefused = [
       () => manager.mutation(api.permissions.set, { companyId: A, action: "dispatch.send_reminder", level: "execute" }),
       () => manager.mutation(api.cleaners.setPay, { companyId: A, cleanerId, pay: { kind: "share", shareBps: 9000 } }),
-      () => manager.mutation(api.members.invite, { companyId: A, email: "friend@example.com", name: "Friend", role: "manager" }),
+      () => manager.mutation(api.invitations.create, { companyId: A, email: "friend@example.com", name: "Friend", role: "manager" }),
       () => manager.mutation(api.companies.setPausedAgents, { companyId: A, agents: [] }),
       () => manager.mutation(api.companies.update, { companyId: A, name: "Renamed" }),
     ];

@@ -18,7 +18,20 @@ export const agentValidator = literals(AGENTS);
 export const MEMBER_STATUSES = ["invited", "active", "removed"] as const;
 export const memberStatusValidator = literals(MEMBER_STATUSES);
 
-export const RECORD_STATUSES = ["active", "archived"] as const;
+/**
+ * An invitation to join a company. "expired" is not here: it is worked out from the expiry time, so a
+ * stored status never disagrees with the clock.
+ */
+export const INVITATION_STATUSES = ["pending", "accepted", "revoked"] as const;
+export type InvitationStatus = (typeof INVITATION_STATUSES)[number];
+export const invitationStatusValidator = literals(INVITATION_STATUSES);
+
+/** What became of the invitation email. queued: planned. not_sent: there was no way to send it. */
+export const INVITATION_DELIVERY_STATES = ["not_sent", "queued", "sent", "failed"] as const;
+export type InvitationDeliveryState = (typeof INVITATION_DELIVERY_STATES)[number];
+export const invitationDeliveryStateValidator = literals(INVITATION_DELIVERY_STATES);
+
+export const RECORD_STATUSES =["active", "archived"] as const;
 export const recordStatusValidator = literals(RECORD_STATUSES);
 
 export const WORK_KINDS = ["home", "short_term_rental", "property_manager", "commercial"] as const;
