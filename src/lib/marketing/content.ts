@@ -319,3 +319,48 @@ export const TASK_TRAIL = {
   ],
   fields: { owner: "Owner", ownerValue: "Sales", next: "Next action", deadline: "Deadline", closed: "Closed" },
 } as const;
+
+/**
+ * The connections planned for launch. None is live yet, and the page says so. `icon` is a file in
+ * public/brand/integrations; a connection with no icon file shows its initial instead.
+ */
+export const INTEGRATIONS = {
+  id: "connections",
+  headline: "Works with the tools you already use.",
+  lead: "Selestial is being built to connect to the places your leads, applicants, calendar and payments already live.",
+  status: "Planned",
+  groups: [
+    {
+      title: "Leads",
+      items: [
+        { name: "Meta lead ads", icon: "meta", body: "New leads from Facebook and Instagram go straight to Sales." },
+        { name: "Google Ads", icon: "google-ads", body: "Leads from your ads arrive with their source attached." },
+        { name: "Google reviews", icon: "google", body: "Retention invites every customer to leave a review." },
+      ],
+    },
+    {
+      title: "Hiring",
+      items: [
+        { name: "Indeed", icon: "indeed", body: "Recruiter reads new applications from your hiring inbox." },
+        { name: "ZipRecruiter", icon: null, body: "Recruiter reads new applications from your hiring inbox." },
+        { name: "Gmail", icon: "gmail", body: "Connect the mailbox your applications arrive in." },
+        { name: "Outlook", icon: "outlook", body: "Connect the mailbox your applications arrive in." },
+      ],
+    },
+    {
+      title: "Scheduling",
+      items: [
+        { name: "Google Calendar", icon: "google-calendar", body: "Interviews and visits appear on the calendar you already keep." },
+        { name: "Google Maps", icon: "googlemaps", body: "Real travel time between jobs, so the day is one cleaners can keep." },
+      ],
+    },
+    {
+      title: "Money",
+      items: [
+        { name: "Stripe", icon: "stripe", body: "Deposits, balances, plans and cleaner payouts." },
+        { name: "QuickBooks", icon: "quickbooks", body: "Charges and payouts sent to your books." },
+      ],
+    },
+  ],
+  note: "Planned connections. None is live yet. Names and logos belong to their owners.",
+} as const;
