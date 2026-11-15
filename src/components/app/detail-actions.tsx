@@ -65,7 +65,7 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
   const setMinutes = setTyped;
   const { busy, error, run, setError } = useRun();
   if (cleaners === undefined) return <p className="text-sm text-muted-foreground">Loading cleaners…</p>;
-  if (cleaners.length === 0) return <p className="text-sm text-muted-foreground">No cleaner is marked ready for work yet. Add one under Records, then offer this visit.</p>;
+  if (cleaners.length === 0) return <p className="text-sm text-muted-foreground">No cleaner is marked ready for work yet. Add one under Cleaners, then offer this visit.</p>;
   return (
     <form
       className="grid gap-3 rounded-xl border border-border bg-muted p-3"

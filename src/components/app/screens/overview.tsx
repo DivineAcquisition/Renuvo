@@ -11,6 +11,7 @@ import { messageOf } from "@/components/app/form";
 import { OverviewView } from "@/components/app/overview/overview-view";
 import type { ScheduleView } from "@/components/app/overview/schedule-table";
 import { useNow } from "@/components/app/use-now";
+import { linkTo } from "@/lib/app/navigation-helpers";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Decision, Link } from "../../../../convex/overview";
@@ -54,7 +55,7 @@ export function OverviewScreen() {
 
   function follow(link: Link) {
     if (link.kind !== "view") return open(link);
-    if (link.view === "decisions") return router.push("/app/decisions");
+    if (link.view === "decisions") return router.push(linkTo("approvals") ?? "/app");
     setView(link.view === "schedule_tomorrow" ? "tomorrow" : "today");
     document.getElementById("schedule")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }

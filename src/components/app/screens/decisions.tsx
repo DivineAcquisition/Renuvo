@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { api } from "../../../../convex/_generated/api";
 
-/** The one queue of decisions, soonest deadline first. Informational notices do not appear here. */
+/** Approvals: the one queue of decisions from every department, soonest deadline first. Notices do not appear here. */
 export function DecisionsScreen({ department }: { department?: string }) {
   const { companyId, timezone } = useCompany();
   const now = useNow();
@@ -35,7 +35,7 @@ export function DecisionsScreen({ department }: { department?: string }) {
   if (department) return list;
   return (
     <>
-      <PageHeader title="Needs your decision" lead="Each item says what the problem is, what the agent proposes, exactly what approving authorizes, and what happens if you wait." />
+      <PageHeader title="Approvals" lead="Decisions from every department, soonest first. Each says what the problem is, what the agent proposes, exactly what approving authorizes, and what happens if you wait." />
       {list}
     </>
   );

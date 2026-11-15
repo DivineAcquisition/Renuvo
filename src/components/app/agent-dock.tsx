@@ -8,6 +8,7 @@ import { ActivityFeed } from "@/components/app/overview/activity-feed";
 import { presenceLine, type TeamAgent, type TeamDepartment } from "@/components/app/overview/team-at-work";
 import { ChevronDown, X } from "@/components/icons";
 import { BorderBeam } from "@/components/ui/border-beam";
+import { linkTo } from "@/lib/app/navigation-helpers";
 import { cn } from "@/lib/utils";
 
 import type { Described, EventRef } from "../../../convex/lib/eventWords";
@@ -94,8 +95,8 @@ export function AgentDock({ departments, activity, now, timezone, onOpen }: { de
             </div>
           </div>
           <footer className="border-t border-border px-4 py-2.5">
-            <Link href="/app/team" onClick={() => setOpen(false)} className="text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
-              Open the AI Team page: permissions, pause, outcomes
+            <Link href={linkTo("settings") ?? "/app"} onClick={() => setOpen(false)} className="text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
+              Agent permissions and pause are in Settings
             </Link>
           </footer>
         </section>

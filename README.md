@@ -15,10 +15,12 @@ working name.
 ## What is here
 
 - The public landing page.
-- **Sign-in with Clerk** and the signed-in app under `/app`: Overview, the
-  decision queue, Schedule, three department workspaces (Sales, Operations,
-  Customer Success), the AI Team page, Records, Insights, Settings, and one
-  shared detail panel for a visit, an approval or a task.
+- **Sign-in with Clerk** and the signed-in app under `/app`: Home, Approvals,
+  Schedule, Customers & Properties, Cleaners, Reports, Settings, and one shared
+  detail panel for a visit, an approval or a task.
+- **The sidebar**, drawn from one navigation definition: three departments
+  (Growth, Operations, Team), eight agents and their work tabs. Unbuilt agents
+  and tabs are listed, marked "Not built yet", and do not link anywhere.
 - **The Convex backend**: companies and roles, customers and properties,
   cleaners and availability, jobs and assignments, tasks, permissions per
   action, approvals, an append-only event log.
@@ -27,8 +29,9 @@ working name.
   the next cleaner on a decline or no answer, and hands the visit to a person
   when it cannot be covered. It is code only; no model is called.
 
-Sales, Recruiter and Retention are not built. Screens say "not built yet"
-where they will be. There is no texting, so an offer is a record: someone
+Only Dispatch has a workflow. The other seven agents are not built, and four
+of them (Marketing, Quality, Customer Care, Team Coordinator) do not exist in
+the backend yet. There is no texting, so an offer is a record: someone
 tells the cleaner, and the office records their answer.
 
 ## Setup
@@ -116,7 +119,8 @@ Convex · Clerk · Vercel.
 | `src/components/marketing` | The page's sections and pictures |
 | `src/app/globals.css` | Tokens. Brand teal `#2CC5A8`, light only on the public site |
 | `src/components/ui` | Shared components |
-| `src/lib/app/navigation.ts` | The one navigation definition: departments, agents, work tabs, paths, availability. Not yet drawn by the shell |
+| `src/lib/app/navigation.ts` | The one navigation definition: departments, agents, work tabs, paths, availability |
+| `src/components/app/sidebar.tsx` | The sidebar, drawn from that definition |
 | `src/components/app` | The signed-in app: shell, Overview pieces, detail panel, screens |
 | `src/components/icons` | Phosphor icons, with the picks the Novara app uses |
 | `convex/schema.ts` | The shared record |

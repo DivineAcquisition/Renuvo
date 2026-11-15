@@ -1,20 +1,15 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import Link from "next/link";
 import { useState } from "react";
 
 import { AgentAvatar, eyebrow, STATE } from "@/components/app/agent";
 import { useCompany } from "@/components/app/company";
-import { useDetail } from "@/components/app/detail-panel";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
-import { AgentWork, departmentPath } from "@/components/app/overview/team-at-work";
-import { PageHeader } from "@/components/app/shell";
-import { useNow } from "@/components/app/use-now";
 import { PauseCircleIcon, Play, ShieldCheck } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ago, centsFrom, money } from "@/lib/app/format";
+import { centsFrom, money } from "@/lib/app/format";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
@@ -113,51 +108,51 @@ function PermissionRow({ action, canEdit }: { action: Action; canEdit: boolean }
 }
 
 /**
- * The AI Team: every agent as a member of the team. What it is responsible for, what it is doing, what
- * it may do without asking, and a way to pause it.
+ * Agent permissions, inside Settings: what each agent may do without asking, action by action, and a
+ * way to pause it. Only the Owner changes these. Agents the backend does not know yet are not listed,
+ * because there is nothing to permit.
  */
-export function TeamScreen() {
-  const { companyId, timezone, role } = useCompany();
-  const now = useNow();
-  const open = useDetail();
+export function AgentPermissions() {
+  const { companyId, role } = useCompany();
   const team = useQuery(api.overview.agents, { companyId });
   const permissions = useQuery(api.permissions.list, { companyId });
   const setPaused = useMutation(api.companies.setPausedAgents);
   const { busy, error, run } = useRun();
   const owner = role === "owner";
-  if (!team || !permissions) return <Skeleton className="h-96 rounded-2xl" />;
+  if (!team || !permissions) return <Skeleton className="h-64 rounded-2xl" />;
   const paused = permissions.pausedAgents;
+  const everyone = team.agents.map((agent) => agent.agent);
+  const allPaused = everyone.every((agent) => paused.includes(agent));
   return (
-    <>
-      <PageHeader
-        title="AI Team"
-        lead="Four agents, each with one responsibility and a standard for when its work is done. You decide, action by action, what each may do without asking."
-        actions={
-          owner ? (
-            <Button variant="outline" size="sm" loading={busy} onClick={() => void run(() => setPaused({ companyId, agents: paused.length === 4 ? [] : ["sales", "recruiter", "dispatch", "retention"] }))}>
-              {paused.length === 4 ? <Play aria-hidden /> : <PauseCircleIcon aria-hidden />}
-              {paused.length === 4 ? "Resume all agents" : "Pause all agents"}
-            </Button>
-          ) : undefined
-        }
-      />
-      <FormError message={error} />
-      <div className="grid items-start gap-5 xl:grid-cols-2">
+    <section id="agents" className="scroll-mt-20 rounded-2xl border border-border bg-card">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+        <div>
+          <h2 className="font-heading text-base tracking-tight text-strong">Agent permissions</h2>
+          <p className="text-xs text-muted-foreground">What each agent may do without asking. Pausing stops an agent from acting; its records stay open.</p>
+        </div>
+        {owner ? (
+          <Button variant="outline" size="sm" loading={busy} onClick={() => void run(() => setPaused({ companyId, agents: allPaused ? [] : everyone }))}>
+            {allPaused ? <Play aria-hidden /> : <PauseCircleIcon aria-hidden />}
+            {allPaused ? "Resume all agents" : "Pause all agents"}
+          </Button>
+        ) : null}
+      </header>
+      <div className="px-4 sm:px-5">
+        <FormError message={error} />
+      </div>
+      <div className="grid divide-y divide-border">
         {team.agents.map((agent) => {
           const actions = permissions.actions.filter((action) => action.agent === agent.agent) as Action[];
           const isPaused = paused.includes(agent.agent);
           return (
-            <section key={agent.agent} className={cn("rounded-2xl border bg-card", agent.state === "not_built" ? "border-dashed border-border" : "border-border")}>
-              <header className="flex flex-wrap items-start justify-between gap-3 p-4 sm:p-5">
-                <div className="flex items-start gap-3">
-                  <AgentAvatar agent={agent.agent} state={agent.state} size="lg" />
+            <div key={agent.agent} className="p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <AgentAvatar agent={agent.agent} state={agent.state} size="md" />
                   <div>
-                    <h2 className="font-heading text-lg tracking-tight text-strong">{agent.name}</h2>
-                    <p className="text-sm text-muted-foreground">
-                      {STATE[agent.state].label} ·{" "}
-                      <Link href={departmentPath(agent.department.id)} className="font-medium text-brand-300 underline-offset-4 hover:underline">
-                        {agent.department.name}
-                      </Link>
+                    <h3 className="text-sm font-semibold text-strong">{agent.name}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {STATE[agent.state].label} · {agent.department.name}
                     </p>
                   </div>
                 </div>
@@ -167,69 +162,23 @@ export function TeamScreen() {
                     {isPaused ? "Resume" : "Pause"}
                   </Button>
                 ) : null}
-              </header>
-
-              <div className="grid gap-4 border-t border-border p-4 sm:p-5">
-                <div>
-                  <p className={eyebrow}>Responsibility</p>
-                  <p className="mt-1 text-sm text-strong">{agent.responsibility}</p>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                    <span className="font-medium">Done means:</span> {agent.completion}
-                  </p>
-                </div>
-
-                {agent.state === "not_built" ? (
-                  <p className="rounded-xl border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground">Not built yet. Its permissions are shown so you can see what it will ask for; nothing runs until its workflow exists.</p>
-                ) : (
-                  <>
-                    <div>
-                      <p className={eyebrow}>Current work</p>
-                      <div className="mt-2">
-                        <AgentWork agent={agent} now={now} timezone={timezone} onOpen={open} limit={5} />
-                      </div>
-                    </div>
-                    <div>
-                      <p className={eyebrow}>Recent outcomes</p>
-                      {agent.recentOutcomes.length === 0 ? (
-                        <p className="mt-1 text-sm text-muted-foreground">Nothing closed yet.</p>
-                      ) : (
-                        <ul className="mt-1.5 grid gap-1.5">
-                          {agent.recentOutcomes.map((row) => (
-                            <li key={row.taskId}>
-                              <button type="button" onClick={() => open({ kind: "task", id: row.taskId })} className="-mx-1.5 block w-[calc(100%+0.75rem)] rounded-md px-1.5 py-1 text-left text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand-500">
-                                <span className="text-strong">{row.outcome || row.title}</span>
-                                <span className="block text-xs text-muted-foreground">
-                                  {row.title}
-                                  {row.closedAt ? ` · ${ago(row.closedAt, now, timezone)}` : ""}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                <div>
-                  <p className={cn(eyebrow, "flex items-center gap-1.5")}>
-                    <ShieldCheck className="size-3.5" aria-hidden />
-                    What {agent.name} may do
-                  </p>
-                  <ul className="mt-1 divide-y divide-border">
-                    {actions.map((action) => (
-                      <PermissionRow key={`${action.key}:${action.level}:${action.perActionCents}:${action.perDayCents}`} action={action} canEdit={owner} />
-                    ))}
-                  </ul>
-                </div>
               </div>
-            </section>
+              {agent.state === "not_built" ? <p className="mt-3 text-xs text-muted-foreground">Not built yet. These are the permissions it will ask for; nothing runs until its workflow exists.</p> : null}
+              <p className={cn(eyebrow, "mt-4 flex items-center gap-1.5")}>
+                <ShieldCheck className="size-3.5" aria-hidden />
+                What {agent.name} may do
+              </p>
+              <ul className="mt-1 divide-y divide-border">
+                {actions.map((action) => (
+                  <PermissionRow key={`${action.key}:${action.level}:${action.perActionCents}:${action.perDayCents}`} action={action} canEdit={owner} />
+                ))}
+              </ul>
+            </div>
           );
         })}
       </div>
-
-      <section className="mt-5 rounded-2xl border border-border bg-card p-4 sm:p-5">
-        <h2 className="font-heading text-base tracking-tight text-strong">Always a person, at any setting</h2>
+      <div className="border-t border-border p-4 sm:p-5">
+        <h3 className="text-sm font-semibold text-strong">Always a person, at any setting</h3>
         <ul className="mt-2 grid gap-1.5 text-sm text-muted-foreground sm:grid-cols-2">
           {permissions.personOnly.map((row) => (
             <li key={row.key} className="flex gap-2">
@@ -246,7 +195,7 @@ export function TeamScreen() {
             </div>
           ))}
         </dl>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }

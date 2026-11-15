@@ -25,10 +25,12 @@ const TOOLS: Record<string, Tool[]> = {
     { id: "coverage", label: "Coverage" },
     { id: "schedule", label: "Schedule" },
     { id: "cleaners", label: "Cleaners" },
-    { id: "recruiting", label: "Recruiting" },
   ],
-  sales: [{ id: "pipeline", label: "Pipeline" }],
-  customer_success: [{ id: "customers", label: "Customers needing attention" }],
+  growth: [
+    { id: "pipeline", label: "Pipeline" },
+    { id: "customers", label: "Customers needing attention" },
+  ],
+  team: [{ id: "recruiting", label: "Recruiting" }],
 };
 
 /** The next seven days, only the visits nobody has accepted. */
@@ -54,10 +56,12 @@ function Tools({ department, tool }: { department: string; tool: string }) {
   if (department === "operations") {
     if (tool === "coverage") return <Coverage />;
     if (tool === "schedule") return <ScheduleBoard initial="tomorrow" />;
-    if (tool === "cleaners") return <CleanersPanel />;
+    return <CleanersPanel />;
+  }
+  if (department === "team") {
     return <NotBuilt title="Recruiting is not built yet" body="The Recruiter turns Dispatch's staffing gaps into a recruiting priority, moves applicants through your requirements and onboarding, and brings candidates to you to decide." points={["Applicants awaiting review", "Interviews scheduled", "Onboarding incomplete"]} />;
   }
-  if (department === "sales") {
+  if (tool === "pipeline") {
     return <NotBuilt title="The sales pipeline is not built yet" body="The Sales agent will take an inquiry through the details the price needs, a quote from your pricing rules, a capacity check with Operations, and a booking." points={["Quotes awaiting replies", "Follow-ups due", "Bookings confirmed against capacity"]} />;
   }
   return <NotBuilt title="The customer workspace is not built yet" body="Retention will follow every visit with feedback, open a service issue for anyone unhappy, and propose recurring service only when nothing is unresolved." points={["Open service concerns", "Recurring offers awaiting replies", "Customers who have gone quiet"]} />;
@@ -76,9 +80,9 @@ export function DepartmentScreen({ id }: { id: string }) {
   const tools = TOOLS[id] ?? [];
   const [tool, setTool] = useState(tools[0]?.id ?? "");
   const department = team?.departments.find((row) => row.id === id);
-  if (team && !department) return <NotBuilt title="There is no department here" body="Selestial has three departments: Sales, Operations and Customer Success." />;
+  if (team && !department) return <NotBuilt title="There is no department here" body="Selestial has three departments: Growth, Operations and Team." />;
   if (!department) return <Skeleton className="h-64 rounded-2xl" />;
-  const results = week?.measures.filter((measure) => (id === "operations" ? ["completed_visits", "coverage_gaps"].includes(measure.key) : id === "sales" ? measure.key === "conversion" : ["recurring", "issues"].includes(measure.key)));
+  const results = week?.measures.filter((measure) => (id === "operations" ? ["completed_visits", "coverage_gaps"].includes(measure.key) : id === "growth" ? ["conversion", "recurring", "issues"].includes(measure.key) : false));
   return (
     <>
       <PageHeader title={department.name} lead={department.purpose} />

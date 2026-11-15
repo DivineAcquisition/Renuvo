@@ -10,6 +10,7 @@ import { presenceLine, TeamAtWork, type TeamDepartment } from "@/components/app/
 import { WeekMeasures } from "@/components/app/overview/week-measures";
 import { Panel } from "@/components/app/shell";
 import { ArrowRight } from "@/components/icons";
+import { linkTo } from "@/lib/app/navigation-helpers";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import type { Described, EventRef } from "../../../../convex/lib/eventWords";
@@ -82,7 +83,7 @@ export function OverviewView({
               </h2>
             </div>
             {decisions && decisions.length > MAX_DECISIONS ? (
-              <Link href="/app/decisions" className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
+              <Link href={linkTo("approvals") ?? "/app"} className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
                 See all {decisions.length}
                 <ArrowRight className="size-3" aria-hidden />
               </Link>
@@ -122,7 +123,7 @@ export function OverviewView({
                 timezone={timezone}
                 onOpen={onOpen}
                 emptyHint={
-                  <Link href="/app/schedule" className="font-medium text-brand-300 underline-offset-4 hover:underline">
+                  <Link href={linkTo("dispatch.schedule") ?? "/app"} className="font-medium text-brand-300 underline-offset-4 hover:underline">
                     Add a visit on the Schedule page
                   </Link>
                 }
@@ -159,8 +160,8 @@ export function OverviewView({
               This week
             </h2>
           </div>
-          <Link href="/app/insights" className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
-            Open Insights
+          <Link href={linkTo("reports") ?? "/app"} className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
+            Open Reports
             <ArrowRight className="size-3" aria-hidden />
           </Link>
         </div>

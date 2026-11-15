@@ -7,6 +7,7 @@ import { useCompany } from "@/components/app/company";
 import { DispatchSettings } from "@/components/app/dispatch-view";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { WeekMeasures } from "@/components/app/overview/week-measures";
+import { AgentPermissions } from "@/components/app/screens/agent-permissions";
 import { NotBuilt, PageHeader, Panel } from "@/components/app/shell";
 import { useNow } from "@/components/app/use-now";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,7 @@ export function InsightsScreen() {
   const week = useQuery(api.overview.week, now ? { companyId, asOf: now } : "skip");
   return (
     <>
-      <PageHeader title="Insights" lead="Business results, with the comparison period and what each number leaves out. Booked revenue, completed service revenue and cash collected are kept apart." />
+      <PageHeader title="Reports" lead="Business results, with the comparison period and what each number leaves out. Booked revenue, completed service revenue and cash collected are kept apart." />
       {week ? (
         <>
           <p className="mb-3 text-sm text-muted-foreground">
@@ -164,10 +165,11 @@ function CompanyDetails() {
 export function SettingsScreen({ extra }: { extra?: React.ReactNode }) {
   return (
     <>
-      <PageHeader title="Settings" lead="Your company's operating rules. What each agent may do is set on the AI Team page." />
+      <PageHeader title="Settings" lead="Your company, its people, what each agent may do, and how Dispatch works." />
       <div className="grid gap-5">
         <CompanyDetails />
         <People />
+        <AgentPermissions />
         <DispatchSettings />
         {extra}
         <NotBuilt title="Services, pricing, coverage and policies are not built yet" body="Before Sales and Retention act, the company's rules are saved here as values the system can enforce: services and durations, pricing and discount limits, service areas and hours, cancellation and refund policies." />

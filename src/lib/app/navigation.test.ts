@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { AGENT_PROFILES } from "../../../convex/lib/departments";
+import { AGENT_PROFILES, DEPARTMENTS as BACKEND_DEPARTMENTS } from "../../../convex/lib/departments";
 import { AGENTS as BACKEND_AGENTS } from "../../../convex/lib/statuses";
 import { AGENT_IDS, AGENTS, APP_ROOT, BADGE_KINDS, DEFAULT_DEPARTMENT, DEPARTMENT_IDS, DEPARTMENTS, EXISTING_ROUTES, FOOTER_ITEMS, LANDING_PATH, NAV_ITEMS, PERSISTENT_ITEMS, SHARED_ITEMS, SIDEBAR_SECTIONS, type Badge } from "./navigation";
 import {
@@ -13,6 +13,7 @@ import {
   breadcrumbsFor,
   hrefFor,
   initialSidebarState,
+  linkTo,
   mayShow,
   parseSidebarState,
   resolvePath,
@@ -205,6 +206,12 @@ describe("what is available today", () => {
         expect(agent.overview.availability.status, agent.id).toBe("planned");
       }
     }
+    // The backend groups the agents it knows into the same three departments, under the same names.
+    expect(BACKEND_DEPARTMENTS.map((row) => [row.id, row.name])).toEqual(DEPARTMENTS.map((row) => [row.id, row.label]));
+    for (const department of BACKEND_DEPARTMENTS) {
+      for (const backendAgent of department.agents) expect(AGENTS.find((agent) => agent.backendAgent === backendAgent)?.department, backendAgent).toBe(department.id);
+    }
+    expect(BACKEND_DEPARTMENTS.flatMap((row) => row.agents).sort()).toEqual([...BACKEND_AGENTS].sort());
     expect(AGENTS.filter((agent) => agent.workflow === "built").map((agent) => agent.id)).toEqual(["dispatch"]);
     // The plan carries no numbers or states of its own: badges get their values from the record.
     expect(JSON.stringify({ AGENTS, NAV_ITEMS })).not.toMatch(/"count"|"badge"|"status":"(working|active)"/);
@@ -212,8 +219,13 @@ describe("what is available today", () => {
 
   it("shows destinations by role without treating that as authorization, and ignores whether an agent is paused", () => {
     const finance = SHARED_ITEMS.find((item) => item.id === "finance")!;
-    expect(finance.minimumRole).toBe("undecided");
+    expect(finance.minimumRole).toBe("owner");
     expect([mayShow(finance, "owner"), mayShow(finance, "manager"), mayShow(finance, "office")]).toEqual([true, false, false]);
+    // Until the owner decides who may open something, it is shown to the Owner only.
+    const undecided = { ...finance, minimumRole: "undecided" as const };
+    expect([mayShow(undecided, "owner"), mayShow(undecided, "manager"), mayShow(undecided, "office")]).toEqual([true, false, false]);
+    // Everything else is drawn for everyone in the company; what they may do there is checked in Convex.
+    for (const { id, destination } of allDestinations()) if (id !== "finance") expect(mayShow(destination, "office"), id).toBe(true);
     for (const { id, destination } of allDestinations()) expect(mayShow(destination, "owner"), id).toBe(true);
     // mayShow takes a destination and a role and nothing else, so a paused agent cannot hide its records.
     expect(mayShow.length).toBe(2);
@@ -267,20 +279,22 @@ describe("navigation behavior", () => {
   });
 
   it("highlights the right thing on today's pages", () => {
-    expect(activeFor("/app/decisions")).toMatchObject({ item: "approvals" });
+    expect(activeFor("/app/approvals")).toMatchObject({ item: "approvals" });
+    expect(activeFor("/app/customers")).toMatchObject({ item: "customers" });
+    expect(activeFor("/app/cleaners")).toMatchObject({ item: "cleaners" });
+    // A page that stands in for exactly one destination highlights that destination.
     expect(activeFor("/app/insights")).toMatchObject({ item: "reports" });
     expect(activeFor("/app/schedule")).toMatchObject({ agent: "dispatch", tab: "schedule", department: "operations" });
-    expect(activeFor("/app/team")).toMatchObject({ agent: "dispatch", tab: null });
     expect(activeFor("/app/departments/operations")).toMatchObject({ agent: "dispatch", tab: "offers-coverage" });
-    // Records serves two destinations, so neither is highlighted as if it were the other.
-    expect(resolvePath("/app/records")).toBeNull();
-    expect(activeFor("/app/departments/sales")).toMatchObject({ agent: null, item: null });
+    // Pages that only redirect, and department pages nothing points at, highlight nothing.
+    for (const path of ["/app/decisions", "/app/records", "/app/team", "/app/departments/growth"]) expect(resolvePath(path), path).toBeNull();
   });
 
-  it("builds breadcrumbs from the same definition", () => {
+  it("builds breadcrumbs and links from the same definition", () => {
     expect(breadcrumbsFor("/app/agents/dispatch/schedule")).toEqual([
       { label: "Operations", href: null },
-      { label: "Dispatch", href: "/app/team" },
+      // Dispatch has no overview page yet, so its crumb is not a link.
+      { label: "Dispatch", href: null },
       { label: "Schedule", href: "/app/schedule" },
     ]);
     expect(breadcrumbsFor("/app/agents/marketing/campaigns")).toEqual([
@@ -288,8 +302,14 @@ describe("navigation behavior", () => {
       { label: "Marketing", href: null },
       { label: "Campaigns", href: null },
     ]);
-    expect(breadcrumbsFor("/app/approvals")).toEqual([{ label: "Approvals", href: "/app/decisions" }]);
+    expect(breadcrumbsFor("/app/approvals")).toEqual([{ label: "Approvals", href: "/app/approvals" }]);
     expect(breadcrumbsFor("/app/unknown")).toEqual([]);
+    expect(linkTo("approvals")).toBe("/app/approvals");
+    expect(linkTo("dispatch.schedule")).toBe("/app/schedule");
+    expect(linkTo("reports")).toBe("/app/insights");
+    expect(linkTo("finance")).toBeNull();
+    expect(linkTo("dispatch")).toBeNull();
+    expect(linkTo("nothing")).toBeNull();
   });
 
   it("puts what needs a person ahead of a general working indicator", () => {

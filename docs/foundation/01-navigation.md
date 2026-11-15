@@ -1,21 +1,21 @@
 # Selestial: sidebar navigation
 
-**Status: the owner's structure, recorded November 15, 2026.** This sets the
-information architecture before the sidebar is built. Where it differs from
-`00-product-brief.md` on departments and agents, this document is the newer
-decision.
+**Status: the owner's structure, recorded November 15, 2026.** Where it
+differs from `00-product-brief.md` on departments and agents, this document is
+the newer decision.
 
 **What exists:** the navigation definition, the helpers that derive everything
-from it, and tests that check it. **What does not exist:** the sidebar itself,
-the agent pages, and any new route. The current app shell still shows the
-earlier navigation and must not be extended; it is replaced when the sidebar
-is built from this definition.
+from it, the sidebar drawn from it, and tests that check it. **What does not
+exist:** the agent overview pages and most work tabs. They are listed in the
+sidebar, marked "Not built yet", and do not link anywhere.
 
 | File | What it is |
 |---|---|
 | `src/lib/app/navigation.ts` | The one definition: departments, agents, work tabs, company-wide items, paths, availability |
 | `src/lib/app/navigation-helpers.ts` | Agent lists, links, active item, breadcrumbs, deep links, sidebar state, badge priority |
 | `src/lib/app/navigation.test.ts` | Validation: names and order, unique ids, no conflicting paths, department mappings, availability against real pages |
+| `src/lib/app/badges.ts` | Turns the record's facts into badges. The facts come from the `overview.sidebar` query |
+| `src/components/app/sidebar.tsx` | The sidebar. It adds icons and markup; the structure is the definition's |
 
 ---
 
@@ -152,14 +152,14 @@ Three states describe each destination:
 | Destination | Path | Today |
 |---|---|---|
 | Home | `/app` | **Live.** The Overview. |
-| Approvals | `/app/approvals` | **Interim** at `/app/decisions`. The queue works; only the path and heading differ. |
+| Approvals | `/app/approvals` | **Live.** The decision queue. |
 | Inbox | `/app/inbox` | **Planned.** A page exists and says conversations are not built. |
 | Search | `/app/search` | **Planned.** |
-| Customers & Properties | `/app/customers` | **Interim** at `/app/records`. A list and an add form; no page per customer. |
-| Cleaners | `/app/cleaners` | **Interim** at `/app/records`. A list and an add form; no page per cleaner. |
-| Finance | `/app/finance` | **Planned.** |
+| Customers & Properties | `/app/customers` | **Live.** A list and an add form; no page per customer yet. |
+| Cleaners | `/app/cleaners` | **Live.** A list and an add form; no page per cleaner yet. |
+| Finance | `/app/finance` | **Planned.** Shown to the Owner only. |
 | Reports | `/app/reports` | **Interim** at `/app/insights`. Weekly measures only. |
-| Settings | `/app/settings` | **Live.** Company, people and Dispatch settings. |
+| Settings | `/app/settings` | **Live.** Company, people, agent permissions and pause, Dispatch settings. |
 
 ### Agent destinations
 
@@ -168,7 +168,7 @@ planned.
 
 | Destination | Path | Today |
 |---|---|---|
-| Dispatch overview | `/app/agents/dispatch` | **Interim** at `/app/team`: its work, outcomes, permissions and pause are one card there. No Ask Dispatch. |
+| Dispatch overview | `/app/agents/dispatch` | **Planned.** Until it exists, Dispatch's name in the sidebar is not a link. |
 | Dispatch › Schedule | `/app/agents/dispatch/schedule` | **Interim** at `/app/schedule`: visits by day or week, with who accepted. |
 | Dispatch › Offers & Coverage | `/app/agents/dispatch/offers-coverage` | **Interim** at `/app/departments/operations`: visits without an accepted cleaner. Offers are made from each visit's panel. |
 | Dispatch › Dispatch Board, Live Jobs, Action Links, Playbook | `/app/agents/dispatch/<tab>` | **Planned.** |
@@ -180,16 +180,17 @@ ids are the kebab-case of the label (`quotes-proposals`, `re-cleans`,
 
 ### Pages that exist and are not a destination's own path
 
-They keep working. Nothing here is removed or redirected by this task.
+| Existing page | Today | Becomes |
+|---|---|---|
+| `/app/decisions` | Redirects to Approvals. | Removed once old links have moved. |
+| `/app/records` | Redirects to Customers & Properties. | Removed once old links have moved. |
+| `/app/team` | Redirects to Settings. The AI Team page is retired. | Removed once old links have moved. |
+| `/app/schedule` | Visits by day or week. | Dispatch › Schedule at its own path, with a redirect. |
+| `/app/insights` | The week's measures. | Reports at `/app/reports`, with a redirect. |
+| `/app/departments/[department]` | A workspace per department. Only Operations is linked, as the stand-in for Offers & Coverage. | Nothing directly. Departments have no page. |
 
-| Existing page | Becomes |
-|---|---|
-| `/app/decisions` | Approvals at `/app/approvals`, with a redirect from the old path. |
-| `/app/schedule` | Dispatch › Schedule. The top-bar Schedule shortcut should then point at the new path. |
-| `/app/records` | Two pages: Customers & Properties, and Cleaners. |
-| `/app/insights` | Reports at `/app/reports`. |
-| `/app/team` (AI Team) | Each agent's overview, plus agent permissions inside Settings. |
-| `/app/departments/[department]` | Nothing directly. It serves the earlier three departments (sales, operations, customer-success). Departments become sidebar tabs with no page; the content moves to agent workspaces. |
+Every link inside the app to one of these destinations goes through
+`linkTo(id)`, so a page that moves is changed in one place.
 
 ## 5. Interaction rules
 
@@ -212,7 +213,8 @@ does not re-implement it.
    and leaves the rest. No accordion.
 6. **The name navigates; the arrow only opens and closes.** They are two
    controls. The arrow is a button with its own accessible name ("Show
-   Dispatch's work tabs") and `aria-expanded`.
+   Dispatch's work tabs") and `aria-expanded`. An agent with no overview page
+   yet has a name that is plain text: it neither navigates nor toggles.
 7. **Approvals and Inbox are reachable from every department.** They are in
    the persistent section, which department tabs never change.
 8. **Badges state something to act on**, in words: "2 unfilled", "3 to
@@ -231,21 +233,31 @@ does not re-implement it.
 
 ### Badges
 
-The definition holds no counts, no states and no badge values. A badge is
-computed from the record when the sidebar is drawn, by a query that does not
-exist yet. One badge per agent and one per tab. The first sources will be
-what the record already knows for Dispatch: visits without an accepted
-cleaner, and proposals waiting on a person.
+The definition holds no counts, no states and no badge values. The
+`overview.sidebar` query counts what the record knows, and `badges.ts` turns
+those counts into words. One badge per agent, one per tab, and one on
+Approvals.
+
+| Where | Badge | Kind |
+|---|---|---|
+| Approvals | "2 to decide" | Decision |
+| Dispatch | "2 unfilled" when a visit nobody has been asked to take starts within a day | Urgent |
+| Dispatch | "1 for you" when a task or proposal is waiting on a person | Decision |
+| Dispatch | "2 unfilled" when the unfilled visits are further out; "Paused" | To look at |
+| Dispatch | "Working", "Waiting on replies" | In progress |
+| Dispatch › Offers & Coverage | "2 unfilled"; "3 awaiting reply" | Urgent or to look at; in progress |
+
+An unbuilt agent never has a badge. While the record is loading no badge is
+shown, never a guessed one.
 
 ## 6. Availability rules
 
 - The definition is the full plan. Each destination carries its own
   availability, so the plan and what is built never get confused.
-- **An unbuilt agent is never shown as working.** It has no overview link, no
-  badge and no status other than "not built yet".
-- **A planned destination has no link.** `hrefFor` returns nothing for it. The
-  sidebar may list it, marked as not built, so the owner can see what is
-  coming.
+- **All eight agents are listed.** An unbuilt agent is marked "Not built yet",
+  has no overview link and no badge, and its tabs are listed without links.
+- **A planned destination has no link.** `hrefFor` returns nothing for it. It
+  is listed, marked as not built, so the owner can see what is coming.
 - **An existing record page can be available before its agent is.** Customers,
   Cleaners and the Schedule work today although Customer Care, Team
   Coordinator and most of Dispatch's tabs do not.
@@ -267,66 +279,60 @@ cleaner, and proposals waiting on a person.
 | Approvals | Everyone | Owners and Managers decide. Office sees only tasks handed to a person. |
 | Cleaners | Everyone | Pay rates are shown to the Owner only. |
 | Settings | Everyone | Only the Owner changes company details, people, authority and billing. |
-| Finance | **Undecided**, so Owner only for now | See open question 2. |
+| Finance | Owner only | The owner's decision. |
 
-## 7. Reuse and what remains
-
-### Can be reused
-
-| Existing | Reuse for |
-|---|---|
-| Overview page (`/app`) | Home, as it is. |
-| Decision queue, decision cards, hold-to-approve | Approvals. Move to `/app/approvals`. |
-| Schedule table with Today / Tomorrow / Week | Dispatch › Schedule. |
-| Coverage list on the Operations workspace | Start of Dispatch › Offers & Coverage and of the Dispatch Board's "needs staffing" column. |
-| Dispatch's ranking, run trace, take-over and hand-back in the visit panel | Dispatch Board and Offers & Coverage. |
-| AI Team agent card: work, outcomes, permissions, pause | Each agent overview; permissions also in Settings. |
-| Dispatch settings in Settings | Dispatch › Playbook, which refers to them. |
-| Customer and cleaner lists and add forms | Customers & Properties, and Cleaners. |
-| Weekly measures | Reports. |
-| The shared detail panel | Every workspace that opens a visit, an approval or a task. |
-| Team console | Stays, fed by the same definition. |
+## 7. What remains
 
 ### Still to build
 
-- The sidebar itself, the business selector, the department tabs, the drawer.
-- The two agent route patterns, and each agent overview.
+- The two agent route patterns, and each agent overview: responsibilities and
+  work, items needing attention, recent outcomes, Ask [Agent], history and
+  controls. The retired AI Team page showed Dispatch's recent outcomes; nothing
+  shows them until its overview exists.
 - 45 of the 47 work tabs. Two (Dispatch's Schedule and Offers & Coverage) are
   served in the meantime by existing pages.
 - Search, Finance, Inbox.
 - A page per customer and per cleaner.
-- The query that feeds badges.
-- Agent permissions inside Settings.
-- Redirects from the old paths when their replacements exist.
+- Badges for the seven agents that have no workflow.
+- Moving Schedule and Reports to their own paths, with redirects.
 
-### The backend does not match this structure yet
+### Reusable when those are built
 
-Nothing in the database was changed by this task. Three gaps need a decision
-before the sidebar can be fully live:
+| Existing | Reuse for |
+|---|---|
+| Schedule table with Today / Tomorrow / Week | Dispatch › Schedule. |
+| Coverage list on the Operations workspace | Dispatch › Offers & Coverage, and the Dispatch Board's "needs staffing" column. |
+| Dispatch's ranking, run trace, take-over and hand-back in the visit panel | Dispatch Board and Offers & Coverage. |
+| Agent permissions and pause in Settings | Each agent overview's controls, linking to the same settings. |
+| Dispatch settings in Settings | Dispatch › Playbook, which refers to them. |
+| Weekly measures | Reports. |
+| The shared detail panel | Every workspace that opens a visit, an approval or a task. |
 
-1. **The backend knows four agents** (Sales, Recruiter, Dispatch, Retention).
-   Marketing, Quality, Customer Care and Team Coordinator have no id in the
-   schema, so they cannot own a task, an approval or a permission. Adding them
-   is a schema change.
-2. **The backend's department catalog is the earlier one** (Sales, Operations,
-   Customer Success, with Recruiter under Operations). The Overview's "team at
-   work", the current sidebar and `/app/departments/[department]` read it. It
-   should become Growth, Operations, Team when the sidebar is built, in the
-   same change that retires the old department pages.
-3. **Permissions exist only for those four agents.** The permission catalog
-   needs actions for the four new agents before they can act.
+### The backend
 
-## 8. Open questions for the owner
+The backend's departments are Growth, Operations and Team, grouping the four
+agents it knows: Sales and Retention, Dispatch, Recruiter. A test keeps that
+grouping in agreement with the sidebar's.
+
+Two gaps remain, and both wait for each new agent to be designed:
+
+1. **Marketing, Quality, Customer Care and Team Coordinator have no id in the
+   schema**, so they cannot own a task, an approval or a permission.
+2. **The permission catalog has no actions for them.**
+
+## 8. Decisions and open questions
+
+Decided by the owner on November 15, 2026:
+
+| Question | Decision |
+|---|---|
+| Unbuilt agents in the sidebar | List all eight; mark the unbuilt ones "Not built yet", with no links. |
+| The decision queue's path | `/app/approvals`, titled Approvals, with a redirect from `/app/decisions`. |
+| Who sees Finance | The Owner only. |
+| The AI Team page | Retired. Agent permissions and pause moved into Settings. |
+| The backend's departments | Regroup the four existing agents now. Add the four new agents when each is designed. |
+
+Still open:
 
 1. **Books.** The brief planned a Books agent. It is not among the eight, and
-   Finance is now a shared area. Is Books dropped, or does it come later?
-2. **Who may open Finance?** The brief keeps billing from Managers. Does that
-   cover the cleaning company's own finances, or only Selestial's
-   subscription?
-3. **`/app/decisions` to `/app/approvals`.** Rename with a redirect when the
-   sidebar is built, or keep the current path?
-4. **Planned agents in the sidebar.** List all eight from the start, with the
-   unbuilt ones marked "not built yet", or show an agent only once it has a
-   workflow? The definition supports either.
-5. **The AI Team page.** Its content moves to agent overviews and Settings.
-   Should a single page comparing all eight agents remain?
+   Finance is a shared area. Dropped, or later?

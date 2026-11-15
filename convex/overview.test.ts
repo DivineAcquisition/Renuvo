@@ -40,6 +40,14 @@ describe("the Overview", () => {
     expect(first.briefing.map((row) => row.text)).toEqual(["No visits are scheduled today.", "Tomorrow has 1 visit without an accepted cleaner.", expect.stringMatching(/^1 decision is waiting for you; the earliest is due /)]);
     expect(first.briefing[1]).toMatchObject({ certainty: "attention", link: { kind: "view", view: "schedule_tomorrow" } });
     expect(await as.query(api.overview.decisionCount, { companyId })).toBe(1);
+    // The sidebar's badges come from the same record: one decision, and one visit nobody has been asked to take.
+    expect(await as.query(api.overview.sidebar, s.at())).toEqual({ decisions: 1, dispatch: { paused: false, withYou: 1, inProgress: 0, waiting: 0, unfilled: 1, unfilledWithinDay: 0, awaitingAnswer: 0 } });
+    const departments = (await as.query(api.overview.team, { companyId })).departments;
+    expect(departments.map((row) => [row.id, row.agents.map((agent) => agent.agent)])).toEqual([
+      ["growth", ["sales", "retention"]],
+      ["operations", ["dispatch"]],
+      ["team", ["recruiter"]],
+    ]);
 
     const tomorrow = await as.query(api.overview.schedule, { ...s.at(), view: "tomorrow" });
     expect(tomorrow.visits).toMatchObject([{ jobId: s.jobId, customer: "Dana Whitfield", state: "needs_coverage", cleaner: null, respondBy: null }]);
@@ -66,7 +74,7 @@ describe("the Overview", () => {
     expect(decision.run[2].detail).toMatch(/^Rosa first: Rosa /);
     expect((await as.query(api.overview.team, { companyId })).departments.find((row) => row.id === "operations")).toMatchObject({
       summary: "1 item needs your decision.",
-      agents: [{ agent: "recruiter", state: "not_built" }, { agent: "dispatch", state: "needs_you" }],
+      agents: [{ agent: "dispatch", state: "needs_you" }],
     });
 
     // Approving carries it out: the offer goes to Rosa. Offered is still not accepted.
@@ -76,7 +84,8 @@ describe("the Overview", () => {
     expect(offered).toMatchObject({ state: "awaiting_acceptance", cleaner: "Rosa" });
     expect(offered.respondBy).toBeGreaterThan(NOW);
     expect(await as.query(api.overview.decisions, s.at())).toEqual([]);
-    expect((await as.query(api.overview.team, { companyId })).departments.find((row) => row.id === "operations")!.agents[1]).toMatchObject({ state: "waiting", counts: { waiting: 1 } });
+    expect(await as.query(api.overview.sidebar, s.at())).toMatchObject({ decisions: 0, dispatch: { withYou: 0, waiting: 1, unfilled: 0, awaitingAnswer: 1 } });
+    expect((await as.query(api.overview.team, { companyId })).departments.find((row) => row.id === "operations")!.agents[0]).toMatchObject({ state: "waiting", counts: { waiting: 1 } });
 
     const detail = await as.query(api.details.get, { ...s.at(), ref: { kind: "job", id: s.jobId } });
     expect(detail.status).toEqual({ label: "Awaiting acceptance", tone: "pending" });
@@ -184,6 +193,7 @@ describe("the Overview", () => {
       () => other.as.query(api.overview.team, { companyId }),
       () => other.as.query(api.overview.agents, { companyId }),
       () => other.as.query(api.overview.week, s.at()),
+      () => other.as.query(api.overview.sidebar, s.at()),
       () => other.as.query(api.details.activity, s.at()),
     ]) {
       expect(await refusal(call())).toBe(NOT_FOUND);

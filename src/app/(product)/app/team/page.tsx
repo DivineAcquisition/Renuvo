@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { TeamScreen } from "@/components/app/screens/team";
-
-export const metadata: Metadata = { title: "AI Team" };
-
+/** The AI Team page is retired. Agent permissions and pause are in Settings. */
 export default function Page() {
-  return <TeamScreen />;
+  redirect("/app/settings");
 }

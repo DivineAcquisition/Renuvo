@@ -1,7 +1,4 @@
-import Link from "next/link";
-
 import { AgentAvatar, STATE } from "@/components/app/agent";
-import { ArrowRight } from "@/components/icons";
 import { whenLabel } from "@/lib/app/format";
 import { cn } from "@/lib/utils";
 
@@ -16,8 +13,6 @@ export type TeamAgent = {
   lines: WorkLine[];
 };
 export type TeamDepartment = { id: string; name: string; purpose: string; summary: string; agents: TeamAgent[] };
-
-export const departmentPath = (id: string) => `/app/departments/${id.replace(/_/g, "-")}`;
 
 const WAITING_ON: Record<string, string> = { customer: "customer", cleaner: "cleaner", applicant: "applicant", owner: "owner", other: "outside" };
 
@@ -107,10 +102,6 @@ export function TeamAtWork({ departments, now, timezone, onOpen }: { departments
               <AgentWork key={agent.agent} agent={agent} now={now} timezone={timezone} onOpen={onOpen} />
             ))}
           </div>
-          <Link href={departmentPath(department.id)} className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
-            Open {department.name}
-            <ArrowRight className="size-3" aria-hidden />
-          </Link>
         </section>
       ))}
     </div>

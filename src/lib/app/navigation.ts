@@ -44,7 +44,8 @@ export type Destination = {
   availability: Availability;
   /**
    * The least role that may open it, for showing or hiding the link. "undecided" means the owner has not
-   * said. This is not authorization: every read and write is checked again in Convex.
+   * said, and it is then shown to the Owner only. This is not authorization: every read and write is
+   * checked again in Convex.
    */
   minimumRole: Role | "undecided";
   accessNote?: string;
@@ -103,7 +104,7 @@ export const PERSISTENT_ITEMS: readonly NavItem[] = [
     section: "persistent",
     purpose: "Decisions from every department, in one queue.",
     path: `${APP_ROOT}/approvals`,
-    availability: interim(`${APP_ROOT}/decisions`, "Nothing functional. The queue works; it lives at /app/decisions under the heading 'Needs your decision'."),
+    availability: LIVE,
     minimumRole: "office",
     accessNote: "Owners and Managers decide approvals. Office sees only the tasks handed to a person.",
   },
@@ -130,8 +131,9 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     section: "shared",
     purpose: "Customers and the properties they have service at.",
     path: `${APP_ROOT}/customers`,
-    availability: interim(`${APP_ROOT}/records`, "A customer's own page: their properties, preferences and service history. Today it is a list with an add form, on a page shared with cleaners."),
+    availability: LIVE,
     minimumRole: "office",
+    accessNote: "A list and an add form so far. A page for each customer, with their properties and service history, is still to build.",
   },
   {
     id: "cleaners",
@@ -139,9 +141,9 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     section: "shared",
     purpose: "The people who do the work: standing, skills, areas and availability.",
     path: `${APP_ROOT}/cleaners`,
-    availability: interim(`${APP_ROOT}/records`, "A cleaner's own page: availability, time off, documents. Today it is a list with an add form, on a page shared with customers."),
+    availability: LIVE,
     minimumRole: "office",
-    accessNote: "Pay rates are shown to the Owner only.",
+    accessNote: "Pay rates are shown to the Owner only. A list and an add form so far; a page for each cleaner is still to build.",
   },
   {
     id: "finance",
@@ -150,8 +152,8 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     purpose: "The cleaning company's own money: customer payments, balances, cleaner pay. Not Selestial's subscription.",
     path: `${APP_ROOT}/finance`,
     availability: PLANNED,
-    minimumRole: "undecided",
-    accessNote: "The brief keeps billing from Managers. Whether that covers the company's own finances is the owner's call.",
+    minimumRole: "owner",
+    accessNote: "The Owner only, by the owner's decision on November 15, 2026.",
   },
   {
     id: "reports",
@@ -286,7 +288,6 @@ export const AGENTS: readonly AgentNav[] = [
     responsibility: "Staffs jobs, manages scheduling and coverage, and monitors service progress.",
     backendAgent: "dispatch",
     workflow: "built",
-    overview: interim(`${APP_ROOT}/team`, "A page of its own with an Ask Dispatch entry point. Today its work, outcomes, permissions and pause are one card on the AI Team page."),
     tabs: [
       ["dispatch-board", "Dispatch Board"],
       ["schedule", "Schedule", interim(`${APP_ROOT}/schedule`, "Arrival windows, projected duration, cleaner availability, conflicts and buffers, and changes that affect later jobs. Today it is visits by day or week with who accepted.")],
@@ -369,15 +370,15 @@ export const AGENTS: readonly AgentNav[] = [
  * or redirected on purpose when the new sidebar is built, and so no page is left unaccounted for.
  */
 export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes: string }[] = [
-  { pattern: `${APP_ROOT}/decisions`, today: "The decision queue.", becomes: "Approvals, at /app/approvals, with a redirect from here." },
-  { pattern: `${APP_ROOT}/schedule`, today: "Visits by day or week.", becomes: "Dispatch › Schedule. The top-bar Schedule shortcut should point at the new path." },
-  { pattern: `${APP_ROOT}/records`, today: "Customers and cleaners on one page.", becomes: "Two pages: Customers & Properties, and Cleaners." },
-  { pattern: `${APP_ROOT}/insights`, today: "The week's measures.", becomes: "Reports, at /app/reports." },
-  { pattern: `${APP_ROOT}/team`, today: "The AI Team page: every agent with its work, permissions and pause.", becomes: "Each agent's overview, plus agent permissions inside Settings." },
+  { pattern: `${APP_ROOT}/decisions`, today: "Redirects to Approvals.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/records`, today: "Redirects to Customers & Properties.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/team`, today: "Redirects to Settings, where agent permissions and pause now live.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/schedule`, today: "Visits by day or week.", becomes: "Dispatch › Schedule, at its own path, with a redirect from here." },
+  { pattern: `${APP_ROOT}/insights`, today: "The week's measures.", becomes: "Reports, at /app/reports, with a redirect from here." },
   {
     pattern: `${APP_ROOT}/departments/[department]`,
-    today: "A workspace for each of the earlier three departments (sales, operations, customer-success).",
-    becomes: "Nothing directly. Departments are sidebar tabs and have no page; their content moves to agent workspaces.",
+    today: "A workspace per department. Only Operations is linked, as the stand-in for Dispatch › Offers & Coverage.",
+    becomes: "Nothing directly. Departments are sidebar tabs and have no page; the content moves to agent workspaces.",
   },
 ];
 

@@ -220,7 +220,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const { busy, error, run, setError } = useRun();
   const [form, setForm] = useState({ customerId: "", propertyId: "", serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
-  if (customers && customers.length === 0) return <p className="text-sm text-muted-foreground">Add a customer under Records first, then schedule their visit here.</p>;
+  if (customers && customers.length === 0) return <p className="text-sm text-muted-foreground">Add a customer under Customers & Properties first, then schedule their visit here.</p>;
   return (
     <form
       className="grid gap-3"

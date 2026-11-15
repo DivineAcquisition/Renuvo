@@ -63,6 +63,15 @@ export function hrefFor(destination: Destination): string | null {
   return null;
 }
 
+/**
+ * The link for a destination named by its id ("approvals", "dispatch.schedule"). Every link in the app
+ * to a navigation destination comes through here, so a page that moves is changed in one place.
+ */
+export function linkTo(id: string): string | null {
+  const found = allDestinations().find((row) => row.id === id);
+  return found ? hrefFor(found.destination) : null;
+}
+
 const ROLE_RANK: Record<Role, number> = { office: 0, manager: 1, owner: 2 };
 
 /**

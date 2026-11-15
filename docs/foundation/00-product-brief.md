@@ -658,5 +658,5 @@ behavior the philosophy has to produce.
 6. **Legal review** of the Recruiter agent before it is sold.
 7. **The price** of the monthly plan.
 8. **Books.** Section 17 planned a Books agent. It is not among the eight
-   agents in `01-navigation.md`, where Finance is a shared area. To confirm:
-   is Books dropped, or does it come later?
+   agents in `01-navigation.md`, where Finance is a shared area. Left open by
+   the owner on November 15: dropped, or later?

@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { DecisionsScreen } from "@/components/app/screens/decisions";
-
-export const metadata: Metadata = { title: "Needs your decision" };
-
+/** The decision queue is Approvals now. Old links land there. */
 export default function Page() {
-  return <DecisionsScreen />;
+  redirect("/app/approvals");
 }

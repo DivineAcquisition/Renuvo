@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { RecordsScreen } from "@/components/app/screens/records";
-
-export const metadata: Metadata = { title: "Records" };
-
+/** Records became two pages: Customers & Properties, and Cleaners. Old links land on the first. */
 export default function Page() {
-  return <RecordsScreen />;
+  redirect("/app/customers");
 }

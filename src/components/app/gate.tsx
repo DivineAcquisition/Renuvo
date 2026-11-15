@@ -2,6 +2,7 @@
 
 import { RedirectToSignIn, useAuth, UserButton } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AgentDock } from "@/components/app/agent-dock";
@@ -11,10 +12,12 @@ import { Field, FormError, TextInput, useRun } from "@/components/app/form";
 import { missingSetup, NotSetUp } from "@/components/app/not-set-up";
 import type { TeamDepartment } from "@/components/app/overview/team-at-work";
 import { AppShell } from "@/components/app/shell";
+import { Sidebar, SidebarStateProvider, type BusinessOption } from "@/components/app/sidebar";
 import { useNow } from "@/components/app/use-now";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LANDING_PATH } from "@/lib/app/navigation";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -113,7 +116,15 @@ function Dock({ departments }: { departments?: TeamDepartment[] }) {
   return <AgentDock departments={departments} activity={activity} now={now} timezone={timezone} onOpen={open} />;
 }
 
-function Workspace({ companyId, role, children }: { companyId: Id<"companies">; role: Role; children: React.ReactNode }) {
+/** The sidebar with the live record behind its badges. */
+function LiveSidebar({ businesses, onSwitch, onNavigate }: { businesses: BusinessOption[]; onSwitch: (companyId: string) => void; onNavigate?: () => void }) {
+  const { companyId, name, role } = useCompany();
+  const now = useNow();
+  const facts = useQuery(api.overview.sidebar, now ? { companyId, asOf: now } : "skip");
+  return <Sidebar company={name} companyId={companyId} businesses={businesses} onSwitchBusiness={onSwitch} role={role} facts={facts} onNavigate={onNavigate} />;
+}
+
+function Workspace({ companyId, role, userId, businesses, onSwitch, children }: { companyId: Id<"companies">; role: Role; userId: string; businesses: BusinessOption[]; onSwitch: (companyId: string) => void; children: React.ReactNode }) {
   const company = useQuery(api.companies.get, { companyId });
   const count = useQuery(api.overview.decisionCount, { companyId });
   const team = useQuery(api.overview.team, { companyId });
@@ -121,17 +132,26 @@ function Workspace({ companyId, role, children }: { companyId: Id<"companies">; 
   return (
     <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
       <DetailProvider>
-        <AppShell company={company.name} decisionCount={count} departments={team?.departments} userSlot={<UserButton />} dock={<Dock departments={team?.departments} />}>
-          {children}
-        </AppShell>
+        <SidebarStateProvider userId={userId} companyId={companyId}>
+          <AppShell
+            company={company.name}
+            decisionCount={count}
+            sidebar={(close) => <LiveSidebar businesses={businesses} onSwitch={onSwitch} onNavigate={close} />}
+            userSlot={<UserButton />}
+            dock={<Dock departments={team?.departments} />}
+          >
+            {children}
+          </AppShell>
+        </SidebarStateProvider>
       </DetailProvider>
     </CompanyProvider>
   );
 }
 
-function Companies({ children }: { children: React.ReactNode }) {
+function Companies({ userId, children }: { userId: string; children: React.ReactNode }) {
+  const router = useRouter();
   const mine = useQuery(api.companies.mine, {});
-  const [chosen] = useState<string | null>(() => {
+  const [chosen, setChosen] = useState<string | null>(() => {
     try {
       return window.localStorage.getItem(STORED);
     } catch {
@@ -141,8 +161,19 @@ function Companies({ children }: { children: React.ReactNode }) {
   if (mine === undefined) return <Loading />;
   if (mine.length === 0) return <Onboarding />;
   const current = mine.find((row) => row.companyId === chosen) ?? mine[0];
+  // Switching company changes the whole workspace, so it lands on Home: a page for one company's
+  // record means nothing in another.
+  const switchTo = (companyId: string) => {
+    try {
+      window.localStorage.setItem(STORED, companyId);
+    } catch {
+      // Not remembered across visits, but the switch still happens.
+    }
+    setChosen(companyId);
+    router.push(LANDING_PATH);
+  };
   return (
-    <Workspace companyId={current.companyId as Id<"companies">} role={current.role as Role}>
+    <Workspace key={current.companyId} companyId={current.companyId as Id<"companies">} role={current.role as Role} userId={userId} businesses={mine.map((row) => ({ companyId: row.companyId, name: row.name }))} onSwitch={switchTo}>
       {children}
     </Workspace>
   );
@@ -150,9 +181,9 @@ function Companies({ children }: { children: React.ReactNode }) {
 
 function SignedIn({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated } = useConvexAuth();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
   if (isLoading || !isLoaded) return <Loading />;
-  if (!isSignedIn) return <RedirectToSignIn />;
+  if (!isSignedIn || !userId) return <RedirectToSignIn />;
   if (!isAuthenticated) {
     // Clerk knows this person, but the record did not accept their session. That is a setup gap, and the screen says which.
     return (
@@ -163,7 +194,7 @@ function SignedIn({ children }: { children: React.ReactNode }) {
       />
     );
   }
-  return <Companies>{children}</Companies>;
+  return <Companies userId={userId}>{children}</Companies>;
 }
 
 /** Everything under /app passes through here: set up, signed in, accepted by the record, and inside a company. */

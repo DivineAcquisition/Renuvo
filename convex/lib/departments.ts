@@ -4,16 +4,22 @@
  */
 import { literals, type Agent } from "./statuses";
 
-export const DEPARTMENT_IDS = ["sales", "operations", "customer_success"] as const;
+export const DEPARTMENT_IDS = ["growth", "operations", "team"] as const;
 export type DepartmentId = (typeof DEPARTMENT_IDS)[number];
 export const departmentValidator = literals(DEPARTMENT_IDS);
 
 export type Department = { id: DepartmentId; name: string; purpose: string; agents: readonly Agent[] };
 
+/**
+ * The three departments. They are departments, not lifecycle stages. Only the agents the backend
+ * knows are listed here; Marketing, Quality, Customer Care and Team Coordinator join their departments
+ * when each is designed (docs/foundation/01-navigation.md). The sidebar's own list of all eight is
+ * src/lib/app/navigation.ts, and a test keeps the two in agreement.
+ */
 export const DEPARTMENTS: readonly Department[] = [
-  { id: "sales", name: "Sales", purpose: "Give every inquiry a timely, honest path to a decision.", agents: ["sales"] },
-  { id: "operations", name: "Operations", purpose: "Keep the team ready and every visit covered.", agents: ["recruiter", "dispatch"] },
-  { id: "customer_success", name: "Customer Success", purpose: "Earn repeat business through consistent care.", agents: ["retention"] },
+  { id: "growth", name: "Growth", purpose: "Customer interest, bookings and lasting customer relationships.", agents: ["sales", "retention"] },
+  { id: "operations", name: "Operations", purpose: "Staffing, service delivery, quality and customer care.", agents: ["dispatch"] },
+  { id: "team", name: "Team", purpose: "Hiring, onboarding, readiness and availability.", agents: ["recruiter"] },
 ];
 
 /** `built` is false until the agent's first workflow exists. Screens say "not built yet" instead of showing an idle agent. */

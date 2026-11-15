@@ -10,6 +10,7 @@ import type { QueryCtx } from "./_generated/server";
 import { companyQuery, type MemberAccess } from "./lib/builders";
 import { AGENT_PROFILES, departmentOf, DEPARTMENTS } from "./lib/departments";
 import { coverRun, type RunStep } from "./lib/dispatch/run";
+import { dispatchSettings } from "./lib/dispatch/settings";
 import { coverKey, jobApprovals } from "./lib/dispatch/workflow";
 import { liveTaskByKey } from "./lib/taskState";
 import { isManager } from "./lib/roles";
@@ -329,6 +330,38 @@ export const decisionCount = companyQuery({
   handler: async (ctx) => {
     const { approvals, tasks } = await openDecisions(ctx);
     return approvals.length + tasks.length;
+  },
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * The facts behind the sidebar's badges: things a person can act on, counted from the record. A badge
+ * is never a count of messages sent or of activity.
+ */
+export const sidebar = companyQuery({
+  args: { asOf: v.number() },
+  handler: async (ctx, args) => {
+    const { approvals, tasks } = await openDecisions(ctx);
+    const ahead = await visitsBetween(ctx, args.asOf, args.asOf + dispatchSettings(ctx.company).lookAheadDays * DAY);
+    const unfilled = ahead.filter((visit) => visit.state === "needs_coverage");
+    const work = await agentWork(ctx, "dispatch");
+    return {
+      /** Approvals and handed-over tasks waiting on this person. */
+      decisions: approvals.length + tasks.length,
+      dispatch: {
+        paused: ctx.company.pausedAgents.includes("dispatch"),
+        withYou: work.counts.needsDecision,
+        inProgress: work.counts.open,
+        waiting: work.counts.waiting,
+        /** Visits Dispatch is looking at that nobody has been asked to take. */
+        unfilled: unfilled.length,
+        /** Of those, the ones that start within a day. */
+        unfilledWithinDay: unfilled.filter((visit) => visit.startsAt < args.asOf + DAY).length,
+        /** Visits with an offer out and no answer yet. */
+        awaitingAnswer: ahead.filter((visit) => visit.state === "awaiting_acceptance").length,
+      },
+    };
   },
 });
 
