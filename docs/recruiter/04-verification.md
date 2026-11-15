@@ -5,7 +5,7 @@ read, nothing was purchased, no real offer was made, and nothing was deployed.
 
 ## Automated tests (`npm test`)
 
-52 Recruiter tests in three files, alongside the 142 that were already there (194 pass).
+52 Recruiter tests in three files, alongside the 145 that were already there (197 pass).
 
 | Scenario from the brief | Test |
 |---|---|

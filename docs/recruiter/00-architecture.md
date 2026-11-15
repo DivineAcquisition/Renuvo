@@ -99,7 +99,7 @@ No second token-link system, message layer or delivery log was built.
 Shared files changed, all additively: `convex/schema.ts`, `convex/lib/events.ts`,
 `convex/lib/permissionCatalog.ts`, `convex/lib/builders.ts`, `convex/messaging.ts`,
 `convex/approvals.ts`, `convex/crons.ts`, `convex/_generated/api.d.ts`. No Dispatch behavior changed;
-all 142 earlier tests still pass.
+all 145 earlier tests still pass.
 
 ## Where a model may act, and where it may not
 
