@@ -22,8 +22,9 @@ Two references sit behind it:
 |---|---|
 | Name | Selestial. |
 | Philosophy | Ownership of the outcome. |
-| Agents | Four: Sales, Recruiter, Dispatch, Retention. Named by role. |
-| Planned later | Quality, Books, Marketing. Not built. |
+| Agents | Eight, in three departments (decided later on November 15; see `01-navigation.md`). Growth: Marketing, Sales, Retention. Operations: Dispatch, Quality, Customer Care. Team: Recruiter, Team Coordinator. Sections 3 and 11 to 14 below describe the first four (Sales, Recruiter, Dispatch, Retention); the other four are named and not yet designed. |
+| Departments | Growth, Operations, Team. They are departments, not lifecycle stages. |
+| Navigation | `01-navigation.md` sets the sidebar, the route map and the interaction rules. |
 | Workers | Contractors paid a share of the job, and hourly employees. Both at launch. |
 | Channels | Text, email and web chat first. Voice follows. |
 | Kinds of work | Homes, short-term rentals, property managers, offices and commercial. |
@@ -65,7 +66,7 @@ to earn that through their behavior. A promise on a landing page does not.
 
 ## 2. What Selestial is
 
-Selestial is one shared operating system for a cleaning company, with four
+Selestial is one shared operating system for a cleaning company, with eight
 agents working inside it. The owner configures how the company operates. The
 agents handle the work they are permitted to do. Unresolved decisions arrive
 in one approval queue.
@@ -237,7 +238,7 @@ them a setting.
 
 ## 9. The shared record
 
-All four agents read and write the same business records. No agent keeps
+All agents read and write the same business records. No agent keeps
 private data.
 
 - **Customers and properties.** Contacts, service history, access
@@ -535,7 +536,7 @@ business it touches.
 The owner can see what happened, what is being handled, and where a decision
 is needed.
 
-One conversation thread per person is shared by all four agents, and the send
+One conversation thread per person is shared by every agent, and the send
 gate stops two agents messaging the same person about different things on one
 afternoon.
 
@@ -579,6 +580,9 @@ conversations). Selestial staff sit outside every company and enter only
 through a separate, logged path.
 
 ## 17. Planned later
+
+**Superseded in part.** Quality and Marketing are now two of the eight agents
+(`01-navigation.md`). Books is an open question (section 19).
 
 Three more agents are planned on the same record. None is built.
 
@@ -653,3 +657,6 @@ behavior the philosophy has to produce.
    Selestial.
 6. **Legal review** of the Recruiter agent before it is sold.
 7. **The price** of the monthly plan.
+8. **Books.** Section 17 planned a Books agent. It is not among the eight
+   agents in `01-navigation.md`, where Finance is a shared area. To confirm:
+   is Books dropped, or does it come later?

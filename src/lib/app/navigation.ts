@@ -1,0 +1,399 @@
+/**
+ * Selestial's navigation, defined once.
+ *
+ * This file is the information architecture: the three departments, the eight agents inside them, each
+ * agent's work tabs, and the company-wide destinations around them. The sidebar, breadcrumbs, active
+ * highlighting and deep-link handling are all derived from it (see navigation-helpers.ts). Nothing else
+ * may keep its own copy of this structure.
+ *
+ * It is the full plan, not a claim about what is built. Every destination says how available it is, and
+ * src/lib/app/navigation.test.ts checks those claims against the pages that actually exist.
+ *
+ * The document that explains it: docs/foundation/01-navigation.md.
+ */
+
+// ── Identifiers. Stable, used in URLs and stored state. Display labels are separate and may change. ──
+
+export const DEPARTMENT_IDS = ["growth", "operations", "team"] as const;
+export type DepartmentId = (typeof DEPARTMENT_IDS)[number];
+
+export const AGENT_IDS = ["marketing", "sales", "retention", "dispatch", "quality", "customer-care", "recruiter", "team-coordinator"] as const;
+export type AgentId = (typeof AGENT_IDS)[number];
+
+/** The agents the Convex backend knows today (convex/lib/statuses.ts). The other four have no record yet. */
+export type BackendAgent = "sales" | "recruiter" | "dispatch" | "retention";
+
+export type Role = "owner" | "manager" | "office";
+
+// ── Availability ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * How available a destination is right now.
+ *
+ * live: a page exists at the destination's own path and does the job.
+ * interim: no page at its own path yet, but an existing page serves it in whole or part. `missing`
+ *   says what that page does not yet do. Links go to `servedBy` until the real page exists.
+ * planned: not built. `notice` means a page already sits at the path, but it only says "not built yet".
+ *   A planned destination is never linked as if it worked.
+ */
+export type Availability = { status: "live" } | { status: "interim"; servedBy: string; missing: string } | { status: "planned"; notice?: true };
+
+export type Destination = {
+  /** The destination's own path. For a planned or interim destination this is the proposed route. */
+  path: string;
+  availability: Availability;
+  /**
+   * The least role that may open it, for showing or hiding the link. "undecided" means the owner has not
+   * said. This is not authorization: every read and write is checked again in Convex.
+   */
+  minimumRole: Role | "undecided";
+  accessNote?: string;
+};
+
+const LIVE: Availability = { status: "live" };
+const PLANNED: Availability = { status: "planned" };
+const interim = (servedBy: string, missing: string): Availability => ({ status: "interim", servedBy, missing });
+
+// ── Routes ──────────────────────────────────────────────────────────────────────────────────────────
+
+/** Everything signed-in lives under this prefix. Home is the landing page for every workspace. */
+export const APP_ROOT = "/app";
+export const LANDING_PATH = APP_ROOT;
+
+/** An agent's overview, and its work tabs beneath it. Two dynamic routes will serve all eight agents. */
+export const agentPath = (agent: AgentId) => `${APP_ROOT}/agents/${agent}`;
+export const tabPath = (agent: AgentId, tab: string) => `${agentPath(agent)}/${tab}`;
+
+// ── Sidebar layout ──────────────────────────────────────────────────────────────────────────────────
+
+/** The sidebar's sections, top to bottom. The order is fixed. */
+export const SIDEBAR_SECTIONS = ["business", "departments", "persistent", "agents", "shared", "footer"] as const;
+export type SidebarSection = (typeof SIDEBAR_SECTIONS)[number];
+
+/** A new workspace opens with Operations selected in the sidebar, on the Home page. */
+export const DEFAULT_DEPARTMENT: DepartmentId = "operations";
+
+export type Department = { id: DepartmentId; label: string };
+
+/** The three tabs at the top of the sidebar. They are departments, not lifecycle stages. */
+export const DEPARTMENTS: readonly Department[] = [
+  { id: "growth", label: "Growth" },
+  { id: "operations", label: "Operations" },
+  { id: "team", label: "Team" },
+];
+
+// ── Company-wide items ──────────────────────────────────────────────────────────────────────────────
+
+export type NavItemId = "home" | "approvals" | "inbox" | "search" | "customers" | "cleaners" | "finance" | "reports" | "settings";
+
+export type NavItem = Destination & {
+  id: NavItemId;
+  label: string;
+  section: "persistent" | "shared" | "footer";
+  /** What the destination is for, in a sentence. */
+  purpose: string;
+};
+
+/** Visible whichever department is selected. They are company-wide and never filtered by department. */
+export const PERSISTENT_ITEMS: readonly NavItem[] = [
+  { id: "home", label: "Home", section: "persistent", purpose: "The company-wide operational overview.", path: APP_ROOT, availability: LIVE, minimumRole: "office" },
+  {
+    id: "approvals",
+    label: "Approvals",
+    section: "persistent",
+    purpose: "Decisions from every department, in one queue.",
+    path: `${APP_ROOT}/approvals`,
+    availability: interim(`${APP_ROOT}/decisions`, "Nothing functional. The queue works; it lives at /app/decisions under the heading 'Needs your decision'."),
+    minimumRole: "office",
+    accessNote: "Owners and Managers decide approvals. Office sees only the tasks handed to a person.",
+  },
+  {
+    id: "inbox",
+    label: "Inbox",
+    section: "persistent",
+    purpose: "Customer and cleaner communications. Conversations with AI agents are not here.",
+    path: `${APP_ROOT}/inbox`,
+    availability: { status: "planned", notice: true },
+    minimumRole: "office",
+  },
+  { id: "search", label: "Search", section: "persistent", purpose: "Find business records, jobs, conversations and tasks.", path: `${APP_ROOT}/search`, availability: PLANNED, minimumRole: "office" },
+];
+
+/**
+ * Company-wide records and results, below the agents. They are the same records the agent workspaces
+ * read: an agent tab is a view over these, never a second copy.
+ */
+export const SHARED_ITEMS: readonly NavItem[] = [
+  {
+    id: "customers",
+    label: "Customers & Properties",
+    section: "shared",
+    purpose: "Customers and the properties they have service at.",
+    path: `${APP_ROOT}/customers`,
+    availability: interim(`${APP_ROOT}/records`, "A customer's own page: their properties, preferences and service history. Today it is a list with an add form, on a page shared with cleaners."),
+    minimumRole: "office",
+  },
+  {
+    id: "cleaners",
+    label: "Cleaners",
+    section: "shared",
+    purpose: "The people who do the work: standing, skills, areas and availability.",
+    path: `${APP_ROOT}/cleaners`,
+    availability: interim(`${APP_ROOT}/records`, "A cleaner's own page: availability, time off, documents. Today it is a list with an add form, on a page shared with customers."),
+    minimumRole: "office",
+    accessNote: "Pay rates are shown to the Owner only.",
+  },
+  {
+    id: "finance",
+    label: "Finance",
+    section: "shared",
+    purpose: "The cleaning company's own money: customer payments, balances, cleaner pay. Not Selestial's subscription.",
+    path: `${APP_ROOT}/finance`,
+    availability: PLANNED,
+    minimumRole: "undecided",
+    accessNote: "The brief keeps billing from Managers. Whether that covers the company's own finances is the owner's call.",
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    section: "shared",
+    purpose: "Business results and agent performance.",
+    path: `${APP_ROOT}/reports`,
+    availability: interim(`${APP_ROOT}/insights`, "Everything beyond the weekly measures: agent performance, longer periods, breakdowns."),
+    minimumRole: "office",
+  },
+];
+
+/** One footer item. Business rules, agent permissions, connections, notifications and platform billing live inside it. */
+export const FOOTER_ITEMS: readonly NavItem[] = [
+  {
+    id: "settings",
+    label: "Settings",
+    section: "footer",
+    purpose: "Business configuration, agent permissions, connections, notifications and Selestial's own billing.",
+    path: `${APP_ROOT}/settings`,
+    availability: LIVE,
+    minimumRole: "office",
+    accessNote: "Anyone in the company can read it. Only the Owner changes company details, people, authority and billing.",
+  },
+];
+
+export const NAV_ITEMS: readonly NavItem[] = [...PERSISTENT_ITEMS, ...SHARED_ITEMS, ...FOOTER_ITEMS];
+
+// ── Agents and their work tabs ──────────────────────────────────────────────────────────────────────
+
+export type WorkTab = Destination & {
+  /** Unique within its agent. Used as the last URL segment. */
+  id: string;
+  label: string;
+};
+
+export type AgentNav = {
+  id: AgentId;
+  label: string;
+  department: DepartmentId;
+  /** What this agent owns, in one sentence. Ownership must not overlap another agent's. */
+  responsibility: string;
+  /** The backend's id for this agent, when the backend has one. Null means it exists only in this plan. */
+  backendAgent: BackendAgent | null;
+  /**
+   * built: at least one workflow runs. planned: nothing runs. This must match the backend's catalog
+   * (convex/lib/departments.ts); the test checks it.
+   */
+  workflow: "built" | "planned";
+  /** The page the agent's name opens. */
+  overview: Destination;
+  /** The nested work tabs, in order. Playbook is always last. Chat is never a tab. */
+  tabs: readonly WorkTab[];
+};
+
+type TabSpec = [id: string, label: string, availability?: Availability];
+
+function agent(spec: { id: AgentId; label: string; department: DepartmentId; responsibility: string; backendAgent: BackendAgent | null; workflow?: "built"; overview?: Availability; tabs: TabSpec[] }): AgentNav {
+  return {
+    id: spec.id,
+    label: spec.label,
+    department: spec.department,
+    responsibility: spec.responsibility,
+    backendAgent: spec.backendAgent,
+    workflow: spec.workflow ?? "planned",
+    overview: { path: agentPath(spec.id), availability: spec.overview ?? PLANNED, minimumRole: "office" },
+    tabs: spec.tabs.map(([id, label, availability]) => ({ id, label, path: tabPath(spec.id, id), availability: availability ?? PLANNED, minimumRole: "office" })),
+  };
+}
+
+/**
+ * The eight agents, in sidebar order within each department. Names, order and tabs are the owner's.
+ *
+ * Two pairs of names are close on purpose and must stay distinct:
+ * - Customer Setup (Customer Care) is about customers. Onboarding (Team Coordinator) is about cleaners.
+ * - Offers & Agreements (Recruiter) is about hiring. Offers & Coverage (Dispatch) is about job assignments.
+ */
+export const AGENTS: readonly AgentNav[] = [
+  // Growth
+  agent({
+    id: "marketing",
+    label: "Marketing",
+    department: "growth",
+    responsibility: "Generates customer interest.",
+    backendAgent: null,
+    tabs: [
+      ["campaigns", "Campaigns"],
+      ["content-creative", "Content & Creative"],
+      ["promotions", "Promotions"],
+      ["lead-sources", "Lead Sources"],
+      ["performance", "Performance"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+  agent({
+    id: "sales",
+    label: "Sales",
+    department: "growth",
+    responsibility: "Turns inquiries into confirmed bookings.",
+    backendAgent: "sales",
+    tabs: [
+      ["pipeline", "Pipeline"],
+      ["quotes-proposals", "Quotes & Proposals"],
+      ["follow-ups", "Follow-ups"],
+      ["calls-messages", "Calls & Messages"],
+      ["booking-forms", "Booking Forms"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+  agent({
+    id: "retention",
+    label: "Retention",
+    department: "growth",
+    responsibility: "Maintains recurring relationships, follows up on risk, and runs win-back and referral workflows.",
+    backendAgent: "retention",
+    tabs: [
+      ["recurring-customers", "Recurring Customers"],
+      ["customer-health", "Customer Health"],
+      ["feedback-reviews", "Feedback & Reviews"],
+      ["recurring-offers", "Recurring Offers"],
+      ["win-back", "Win-back"],
+      ["referrals", "Referrals"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+
+  // Operations
+  agent({
+    id: "dispatch",
+    label: "Dispatch",
+    department: "operations",
+    responsibility: "Staffs jobs, manages scheduling and coverage, and monitors service progress.",
+    backendAgent: "dispatch",
+    workflow: "built",
+    overview: interim(`${APP_ROOT}/team`, "A page of its own with an Ask Dispatch entry point. Today its work, outcomes, permissions and pause are one card on the AI Team page."),
+    tabs: [
+      ["dispatch-board", "Dispatch Board"],
+      ["schedule", "Schedule", interim(`${APP_ROOT}/schedule`, "Arrival windows, projected duration, cleaner availability, conflicts and buffers, and changes that affect later jobs. Today it is visits by day or week with who accepted.")],
+      [
+        "offers-coverage",
+        "Offers & Coverage",
+        interim(`${APP_ROOT}/departments/operations`, "Broadcast offers, backup coverage and urgent-hire requests to Recruiter. Today it lists visits without an accepted cleaner; offers are made from each visit's panel."),
+      ],
+      ["live-jobs", "Live Jobs"],
+      ["action-links", "Action Links"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+  agent({
+    id: "quality",
+    label: "Quality",
+    department: "operations",
+    responsibility: "Reviews service evidence, investigates issues, and coordinates corrective work.",
+    backendAgent: null,
+    tabs: [
+      ["completion-review", "Completion Review"],
+      ["checklists-photos", "Checklists & Photos"],
+      ["service-issues", "Service Issues"],
+      ["re-cleans", "Re-cleans"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+  agent({
+    id: "customer-care",
+    label: "Customer Care",
+    department: "operations",
+    responsibility: "Handles customer communications, setup, requests, and scheduling changes.",
+    backendAgent: null,
+    tabs: [
+      ["conversations", "Conversations"],
+      ["customer-setup", "Customer Setup"],
+      ["service-requests", "Service Requests"],
+      ["rescheduling-cancellations", "Rescheduling & Cancellations"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+
+  // Team
+  agent({
+    id: "recruiter",
+    label: "Recruiter",
+    department: "team",
+    responsibility: "Manages candidate acquisition, screening, interviews, and hiring offers.",
+    backendAgent: "recruiter",
+    tabs: [
+      ["hiring-needs", "Hiring Needs"],
+      ["applicants", "Applicants"],
+      ["screening", "Screening"],
+      ["interviews", "Interviews"],
+      ["offers-agreements", "Offers & Agreements"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+  agent({
+    id: "team-coordinator",
+    label: "Team Coordinator",
+    department: "team",
+    responsibility: "Manages cleaner onboarding, documentation, training, readiness, and ongoing availability.",
+    backendAgent: null,
+    tabs: [
+      ["onboarding", "Onboarding"],
+      ["documents-training", "Documents & Training"],
+      ["readiness", "Readiness"],
+      ["availability", "Availability"],
+      ["team-check-ins", "Team Check-ins"],
+      ["playbook", "Playbook"],
+    ],
+  }),
+];
+
+// ── Routes that exist today and are not a destination's own path ────────────────────────────────────
+
+/**
+ * Pages built before this structure. They keep working. Each says what replaces it, so it can be moved
+ * or redirected on purpose when the new sidebar is built, and so no page is left unaccounted for.
+ */
+export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes: string }[] = [
+  { pattern: `${APP_ROOT}/decisions`, today: "The decision queue.", becomes: "Approvals, at /app/approvals, with a redirect from here." },
+  { pattern: `${APP_ROOT}/schedule`, today: "Visits by day or week.", becomes: "Dispatch › Schedule. The top-bar Schedule shortcut should point at the new path." },
+  { pattern: `${APP_ROOT}/records`, today: "Customers and cleaners on one page.", becomes: "Two pages: Customers & Properties, and Cleaners." },
+  { pattern: `${APP_ROOT}/insights`, today: "The week's measures.", becomes: "Reports, at /app/reports." },
+  { pattern: `${APP_ROOT}/team`, today: "The AI Team page: every agent with its work, permissions and pause.", becomes: "Each agent's overview, plus agent permissions inside Settings." },
+  {
+    pattern: `${APP_ROOT}/departments/[department]`,
+    today: "A workspace for each of the earlier three departments (sales, operations, customer-success).",
+    becomes: "Nothing directly. Departments are sidebar tabs and have no page; their content moves to agent workspaces.",
+  },
+];
+
+// ── Badges ──────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * What an agent or tab may show beside its name. A badge states something a person can act on, in
+ * words ("2 unfilled", "3 to review"), never a count of activity. Kinds are listed most important first.
+ * No badge is defined here with a value: values come from the record at the time the sidebar is drawn.
+ */
+export const BADGE_KINDS = ["urgent", "decision", "attention", "working"] as const;
+export type BadgeKind = (typeof BADGE_KINDS)[number];
+
+export type Badge = {
+  kind: BadgeKind;
+  /** The words shown and read aloud, for example "2 unfilled". Status never depends on color alone. */
+  label: string;
+  count?: number;
+};

@@ -6,6 +6,8 @@ The owner sets the standards. Selestial carries the work forward.
 
 The source of truth is
 [`docs/foundation/00-product-brief.md`](docs/foundation/00-product-brief.md).
+The sidebar, the route map and the navigation rules are in
+[`docs/foundation/01-navigation.md`](docs/foundation/01-navigation.md).
 
 This repository and its Vercel project are still named Renuvo, which was the
 working name.
@@ -114,6 +116,7 @@ Convex · Clerk · Vercel.
 | `src/components/marketing` | The page's sections and pictures |
 | `src/app/globals.css` | Tokens. Brand teal `#2CC5A8`, light only on the public site |
 | `src/components/ui` | Shared components |
+| `src/lib/app/navigation.ts` | The one navigation definition: departments, agents, work tabs, paths, availability. Not yet drawn by the shell |
 | `src/components/app` | The signed-in app: shell, Overview pieces, detail panel, screens |
 | `src/components/icons` | Phosphor icons, with the picks the Novara app uses |
 | `convex/schema.ts` | The shared record |
