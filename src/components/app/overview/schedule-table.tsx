@@ -135,7 +135,7 @@ export function ViewSwitch({ view, onChange }: { view: ScheduleView; onChange: (
           role="tab"
           aria-selected={view === option.id}
           onClick={() => onChange(option.id)}
-          className={cn("rounded-md px-3 py-1 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500", view === option.id ? "bg-background text-strong shadow-sm" : "text-muted-foreground hover:text-strong")}
+          className={cn("rounded-md px-3 py-1 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500", view === option.id ? "bg-card text-strong shadow-sm" : "text-muted-foreground hover:text-strong")}
         >
           {option.label}
         </button>

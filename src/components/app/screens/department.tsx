@@ -133,7 +133,7 @@ export function DepartmentScreen({ id }: { id: string }) {
                     role="tab"
                     aria-selected={tool === option.id}
                     onClick={() => setTool(option.id)}
-                    className={cn("rounded-md px-3 py-1 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500", tool === option.id ? "bg-background text-strong shadow-sm" : "text-muted-foreground hover:text-strong")}
+                    className={cn("rounded-md px-3 py-1 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500", tool === option.id ? "bg-card text-strong shadow-sm" : "text-muted-foreground hover:text-strong")}
                   >
                     {option.label}
                   </button>

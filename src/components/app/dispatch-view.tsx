@@ -164,7 +164,7 @@ function DispatchSettingsForm({ settings, canEdit }: { settings: { offerWindowMi
               disabled={!canEdit}
               value={form[row.key]}
               onChange={(event) => setForm((current) => ({ ...current, [row.key]: event.target.value }))}
-              className="block min-h-10 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-strong focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30 disabled:opacity-70"
+              className="block min-h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-strong focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30 disabled:opacity-70"
             />
             <span className="text-xs text-muted-foreground">{row.hint}</span>
           </label>

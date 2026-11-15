@@ -38,7 +38,7 @@ export function Briefing({
 }) {
   return (
     <section className="relative overflow-hidden rounded-2xl border border-brand-500/30 bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--color-brand-500)_9%,transparent),transparent_55%),var(--card)] p-5 sm:p-6">
-      <ShineBorder borderWidth={1} duration={18} shineColor={["#7957ff", "#b3afff", "#7957ff"]} />
+      <ShineBorder borderWidth={1} duration={18} shineColor={["#6838ef", "#b39eff", "#6838ef"]} />
       <div className="relative flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
         <h1 className="font-heading text-2xl tracking-tight text-strong sm:text-[1.75rem]">
           {greeting(now, timezone)}
@@ -89,7 +89,7 @@ export function Briefing({
         <ul className="mt-2.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {presence.map((row) => (
             <li key={row.agent} className={cn("relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-xl border border-border bg-background px-3 py-2.5", row.state === "not_built" && "border-dashed bg-transparent", row.state === "needs_you" && "border-warning/50")}>
-              {row.state === "working" || row.state === "needs_you" ? <BorderBeam size={60} duration={row.state === "working" ? 4 : 7} colorFrom={row.state === "needs_you" ? "#f0b45c" : "#7957ff"} colorTo="#9294ff" /> : null}
+              {row.state === "working" || row.state === "needs_you" ? <BorderBeam size={60} duration={row.state === "working" ? 4 : 7} colorFrom={row.state === "needs_you" ? "#f0b45c" : "#6838ef"} colorTo="#b39eff" /> : null}
               <AgentAvatar agent={row.agent} state={row.state} size="md" />
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-strong">

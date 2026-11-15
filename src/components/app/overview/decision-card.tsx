@@ -46,7 +46,7 @@ export function DecisionCard({
   return (
     <article className={cn("live-enter relative overflow-hidden rounded-2xl border bg-card p-4 sm:p-5", due.late ? "border-destructive/50" : due.soon ? "border-warning/60" : "border-border")}>
       {/* The agent is waiting on a person: the edge keeps moving until someone decides. */}
-      {due.soon ? <BorderBeam size={90} duration={7} colorFrom="#f0b45c" colorTo="#7957ff" borderWidth={2} /> : null}
+      {due.soon ? <BorderBeam size={90} duration={7} colorFrom="#f0b45c" colorTo="#6838ef" borderWidth={2} /> : null}
       <header className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2.5 text-xs text-muted-foreground">
           <AgentAvatar agent={decision.agent} state="needs_you" size="sm" />

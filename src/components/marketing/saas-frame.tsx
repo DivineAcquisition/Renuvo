@@ -8,12 +8,12 @@ import { MagicCard } from "@/components/ui/magic-card";
 import { marketingPanel } from "@/lib/marketing/ui";
 import { cn } from "@/lib/utils";
 
-const cardGlow = "shadow-[0_0_72px_-28px_rgba(121,87,255,0.8)]";
+const cardGlow = "shadow-[0_0_72px_-28px_rgba(104,56,239,0.8)]";
 
 function TravelingBeam({ delay = 0 }: { delay?: number }) {
   return (
     <div className="pointer-events-none absolute inset-0 motion-safe:block motion-reduce:hidden">
-      <BorderBeam delay={delay} duration={8} size={110} borderWidth={1} colorFrom="#7957ff" colorTo="#9294ff" />
+      <BorderBeam delay={delay} duration={8} size={110} borderWidth={1} colorFrom="#6838ef" colorTo="#b39eff" />
     </div>
   );
 }

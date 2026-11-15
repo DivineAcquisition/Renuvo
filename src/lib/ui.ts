@@ -5,9 +5,9 @@
  * In-app screens should use the primitives. These strings remain for recipes
  * such as readonly field chrome and any last native leftovers.
  *
- * #7957ff (brand-500) is the prime action colour, taken from the logo. Filled
- * buttons run from it to #5b0fff and carry a white label. brand-300 carries
- * eyebrows, section labels, and links.
+ * #6838ef (brand-500, Selestial Violet) is the prime action colour. Filled
+ * buttons use it with a white label and turn Deep Violet (#5126c7) on hover and
+ * press. brand-300 carries eyebrows, section labels, and links.
  */
 
 import { buttonVariants } from "@/components/ui/button-variants";

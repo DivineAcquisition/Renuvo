@@ -27,7 +27,7 @@ const STORED = "selestial.company";
 function Loading() {
   return (
     <div className="flex min-h-dvh bg-muted/50" aria-busy="true" aria-label="Loading">
-      <div className="hidden w-64 shrink-0 border-r border-border bg-background p-4 lg:block">
+      <div className="hidden w-64 shrink-0 border-r border-border bg-card p-4 lg:block">
         <Skeleton className="h-8 w-36" />
         <div className="mt-8 grid gap-2">
           {Array.from({ length: 8 }, (_, index) => (

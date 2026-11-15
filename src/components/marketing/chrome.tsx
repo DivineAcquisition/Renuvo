@@ -54,7 +54,7 @@ export function SiteHeader() {
             <span className="sr-only">{NAV.openMenu}</span>
             <Menu className="size-4" aria-hidden />
           </summary>
-          <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-background p-3 shadow-xl">
+          <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-card p-3 shadow-xl">
             <EarlyAccessLink position="nav" size="lg" className="w-full">
               {NAV.cta}
             </EarlyAccessLink>
