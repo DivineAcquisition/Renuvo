@@ -30,7 +30,7 @@ interface ShineBorderProps extends React.HTMLAttributes<HTMLDivElement> {
 export function ShineBorder({
   borderWidth = 1,
   duration = 14,
-  shineColor = ["#2cc5a8", "#6fdfc8"],
+  shineColor = ["#7957ff", "#9294ff"],
   className,
   style,
   ...props

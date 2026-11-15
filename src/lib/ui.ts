@@ -5,9 +5,9 @@
  * In-app screens should use the primitives. These strings remain for recipes
  * such as readonly field chrome and any last native leftovers.
  *
- * #2cc5a8 (brand-500) is the prime action colour. It is light enough that
- * near-black label text reads far better on it than white, which is why primary
- * buttons invert their type. brand-300 carries eyebrows, section labels, and links.
+ * #7957ff (brand-500) is the prime action colour, taken from the logo. Filled
+ * buttons run from it to #5b0fff and carry a white label. brand-300 carries
+ * eyebrows, section labels, and links.
  */
 
 import { buttonVariants } from "@/components/ui/button-variants";

@@ -31,7 +31,7 @@ Two references sit behind it:
 | Pricing of Selestial | A monthly plan that includes agent work and texting, with top-ups beyond that. |
 | Stack | Next.js, Convex, Clerk, Vercel. A fresh build. |
 | Build order | Shared foundation, Dispatch, Sales, Retention, Recruiter. |
-| Public site | Light, brand teal `#2CC5A8`. One action: get early access. |
+| Public site | Light, brand violet `#7957FF` from the logo. One action: get early access. |
 
 Section 19 lists what is still open, including two points where the latest
 direction differs from an earlier answer.
@@ -653,8 +653,9 @@ behavior the philosophy has to produce.
    Convex. The form opens once the deployment and its shared secret are set.
 4. **The domain** is selestial.io. Still open: connecting it, and the legal
    name and contact address for the footer and legal pages.
-5. **Brand color.** Teal was chosen under the Renuvo name. To confirm for
-   Selestial.
+5. **Brand color.** Settled by the owner on November 15: the violet of the
+   Selestial logo, running `#9294FF` to `#5B0FFF` with `#7957FF` as the prime
+   colour. The teal chosen under the Renuvo name is gone.
 6. **Legal review** of the Recruiter agent before it is sold.
 7. **The price** of the monthly plan.
 8. **Books.** Section 17 planned a Books agent. It is not among the eight
