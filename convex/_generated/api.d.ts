@@ -30,6 +30,7 @@ import type * as interviews from "../interviews.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_approvalQueue from "../lib/approvalQueue.js";
+import type * as lib_assessment from "../lib/assessment.js";
 import type * as lib_authority from "../lib/authority.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_builders from "../lib/builders.js";
@@ -132,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   "lib/access": typeof lib_access;
   "lib/approvalQueue": typeof lib_approvalQueue;
+  "lib/assessment": typeof lib_assessment;
   "lib/authority": typeof lib_authority;
   "lib/availability": typeof lib_availability;
   "lib/builders": typeof lib_builders;

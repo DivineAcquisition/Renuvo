@@ -133,6 +133,18 @@ export default defineSchema({
     company: v.string(),
     focus: v.union(v.literal("Sales"), v.literal("Recruiting"), v.literal("Dispatch"), v.literal("Retention")),
     source: v.string(),
+    // The operations assessment (convex/lib/assessment.ts). Absent on requests made before it existed.
+    role: v.optional(v.string()),
+    businessType: v.optional(v.string()),
+    cleaners: v.optional(v.string()),
+    monthlyCleans: v.optional(v.string()),
+    bookingTool: v.optional(v.string()),
+    help: v.optional(v.string()),
+    openTo: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    website: v.optional(v.string()),
+    /** Set only when the person ticked the separate box saying they may be texted, and gave a number. */
+    smsConsentAt: v.optional(v.number()),
     /** How many times this email has asked. A repeat updates the row instead of adding one. */
     requests: v.number(),
     createdAt: v.number(),

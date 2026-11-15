@@ -1,5 +1,6 @@
 /**
- * Early-access requests from the public site. Only the Selestial web server can call `request`: it holds
+ * Requests for an operations assessment from the public site: seven answers about the business and how
+ * to reach the person. Only the Selestial web server can call `request`: it holds
  * PUBLIC_FORM_SECRET. The answer says plainly whether the request was saved, so the page never reports
  * success for one that was not.
  */
@@ -7,11 +8,10 @@ import { v } from "convex/values";
 
 import { internalQuery } from "./_generated/server";
 import { serverMutation } from "./lib/builders";
+import { checkedAnswers, HELP_FOCUS, phoneOk, websiteOk } from "./lib/assessment";
 import { allow } from "./lib/rateLimit";
 import { isEmail } from "./lib/text";
 
-export const FOCUS = ["Sales", "Recruiting", "Dispatch", "Retention"] as const;
-type Focus = (typeof FOCUS)[number];
 
 const HOUR = 60 * 60 * 1000;
 /** One visitor (the web server passes a hash of their address, never the address). */
@@ -26,31 +26,46 @@ export const request = serverMutation({
     name: v.string(),
     email: v.string(),
     company: v.string(),
-    focus: v.string(),
+    role: v.string(),
+    businessType: v.string(),
+    cleaners: v.string(),
+    monthlyCleans: v.string(),
+    bookingTool: v.string(),
+    help: v.string(),
+    openTo: v.string(),
+    phone: v.optional(v.string()),
+    website: v.optional(v.string()),
+    /** The separate, optional box: "you may text me at this number". */
+    smsConsent: v.optional(v.boolean()),
     visitorKey: v.string(),
   },
   handler: async (ctx, args): Promise<EarlyAccessResult> => {
     const name = args.name.trim();
     const email = args.email.trim().toLowerCase();
     const company = args.company.trim();
-    const focus = FOCUS.find((option) => option === args.focus) as Focus | undefined;
-    if (!name || name.length > 120 || !company || company.length > 160 || !isEmail(email) || !focus) return { status: "invalid" };
+    const phone = args.phone?.trim() ?? "";
+    const website = args.website?.trim() ?? "";
+    const answers = checkedAnswers({ role: args.role, businessType: args.businessType, cleaners: args.cleaners, monthlyCleans: args.monthlyCleans, bookingTool: args.bookingTool, help: args.help, openTo: args.openTo });
+    if (!name || name.length > 120 || !company || company.length > 160 || !isEmail(email) || !answers || !phoneOk(phone) || !websiteOk(website)) return { status: "invalid" };
+    const focus = HELP_FOCUS[answers.help];
 
     const visitorKey = args.visitorKey.trim().slice(0, 128) || "unknown";
     if (!(await allow(ctx, `early-access:visitor:${visitorKey}`, PER_VISITOR_PER_HOUR, HOUR))) return { status: "limited" };
     if (!(await allow(ctx, "early-access:all", TOTAL_PER_HOUR, HOUR))) return { status: "limited" };
 
     const now = Date.now();
+    // Consent to texts is recorded only with a number to text, and is dropped again if a later request withdraws either.
+    const details = { ...answers, focus, phone: phone || undefined, website: website || undefined, smsConsentAt: args.smsConsent === true && phone ? now : undefined };
     const existing = await ctx.db
       .query("earlyAccessRequests")
       .withIndex("by_email", (q) => q.eq("email", email))
       .unique();
     if (existing) {
       // The same person asking again keeps one row with their latest answers. They are told it is saved, which it is.
-      await ctx.db.patch(existing._id, { name, company, focus, requests: existing.requests + 1, lastRequestedAt: now });
+      await ctx.db.patch(existing._id, { name, company, ...details, requests: existing.requests + 1, lastRequestedAt: now });
       return { status: "saved" };
     }
-    await ctx.db.insert("earlyAccessRequests", { name, email, company, focus, source: "selestial-landing", requests: 1, createdAt: now, lastRequestedAt: now });
+    await ctx.db.insert("earlyAccessRequests", { name, email, company, ...details, source: "selestial-landing", requests: 1, createdAt: now, lastRequestedAt: now });
     return { status: "saved" };
   },
 });
