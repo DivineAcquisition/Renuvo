@@ -10,7 +10,8 @@ export const TAGLINE = "The AI operating platform for cleaning companies.";
 export const SITE_DESCRIPTION =
   "Selestial is the AI operating platform for cleaning companies. Four coordinated agents for sales, recruiting, dispatch and retention move the daily work forward within the standards you set.";
 
-export const EARLY_ACCESS_ANCHOR = "#early-access";
+/** Where the operations assessment lives. Every "Get early access" button goes here. */
+export const ASSESSMENT_PATH = "/assessment";
 
 export const NAV = {
   links: [
@@ -189,6 +190,16 @@ export const FINAL_CTA = {
   paragraphs: [
     "Tell us how your company operates. We’ll assess where Selestial could support sales, recruiting, dispatch, and retention—and what setup or migration would involve.",
   ],
+  cta: "Start the assessment",
+  note: "Seven short questions and your contact details.",
+} as const;
+
+export const ASSESSMENT_PAGE = {
+  title: "Operations assessment",
+  eyebrow: "Operations assessment",
+  headline: FINAL_CTA.headline,
+  lead: FINAL_CTA.paragraphs[0],
+  back: "Back to Selestial",
 } as const;
 
 /**

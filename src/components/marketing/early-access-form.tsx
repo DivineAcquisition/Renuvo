@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 
 import { requestEarlyAccess } from "@/app/actions";
-import { CheckCircle2 } from "@/components/icons";
+import { LogoMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { TRAP_FIELD, type EarlyAccessState } from "@/lib/early-access";
 import { EARLY_ACCESS } from "@/lib/marketing/content";
@@ -23,8 +23,9 @@ function Field({ id, label, optional = false, children }: { id: string; label: s
   );
 }
 
+/** An answer. Chosen, it takes the icon tile's colours: Selestial Violet to Deep Violet, corner to corner, white on top. */
 const choice =
-  "flex min-h-11 cursor-pointer items-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-strong has-checked:border-brand-500/60 has-checked:bg-brand-500/10 has-checked:text-strong has-focus-visible:outline-2 has-focus-visible:outline-brand-500";
+  "flex min-h-11 cursor-pointer items-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-brand-500/50 hover:text-strong has-checked:border-[#5126c7]/40 has-checked:bg-gradient-to-br has-checked:from-[#6838ef] has-checked:to-[#5126c7] has-checked:text-white has-checked:shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand-500";
 
 /** The operations assessment: seven questions and how to reach the person. Nothing is kept until it is submitted. */
 export function EarlyAccessForm() {
@@ -32,8 +33,8 @@ export function EarlyAccessForm() {
 
   if (state.status === "done") {
     return (
-      <div className="live-enter flex items-start gap-3 rounded-xl border border-success/40 bg-success/10 p-5" role="status">
-        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" aria-hidden />
+      <div className="live-enter flex items-start gap-4 rounded-xl border border-brand-500/30 bg-brand-50 p-5" role="status">
+        <LogoMark className="size-10 shrink-0" />
         <div>
           <p className="font-medium text-strong">{EARLY_ACCESS.done.title}</p>
           <p className="mt-0.5 text-sm text-muted-foreground">{EARLY_ACCESS.done.body}</p>
@@ -43,13 +44,13 @@ export function EarlyAccessForm() {
   }
 
   return (
-    <form action={action} className="grid gap-7 text-left">
+    <form action={action} className="grid grid-cols-1 gap-7 text-left">
       {EARLY_ACCESS.questions.map((question, index) => (
-        <fieldset key={question.name}>
+        <fieldset key={question.name} className="min-w-0">
           <legend className={marketingFormLabel}>
             {index + 1}. {question.label}
           </legend>
-          <div className={`mt-2 grid gap-2 ${question.options.some(([, label]) => label.length > 24) ? "" : "sm:grid-cols-2"}`}>
+          <div className={`mt-2 grid grid-cols-1 gap-2 ${question.options.some(([, label]) => label.length > 24) ? "" : "sm:grid-cols-2"}`}>
             {question.options.map(([value, label]) => (
               <label key={value} className={choice}>
                 <input type="radio" name={question.name} value={value} required className="sr-only" />
@@ -60,9 +61,9 @@ export function EarlyAccessForm() {
         </fieldset>
       ))}
 
-      <fieldset className="grid gap-4">
+      <fieldset className="grid min-w-0 gap-4">
         <legend className={marketingFormLabel}>{EARLY_ACCESS.contactTitle}</legend>
-        <div className="mt-2 grid gap-4 sm:grid-cols-2">
+        <div className="mt-2 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="early-name" label={EARLY_ACCESS.fields.name}>
             <input id="early-name" name="name" required maxLength={120} autoComplete="name" className={marketingFieldControl} />
           </Field>

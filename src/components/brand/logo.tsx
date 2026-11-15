@@ -30,19 +30,28 @@ export function LogoGlyph({ className }: { className?: string }) {
   );
 }
 
-/** The app icon: the mark in white on the gradient tile. */
+/** The two ends of the app icon's tile, from the owner's palette (scripts/generate-icons.mjs draws the same). */
+export const ICON_TOP = "#6838ef";
+export const ICON_BOTTOM = "#5126c7";
+
+/** The app icon: the mark in white on the violet tile, Selestial Violet at the top-left to Deep Violet at the bottom-right. */
 export function LogoMark({ className }: { className?: string }) {
   const id = useId();
   return (
     <svg viewBox="0 0 40 40" className={cn("size-9", className)} aria-hidden>
       <defs>
-        <linearGradient id={id} x1="0" x2="1" y1="0" y2="0">
-          <stop offset="0" stopColor={LIGHT} />
-          <stop offset="1" stopColor={DEEP} />
+        <linearGradient id={id} x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0" stopColor={ICON_TOP} />
+          <stop offset="1" stopColor={ICON_BOTTOM} />
         </linearGradient>
+        <radialGradient id={`${id}-hl`} cx="0.3" cy="0.1" r="0.8">
+          <stop offset="0" stopColor="#ffffff" stopOpacity="0.22" />
+          <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
       </defs>
-      <rect width="40" height="40" rx="7.5" fill={`url(#${id})`} />
-      <path d={MARK} fill="#ffffff" transform="translate(10.36 3.5) scale(0.33)" />
+      <rect width="40" height="40" rx="9" fill={`url(#${id})`} />
+      <rect width="40" height="40" rx="9" fill={`url(#${id}-hl)`} />
+      <path d={MARK} fill="#ffffff" transform="translate(11.82 6) scale(0.28)" />
     </svg>
   );
 }
