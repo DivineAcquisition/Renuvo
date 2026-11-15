@@ -12,10 +12,18 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
-      // The cleaner's job page asks for the phone's position at check-in, and nothing else may.
-      { source: "/c/job/:path*", headers: [{ key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), payment=()" }] },
-      // A link is a credential: its address is never sent on to another site.
-      { source: "/c/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }, { key: "Cache-Control", value: "no-store" }] },
+      // A link is a credential: its address is never sent on to another site. The cleaner pages may ask for
+      // the phone's position, for check-in. It is allowed on all of them because the offer page leads to the
+      // job page without a fresh page load, and a page keeps the policy it was loaded with.
+      {
+        source: "/c/:path*",
+        headers: [
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self), payment=()" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      },
     ];
   },
 };
