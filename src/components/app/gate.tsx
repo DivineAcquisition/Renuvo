@@ -6,6 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AgentDock } from "@/components/app/agent-dock";
+import { ChatProvider, useChat } from "@/components/app/chat/chat-context";
+import { AskButton, ChatPanel } from "@/components/app/chat/panel";
+import { SidebarChatList } from "@/components/app/chat/sessions";
 import { CompanyProvider, type Role, useCompany } from "@/components/app/company";
 import { DetailProvider, useDetail } from "@/components/app/detail-panel";
 import { useRun } from "@/components/app/form";
@@ -157,7 +160,9 @@ function Dock({ departments }: { departments?: TeamDepartment[] }) {
   const now = useNow();
   const open = useDetail();
   const activity = useQuery(api.details.activity, now ? { companyId, asOf: now, limit: 6 } : "skip");
-  if (!departments) return null;
+  // The chat panel takes the same corner; one floating thing at a time.
+  const { panelOpen } = useChat();
+  if (!departments || panelOpen) return null;
   return <AgentDock departments={departments} activity={activity} now={now} timezone={timezone} onOpen={open} />;
 }
 
@@ -166,7 +171,7 @@ function LiveSidebar({ businesses, onSwitch, onNavigate }: { businesses: Busines
   const { companyId, name, role } = useCompany();
   const now = useNow();
   const facts = useQuery(api.overview.sidebar, now ? { companyId, asOf: now } : "skip");
-  return <Sidebar company={name} companyId={companyId} businesses={businesses} onSwitchBusiness={onSwitch} role={role} facts={facts} onNavigate={onNavigate} />;
+  return <Sidebar company={name} companyId={companyId} businesses={businesses} onSwitchBusiness={onSwitch} role={role} facts={facts} onNavigate={onNavigate} chatSessions={(close) => <SidebarChatList onNavigate={close} />} />;
 }
 
 function Workspace({ companyId, role, userId, businesses, onSwitch, children }: { companyId: Id<"companies">; role: Role; userId: string; businesses: BusinessOption[]; onSwitch: (companyId: string) => void; children: React.ReactNode }) {
@@ -176,19 +181,23 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, children }: 
   if (company === undefined) return <Loading />;
   return (
     <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
-      <DetailProvider>
-        <SidebarStateProvider userId={userId} companyId={companyId}>
-          <AppShell
-            company={company.name}
-            decisionCount={count}
-            sidebar={(close) => <LiveSidebar businesses={businesses} onSwitch={onSwitch} onNavigate={close} />}
-            userSlot={<UserMenu />}
-            dock={<Dock departments={team?.departments} />}
-          >
-            {children}
-          </AppShell>
-        </SidebarStateProvider>
-      </DetailProvider>
+      <ChatProvider userId={userId} companyId={companyId}>
+        <DetailProvider>
+          <SidebarStateProvider userId={userId} companyId={companyId}>
+            <AppShell
+              company={company.name}
+              decisionCount={count}
+              sidebar={(close) => <LiveSidebar businesses={businesses} onSwitch={onSwitch} onNavigate={close} />}
+              userSlot={<UserMenu />}
+              assistant={<AskButton />}
+              panel={<ChatPanel />}
+              dock={<Dock departments={team?.departments} />}
+            >
+              {children}
+            </AppShell>
+          </SidebarStateProvider>
+        </DetailProvider>
+      </ChatProvider>
     </CompanyProvider>
   );
 }

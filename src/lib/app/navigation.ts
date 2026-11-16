@@ -85,7 +85,7 @@ export const DEPARTMENTS: readonly Department[] = [
 
 // ── Company-wide items ──────────────────────────────────────────────────────────────────────────────
 
-export type NavItemId = "home" | "approvals" | "inbox" | "search" | "customers" | "cleaners" | "finance" | "reports" | "settings";
+export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "finance" | "reports" | "settings";
 
 export type NavItem = Destination & {
   id: NavItemId;
@@ -93,6 +93,8 @@ export type NavItem = Destination & {
   section: "persistent" | "shared" | "footer";
   /** What the destination is for, in a sentence. */
   purpose: string;
+  /** Other paths that belong to this destination and highlight it, such as Chat's full history. */
+  alsoAt?: readonly string[];
 };
 
 /** Visible whichever department is selected. They are company-wide and never filtered by department. */
@@ -125,6 +127,17 @@ export const PERSISTENT_ITEMS: readonly NavItem[] = [
  * read: an agent tab is a view over these, never a second copy.
  */
 export const SHARED_ITEMS: readonly NavItem[] = [
+  {
+    id: "chat",
+    label: "Chat",
+    section: "shared",
+    purpose: "The company's general assistant: ask, analyze, draft documents and request supported work, without choosing an agent first.",
+    path: `${APP_ROOT}/chat`,
+    availability: LIVE,
+    minimumRole: "office",
+    accessNote: "Each chat is private to the person who started it. What chat may change is checked in Convex against that person's role and each agent's authority.",
+    alsoAt: [`${APP_ROOT}/chats`],
+  },
   {
     id: "customers",
     label: "Customers & Properties",
@@ -186,6 +199,12 @@ export const NAV_ITEMS: readonly NavItem[] = [...PERSISTENT_ITEMS, ...SHARED_ITE
 export const SETTINGS_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/settings/compliance`, label: "Trust & Compliance", purpose: "Readiness per operation, business identity, messaging setup, consent wording, the company's data, and agreements." },
   { path: `${APP_ROOT}/settings/agreements`, label: "Agreements", purpose: "Which version of Selestial's Terms the company accepted, who, and when." },
+];
+
+/** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */
+export const CHAT_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/chat/[id]`, label: "Chat", purpose: "One conversation, with its drafts and actions." },
+  { path: `${APP_ROOT}/chats`, label: "All chats", purpose: "Every chat the person started, searchable and paged." },
 ];
 
 // ── Agents and their work tabs ──────────────────────────────────────────────────────────────────────

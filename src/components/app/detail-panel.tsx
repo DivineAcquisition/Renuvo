@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 
+import { useOfferChatContext } from "@/components/app/chat/chat-context";
 import { useCompany } from "@/components/app/company";
 import { DetailActions } from "@/components/app/detail-actions";
 import { DetailView } from "@/components/app/detail-view";
@@ -24,6 +25,8 @@ export function useDetail(): Open {
 
 function Body({ target, onOpen }: { target: EventRef; onOpen: Open }) {
   const company = useCompany();
+  // The record open here is offered to Ask Selestial as context the person can remove.
+  useOfferChatContext(target.kind === "job" ? [{ table: "jobs", id: target.id }] : target.kind === "task" ? [{ table: "tasks", id: target.id }] : null);
   const now = useNow();
   const detail = useQuery(api.details.get, now ? { companyId: company.companyId, ref: target, asOf: now } : "skip");
   if (detail === undefined) {

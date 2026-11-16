@@ -77,7 +77,7 @@ billing is separate and lives inside Settings.
 
 ## 3. Work tabs
 
-Names and order are the owner's. Playbook is always last. Chat is never a tab.
+Names and order are the owner's. Playbook is always last. Chat is never a tab: it is one company-wide destination under Company, and the conversation decides which specialist's tools it needs.
 
 | Agent | Tabs |
 |---|---|
@@ -155,6 +155,7 @@ Three states describe each destination:
 | Approvals | `/app/approvals` | **Live.** The decision queue. |
 | Inbox | `/app/inbox` | **Planned.** A page exists and says conversations are not built. |
 | Search | `/app/search` | **Planned.** |
+| Chat | `/app/chat` | **Live.** Under Company, for every department. The name opens the conversation workspace; a separate arrow lists New chat, Search chats, pinned and recent chats, and All chats. One conversation is `/app/chat/[id]`; the searchable, paged history is `/app/chats`. Each chat is private to the person who started it. See `docs/chat/00-architecture.md`. |
 | Customers & Properties | `/app/customers` | **Live.** A list and an add form; no page per customer yet. |
 | Cleaners | `/app/cleaners` | **Live.** A list and an add form; no page per cleaner yet. |
 | Finance | `/app/finance` | **Planned.** Shown to the Owner only. |

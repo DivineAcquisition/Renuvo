@@ -20,6 +20,8 @@ export function AppShell({
   userSlot,
   banner,
   dock,
+  assistant,
+  panel,
   children,
 }: {
   company: string;
@@ -30,6 +32,10 @@ export function AppShell({
   banner?: React.ReactNode;
   /** The team console, floating over every page. */
   dock?: React.ReactNode;
+  /** "Ask Selestial" in the header. */
+  assistant?: React.ReactNode;
+  /** The chat panel, which stays open across pages. */
+  panel?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [menu, setMenu] = useState(false);
@@ -53,6 +59,7 @@ export function AppShell({
           </button>
           <span className="truncate text-sm font-semibold text-strong lg:hidden">{company}</span>
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+            {assistant}
             {schedule ? (
               <Link href={schedule} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
                 <ScheduleIcon className="size-4" aria-hidden />
@@ -81,6 +88,7 @@ export function AppShell({
         <main className="mx-auto w-full max-w-[1500px] flex-1 px-3 pt-5 pb-24 sm:px-6 sm:pt-6">{children}</main>
       </div>
       {dock}
+      {panel}
     </div>
   );
 }

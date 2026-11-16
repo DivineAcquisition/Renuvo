@@ -112,7 +112,10 @@ export function resolvePath(pathname: string): Resolved | null {
     candidates.push({ base: agent.overview.path, resolved: { kind: "agent", agent, tab: null } });
     for (const tab of agent.tabs) candidates.push({ base: tab.path, resolved: { kind: "agent", agent, tab } });
   }
-  for (const item of NAV_ITEMS) candidates.push({ base: item.path, resolved: { kind: "item", item } });
+  for (const item of NAV_ITEMS) {
+    candidates.push({ base: item.path, resolved: { kind: "item", item } });
+    for (const also of item.alsoAt ?? []) candidates.push({ base: also, resolved: { kind: "item", item } });
+  }
 
   const own = candidates.filter((candidate) => (candidate.base === "/app" ? path === "/app" : under(path, candidate.base))).sort((a, b) => b.base.length - a.base.length)[0];
   if (own) return own.resolved;

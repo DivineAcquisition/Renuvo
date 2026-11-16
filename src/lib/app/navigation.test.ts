@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { AGENT_PROFILES, DEPARTMENTS as BACKEND_DEPARTMENTS } from "../../../convex/lib/departments";
 import { AGENTS as BACKEND_AGENTS } from "../../../convex/lib/statuses";
-import { AGENT_IDS, AGENTS, APP_ROOT, BADGE_KINDS, DEFAULT_DEPARTMENT, DEPARTMENT_IDS, DEPARTMENTS, EXISTING_ROUTES, FOOTER_ITEMS, LANDING_PATH, NAV_ITEMS, PERSISTENT_ITEMS, SETTINGS_PAGES, SHARED_ITEMS, SIDEBAR_SECTIONS, type Badge } from "./navigation";
+import { AGENT_IDS, AGENTS, APP_ROOT, BADGE_KINDS, CHAT_PAGES, DEFAULT_DEPARTMENT, DEPARTMENT_IDS, DEPARTMENTS, EXISTING_ROUTES, FOOTER_ITEMS, LANDING_PATH, NAV_ITEMS, PERSISTENT_ITEMS, SETTINGS_PAGES, SHARED_ITEMS, SIDEBAR_SECTIONS, type Badge } from "./navigation";
 import {
   activeFor,
   agentsIn,
@@ -83,7 +83,7 @@ describe("the navigation definition", () => {
     expect(AGENTS).toHaveLength(8);
     expect(SIDEBAR_SECTIONS).toEqual(["business", "departments", "persistent", "agents", "shared", "footer"]);
     expect(PERSISTENT_ITEMS.map((item) => item.label)).toEqual(["Home", "Approvals", "Inbox", "Search"]);
-    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Customers & Properties", "Cleaners", "Finance", "Reports"]);
+    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Chat", "Customers & Properties", "Cleaners", "Finance", "Reports"]);
     expect(FOOTER_ITEMS.map((item) => item.label)).toEqual(["Settings"]);
   });
 
@@ -182,7 +182,7 @@ describe("what is available today", () => {
       .filter((row) => row.destination.availability.status === "live" || (row.destination.availability.status === "planned" && row.destination.availability.notice))
       .map((row) => row.destination.path);
     for (const pattern of APP_PAGES) {
-      const known = live.includes(pattern) || EXISTING_ROUTES.some((route) => route.pattern === pattern) || SETTINGS_PAGES.some((page) => page.path === pattern);
+      const known = live.includes(pattern) || EXISTING_ROUTES.some((route) => route.pattern === pattern) || SETTINGS_PAGES.some((page) => page.path === pattern) || CHAT_PAGES.some((page) => page.path === pattern);
       expect(known, `${pattern} is a page that the navigation does not account for`).toBe(true);
     }
     for (const route of EXISTING_ROUTES) expect(APP_PAGES, route.pattern).toContain(route.pattern);
@@ -276,6 +276,20 @@ describe("navigation behavior", () => {
     expect(activeFor("/app")).toMatchObject({ item: "home", agent: null });
     expect(activeFor("/app/unknown")).toEqual({ item: null, agent: null, tab: null, department: null });
     expect(resolvePath("/app/agents/nobody")).toBeNull();
+  });
+
+  it("puts Chat under Company, for every department, with its conversations and history highlighting it", () => {
+    const chat = SHARED_ITEMS.find((item) => item.id === "chat")!;
+    expect(chat).toMatchObject({ label: "Chat", section: "shared", path: "/app/chat", availability: { status: "live" } });
+    for (const role of ["owner", "manager", "office"] as const) expect(mayShow(chat, role)).toBe(true);
+    for (const path of ["/app/chat", "/app/chat/abc123", "/app/chats", "/app/chats?q=price"]) expect(activeFor(path), path).toMatchObject({ item: "chat", agent: null });
+    expect(breadcrumbsFor("/app/chat/abc123")).toEqual([{ label: "Chat", href: "/app/chat" }]);
+    // A conversation page leaves the sidebar's department and open agents as they were.
+    const state = { department: "team" as const, expanded: ["recruiter" as const] };
+    expect(syncToPath(state, "/app/chat/abc123")).toBe(state);
+    // Chat is a company destination, never an agent's tab.
+    for (const agent of AGENTS) expect(agent.tabs.some((tab) => /chat/i.test(tab.label))).toBe(false);
+    for (const page of CHAT_PAGES) expect(APP_PAGES, page.path).toContain(page.path);
   });
 
   it("highlights the right thing on today's pages", () => {

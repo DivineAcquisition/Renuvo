@@ -29,6 +29,7 @@ import {
   RefreshCw,
   Search,
   SirenIcon,
+  Sparkles,
   UserPlusIcon,
   Wallet,
   type LucideIcon,
@@ -57,6 +58,7 @@ const ITEM_ICON: Record<NavItemId, LucideIcon> = {
   approvals: Hand,
   inbox: ChatIcon,
   search: Search,
+  chat: Sparkles,
   customers: HouseIcon,
   cleaners: BroomIcon,
   finance: Wallet,
@@ -267,6 +269,43 @@ function AgentRow({ agent, open, active, facts, onToggle, onNavigate }: { agent:
   );
 }
 
+/**
+ * Chat, under Company. The name opens the conversation workspace; the separate arrow only shows and
+ * hides previous chats, and never starts a new one. The list itself comes from the live record.
+ */
+function ChatRow({ item, active, onNavigate, sessions }: { item: NavItem; active: boolean; onNavigate?: () => void; sessions?: (onNavigate?: () => void) => React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const panel = useId();
+  const href = hrefFor(item) ?? item.path;
+  return (
+    <li>
+      <div className={cn("flex items-center gap-1 rounded-lg", active && current)}>
+        <Link href={href} onClick={onNavigate} aria-current={active ? "page" : undefined} className={cn(row, "min-w-0 flex-1", active ? "text-brand-300" : linked)}>
+          <Sparkles className={cn("size-[18px] shrink-0", active && "text-brand-300")} aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+        </Link>
+        {sessions ? (
+          <button
+            type="button"
+            onClick={() => setOpen((before) => !before)}
+            aria-expanded={open}
+            aria-controls={panel}
+            aria-label={`${open ? "Hide" : "Show"} previous chats`}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-strong focus-visible:outline-2 focus-visible:outline-brand-500"
+          >
+            {open ? <ChevronDown className="size-3.5" aria-hidden /> : <ChevronRight className="size-3.5" aria-hidden />}
+          </button>
+        ) : null}
+      </div>
+      {open && sessions ? (
+        <div id={panel} className="mt-0.5 mb-1.5 ml-[1.35rem] border-l border-border pl-2">
+          {sessions(onNavigate)}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
 // ── Business selector ───────────────────────────────────────────────────────────────────────────────
 
 export type BusinessOption = { companyId: string; name: string };
@@ -401,6 +440,7 @@ export function Sidebar({
   role,
   facts,
   onNavigate,
+  chatSessions,
 }: {
   company: string;
   companyId: string;
@@ -410,6 +450,8 @@ export function Sidebar({
   /** The record's facts behind the badges. Undefined while loading: no badge is shown, never a guessed one. */
   facts?: SidebarFacts;
   onNavigate?: () => void;
+  /** Previous chats under Chat, drawn by the caller from the live record. */
+  chatSessions?: (onNavigate?: () => void) => React.ReactNode;
 }) {
   const pathname = usePathname();
   const { state, update } = useSidebarStore();
@@ -454,11 +496,15 @@ export function Sidebar({
         <section aria-label="Company records">
           <h2 className={heading}>Company</h2>
           <ul className="mt-1.5 grid gap-0.5">
-            {shown(SHARED_ITEMS).map((item) => (
-              <li key={item.id}>
-                <ItemRow item={item} active={active.item === item.id} onNavigate={onNavigate} />
-              </li>
-            ))}
+            {shown(SHARED_ITEMS).map((item) =>
+              item.id === "chat" ? (
+                <ChatRow key={item.id} item={item} active={active.item === item.id} onNavigate={onNavigate} sessions={chatSessions} />
+              ) : (
+                <li key={item.id}>
+                  <ItemRow item={item} active={active.item === item.id} onNavigate={onNavigate} />
+                </li>
+              ),
+            )}
           </ul>
         </section>
 

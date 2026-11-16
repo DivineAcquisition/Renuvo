@@ -70,7 +70,7 @@ const mock: ChatModel = {
     if (turn.error) throw new ModelError(turn.error, true);
     const text = turn.text ?? "";
     // Delivered in pieces, the way a stream arrives.
-    for (const piece of text.match(/.{1,12}/gs) ?? []) request.onText(piece);
+    for (const piece of text.match(/[\s\S]{1,12}/g) ?? []) request.onText(piece);
     const toolCalls = (turn.toolCalls ?? []).map((call) => ({ id: `mock_tool_${(mockCounter += 1)}`, name: call.name, input: call.input }));
     const content = [...(text ? [{ type: "text", text }] : []), ...toolCalls.map((call) => ({ type: "tool_use", id: call.id, name: call.name, input: call.input }))];
     return { stop: turn.stop ?? (toolCalls.length ? "tool_use" : "end"), text, toolCalls, content, usage: { inputTokens: 100, outputTokens: 20 }, model: "mock" };
