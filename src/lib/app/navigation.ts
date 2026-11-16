@@ -12,6 +12,8 @@
  * The document that explains it: docs/foundation/01-navigation.md.
  */
 
+import { SETTINGS_SECTIONS } from "./settings";
+
 // ── Identifiers. Stable, used in URLs and stored state. Display labels are separate and may change. ──
 
 export const DEPARTMENT_IDS = ["growth", "operations", "team"] as const;
@@ -182,7 +184,7 @@ export const FOOTER_ITEMS: readonly NavItem[] = [
     id: "settings",
     label: "Settings",
     section: "footer",
-    purpose: "Business configuration, agent permissions, connections, notifications and Selestial's own billing.",
+    purpose: "Business hours and services, people, agent permissions and rules, connections, security, compliance and Selestial's own plans.",
     path: `${APP_ROOT}/settings`,
     availability: LIVE,
     minimumRole: "office",
@@ -192,11 +194,8 @@ export const FOOTER_ITEMS: readonly NavItem[] = [
 
 export const NAV_ITEMS: readonly NavItem[] = [...PERSISTENT_ITEMS, ...SHARED_ITEMS, ...FOOTER_ITEMS];
 
-/** Pages inside Settings. They have no sidebar entry: Settings links to them, and readiness blockers link to their sections. */
-export const SETTINGS_PAGES: readonly { path: string; label: string; purpose: string }[] = [
-  { path: `${APP_ROOT}/settings/compliance`, label: "Trust & Compliance", purpose: "Readiness per operation, business identity, messaging setup, consent wording, the company's data, and agreements." },
-  { path: `${APP_ROOT}/settings/agreements`, label: "Agreements", purpose: "Which version of Selestial's Terms the company accepted, who, and when." },
-];
+/** Pages inside Settings. They have no sidebar entry: Settings links to them. They are derived from the settings catalog (settings.ts), the one place they are defined. */
+export const SETTINGS_PAGES: readonly { path: string; label: string; purpose: string }[] = SETTINGS_SECTIONS.map(({ path, label, purpose }) => ({ path, label, purpose }));
 
 // ── Agents and their work tabs ──────────────────────────────────────────────────────────────────────
 

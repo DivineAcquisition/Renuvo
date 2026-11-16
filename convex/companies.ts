@@ -94,6 +94,8 @@ export const update = ownerMutation({
     await ctx.db.patch(ctx.companyId, {
       ...(args.name !== undefined ? { name: text(args.name, "Company name", 160) } : {}),
       ...(args.timezone !== undefined ? { timezone: timezone(args.timezone) } : {}),
+      // A change here is a change to the business settings, so a stale tab must not save over it.
+      settingsRevision: (ctx.company.settingsRevision ?? 0) + 1,
     });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "company.updated", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId } });
     return null;

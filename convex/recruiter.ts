@@ -119,6 +119,18 @@ export const updatePlaybook = ownerMutation({
     within(next.sendFromMinute, 0, 1439, "The start of sending hours");
     within(next.sendUntilMinute, 1, 1440, "The end of sending hours");
     if ((next.followUpHours ?? []).length > 5 || (next.followUpHours ?? []).some((hours) => !Number.isFinite(hours) || hours < 12 || hours > 720)) throw userError("Reminders are at most five, each between 12 hours and 30 days after the invitation.");
+    const reminders = next.followUpHours ?? [];
+    if (new Set(reminders).size !== reminders.length) throw userError("Two reminders are set for the same time. Each reminder needs its own delay.");
+    if (next.maxFollowUps !== undefined && (!Number.isInteger(next.maxFollowUps) || next.maxFollowUps > reminders.length)) throw userError("The number of reminders must be a whole number and no more than the reminders you have scheduled.");
+    if (next.sendFromMinute !== undefined && next.sendUntilMinute !== undefined && next.sendFromMinute >= next.sendUntilMinute) throw userError("Sending hours must end after they start.");
+    if (next.sendDays !== undefined && next.sendDays.length === 0) throw userError("Choose at least one day messages may be sent.");
+    if (next.onboardingRequirements !== undefined) {
+      const items = next.onboardingRequirements.map((item) => ({ key: item.key.trim().toLowerCase(), label: item.label.trim() }));
+      if (items.length === 0) throw userError("A new worker needs at least one onboarding requirement.");
+      if (items.some((item) => !/^[a-z0-9_]{1,40}$/.test(item.key) || !item.label || item.label.length > 120)) throw userError("Each onboarding requirement needs a short key of letters, numbers or underscores, and a label.");
+      if (new Set(items.map((item) => item.key)).size !== items.length) throw userError("Two onboarding requirements share a key.");
+      next.onboardingRequirements = items;
+    }
     if ((next.sendDays ?? []).some((day) => !Number.isInteger(day) || day < 0 || day > 6)) throw userError("Sending days are numbered 0 (Sunday) to 6 (Saturday).");
     if (next.replyTo !== undefined) next.replyTo = next.replyTo.trim() ? email(next.replyTo, "The reply address") : undefined;
     next.fromName = optionalText(next.fromName, "The sender name", 80);

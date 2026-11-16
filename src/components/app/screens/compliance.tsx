@@ -494,7 +494,7 @@ function AgentAuthority() {
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />Every action an agent takes is written to the activity log with what it was based on.
           </li>
         </ul>
-        <Link href="/app/settings#agents" className="inline-flex items-center gap-1 font-medium text-brand-600 underline-offset-2 hover:underline">
+        <Link href="/app/settings/agents" className="inline-flex items-center gap-1 font-medium text-brand-600 underline-offset-2 hover:underline">
           Open agent permissions
           <ArrowRight className="size-3.5" aria-hidden />
         </Link>
