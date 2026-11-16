@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { diffCounts, diffLines } from "./diff";
 import { parseInline, parseMarkdown, plainText, safeHref } from "./markdown";
-import { chatStorageKey, parseStoredChat, STATE_LOOK, toolWords } from "./session";
+import { chatFailureWords, chatStorageKey, parseStoredChat, STATE_LOOK, toolWords } from "./session";
 
 describe("chat markdown", () => {
   it("parses the blocks answers and drafts use", () => {
@@ -56,5 +56,15 @@ describe("chat session state", () => {
     expect(Object.values(STATE_LOOK).map((look) => look.label)).toEqual(["New", "Working", "Needs your input", "Awaiting approval", "Completed", "Failed", "Stopped"]);
     expect(toolWords("price_service", "running")).toBe("Working out the price");
     expect(toolWords("unknown_tool", "done")).toBe("unknown tool");
+  });
+});
+
+describe("when chat cannot load", () => {
+  it("says plainly that chat is not deployed, instead of failing the page", () => {
+    const missing = new Error("[CONVEX Q(chat:recent)] [Request ID: x] Server Error\nCould not find public function for 'chat:recent'. Did you forget to run `npx convex deploy`?");
+    expect(chatFailureWords(missing).title).toBe("Chat is not switched on for this workspace yet");
+    expect(chatFailureWords(new Error("Network down")).title).toBe("Chat could not load");
+    // Provider and server details never reach the person.
+    expect(JSON.stringify(chatFailureWords(missing))).not.toMatch(/Request ID|npx/);
   });
 });

@@ -117,3 +117,19 @@ export const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US"
 export function newClientKey(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
+
+/** Convex's words when a function is not on the deployment the app is talking to. */
+const NOT_DEPLOYED = /Could not find public function/i;
+
+/** What a person is told when chat cannot load. A backend without chat's functions is said plainly. */
+export function chatFailureWords(error: unknown): { title: string; body: string; short: string } {
+  const message = error instanceof Error ? error.message : String(error);
+  if (NOT_DEPLOYED.test(message)) {
+    return {
+      title: "Chat is not switched on for this workspace yet",
+      body: "The chat screens are here, but the server side of Company Chat has not been deployed to this workspace's backend yet. Nothing is wrong with your account, and the rest of Selestial works as usual.",
+      short: "Its server side is not deployed yet. The rest of Selestial works as usual.",
+    };
+  }
+  return { title: "Chat could not load", body: "Something went wrong while loading chat. The rest of Selestial still works. Try again in a moment.", short: "Something went wrong. Try again in a moment." };
+}

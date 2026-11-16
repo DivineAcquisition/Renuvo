@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
+import { ChatBoundary } from "@/components/app/chat/boundary";
 import { useChat } from "@/components/app/chat/chat-context";
 import { SessionSwitcher } from "@/components/app/chat/sessions";
 import { ChatThread } from "@/components/app/chat/thread";
@@ -85,7 +86,9 @@ export function ChatPanel() {
               </button>
             </div>
             <div className="flex min-w-0 items-center gap-2">
-              <SessionSwitcher compact current={conversationId} onPick={(id) => setConversationId(id)} onNew={() => setConversationId(null)} />
+              <ChatBoundary compact>
+                <SessionSwitcher compact current={conversationId} onPick={(id) => setConversationId(id)} onNew={() => setConversationId(null)} />
+              </ChatBoundary>
               <button type="button" onClick={() => setConversationId(null)} className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500">
                 <Plus className="size-4" aria-hidden /> New
               </button>
@@ -95,14 +98,18 @@ export function ChatPanel() {
             </Link>
           </header>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            <ChatThread key={conversationId ?? "new"} compact conversationId={conversationId} onStarted={(id) => setConversationId(id)} />
+            <ChatBoundary compact>
+              <ChatThread key={conversationId ?? "new"} compact conversationId={conversationId} onStarted={(id) => setConversationId(id)} />
+            </ChatBoundary>
           </div>
         </aside>
       ) : null}
       {artifactId && !hidden ? (
         <div className={cn("fixed inset-0 z-50 flex sm:inset-y-0 sm:left-auto sm:border-l sm:border-border sm:shadow-2xl", panelOpen ? "sm:right-[27rem] sm:w-[min(34rem,calc(100vw-28rem))]" : "sm:right-0 sm:w-[min(36rem,100vw)]")}>
           <div className="flex min-h-0 w-full flex-col">
-            <DocumentWorkspace artifactId={artifactId} onClose={() => openArtifact(null)} />
+            <ChatBoundary compact>
+              <DocumentWorkspace artifactId={artifactId} onClose={() => openArtifact(null)} />
+            </ChatBoundary>
           </div>
         </div>
       ) : null}

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AgentDock } from "@/components/app/agent-dock";
+import { ChatBoundary } from "@/components/app/chat/boundary";
 import { ChatProvider, useChat } from "@/components/app/chat/chat-context";
 import { AskButton, ChatPanel } from "@/components/app/chat/panel";
 import { SidebarChatList } from "@/components/app/chat/sessions";
@@ -171,7 +172,11 @@ function LiveSidebar({ businesses, onSwitch, onNavigate }: { businesses: Busines
   const { companyId, name, role } = useCompany();
   const now = useNow();
   const facts = useQuery(api.overview.sidebar, now ? { companyId, asOf: now } : "skip");
-  return <Sidebar company={name} companyId={companyId} businesses={businesses} onSwitchBusiness={onSwitch} role={role} facts={facts} onNavigate={onNavigate} chatSessions={(close) => <SidebarChatList onNavigate={close} />} />;
+  return <Sidebar company={name} companyId={companyId} businesses={businesses} onSwitchBusiness={onSwitch} role={role} facts={facts} onNavigate={onNavigate} chatSessions={(close) => (
+        <ChatBoundary compact>
+          <SidebarChatList onNavigate={close} />
+        </ChatBoundary>
+      )} />;
 }
 
 function Workspace({ companyId, role, userId, businesses, onSwitch, children }: { companyId: Id<"companies">; role: Role; userId: string; businesses: BusinessOption[]; onSwitch: (companyId: string) => void; children: React.ReactNode }) {
