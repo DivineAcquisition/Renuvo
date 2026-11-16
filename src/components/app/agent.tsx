@@ -21,8 +21,11 @@ export const STATE: Record<AgentState, { label: string; dot: string; pulse: bool
 
 const PIXELS = { xs: 20, sm: 28, md: 36, lg: 44 } as const;
 
-/** Where an agent's portrait is served from: the same faces the public site uses. */
-export function agentPortrait(agent: AgentId): string {
+/**
+ * Where an agent's portrait is served from: public/agents/<id>.webp, the same faces the public site uses.
+ * Every agent in the navigation has one, including those not built yet.
+ */
+export function agentPortrait(agent: string): string {
   return `/agents/${agent}.webp`;
 }
 
