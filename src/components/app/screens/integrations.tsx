@@ -1,5 +1,7 @@
 "use client";
 
+import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -7,30 +9,117 @@ import { AgentAvatar, eyebrow } from "@/components/app/agent";
 import { useCompany } from "@/components/app/company";
 import { IntegrationMark } from "@/components/app/integration-mark";
 import { PageHeader, Panel } from "@/components/app/shell";
-import { Lock, Search, X } from "@/components/icons";
+import { messageOf } from "@/components/app/form";
+import { ArrowRight, CheckCircle2, Lock, Plug, Search, Sparkles, X } from "@/components/icons";
 import { mapsKey } from "@/lib/app/address";
 import { CATEGORIES, INTEGRATIONS, integrationsFor, type Integration } from "@/lib/app/integrations";
 import { AGENTS, type AgentId } from "@/lib/app/navigation";
 import { cn } from "@/lib/utils";
 
+import { api } from "../../../../convex/_generated/api";
+
 const AGENT_LABEL = Object.fromEntries(AGENTS.map((agent) => [agent.id, agent.label])) as Record<AgentId, string>;
 
+type Overview = FunctionReturnType<typeof api.integrations.overview>;
+type Live = { state: "connected" | "in_progress" | "ready" | "not_set_up"; detail: string | null };
+
+function liveOf(integration: Integration, overview: Overview | undefined): Live | null {
+  if (integration.status.kind !== "available" || !overview) return null;
+  return (overview.live as Record<string, Live | undefined>)[integration.id] ?? null;
+}
+
 /** Where an integration stands, as a dot and words, the same way an agent's state is shown. */
-function Status({ integration }: { integration: Integration }) {
+function Status({ integration, live, requested }: { integration: Integration; live: Live | null; requested: boolean }) {
   const { status } = integration;
   const look =
     status.kind === "available"
-      ? { dot: "bg-success", word: "Ready to connect", pulse: false, title: undefined }
+      ? live?.state === "connected"
+        ? { dot: "bg-success", word: live.detail ? `Connected · ${live.detail}` : "Connected", pulse: false, title: undefined }
+        : live?.state === "in_progress"
+          ? { dot: "bg-warning", word: "Setting up", pulse: true, title: undefined }
+          : live?.state === "not_set_up"
+            ? { dot: "bg-warning", word: "Not switched on yet", pulse: false, title: "Built, and waiting for Selestial to switch it on." }
+            : { dot: "bg-brand-500", word: "Ready to connect", pulse: false, title: undefined }
       : status.kind === "built_in"
         ? mapsKey()
           ? { dot: "bg-success", word: "Built in", pulse: false, title: undefined }
           : { dot: "bg-warning", word: "Not switched on yet", pulse: true, title: "Built, and waiting for Selestial to switch it on." }
-        : { dot: "bg-muted-foreground/50", word: "Coming soon", pulse: false, title: `Planned for phase ${status.phase}` };
+        : requested
+          ? { dot: "bg-brand-500/70", word: "Requested", pulse: false, title: "Your company asked for this. Selestial builds the most-requested first." }
+          : { dot: "bg-muted-foreground/50", word: "Coming soon", pulse: false, title: `Planned for phase ${status.phase}` };
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground" title={look.title}>
-      <span className={cn("size-2 rounded-full", look.dot, look.pulse && "live-pulse")} aria-hidden />
-      {look.word}
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted-foreground" title={look.title}>
+      <span className={cn("size-2 shrink-0 rounded-full", look.dot, look.pulse && "live-pulse")} aria-hidden />
+      <span className="truncate">{look.word}</span>
     </span>
+  );
+}
+
+const action = "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-50";
+const primary = cn(action, "bg-brand-500 text-white shadow-sm hover:bg-brand-600");
+const secondary = cn(action, "border border-border bg-card text-strong hover:bg-muted");
+
+/**
+ * What a person can do from the card. Built: go to where it is set up. Planned: the Owner asks for it.
+ * Built in: nothing to do. The server checks the Owner again, so the button only saves a trip.
+ */
+function CardAction({ integration, live, requested }: { integration: Integration; live: Live | null; requested: { requestedAt: number } | null }) {
+  const { companyId, role } = useCompany();
+  const ask = useMutation(api.integrations.request);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const owner = role === "owner";
+  const { status } = integration;
+
+  if (status.kind === "built_in") return <p className="text-xs text-muted-foreground">Nothing to connect. It works on every address field.</p>;
+
+  if (status.kind === "available") {
+    if (live?.state === "not_set_up") return <p className="text-xs text-muted-foreground">Selestial still has to switch this on for your account.</p>;
+    const label = live?.state === "connected" ? "Manage" : live?.state === "in_progress" ? "See progress" : owner ? `Connect ${integration.name.replace(/^Business /, "")}` : "See setup";
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href={status.href} className={live?.state === "ready" && owner ? primary : secondary}>
+          {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
+          {label}
+          <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
+        <span className="text-[11px] text-muted-foreground">In {status.setUpWhere}</span>
+      </div>
+    );
+  }
+
+  if (requested) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <CheckCircle2 className="size-3.5 text-success" aria-hidden />
+        Requested {new Date(requested.requestedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}. Selestial builds the most-requested first.
+      </p>
+    );
+  }
+  if (!owner) return <p className="text-xs text-muted-foreground">Coming soon. Your Owner can ask Selestial for it.</p>;
+  return (
+    <div className="grid gap-1.5">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          ask({ companyId, integrationId: integration.id })
+            .catch((caught: unknown) => setError(messageOf(caught)))
+            .finally(() => setBusy(false));
+        }}
+        className={cn(secondary, "w-fit")}
+      >
+        <Sparkles className="size-3.5 text-brand-300" aria-hidden />
+        {busy ? "Requesting…" : "Request early access"}
+      </button>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive-foreground">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -70,20 +159,23 @@ function UsedBy({ agents, highlight }: { agents: AgentId[]; highlight: AgentId |
   );
 }
 
-function IntegrationCard({ integration, highlight }: { integration: Integration; highlight: AgentId | null }) {
+function IntegrationCard({ integration, highlight, overview }: { integration: Integration; highlight: AgentId | null; overview: Overview | undefined }) {
+  const live = liveOf(integration, overview);
+  const requested = overview?.requested.find((row) => row.integrationId === integration.id) ?? null;
   return (
-    <li className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-brand-500/40">
+    <li className={cn("group flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-brand-500/40", live?.state === "connected" ? "border-success/40" : "border-border")}>
       <div className="flex items-center gap-3">
         <IntegrationMark id={integration.id} size="lg" />
         <div className="min-w-0">
           <h3 className="truncate font-medium text-strong">{integration.name}</h3>
-          <Status integration={integration} />
+          <Status integration={integration} live={live} requested={Boolean(requested)} />
         </div>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">{integration.does}</p>
       <Abilities can={integration.can} />
       {integration.note ? <p className="text-xs leading-relaxed text-muted-foreground">{integration.note}</p> : null}
-      <div className="mt-auto border-t border-border pt-3">
+      <div className="mt-auto grid gap-3 border-t border-border pt-3">
+        <CardAction integration={integration} live={live} requested={requested} />
         <UsedBy agents={integration.agents} highlight={highlight} />
       </div>
     </li>
@@ -124,7 +216,8 @@ function AgentTools({ agent, selected, onSelect }: { agent: AgentId; selected: b
 }
 
 export function IntegrationsScreen() {
-  const { role } = useCompany();
+  const { companyId, role } = useCompany();
+  const overview = useQuery(api.integrations.overview, { companyId });
   const [agent, setAgent] = useState<AgentId | null>(null);
   const [query, setQuery] = useState("");
 
@@ -160,7 +253,7 @@ export function IntegrationsScreen() {
         </ul>
         <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
           <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          {role === "owner" ? "Only you, as the Owner, can connect or disconnect an integration. Everyone in your company can see what is connected." : "Only the Owner can connect or disconnect an integration. You can see what is connected."}
+          {role === "owner" ? "Only you, as the Owner, can connect, disconnect or request an integration. Everyone in your company can see what is connected." : "Only the Owner can connect, disconnect or request an integration. You can see what is connected."}
         </p>
       </section>
 
@@ -208,7 +301,7 @@ export function IntegrationsScreen() {
                 <p className="mb-4 text-sm text-muted-foreground">{category.lead}</p>
                 <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {inGroup.map((integration) => (
-                    <IntegrationCard key={integration.id} integration={integration} highlight={agent} />
+                    <IntegrationCard key={integration.id} integration={integration} highlight={agent} overview={overview} />
                   ))}
                 </ul>
               </Panel>

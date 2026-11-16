@@ -144,6 +144,17 @@ export const checkInValidator = v.object({
 });
 
 export default defineSchema({
+  /**
+   * An Owner asked for an integration that is not built yet (convex/integrations.ts). One row per company
+   * and integration: asking again keeps the first. It tells Selestial what to build next and promises nothing.
+   */
+  integrationRequests: defineTable({
+    companyId: v.id("companies"),
+    integrationId: v.string(),
+    requestedBy: v.id("members"),
+    requestedAt: v.number(),
+  }).index("by_company_integration", ["companyId", "integrationId"]),
+
   // ── Selestial staff (convex/lib/trust/staffSchema.ts) ─────────────────────────────────────────────
   ...staffTables,
   // ── Messaging consent, the compliance profile, agreements (convex/lib/compliance/schema.ts) ──────
