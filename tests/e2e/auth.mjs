@@ -42,7 +42,7 @@ const path = (page) => {
   return `${url.pathname}${url.search}`;
 };
 const heading = (page) => page.locator("h1").first().innerText();
-const notice = (page) => page.locator('[role="alert"], [role="status"]').filter({ hasText: /\S/ });
+const notice = (page) => page.locator('form [role="alert"], form [role="status"]').filter({ hasText: /\S/ });
 const shot = async (page, name) => {
   if (shots) await page.screenshot({ path: `${shots}/${name}.png` });
 };

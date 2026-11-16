@@ -48,7 +48,7 @@ export function UserMenu() {
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex size-9 items-center justify-center rounded-full bg-brand-500 text-xs font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
+        className="icon-gradient flex size-9 items-center justify-center rounded-full text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
       >
         <span aria-hidden>{initials(name)}</span>
         <span className="sr-only">Account menu for {name}</span>

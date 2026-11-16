@@ -26,11 +26,11 @@ export const buttonVariants = cva(
       },
       variant: {
         default:
-          "border-[#5126c7]/40 bg-[#6838ef] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-[#5126c7] data-pressed:bg-[#5126c7] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
+          "icon-gradient border-[#5126c7]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         primary:
-          "border-[#5126c7]/40 bg-[#6838ef] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-[#5126c7] data-pressed:bg-[#5126c7] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
+          "icon-gradient border-[#5126c7]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         gradient:
-          "border-[#5126c7]/40 bg-gradient-to-br from-[#6838ef] to-[#5126c7] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_28px_-12px_rgba(104,56,239,0.8)] hover:from-[#5126c7] hover:to-[#3f1d9e] data-pressed:from-[#5126c7] data-pressed:to-[#3f1d9e] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
+          "icon-gradient border-[#5126c7]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_28px_-12px_rgba(104,56,239,0.8)] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         destructive:
           "border-[#991b1b]/30 bg-destructive bg-gradient-to-b from-[#fca5a5] to-[#dc2626] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:from-[#fecaca] hover:to-[#ef4444] data-pressed:from-[#f87171] data-pressed:to-[#b91c1c] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         "destructive-outline":

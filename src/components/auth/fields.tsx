@@ -126,7 +126,7 @@ export function SubmitButton({ busy, children, busyLabel, disabled }: { busy: bo
       type="submit"
       disabled={busy || disabled}
       aria-busy={busy}
-      className="relative flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#6838ef] px-4 text-[15px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_-14px_rgba(104,56,239,0.9)] transition-colors hover:bg-[#5126c7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef] disabled:cursor-not-allowed disabled:bg-[#8e6df6] disabled:shadow-none"
+      className="icon-gradient relative flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#5126c7]/40 px-4 text-[15px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_24px_-14px_rgba(104,56,239,0.9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef] disabled:cursor-not-allowed disabled:shadow-none"
     >
       {busy ? <Loader className="size-4 animate-spin" aria-hidden /> : null}
       {busy ? busyLabel : children}

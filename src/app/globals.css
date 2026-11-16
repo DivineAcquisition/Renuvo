@@ -2619,6 +2619,112 @@ html[data-calm="true"] .work-hero-halo-on {
   }
 }
 
+/* ---------- The icon's paint, for filled buttons ----------
+   Exactly what the app icon's tile is painted with (src/components/brand/logo.tsx): Selestial Violet at
+   the top-left running to Deep Violet at the bottom-right, under a soft highlight from the top-left.
+   White text is at least 5:1 anywhere a label sits. Literal colours: the icon does not change with the theme. */
+.icon-gradient {
+  background-color: #6838ef;
+  background-image:
+    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(135deg, #6838ef 0%, #5126c7 100%);
+  color: #ffffff;
+}
+
+.icon-gradient:hover:not(:disabled):not([data-disabled]),
+.icon-gradient[data-pressed]:not(:disabled) {
+  background-image:
+    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(135deg, #5c2fdb 0%, #431fa6 100%);
+}
+
+.icon-gradient:disabled,
+.icon-gradient[data-disabled] {
+  background-image:
+    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(135deg, #a58cf6 0%, #8f76e0 100%);
+}
+
+/* While a button's request runs, a band of light crosses it: the work is under way. */
+.icon-gradient[aria-busy="true"] {
+  background-image:
+    linear-gradient(105deg, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0.28) 50%, rgba(255, 255, 255, 0) 60%),
+    linear-gradient(135deg, #6838ef 0%, #5126c7 100%);
+  background-size:
+    220% 100%,
+    100% 100%;
+  animation: auth-sweep 1.4s linear infinite;
+}
+
+@keyframes auth-sweep {
+  from {
+    background-position:
+      120% 0,
+      0 0;
+  }
+  to {
+    background-position:
+      -120% 0,
+      0 0;
+  }
+}
+
+/* The agent's line at the top of each sign-in card. */
+.agent-line-working {
+  background: linear-gradient(90deg, #5126c7 0%, #b39eff 45%, #5126c7 90%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: auth-shimmer 2.2s linear infinite;
+}
+
+@keyframes auth-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.auth-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: auth-blink 1.1s steps(1) infinite;
+}
+
+@keyframes auth-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(104, 56, 239, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 9px rgba(104, 56, 239, 0);
+  }
+}
+
+.agent-avatar-working {
+  animation: auth-ring 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-gradient[aria-busy="true"],
+  .agent-avatar-working,
+  .auth-caret {
+    animation: none;
+  }
+  .agent-line-working {
+    animation: none;
+    -webkit-text-fill-color: #5126c7;
+  }
+}
+
 /* One control style for every sign-in field, so labels, focus and errors look the same everywhere. */
 .auth-input {
   display: block;

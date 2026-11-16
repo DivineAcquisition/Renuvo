@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
-import { Logo, LogoGlyph } from "@/components/brand/logo";
+import { Logo, LogoMark } from "@/components/brand/logo";
+import { BorderBeam } from "@/components/ui/border-beam";
 import { Check, Hand, X } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
@@ -57,24 +58,43 @@ function Mark({ state, index, dark }: { state: TraceState; index: number; dark?:
   );
 }
 
-/** The one-line status at the top of the panel: who is working and on what. */
-function StatusLine({ steps }: { steps: TraceStep[] }) {
-  const at = steps.find((step) => step.state === "failed") ?? steps.find((step) => step.state === "active") ?? steps.find((step) => step.state === "needs_you");
-  const allDone = steps.length > 0 && steps.every((step) => step.state === "done");
-  const tone = allDone ? "text-emerald-300" : at?.state === "failed" ? "text-red-300" : at?.state === "needs_you" ? "text-amber-300" : "text-[#b39eff]";
-  const word = allDone ? "Done" : at ? WORD[at.state] : "Ready";
+/** Which step speaks for the screen right now: a stop first, then work under way, then whatever waits on the person. */
+function current(steps: TraceStep[]): { step: TraceStep | null; allDone: boolean } {
+  const step = steps.find((row) => row.state === "failed") ?? steps.find((row) => row.state === "active") ?? steps.find((row) => row.state === "needs_you") ?? null;
+  return { step, allDone: steps.length > 0 && steps.every((row) => row.state === "done") };
+}
+
+/**
+ * The agent's line at the top of every card: who is working, on what, and whether it is waiting on
+ * the person. It is read from the same steps as the panel, so it can never say something the
+ * screen is not doing. The state is a word and a mark, not only a colour.
+ */
+function AgentLine({ steps }: { steps: TraceStep[] }) {
+  const { step, allDone } = current(steps);
+  const state: TraceState | "ready" = allDone ? "done" : (step?.state ?? "ready");
+  const chip = {
+    active: { word: "Working", look: "border-[#d9cfff] bg-[#eee8ff] text-[#5126c7]" },
+    needs_you: { word: "Waiting on you", look: "border-amber-200 bg-amber-50 text-amber-800" },
+    failed: { word: "Stopped here", look: "border-red-200 bg-red-50 text-red-800" },
+    done: { word: "Done", look: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+    todo: { word: "Ready", look: "border-[#e4e7ef] bg-[#f8f9fc] text-[#667085]" },
+    ready: { word: "Ready", look: "border-[#e4e7ef] bg-[#f8f9fc] text-[#667085]" },
+  }[state];
+  const sentence = allDone ? "Everything on this screen is finished." : step ? `${step.label}${step.state === "active" ? "…" : ""}` : "Ready when you are.";
   return (
-    <div className="auth-glass flex items-center gap-3 rounded-2xl px-3.5 py-3">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
-        <LogoGlyph className="h-5 [&_path]:fill-white" />
+    <div className="mb-5 flex items-center gap-3 border-b border-[#e4e7ef] pb-4" role="status" aria-live="polite">
+      <span className={cn("relative flex size-9 shrink-0 items-center justify-center rounded-[10px]", state === "active" && "agent-avatar-working")}>
+        <LogoMark className="size-9" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-semibold text-white">Selestial</p>
-        <p className="truncate text-xs text-white/65">{allDone ? "Everything on this screen is finished." : at ? at.label : "Ready when you are."}</p>
+        <p className="text-[11px] font-semibold tracking-[0.14em] text-[#667085] uppercase">Selestial</p>
+        <p key={sentence} className={cn("auth-rise text-sm leading-snug font-medium", state === "active" ? "agent-line-working" : "text-[#211a35]")}>
+          {sentence}
+        </p>
       </div>
-      <span className={cn("flex shrink-0 items-center gap-1.5 text-[11px] font-semibold tracking-wide uppercase", tone)}>
-        <span className={cn("relative size-1.5 rounded-full bg-current", at?.state === "active" && "auth-dot")} aria-hidden />
-        {word}
+      <span className={cn("flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold tracking-wide uppercase", chip.look)}>
+        <span className={cn("relative size-1.5 rounded-full bg-current", state === "active" && "auth-dot")} aria-hidden />
+        {chip.word}
       </span>
     </div>
   );
@@ -84,41 +104,63 @@ function clock(at: number): string {
   return new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 }
 
-/** The dark panel beside the form: the steps of this screen's real work, and what has happened so far. */
+/** The dark panel beside the form: the steps of this screen's real work, and a console of what has happened so far. */
 function AgentPanel({ steps, events }: { steps: TraceStep[]; events: TraceEvent[] }) {
+  const { step, allDone } = current(steps);
+  const done = steps.filter((row) => row.state === "done").length;
   return (
     <aside className="auth-panel hidden w-[44%] max-w-[560px] shrink-0 flex-col justify-between p-10 lg:flex xl:p-12" aria-label="Progress">
       <div className="grid gap-5">
-        <StatusLine steps={steps} />
         <div className="auth-glass rounded-2xl p-5">
-          <p className="text-[11px] font-semibold tracking-[0.16em] text-white/55 uppercase">What happens here</p>
-          <ol className="mt-4 grid">
-            {steps.map((step, index) => (
-              <li key={step.key} className="relative flex gap-3 pb-5 last:pb-0">
-                {index < steps.length - 1 ? <span className={cn("absolute top-6 left-[11px] h-[calc(100%-1.5rem)] w-px", step.state === "done" ? "bg-emerald-300/40" : "bg-white/15")} aria-hidden /> : null}
-                <Mark state={step.state} index={index} dark />
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-white/55 uppercase">The plan</p>
+            <p className="font-mono text-[11px] text-white/55 tabular-nums">
+              {done} of {steps.length} done
+            </p>
+          </div>
+          <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/10" aria-hidden>
+            <div className="h-full rounded-full bg-gradient-to-r from-[#b39eff] to-white transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${steps.length === 0 ? 0 : (done / steps.length) * 100}%` }} />
+          </div>
+          <ol className="mt-5 grid">
+            {steps.map((row, index) => (
+              <li key={row.key} className="relative flex gap-3 pb-5 last:pb-0">
+                {index < steps.length - 1 ? <span className={cn("absolute top-6 left-[11px] h-[calc(100%-1.5rem)] w-px", row.state === "done" ? "bg-emerald-300/40" : "bg-white/15")} aria-hidden /> : null}
+                <Mark state={row.state} index={index} dark />
                 <div className="min-w-0 pt-0.5">
-                  <p className={cn("text-sm font-medium", step.state === "active" ? "auth-working" : step.state === "todo" ? "text-white/55" : "text-white")}>{step.label}</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-white/60">{step.detail}</p>
+                  <p className={cn("text-sm font-medium", row.state === "active" ? "auth-working" : row.state === "todo" ? "text-white/55" : "text-white")}>{row.label}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-white/60">{row.detail}</p>
                 </div>
               </li>
             ))}
           </ol>
         </div>
         <div className="auth-glass rounded-2xl p-5">
-          <p className="text-[11px] font-semibold tracking-[0.16em] text-white/55 uppercase">Activity</p>
-          {events.length === 0 ? (
-            <p className="mt-3 font-mono text-xs text-white/45">Nothing yet. This fills in as you go.</p>
-          ) : (
-            <ol className="mt-3 grid gap-1.5" aria-live="off">
-              {events.map((event) => (
-                <li key={`${event.at}-${event.text}`} className="auth-rise flex gap-3 font-mono text-xs">
-                  <span className="shrink-0 text-white/40 tabular-nums">{clock(event.at)}</span>
-                  <span className="text-white/80">{event.text}</span>
-                </li>
-              ))}
-            </ol>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="flex gap-1" aria-hidden>
+              <span className="size-2 rounded-full bg-white/20" />
+              <span className="size-2 rounded-full bg-white/20" />
+              <span className="size-2 rounded-full bg-white/20" />
+            </span>
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-white/55 uppercase">Activity</p>
+          </div>
+          <ol className="mt-3 grid gap-1.5 font-mono text-xs" aria-live="off">
+            {events.map((event) => (
+              <li key={`${event.at}-${event.text}`} className="auth-rise flex gap-3">
+                <span className="shrink-0 text-white/40 tabular-nums">{clock(event.at)}</span>
+                <span className="text-white/80">{event.text}</span>
+              </li>
+            ))}
+            {/* The last line is what is happening now, with a cursor: working, waiting on the person, or stopped. */}
+            <li className="flex gap-3">
+              <span className="shrink-0 text-[#b39eff]" aria-hidden>
+                ›
+              </span>
+              <span className={cn(step?.state === "failed" ? "text-red-200" : step?.state === "active" ? "text-white" : "text-white/60")}>
+                {allDone ? "done" : step?.state === "active" ? `${step.label.toLowerCase()}…` : step?.state === "failed" ? "stopped. try again when ready" : step?.state === "needs_you" ? "waiting on you" : "ready"}
+                {step?.state === "failed" || allDone ? null : <span className="auth-caret ml-1 text-[#b39eff]" aria-hidden />}
+              </span>
+            </li>
+          </ol>
         </div>
       </div>
       <div className="mt-10">
@@ -129,33 +171,29 @@ function AgentPanel({ steps, events }: { steps: TraceStep[]; events: TraceEvent[
   );
 }
 
-/** The same steps, folded into one line for a phone. */
+/** The same steps as a row of marks, inside the card, for screens too narrow for the panel. */
 function CompactTrace({ steps }: { steps: TraceStep[] }) {
   if (steps.length === 0) return null;
-  const at = steps.find((step) => step.state !== "done") ?? steps[steps.length - 1];
   return (
-    <div className="mb-5 rounded-2xl border border-[#e4e7ef] bg-white/70 px-3.5 py-3 lg:hidden">
-      <ol className="flex items-center" aria-label="Progress">
-        {steps.map((step, index) => (
-          <li key={step.key} className="flex flex-1 items-center last:flex-none">
-            <Mark state={step.state} index={index} />
-            <span className="sr-only">{step.label}</span>
-            {index < steps.length - 1 ? <span className={cn("h-px flex-1", step.state === "done" ? "bg-emerald-600/40" : "bg-[#e4e7ef]")} aria-hidden /> : null}
-          </li>
-        ))}
-      </ol>
-      <p className="mt-2 text-xs leading-relaxed text-[#667085]">
-        <span className="font-semibold text-[#211a35]">{at.label}.</span> {at.detail}
-      </p>
-    </div>
+    <ol className="mb-5 flex items-center lg:hidden" aria-label="Progress">
+      {steps.map((step, index) => (
+        <li key={step.key} className="flex flex-1 items-center last:flex-none">
+          <Mark state={step.state} index={index} />
+          <span className="sr-only">{step.label}</span>
+          {index < steps.length - 1 ? <span className={cn("h-px flex-1", step.state === "done" ? "bg-emerald-600/40" : "bg-[#e4e7ef]")} aria-hidden /> : null}
+        </li>
+      ))}
+    </ol>
   );
 }
 
 /**
  * The frame every sign-in screen sits in: the wordmark, one focused card, and the progress panel.
- * The panel is not decoration. Its steps and its activity list come from what this screen is doing.
+ * Nothing here is decoration. The agent's line, the plan and the activity list all come from what
+ * this screen is doing, and a light runs round the card only while a request is really under way.
  */
 export function AuthShell({ eyebrow, title, lead, steps, events, children, below }: { eyebrow: string; title: string; lead?: React.ReactNode; steps: TraceStep[]; events: TraceEvent[]; children: React.ReactNode; below?: React.ReactNode }) {
+  const working = steps.some((step) => step.state === "active");
   return (
     <div className="auth-page flex min-h-dvh text-[#211a35]">
       <div className="flex min-w-0 flex-1 flex-col px-5 py-6 sm:px-10 sm:py-8">
@@ -165,8 +203,10 @@ export function AuthShell({ eyebrow, title, lead, steps, events, children, below
           </Link>
         </header>
         <main id="content" className="mx-auto flex w-full max-w-[440px] flex-1 flex-col justify-center py-8 sm:py-12">
-          <CompactTrace steps={steps} />
-          <div className="auth-card p-6 sm:p-8">
+          <div className="auth-card auth-rise relative overflow-hidden p-6 sm:p-8">
+            {working ? <BorderBeam size={90} duration={4} borderWidth={2} colorFrom="#6838ef" colorTo="#b39eff" /> : null}
+            <AgentLine steps={steps} />
+            <CompactTrace steps={steps} />
             <p className="text-[11px] font-semibold tracking-[0.16em] text-[#5126c7] uppercase">{eyebrow}</p>
             <h1 className="mt-2 font-heading text-[1.65rem] leading-tight tracking-tight text-[#211a35]">{title}</h1>
             {lead ? <p className="mt-2 text-sm leading-relaxed text-[#667085]">{lead}</p> : null}
