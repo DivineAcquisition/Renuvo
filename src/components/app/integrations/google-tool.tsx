@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { canManage, useCompany } from "@/components/app/company";
@@ -14,18 +13,18 @@ import { driveIdFrom, pickerConfig, pickFromDrive } from "@/lib/app/google-picke
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
-type Feature = "drive" | "calendar" | "business_profile" | "ads" | "conversions";
+export type Feature = "drive" | "calendar" | "business_profile" | "ads" | "conversions";
 const PURPOSES = ["photos", "resumes", "agreements", "reports", "creative", "documents"] as const;
 
 /** What Google sent the Owner back with, in words. */
-function resultWords(result: string, labels: Record<string, string>): string {
-  if (result === "connected") return "Connected. Now choose what Selestial may use for that tool below.";
-  if (result.startsWith("partial:")) return `Google granted only part of what ${result.slice(8).split(",").map((f) => labels[f] ?? f).join(", ")} needs, so it stays off. Reconnect it and allow everything Google asks for.`;
-  if (result === "different_account") return "You signed in with a different Google account than the one this tool uses. Nothing changed. To switch accounts, choose “Use a different Google account” on that tool.";
+export function googleResultWords(result: string): string {
+  if (result === "connected") return "Connected. Now choose what Selestial may use below.";
+  if (result.startsWith("partial:")) return "Google granted only part of what this tool needs, so it stays off. Reconnect and allow everything Google asks for.";
+  if (result === "different_account") return "You signed in with a different Google account than the one this tool uses. Nothing changed. To switch, choose “Use a different Google account”.";
   if (result === "no_refresh_token") return "Google did not give lasting access, so nothing was connected. Try again and allow access.";
   if (result === "declined") return "You declined at Google. Nothing was connected.";
   if (result === "expired") return "That sign-in had already been used or took longer than ten minutes. Start again.";
-  return "That tool was not connected. Try again.";
+  return "Not connected. Try again.";
 }
 
 /** What each kind of chosen item is, in words. */
@@ -43,101 +42,105 @@ const DRAFT_WORDS: Record<string, string> = { draft: "Draft", approved: "Approve
 
 const ACCESS_WORDS = { verified: "Checked with Google", unverified: "Checking with Google…", lost: "Not reachable" } as const;
 
-export function GoogleSettings() {
+type Status = NonNullable<ReturnType<typeof useQuery<typeof api.google.status>>>;
+type Tool = Status["tools"][number];
+
+/** Starts Google's sign-in for one tool, straight from its card. */
+export function useConnectGoogle(feature: Feature) {
+  const { companyId } = useCompany();
+  const start = useMutation(api.google.startConnect);
+  const { busy, error, run } = useRun();
+  const connect = (differentAccount = false) =>
+    void run(async () => {
+      const { url } = await start({ companyId, feature, differentAccount, returnTo: window.location.origin });
+      window.location.assign(url);
+    });
+  return { busy, error, connect };
+}
+
+/** Everything about one Google tool, shown inside its card once opened: account, what it may use, and its work. */
+export function GoogleToolPanel({ feature, result }: { feature: Feature; result: string | null }) {
   const { companyId, role } = useCompany();
   const status = useQuery(api.google.status, { companyId });
-  const result = useSearchParams().get("result");
-  if (!status) return <Skeleton className="h-96 rounded-2xl" />;
+  if (!status) return <Skeleton className="h-40 rounded-xl" />;
+  const tool = status.tools.find((t) => t.feature === feature)!;
   const owner = status.canManage;
-  const labels = Object.fromEntries(status.tools.map((tool) => [tool.feature, tool.label]));
   const manager = canManage(role);
+  const conversions = status.tools.find((t) => t.feature === "conversions")!;
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4">
       {result ? (
         <p role="status" className="rounded-lg border border-border bg-muted px-3 py-2 text-sm text-strong">
-          {resultWords(result, labels)}
+          {googleResultWords(result)}
         </p>
       ) : null}
-      <p className="text-sm text-muted-foreground">Each Google tool is connected on its own, with whichever Google account you choose for it, and can be disconnected without affecting the others. This is separate from signing in to Selestial with Google.</p>
-      {!status.ready && owner ? <p className="text-sm text-muted-foreground">Connecting Google isn&apos;t available yet. Selestial&apos;s team needs to finish setting it up for your account.</p> : null}
-      {status.tools.map((tool) => (
-        <ToolCard key={tool.feature} tool={tool} owner={owner} ready={status.ready} companyId={companyId} platform={status.platform}>
-          {tool.feature === "drive" && tool.granted ? <DrivePanel companyId={companyId} manager={manager} /> : null}
-          {tool.feature === "calendar" && tool.granted ? <CalendarPanel companyId={companyId} manager={manager} /> : null}
-          {tool.feature === "business_profile" && tool.granted ? <ReviewsPanel companyId={companyId} manager={manager} /> : null}
-          {tool.feature === "ads" ? <LeadsPanel companyId={companyId} owner={owner} /> : null}
-          {tool.feature === "ads" && tool.granted ? <AdsPanel companyId={companyId} owner={owner} /> : null}
-          {tool.feature === "conversions" && tool.granted ? <ConversionsPanel companyId={companyId} owner={owner} /> : null}
-        </ToolCard>
-      ))}
+      <ToolConnection tool={tool} owner={owner} ready={status.ready} companyId={companyId} />
+      {tool.feature === "drive" && tool.granted ? <DrivePanel companyId={companyId} manager={manager} /> : null}
+      {tool.feature === "calendar" && tool.granted ? <CalendarPanel companyId={companyId} manager={manager} /> : null}
+      {tool.feature === "business_profile" && tool.granted ? <ReviewsPanel companyId={companyId} manager={manager} /> : null}
+      {tool.feature === "ads" ? <LeadsPanel companyId={companyId} owner={owner} /> : null}
+      {tool.feature === "ads" && tool.granted ? <AdsPanel companyId={companyId} owner={owner} /> : null}
+      {tool.feature === "ads" ? (
+        <div className="grid gap-3 rounded-lg border border-border p-3">
+          <span className="text-sm font-medium text-strong">{conversions.label}</span>
+          <p className="text-xs text-muted-foreground">{conversions.does} Connected separately from Google Ads.</p>
+          <ToolConnection tool={conversions} owner={owner} ready={status.ready} companyId={companyId} />
+          {conversions.granted ? <ConversionsPanel companyId={companyId} owner={owner} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-type Status = NonNullable<ReturnType<typeof useQuery<typeof api.google.status>>>;
-type Tool = Status["tools"][number];
-
-/** One Google tool: its own connection, account, chosen resources and disconnect. */
-function ToolCard({ tool, owner, ready, companyId, platform, children }: { tool: Tool; owner: boolean; ready: boolean; companyId: Id<"companies">; platform: Status["platform"]; children: React.ReactNode }) {
-  const start = useMutation(api.google.startConnect);
+/** One tool's own connection: its account, reconnect, a different account, disconnect, and what it may use. */
+function ToolConnection({ tool, owner, ready, companyId }: { tool: Tool; owner: boolean; ready: boolean; companyId: Id<"companies"> }) {
   const disconnect = useMutation(api.google.disconnect);
+  const { busy: connecting, error: connectError, connect } = useConnectGoogle(tool.feature as Feature);
   const { busy, error, run } = useRun();
   const [confirming, setConfirming] = useState(false);
-  const go = (differentAccount = false) =>
-    void run(async () => {
-      const { url } = await start({ companyId, feature: tool.feature as Feature, differentAccount, returnTo: window.location.origin });
-      window.location.assign(url);
-    });
   const connection = tool.connection;
-  const state = !connection ? "Not connected" : connection.status === "expired" ? "Access ended: reconnect" : tool.granted ? "Connected" : "Not everything was granted: reconnect";
-  return (
-    <Panel title={tool.label} action={<span className={tool.granted ? "text-xs font-medium text-success" : "text-xs text-muted-foreground"}>{state}</span>}>
-      <div className="grid gap-4 px-4 py-4 sm:px-5">
-        <p className="text-sm text-muted-foreground">{tool.does}</p>
-        {tool.needsPlatform.some((key) => platform.some((p) => p.key.includes(key) && !p.configured)) ? <p className="text-xs text-muted-foreground">Part of this needs a final setup step from Selestial&apos;s team.</p> : null}
-        {connection ? (
-          <div className="rounded-lg border border-border px-3 py-2 text-sm">
-            <span className="font-medium text-strong">{connection.email}</span>{" "}
-            <span className="text-muted-foreground">· connected {new Date(connection.connectedAt).toLocaleDateString()}</span>
-            {connection.problem && connection.status !== "connected" ? <p className="mt-1 text-xs text-muted-foreground">{connection.problem}</p> : null}
-          </div>
-        ) : null}
-        {owner ? (
-          <div className="flex flex-wrap gap-2">
-            {!connection ? (
-              <Button type="button" variant="primary" disabled={busy || !ready} onClick={() => go()}>
-                Connect {tool.label}
-              </Button>
-            ) : (
-              <>
-                {!tool.granted ? (
-                  <Button type="button" variant="primary" disabled={busy || !ready} onClick={() => go()}>
-                    Reconnect
-                  </Button>
-                ) : null}
-                <Button type="button" variant="outline" disabled={busy || !ready} onClick={() => go(true)}>
-                  Use a different Google account
-                </Button>
-                {confirming ? (
-                  <Button type="button" variant="destructive" disabled={busy} onClick={() => void run(async () => { await disconnect({ companyId, feature: tool.feature as Feature }); setConfirming(false); })}>
-                    Disconnect now: this tool’s Google work stops
-                  </Button>
-                ) : (
-                  <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirming(true)}>
-                    Disconnect
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        ) : !connection ? (
-          <p className="text-xs text-muted-foreground">Only the Owner connects Google tools and chooses what Selestial may use.</p>
-        ) : null}
-        <FormError message={error} />
-        {tool.granted ? <Resources tool={tool} owner={owner} companyId={companyId} /> : null}
-        {children}
+  if (!connection)
+    return owner ? (
+      <div>
+        <Button type="button" variant="primary" disabled={connecting || !ready} onClick={() => connect()}>
+          Connect {tool.label}
+        </Button>
+        <FormError message={connectError} />
       </div>
-    </Panel>
+    ) : (
+      <p className="text-xs text-muted-foreground">Not connected. Only the Owner connects it.</p>
+    );
+  return (
+    <div className="grid gap-3">
+      <div className="rounded-lg border border-border px-3 py-2 text-sm">
+        <span className="font-medium text-strong">{connection.email}</span>{" "}
+        <span className="text-muted-foreground">· {connection.status === "expired" ? "access ended, reconnect" : tool.granted ? `connected ${new Date(connection.connectedAt).toLocaleDateString()}` : "not everything was granted, reconnect"}</span>
+        {connection.problem && connection.status !== "connected" ? <p className="mt-1 text-xs text-muted-foreground">{connection.problem}</p> : null}
+      </div>
+      {owner ? (
+        <div className="flex flex-wrap gap-2">
+          {!tool.granted ? (
+            <Button type="button" size="sm" variant="primary" disabled={connecting || !ready} onClick={() => connect()}>
+              Reconnect
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" variant="outline" disabled={connecting || !ready} onClick={() => connect(true)}>
+            Use a different Google account
+          </Button>
+          {confirming ? (
+            <Button type="button" size="sm" variant="destructive" disabled={busy} onClick={() => void run(async () => { await disconnect({ companyId, feature: tool.feature as Feature }); setConfirming(false); })}>
+              Disconnect now: this tool’s Google work stops
+            </Button>
+          ) : (
+            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => setConfirming(true)}>
+              Disconnect
+            </Button>
+          )}
+        </div>
+      ) : null}
+      <FormError message={error ?? connectError} />
+      {tool.granted ? <Resources tool={tool} owner={owner} companyId={companyId} /> : null}
+    </div>
   );
 }
 

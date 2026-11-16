@@ -35,8 +35,8 @@ import { hashToken, randomToken, secretsConfigured, unseal } from "./lib/recruit
 
 const STATE_LIFE = 10 * 60 * 1000;
 
-export function afterGoogle(outcome: string, origin?: string | null): string {
-  return `${returnOrigin(origin) ?? appOrigin() ?? ""}/app/settings/integrations?google=1&result=${encodeURIComponent(outcome)}#google`;
+export function afterGoogle(outcome: string, origin?: string | null, feature?: string | null): string {
+  return `${returnOrigin(origin) ?? appOrigin() ?? ""}/app/settings/integrations?${feature ? `tool=${encodeURIComponent(feature)}&` : ""}result=${encodeURIComponent(outcome)}`;
 }
 
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────────
@@ -104,11 +104,11 @@ export const takeState = internalMutation({
     if (!row) return { kind: "unknown" as const };
     if (row.usedAt !== undefined || row.expiresAt <= Date.now()) {
       await ctx.db.patch(row._id, { usedAt: row.usedAt ?? Date.now() });
-      return { kind: "expired" as const, returnOrigin: row.returnOrigin ?? null };
+      return { kind: "expired" as const, returnOrigin: row.returnOrigin ?? null, feature: row.features[0] ?? null };
     }
     await ctx.db.patch(row._id, { usedAt: Date.now() });
     const member = await ctx.db.get(row.memberId);
-    if (!member || member.companyId !== row.companyId || member.status !== "active" || member.role !== "owner") return { kind: "expired" as const, returnOrigin: row.returnOrigin ?? null };
+    if (!member || member.companyId !== row.companyId || member.status !== "active" || member.role !== "owner") return { kind: "expired" as const, returnOrigin: row.returnOrigin ?? null, feature: row.features[0] ?? null };
     return { kind: "ok" as const, companyId: row.companyId, memberId: row.memberId, features: row.features, connectionId: row.connectionId ?? null, returnOrigin: row.returnOrigin ?? null };
   },
 });

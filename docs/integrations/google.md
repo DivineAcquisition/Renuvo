@@ -1,6 +1,6 @@
 # Google integrations
 
-One connection **per Google tool** — Drive (with Docs and Sheets), Calendar, Business Profile, Google Ads, and conversion reporting — each made by the Owner under **Settings › Integrations**, in the "Google tools" panel (`/app/settings/integrations#google`). Each tool has its own sign-in, Google account (they may differ), grant (`include_granted_scopes=false`), sealed token, chosen resources and disconnect. Disconnecting a tool revokes at Google only when no other connected tool uses the same Google account, because Google revokes per account, not per tool. Rows from before this change are moved with `npx convex run google:migrateToPerTool`.
+One connection **per Google tool** — Drive (with Docs and Sheets), Calendar, Business Profile, Google Ads, and conversion reporting — each started by the Owner from that tool's own card under **Settings › Integrations** (`/app/settings/integrations`); Manage opens the tool inside its card. Conversion reporting is connected inside the Google Ads card. Each tool has its own sign-in, Google account (they may differ), grant (`include_granted_scopes=false`), sealed token, chosen resources and disconnect. Disconnecting a tool revokes at Google only when no other connected tool uses the same Google account, because Google revokes per account, not per tool. Rows from before this change are moved with `npx convex run google:migrateToPerTool`.
 It is separate from signing in to Selestial with Google (Clerk). Platform credentials (Maps, Routes,
 Gemini, Pub/Sub, the Ads developer token) are Selestial's and never mix with a company's OAuth grant.
 
@@ -53,7 +53,7 @@ Vercel (public, browser):
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Address autocomplete (restrict to Places API (New) and your domains) |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_GOOGLE_PICKER_API_KEY`, `NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER` | Google's file chooser (Picker). Without them, Owners paste Drive links |
 
-Addresses the deployment computes from `CONVEX_SITE_URL` (shown to the Owner under Settings › Integrations › Google tools › Setup):
+Addresses the deployment computes from `CONVEX_SITE_URL` (also printed by `npx convex run googleChecks:platform`):
 
 - OAuth redirect URI: `<CONVEX_SITE_URL>/oauth/google/callback` — register on the OAuth client.
 - Calendar push: `<CONVEX_SITE_URL>/webhooks/google/calendar` — the domain must be verified for the project.

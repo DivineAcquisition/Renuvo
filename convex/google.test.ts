@@ -108,10 +108,10 @@ describe("connecting Google", () => {
       const response = await t.fetch(`/oauth/google/callback?state=${encodeURIComponent(state)}&error=access_denied`, { method: "GET" });
       return response.headers.get("location");
     };
-    expect(await started("https://selestial.io")).toBe("https://selestial.io/app/settings/integrations?google=1&result=declined#google");
+    expect(await started("https://selestial.io")).toBe("https://selestial.io/app/settings/integrations?tool=drive&result=declined");
     expect(await started("https://selestial-ai-git-x-divine-acquisition.vercel.app")).toMatch(/^https:\/\/selestial-ai-git-x-divine-acquisition\.vercel\.app\/app\/settings\/integrations/);
-    expect(await started("https://evil.example.test")).toBe("/app/settings/integrations?google=1&result=declined#google");
-    expect(await started("http://selestial.io")).toBe("/app/settings/integrations?google=1&result=declined#google");
+    expect(await started("https://evil.example.test")).toBe("/app/settings/integrations?tool=drive&result=declined");
+    expect(await started("http://selestial.io")).toBe("/app/settings/integrations?tool=drive&result=declined");
   });
 
   it("keeps partial consent as partial, seals the token, and uses each state once", async () => {
@@ -119,7 +119,7 @@ describe("connecting Google", () => {
     // Calendar needs three scopes; Google granted one.
     const first = await connect(t, as, companyId, { feature: "calendar", grant: [SCOPE.calendarEvents] });
     expect(first.response.status).toBe(302);
-    expect(first.location).toBe("https://app.selestial.test/app/settings/integrations?google=1&result=partial%3Acalendar#google");
+    expect(first.location).toBe("https://app.selestial.test/app/settings/integrations?tool=calendar&result=partial%3Acalendar");
     const calendar = (await as.query(api.google.status, { companyId })).tools.find((tool) => tool.feature === "calendar")!;
     expect(calendar.granted).toBe(false);
     expect(calendar.missing).toEqual(expect.arrayContaining([SCOPE.calendarList, SCOPE.calendarFreeBusy]));
