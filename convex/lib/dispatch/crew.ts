@@ -39,3 +39,8 @@ export function coverageOf(assignments: Pick<Doc<"assignments">, "status">[], jo
   if (assignments.some((row) => row.status === "offered")) return "offered";
   return "uncovered";
 }
+
+/** The role the next offer on this job would carry: lead until a lead holds an offer or has accepted. */
+export function nextRole(assignments: Pick<Doc<"assignments">, "status" | "role">[]): "lead" | "support" {
+  return assignments.some((row) => (row.status === "offered" || row.status === "accepted") && row.role === "lead") ? "support" : "lead";
+}

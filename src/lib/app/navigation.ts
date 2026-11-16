@@ -301,7 +301,7 @@ export const AGENTS: readonly AgentNav[] = [
       ["offers-coverage", "Offers & Coverage", LIVE],
       ["live-jobs", "Live Jobs", LIVE],
       ["action-links", "Action Links", LIVE],
-      ["playbook", "Playbook"],
+      ["playbook", "Playbook", LIVE],
     ],
   }),
   agent({

@@ -119,6 +119,10 @@ export const dispatchPolicyValidator = v.object({
   jobAccessGraceHours: v.optional(v.number()),
   beforePhotosRequired: v.optional(v.number()),
   afterPhotosRequired: v.optional(v.number()),
+  /** How a cleaner on a share is paid on a crew job: their share of the whole price, or split across the crew. */
+  crewPayMode: v.optional(v.union(v.literal("share_of_whole"), v.literal("split_by_crew"))),
+  /** Extra pay for the lead of a crew, as a percentage. */
+  leadPremiumPercent: v.optional(v.number()),
   /** Text the before-photo link after check-in. */
   sendBeforePhotoLink: v.optional(v.boolean()),
 });
@@ -319,6 +323,8 @@ export default defineSchema({
     completionReview: v.optional(v.object({ decision: v.union(v.literal("closed"), v.literal("closed_without_review")), by: v.id("members"), at: v.number(), note: v.optional(v.string()) })),
     /** How many times the crew's report was sent back for correction. */
     completionReturns: v.optional(v.number()),
+    /** The checklist template version this visit's checklist was copied from, if any. */
+    checklistTemplate: v.optional(v.object({ templateId: v.id("checklistTemplates"), version: v.number() })),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
@@ -574,6 +580,23 @@ export default defineSchema({
     byCleanerId: v.optional(v.id("cleaners")),
     at: v.optional(v.number()),
   }).index("by_company_job", ["companyId", "jobId", "order"]),
+
+  /**
+   * The checklist a service starts from. Each change is a new version; a visit keeps the items it was
+   * created with, so a change applies to visits scheduled after it and never to work already offered.
+   */
+  checklistTemplates: defineTable({
+    companyId: v.id("companies"),
+    /** The service it applies to, matched without regard to case or spacing. */
+    serviceKey: v.string(),
+    serviceType: v.string(),
+    version: v.number(),
+    items: v.array(v.object({ label: v.string(), section: v.optional(v.string()), requiresPhoto: v.boolean() })),
+    createdBy: v.id("members"),
+    createdAt: v.number(),
+    /** Set when a person stopped using it. Visits already made from it keep their items. */
+    retiredAt: v.optional(v.number()),
+  }).index("by_company_service_version", ["companyId", "serviceKey", "version"]),
 
   /** A photo a cleaner uploaded for a job. */
   evidence: defineTable({

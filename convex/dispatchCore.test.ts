@@ -270,3 +270,72 @@ describe("Dispatch: what a person does on the day", () => {
     expect(await refusal(ask(s.as))).toBe("This only applies to an accepted cleaner who has not checked in.");
   });
 });
+
+describe("Dispatch: how a crew is paid is the Owner's setting", () => {
+  let undo = () => {};
+  beforeEach(() => {
+    undo = dispatchTestEnv();
+  });
+  afterEach(() => undo());
+
+  it("pays each cleaner their share of the whole price unless the Owner splits it, with a lead premium on top", async () => {
+    const s = await setup(["Lena", "Rosa", "Mia"]);
+    const jobId = await heldJob(s, { requiredCrew: 3 });
+    const pay = async () => Object.fromEntries((await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId })).candidates.map((row) => [row.name, row.pay]));
+
+    // The starting rule is today's: 50% of the $160 price, whatever the crew size.
+    expect((await pay()).Lena).toEqual({ payCents: 8000, basis: "50% of the $160.00 job price" });
+
+    await s.as.mutation(api.dispatchOps.setPolicy, { companyId: s.companyId, policy: { crewPayMode: "split_by_crew", leadPremiumPercent: 10 } });
+    // Nobody holds the lead yet, so the next offer is the lead's: split three ways, plus 10%.
+    expect((await pay()).Lena).toEqual({ payCents: 2933, basis: "50% of the $160.00 job price, split 3 ways, plus 10% as lead" });
+    const lead = await s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId, cleanerId: s.cleaners.Lena, respondBy: NOW + 4 * HOUR, payCents: 2933 });
+    expect((await s.job(jobId)).assignments.find((row) => row._id === lead)!.role).toBe("lead");
+    // With the lead offered, the others are support, and support gets the split alone.
+    expect((await pay()).Rosa).toEqual({ payCents: 2667, basis: "50% of the $160.00 job price, split 3 ways" });
+
+    // A solo job is never split and never has a lead premium.
+    const solo = await heldJob(s);
+    const soloPay = (await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId: solo })).candidates.find((row) => row.name === "Mia")!.pay;
+    expect(soloPay).toEqual({ payCents: 8000, basis: "50% of the $160.00 job price" });
+
+    // Only the Owner sets it, and only to a known rule.
+    expect(await refusal(s.as.mutation(api.dispatchOps.setPolicy, { companyId: s.companyId, policy: { leadPremiumPercent: 150 } }))).toBe("The lead's extra pay must be a whole number from 0 to 100.");
+    const manager = await addMember(s.t, s.as, s.companyId, "manager-1", "manager");
+    expect(await refusal(manager.mutation(api.dispatchOps.setPolicy, { companyId: s.companyId, policy: { crewPayMode: "share_of_whole" } }))).toBe("Not allowed.");
+  });
+});
+
+describe("Dispatch: checklists come from the service's template, as it was when the visit was made", () => {
+  let undo = () => {};
+  beforeEach(() => {
+    undo = dispatchTestEnv();
+  });
+  afterEach(() => undo());
+
+  it("copies the current version onto new visits and leaves older visits alone", async () => {
+    const s = await setup();
+    const items = async (jobId: Id<"jobs">) => (await s.as.query(api.dispatchViews.liveJobs, { companyId: s.companyId, from: JOB_START - HOUR, to: JOB_END + 48 * HOUR })).jobs.find((row) => row.jobId === jobId)!.checklist.total;
+    const v1 = await s.as.mutation(api.dispatchOps.setChecklistTemplate, { companyId: s.companyId, serviceType: "Standard", items: [{ label: "Kitchen counters", section: "Kitchen" }, { label: "Oven", section: "Kitchen", requiresPhoto: true }] });
+    expect(v1.version).toBe(1);
+    // "standard" and "Standard" are the same service.
+    const first = await heldJob(s);
+    expect(await items(first)).toBe(2);
+    expect((await s.job(first)).job.checklistTemplate).toMatchObject({ version: 1 });
+
+    const v2 = await s.as.mutation(api.dispatchOps.setChecklistTemplate, { companyId: s.companyId, serviceType: "standard ", items: [{ label: "Kitchen counters" }, { label: "Oven" }, { label: "Balcony" }] });
+    expect(v2.version).toBe(2);
+    const second = await s.as.mutation(api.jobs.create, { companyId: s.companyId, ...s.place, serviceType: "standard", scope: "x", startsAt: JOB_START + 24 * HOUR, endsAt: JOB_END + 24 * HOUR });
+    expect(await items(second)).toBe(3);
+    // The first visit keeps the checklist it was given.
+    expect(await items(first)).toBe(2);
+
+    const [listed] = await s.as.query(api.dispatchOps.checklistTemplates, { companyId: s.companyId });
+    expect(listed).toMatchObject({ serviceType: "standard", version: 2, retired: false });
+    await s.as.mutation(api.dispatchOps.retireChecklistTemplate, { companyId: s.companyId, templateId: listed.templateId });
+    const third = await s.as.mutation(api.jobs.create, { companyId: s.companyId, ...s.place, serviceType: "Standard", scope: "x", startsAt: JOB_START + 48 * HOUR, endsAt: JOB_END + 48 * HOUR });
+    expect(await items(third)).toBe(0);
+    expect(await items(second)).toBe(3);
+    expect(await refusal(s.as.mutation(api.dispatchOps.setChecklistTemplate, { companyId: s.companyId, serviceType: "Deep", items: [] }))).toContain("at least one item");
+  });
+});

@@ -33,6 +33,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "messages", index: "by_company_queued" },
   { table: "coverageRequests", index: "by_company_job" },
   { table: "checklistItems", index: "by_company_job" },
+  { table: "checklistTemplates", index: "by_company_service_version" },
   { table: "evidence", index: "by_company_job", omit: ["storageId", "clientKey"], why: "Internal file references. The photos themselves are not in the file." },
   { table: "jobReports", index: "by_company_job" },
   { table: "toolRuns", index: "by_company_key" },

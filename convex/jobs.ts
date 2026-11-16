@@ -14,6 +14,7 @@ import { endAssignment } from "./lib/dispatch/assignmentState";
 import { coverageOf, requiredCrew, staffing, type Coverage } from "./lib/dispatch/crew";
 import { reviewKey } from "./lib/dispatch/live";
 import { commitMove, planMove } from "./lib/dispatch/reschedule";
+import { applyTemplate } from "./lib/dispatch/templates";
 import { coverJob } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
@@ -119,7 +120,8 @@ export const create = companyMutation({
       ...(args.instructions?.trim() ? { instructions: text(args.instructions, "Instructions", 4000) } : {}),
       createdAt: Date.now(),
     });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: byMember(ctx), subject: { table: "jobs", id: jobId } });
+    const template = await applyTemplate(ctx, (await ctx.db.get(jobId))!);
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: byMember(ctx), subject: { table: "jobs", id: jobId }, data: template ? { checklistVersion: template.version } : undefined });
     await coverJob(ctx, jobId);
     return jobId;
   },
