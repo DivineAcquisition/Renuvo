@@ -92,9 +92,6 @@ export async function queueGeneration(
   if (!featureOn(input.company, input.kind)) throw userError(input.kind === "video_generate" ? "The Owner has switched video generation off for this company." : "The Owner has switched image generation off for this company.", "not_allowed");
   const prompt = text(input.prompt, "The prompt", 4000);
   const params = checkedParams(input.kind, input.params);
-  const capability = capabilityFor(input.kind, params);
-  const resolved = resolve(capability, await settingFor(ctx, capability));
-  if (!resolved.ready) throw userError(resolved.words, "not_allowed");
   if (input.sources.length > 4) throw userError("Use at most four source images.");
   const sources: Id<"mediaAssets">[] = [];
   for (const sourceId of input.sources) {
@@ -104,6 +101,10 @@ export async function queueGeneration(
     sources.push(asset._id);
   }
   if (input.kind === "image_edit" && sources.length === 0) throw userError("Choose the image to edit.");
+  // Selestial's own rules first; then whether a provider can take it.
+  const capability = capabilityFor(input.kind, params);
+  const resolved = resolve(capability, await settingFor(ctx, capability));
+  if (!resolved.ready) throw userError(resolved.words, "not_allowed");
   const want = input.kind === "video_generate" ? { images: 0, videos: 1 } : { images: params.n ?? 1, videos: 0 };
   await reserve(ctx, input.company, want);
   const now = Date.now();

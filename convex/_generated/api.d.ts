@@ -9,6 +9,8 @@
  */
 
 import type * as agreements from "../agreements.js";
+import type * as ai from "../ai.js";
+import type * as aiAdmin from "../aiAdmin.js";
 import type * as applicantPages from "../applicantPages.js";
 import type * as applications from "../applications.js";
 import type * as approvals from "../approvals.js";
@@ -69,6 +71,7 @@ import type * as lib_chat_state from "../lib/chat/state.js";
 import type * as lib_chat_steps from "../lib/chat/steps.js";
 import type * as lib_chat_titles from "../lib/chat/titles.js";
 import type * as lib_chat_tools from "../lib/chat/tools.js";
+import type * as lib_chat_work from "../lib/chat/work.js";
 import type * as lib_compliance_agreements from "../lib/compliance/agreements.js";
 import type * as lib_compliance_ledger from "../lib/compliance/ledger.js";
 import type * as lib_compliance_permissions from "../lib/compliance/permissions.js";
@@ -182,6 +185,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agreements: typeof agreements;
+  ai: typeof ai;
+  aiAdmin: typeof aiAdmin;
   applicantPages: typeof applicantPages;
   applications: typeof applications;
   approvals: typeof approvals;
@@ -242,6 +247,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/steps": typeof lib_chat_steps;
   "lib/chat/titles": typeof lib_chat_titles;
   "lib/chat/tools": typeof lib_chat_tools;
+  "lib/chat/work": typeof lib_chat_work;
   "lib/compliance/agreements": typeof lib_compliance_agreements;
   "lib/compliance/ledger": typeof lib_compliance_ledger;
   "lib/compliance/permissions": typeof lib_compliance_permissions;

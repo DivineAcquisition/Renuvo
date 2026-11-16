@@ -17,7 +17,7 @@ export type Outgoing = { text: string; clientKey: string; includePage: boolean; 
 
 type Upload = { id: string; name: string; storageId: string | null; error: string | null };
 
-const ACCEPT = ".txt,.md,.markdown,.csv,.json,text/plain,text/markdown,text/csv,application/json";
+const ACCEPT = ".pdf,.txt,.md,.markdown,.csv,.json,application/pdf,text/plain,text/markdown,text/csv,application/json";
 const chip = "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500";
 
 /** Search the company's customers, cleaners and drafts, and attach one as context. */
@@ -138,8 +138,9 @@ export function Composer({
       const id = newClientKey();
       setUploads((before) => [...before, { id, name: one.name, storageId: null, error: null }]);
       try {
-        if (one.size > 512 * 1024) throw new Error("Larger than 512 KB.");
-        if (!/\.(txt|md|markdown|csv|json)$/i.test(one.name)) throw new Error("Only text files (.txt, .md, .csv, .json) can be read.");
+        const pdf = /\.pdf$/i.test(one.name);
+        if (!pdf && !/\.(txt|md|markdown|csv|json)$/i.test(one.name)) throw new Error("Only PDFs and text files (.pdf, .txt, .md, .csv, .json) can be read.");
+        if (one.size > (pdf ? 10 * 1024 * 1024 : 512 * 1024)) throw new Error(pdf ? "Larger than 10 MB." : "Larger than 512 KB.");
         const url = await uploadUrl({ companyId });
         const response = await fetch(url, { method: "POST", headers: { "Content-Type": one.type || "text/plain" }, body: one });
         if (!response.ok) throw new Error("The upload did not finish.");
@@ -260,8 +261,8 @@ export function Composer({
                     className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted"
                   >
                     <Paperclip className="size-4 text-muted-foreground" aria-hidden />
-                    <span className="flex-1">Attach a text file</span>
-                    <span className="text-[11px] text-muted-foreground">.txt .md .csv</span>
+                    <span className="flex-1">Attach a file</span>
+                    <span className="text-[11px] text-muted-foreground">.pdf .txt .md .csv</span>
                   </button>
                 </li>
                 <li role="none">
