@@ -60,8 +60,12 @@ export const claim = internalMutation({
         await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code, retryAt: answer.retryAt } });
         return null;
       }
-      await ctx.db.patch(message._id, { status: "not_sent", problem: answer.words });
+      await ctx.db.patch(message._id, { status: "not_sent", problem: answer.words, refusal: answer.code });
       await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code } });
+      if (message.assignmentId && (message.purpose === "offer" || message.purpose === "backup_offer")) {
+        const intent = await intentOf(ctx, message);
+        await ctx.scheduler.runAfter(0, internal.dispatchOps.offerTextRefused, { messageId: message._id, byAgent: intent.agent !== undefined });
+      }
       return null;
     }
     let body = message.body;

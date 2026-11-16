@@ -334,5 +334,68 @@ describe("Dispatch: from a staffing need to accepted coverage", () => {
     delete process.env.ACTION_LINK_SECRET;
     expect(await refusal(s.t.query(api.links.job, { token: a.jobToken }))).toBe("Not found.");
   });
-});
 
+  it("ends an offer the sending policy refused as undelivered and asks the next cleaner, never as the cleaner's silence", async () => {
+    const s = await setup();
+    await s.autonomous();
+    // Lena has asked not to be texted.
+    await s.t.mutation(internal.inbound.sms, { to: s.smsNumber, from: PHONES.Lena, body: "STOP", receivedAt: Date.now() });
+    await flush(s.t);
+    const jobId = await dispatchJob(s.as, s.companyId, s.place);
+    await flush(s.t);
+
+    const after = await s.job(jobId);
+    const lena = after.assignments.find((row) => row.cleanerId === s.cleaners.Lena)!;
+    // Her offer did not sit until its deadline. It ended at once as undelivered, with the policy's reason.
+    expect(lena).toMatchObject({ status: "cancelled", endCause: "undelivered" });
+    expect(lena.endReason).toContain("This number replied STOP");
+    const record = await s.record(jobId);
+    expect(record.messages.find((row) => row.assignmentId === lena._id)).toMatchObject({ status: "not_sent" });
+    expect(record.links.find((link) => link.assignmentId === lena._id)).toMatchObject({ status: "revoked" });
+    expect(mockOutbox.filter((row) => row.to === PHONES.Lena && row.body.includes("job offer"))).toEqual([]);
+    // A person is told why, and Rosa has been asked.
+    expect((await s.tasks("needs_decision")).find((task) => task.handoffTo === "team_coordinator")?.openQuestion).toContain("An offer was not sent. This number replied STOP");
+    expect(after.assignments.find((row) => row.cleanerId === s.cleaners.Rosa)).toMatchObject({ status: "offered" });
+    expect(mockOutbox.filter((row) => row.to === PHONES.Rosa && row.body.includes("job offer"))).toHaveLength(1);
+    expect((await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId })).excluded).toMatchObject([{ name: "Lena", code: "already_asked" }]);
+  });
+
+  it("does not burn through every cleaner when no text can go out at all, and still never records silence", async () => {
+    const s = await setup();
+    await s.autonomous();
+    // Texting is not approved yet: the policy refuses every text the company sends.
+    await s.as.mutation(api.compliance.recordRegistration, { companyId: s.companyId, status: "submitted", reference: "BRAND-1" });
+    const jobId = await dispatchJob(s.as, s.companyId, s.place);
+    await flush(s.t);
+
+    // One offer, still open for a person to make by hand. Rosa was not dragged in.
+    let job = await s.job(jobId);
+    expect(job.assignments.map((row) => [row.cleanerId, row.status])).toEqual([[s.cleaners.Lena, "offered"]]);
+    expect(mockOutbox).toEqual([]);
+    const blocked = (await s.tasks("needs_decision")).filter((task) => task.title === "Dispatch's texts to cleaners are not going out");
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0].openQuestion).toContain("Texting needs carrier registration approval.");
+    // The office can still record her answer. Left alone, the offer ends as undelivered, not expired.
+    vi.setSystemTime(job.assignments[0].respondBy + 1);
+    await s.t.mutation(internal.assignments.expireDue, {});
+    await flush(s.t);
+    job = await s.job(jobId);
+    expect(job.assignments.find((row) => row.cleanerId === s.cleaners.Lena)).toMatchObject({ status: "cancelled", endCause: "undelivered" });
+    expect(job.assignments.some((row) => row.status === "expired")).toBe(false);
+    // Still one task about sending, however many offers it happens to.
+    expect((await s.tasks("needs_decision")).filter((task) => task.title === "Dispatch's texts to cleaners are not going out")).toHaveLength(1);
+  });
+
+  it("leaves an offer a person made in their hands when its text is refused", async () => {
+    const s = await setup(["Lena"]);
+    await s.t.mutation(internal.inbound.sms, { to: s.smsNumber, from: PHONES.Lena, body: "STOP", receivedAt: Date.now() });
+    await flush(s.t);
+    const jobId = await dispatchJob(s.as, s.companyId, s.place);
+    await s.as.mutation(api.dispatch.takeOver, { companyId: s.companyId, jobId });
+    const assignmentId = await s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId, cleanerId: s.cleaners.Lena, respondBy: NOW + HOUR, payCents: 8000 });
+    await flush(s.t);
+    // The person chose her and can call her: the offer stays open and they can record her answer.
+    expect((await s.job(jobId)).assignments[0]).toMatchObject({ status: "offered" });
+    expect(await s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId, answer: "accepted" })).toEqual({ status: "accepted" });
+  });
+});
