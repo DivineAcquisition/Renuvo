@@ -172,7 +172,7 @@ planned.
 | Dispatch › Dispatch Board | `/app/agents/dispatch/dispatch-board` | **Live.** Visits grouped by where staffing stands, as a board or a list. |
 | Dispatch › Schedule | `/app/agents/dispatch/schedule` | **Live.** Cleaner lanes by day or week. `/app/schedule` redirects here. |
 | Dispatch › Offers & Coverage | `/app/agents/dispatch/offers-coverage` | **Live.** Open offers, places that lost a cleaner, places nobody is asked for, and history. Starting a broadcast or a Recruiter request by hand is not built. |
-| Dispatch › Live Jobs, Action Links, Playbook | `/app/agents/dispatch/<tab>` | **Planned.** |
+| Dispatch › Live Jobs, Action Links, Playbook | `/app/agents/dispatch/<tab>` | **Live.** |
 | All tabs of the other seven agents | `/app/agents/<agent>/<tab>` | **Planned.** |
 
 The exact path of every tab is `tabPath(agent, tab)` in `navigation.ts`; tab

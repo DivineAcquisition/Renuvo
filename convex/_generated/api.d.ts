@@ -82,6 +82,7 @@ import type * as lib_messaging_outbox from "../lib/messaging/outbox.js";
 import type * as lib_messaging_policy from "../lib/messaging/policy.js";
 import type * as lib_messaging_provider from "../lib/messaging/provider.js";
 import type * as lib_messaging_resend from "../lib/messaging/resend.js";
+import type * as lib_messaging_telnyx from "../lib/messaging/telnyx.js";
 import type * as lib_permissionCatalog from "../lib/permissionCatalog.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_recruiter_applications from "../lib/recruiter/applications.js";
@@ -221,6 +222,7 @@ declare const fullApi: ApiFromModules<{
   "lib/messaging/policy": typeof lib_messaging_policy;
   "lib/messaging/provider": typeof lib_messaging_provider;
   "lib/messaging/resend": typeof lib_messaging_resend;
+  "lib/messaging/telnyx": typeof lib_messaging_telnyx;
   "lib/permissionCatalog": typeof lib_permissionCatalog;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/recruiter/applications": typeof lib_recruiter_applications;

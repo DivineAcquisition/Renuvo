@@ -10,6 +10,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation, type MutationCtx } from "./_generated/server";
+import { readProfile } from "./lib/compliance/profile";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
 import { linkPath, linkState, siteOrigin, tokenFor } from "./lib/dispatch/links";
 import { recordEvent } from "./lib/events";
@@ -98,7 +99,9 @@ export const claim = internalMutation({
     }
     const attempt = message.attempts + 1;
     await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now() });
-    return { to: message.to, body, attempt, channel: message.channel ?? ("sms" as const), subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName };
+    // A text goes from the company's own number. The send policy has already checked it is set and approved.
+    const from = (message.channel ?? "sms") === "sms" ? ((await readProfile(ctx, message.companyId)).messaging.smsNumber ?? "") : "";
+    return { to: message.to, from, body, attempt, channel: message.channel ?? ("sms" as const), subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName };
   },
 });
 
@@ -158,7 +161,7 @@ export const deliver = internalAction({
       return null;
     }
     // If this throws, nobody knows whether the text went. The message stays "sending" and the sweep marks it unconfirmed.
-    const result = await provider.send({ to: claimed.to, body: claimed.body, idempotencyKey: args.messageId, attempt: claimed.attempt });
+    const result = await provider.send({ to: claimed.to, from: claimed.from || undefined, body: claimed.body, idempotencyKey: args.messageId, attempt: claimed.attempt });
     await ctx.runMutation(internal.messaging.settle, { messageId: args.messageId, result });
     return null;
   },
@@ -190,7 +193,7 @@ export const receipt = internalMutation({
       return "delivered" as const;
     }
     const bounced = args.outcome === "bounced";
-    const problem = bounced ? "The address rejected the message." : message.channel === "email" ? "The email service reported that the message was not delivered." : "The carrier reported that the text was not delivered.";
+    const problem = args.problem ?? (bounced ? "The address rejected the message." : message.channel === "email" ? "The email service reported that the message was not delivered." : "The carrier reported that the text was not delivered.");
     await ctx.db.patch(message._id, { status: "failed", failedAt: now, problem, ...(bounced ? { bouncedAt: now } : {}) });
     await recordEvent(ctx, { companyId: message.companyId, type: bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");

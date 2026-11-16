@@ -4,9 +4,8 @@ Operations → Dispatch opens the overview. Its dropdown: Dispatch Board, Schedu
 Live Jobs, Action Links, Playbook (already defined in `src/lib/app/navigation.ts`). Chat, activity,
 permissions and agent controls belong to the agent workspace, not to more sidebar tabs.
 
-**Built:** the overview, Dispatch Board, Schedule, Offers & Coverage, and the visit panel
-(`src/components/app/screens/dispatch/`, `detail-actions.tsx`). **Not built:** Live Jobs, Action Links,
-Playbook; their queries below are still only contracts. Every query takes `companyId` and goes through
+**Built:** all of them — the overview, Dispatch Board, Schedule, Offers & Coverage, Live Jobs, Action
+Links, Playbook, and the visit panel (`src/components/app/screens/dispatch/`, `detail-actions.tsx`). Every query takes `companyId` and goes through
 the access builders. Unknown values are `null`.
 
 | Screen | Reads | Actions |
@@ -80,3 +79,26 @@ opened". A text's `delivered` means the provider confirmed the handset got it, a
   `job_moved`, which does not count against asking the same cleaner again.
 - **Lists stop at 200 visits.** Each screen says so when it reaches that, instead of showing a total.
   Real pagination is still to do.
+- **Crew pay** is the Owner's setting in Playbook (`dispatchPolicy.crewPayMode`, `leadPremiumPercent`):
+  a cleaner on a share gets their share of the whole price (the default) or that share split across the
+  cleaners the visit needs, with an optional lead premium. Pay is worked out for the role the offer
+  carries and rounded once. Hourly pay is never split.
+- **Checklist templates** (`checklistTemplates`) are versioned per service. A new visit copies the
+  current version (`jobs.checklistTemplate` records which), so a change never alters a checklist a
+  cleaner already has.
+- **Live Jobs actions:** `dispatchOps.askCleaner` texts a cleaner who has not checked in, at most once a
+  quarter hour. `dispatchOps.recordCannotAttend` records a drop-out a person was told about; it opens
+  the place and cover exactly as the cleaner's own link would.
+- **Photos** in the review are read through `dispatchViews.jobPhotos` (the company's own access check).
+  The addresses are the stored files' own and do not expire; expiring addresses are still to do.
+
+## Texting through Telnyx
+
+`MESSAGING_PROVIDER=telnyx` with `TELNYX_API_KEY` sends real texts (`convex/lib/messaging/telnyx.ts`),
+from the company's texting number, with an `Idempotency-Key` per message and the deployment's own
+`/webhooks/telnyx` as each text's `webhook_url`. `/webhooks/telnyx` verifies Telnyx's Ed25519 signature
+against `TELNYX_PUBLIC_KEY` and refuses anything older than five minutes. Delivery reports update the
+message once per event. Incoming texts go through the same STOP / HELP / START handling; any other text
+from a cleaner or customer on record becomes one task per number for a person to read. Nothing acts on
+what a text says, and a text is never taken as an answer to an offer. Texts coming in arrive at the
+number's messaging profile webhook, so the company's number needs a profile pointed at this deployment.
