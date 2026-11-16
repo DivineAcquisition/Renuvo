@@ -5,7 +5,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { convexUrl } from "@/lib/app/config";
 
 import { api } from "../../../convex/_generated/api";
-import { publicFromSeed } from "../../../convex/lib/trust/seed";
+import { SEED_PUBLIC_SNAPSHOT, type PublicSnapshot } from "../../../convex/lib/trust/seed";
 
 /**
  * What the public pages may show about Selestial's operator, providers, claims and documents: only
@@ -13,17 +13,17 @@ import { publicFromSeed } from "../../../convex/lib/trust/seed";
  * cannot be reached, the pages fall back to the same seed the record started from, which holds the
  * owner-confirmed facts only.
  */
-export type PublicTrust = Awaited<ReturnType<typeof publicFromSeed>>;
+export type PublicTrust = PublicSnapshot;
 
 export async function loadPublicTrust(): Promise<PublicTrust> {
   const url = convexUrl();
-  if (!url) return publicFromSeed();
+  if (!url) return SEED_PUBLIC_SNAPSHOT;
   try {
     const client = new ConvexHttpClient(url);
     const snapshot = await Promise.race([client.query(api.trust.publicSnapshot, {}), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), 4000))]);
-    return snapshot as PublicTrust;
+    return snapshot;
   } catch {
-    return publicFromSeed();
+    return SEED_PUBLIC_SNAPSHOT;
   }
 }
 

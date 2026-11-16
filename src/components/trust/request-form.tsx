@@ -6,10 +6,11 @@ import { AlertTriangle, CircleCheckIcon, Loader } from "@/components/icons";
 import type { RequestState } from "@/lib/trust/requests";
 import { cn } from "@/lib/utils";
 
+type FieldBase = { name: string; label: string; required?: boolean; hint?: string; /** Shown after an unrequired label instead of "(optional)". */ optionalLabel?: string };
 export type FieldSpec =
-  | { kind: "text" | "email"; name: string; label: string; required?: boolean; autoComplete?: string; hint?: string; max?: number }
-  | { kind: "textarea"; name: string; label: string; required?: boolean; hint?: string; max?: number; rows?: number }
-  | { kind: "select"; name: string; label: string; required?: boolean; hint?: string; options: { value: string; label: string }[] };
+  | (FieldBase & { kind: "text" | "email"; autoComplete?: string; max?: number })
+  | (FieldBase & { kind: "textarea"; max?: number; rows?: number })
+  | (FieldBase & { kind: "select"; options: { value: string; label: string }[] });
 
 const control = "block w-full rounded-xl border border-[#d5dae5] bg-white px-3.5 text-[15px] text-[#211a35] placeholder:text-[#98a1b3] hover:border-[#b9c0cf] focus-visible:border-[#6838ef] focus-visible:shadow-[0_0_0_3px_rgba(104,56,239,0.22)] focus-visible:outline-none aria-[invalid=true]:border-red-600";
 
@@ -45,7 +46,7 @@ export function RequestForm({ action, fields, submitLabel, consentNote }: { acti
           <div key={field.name} className="grid gap-1.5">
             <label htmlFor={id} className="text-sm font-medium text-[#211a35]">
               {field.label}
-              {field.required ? null : <span className="font-normal text-[#667085]"> (optional)</span>}
+              {field.required ? null : <span className="font-normal text-[#667085]"> {field.optionalLabel ?? "(optional)"}</span>}
             </label>
             {field.kind === "textarea" ? (
               <textarea {...common} rows={field.rows ?? 5} maxLength={field.max} className={cn(control, "py-2.5")} />
