@@ -456,6 +456,7 @@ try {
     await signupPage.getByLabel("Work email").fill(staff.email);
     await signupPage.getByLabel("Password", { exact: true }).fill(fresh.password);
     await signupPage.getByLabel("Confirm password").fill(fresh.password);
+    await signupPage.getByLabel(/I agree to Selestial/).check();
     await signupPage.getByRole("button", { name: "Create account" }).click();
     await signupPage.getByText("An account with this email already exists").first().waitFor({ timeout: 20000 });
   });
@@ -465,6 +466,7 @@ try {
     await signupPage.getByLabel("Work email").fill(fresh.email);
     await signupPage.getByLabel("Password", { exact: true }).fill(fresh.password);
     await signupPage.getByLabel("Confirm password").fill(fresh.password);
+    await signupPage.getByLabel(/I agree to Selestial/).check();
     await signupPage.getByRole("button", { name: "Create account" }).click();
     await settle(signupPage, () => location.pathname === "/auth/check-email" || Boolean(document.querySelector('form [role="alert"]')), "the sign-up to answer");
     if (new URL(signupPage.url()).pathname !== "/auth/check-email") {
@@ -525,6 +527,7 @@ try {
       await page.getByLabel("Work email").fill(invited.email);
       await page.getByLabel("Password", { exact: true }).fill(invited.password);
       await page.getByLabel("Confirm password").fill(invited.password);
+      await page.getByLabel(/I agree to Selestial/).check();
       await page.getByRole("button", { name: "Create account" }).click();
       await settle(page, () => location.pathname === "/auth/check-email", "the code screen");
       expect(path(page).includes("next=%2Finvite%2F"), "The invitation was lost at the code screen.");

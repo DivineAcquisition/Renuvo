@@ -110,6 +110,9 @@ In the dashboard (cannot be done from here):
 1. **User & authentication.** Email: on, required, verified at sign-up by code. Password: on.
    **Phone number: off. Username: off.** The sign-up form asks for name, email and password only; if
    the service asks for more, the form says setup is unfinished and creates nothing.
+   **Legal consent: on**, with Terms at `https://www.selestial.io/terms` and Privacy at
+   `https://www.selestial.io/privacy`. The sign-up form has an unticked consent box; Create account
+   stays disabled until it is ticked, and the form sends `legalAccepted: true` with the account.
 2. **Paths.** Sign-in `/login`, sign-up `/signup`, on the application's own domain.
 3. **Production only.** Add the domain and its DNS records, and set the production keys on Vercel.
    Custom email templates and removing the service's branding may need a paid plan.
@@ -124,10 +127,14 @@ Then: set the Convex and Vercel settings above, run `auth-emails.mjs --apply`, a
 
 ## State of the two instances (November 16)
 
-- **Development** (`first-opossum-325`): steps 4 and 5 done, emails installed, the dev Convex
-  deployment trusts it. **Step 1 is not done: phone number and username are still required**, so
-  creating an account stops at the form with the setup message.
-- **Production** (`clerk.selestial.io`): not touched. Nothing here has been run against it.
+- **Development** (`first-opossum-325`): every step done. Phone number and username are off and legal
+  consent is on, the same as production, so sign-up only works with the consent box. Emails are
+  installed, and the dev Convex deployment trusts it. The doctor reports it ready.
+- **Production** (`clerk.selestial.io`): phone number and username off, legal consent on with the
+  Terms and Privacy addresses above (checked from its public settings). **It has no `convex` token
+  template yet** (reported when it was set up; needs its secret to check from here): create it in the
+  dashboard (step 5) before the production record can trust a sign-in. The production Convex
+  deployment is not set up yet either.
 
 ## Tests
 
@@ -146,7 +153,6 @@ Then: set the Convex and Vercel settings above, run `auth-emails.mjs --apply`, a
 - Turning two-step sign-in on or off from Settings.
 - Confirmation by link instead of code. `/auth/verify` shows a link's result if the service is ever
   set to send links, but that path has not been run.
-- Terms and Privacy pages. The sign-up form links to neither, because neither exists.
 - Selestial staff access (`admin.`), and its second factor.
 - A member whose access is removed while they have the workspace open is moved to their other
   company or to setup by the record's own refusal; there is no dedicated "access removed" screen.
