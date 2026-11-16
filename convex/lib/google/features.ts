@@ -26,18 +26,18 @@ export type Feature = (typeof FEATURES)[number];
 
 export const FEATURE_INFO: Record<Feature, { label: string; scopes: readonly string[]; does: string; needsPlatform?: string[] }> = {
   drive: {
-    label: "Drive, Docs and Sheets",
+    label: "Google Drive, Docs and Sheets",
     scopes: [SCOPE.driveFile],
     does: "Read the files and folders you pick, and save photos, resumes, agreements, reports and new documents into the folders you pick. Selestial sees only files you pick or that it creates.",
     needsPlatform: ["NEXT_PUBLIC_GOOGLE_PICKER_API_KEY", "NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER"],
   },
   calendar: {
-    label: "Calendar",
+    label: "Google Calendar",
     scopes: [SCOPE.calendarList, SCOPE.calendarEvents, SCOPE.calendarFreeBusy],
     does: "Put visits and interviews on the calendar you choose, read busy times from the calendars you choose, and notice when an event Selestial made is moved or deleted.",
   },
   business_profile: {
-    label: "Business Profile",
+    label: "Google Business Profile",
     scopes: [SCOPE.business],
     does: "Read reviews for the locations you choose, draft replies, and publish only the replies you approve.",
   },
@@ -48,7 +48,7 @@ export const FEATURE_INFO: Record<Feature, { label: string; scopes: readonly str
     needsPlatform: ["GOOGLE_ADS_DEVELOPER_TOKEN"],
   },
   conversions: {
-    label: "Conversion reporting (Data Manager)",
+    label: "Google Ads conversion reporting",
     scopes: [SCOPE.dataManager],
     does: "Report booked jobs that came from a Google ad back to Google Ads, with the consent you record, so the ads learn which clicks become customers.",
   },

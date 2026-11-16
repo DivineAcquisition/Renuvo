@@ -134,7 +134,7 @@ function HiringInbox({ canEdit, companyId }: { canEdit: boolean; companyId: Id<"
             loading={busy}
             onClick={() =>
               void run(async () => {
-                const { url } = await start({ companyId, canSend, ...(label.trim() ? { folder: label.trim() } : {}) });
+                const { url } = await start({ companyId, canSend, returnTo: window.location.origin, ...(label.trim() ? { folder: label.trim() } : {}) });
                 window.location.assign(url);
               })
             }

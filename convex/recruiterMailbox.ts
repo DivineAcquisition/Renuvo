@@ -14,7 +14,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
-import { appOrigin } from "./lib/invitations";
+import { appOrigin, returnOrigin } from "./lib/invitations";
 import { byMember, recordEvent } from "./lib/events";
 import { authorizationUrl, googleApp } from "./lib/recruiter/gmail";
 import { sourceValidator } from "./lib/recruiter/schema";
@@ -30,8 +30,8 @@ export function googleRedirectUri(): string | null {
 }
 
 /** Where the Owner lands after Google: the Recruiting settings, saying how it went. */
-export function afterConnect(outcome: "connected" | "failed" | "expired"): string {
-  return `${appOrigin() ?? ""}/app/settings/recruiting?mailbox=${outcome}`;
+export function afterConnect(outcome: "connected" | "failed" | "expired", origin?: string | null): string {
+  return `${returnOrigin(origin) ?? appOrigin() ?? ""}/app/settings/recruiting?mailbox=${outcome}`;
 }
 
 /** Starts connecting a Gmail mailbox. Answers with the Google address to send the Owner to. */
@@ -42,6 +42,8 @@ export const startGmailConnect = ownerMutation({
     processFrom: v.optional(v.number()),
     /** Also allow applicant email to be sent from this mailbox. */
     canSend: v.optional(v.boolean()),
+    /** The app address the Owner is on, so Google's answer comes back there. */
+    returnTo: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const app = googleApp();
@@ -61,6 +63,7 @@ export const startGmailConnect = ownerMutation({
       sources: args.sources ?? [],
       processFrom,
       canSend: args.canSend ?? true,
+      returnOrigin: returnOrigin(args.returnTo) ?? undefined,
       expiresAt: now + STATE_LIFE,
     });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "mailbox.connect_started", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { provider: "gmail" } });
@@ -82,7 +85,7 @@ export const takeState = internalMutation({
     const member = await ctx.db.get(row.memberId);
     // Only someone who is still this company's Owner can finish connecting its mailbox.
     if (!member || member.companyId !== row.companyId || member.status !== "active" || member.role !== "owner") return null;
-    return { stateId: row._id, companyId: row.companyId, memberId: row.memberId, folder: row.folder, sources: row.sources, processFrom: row.processFrom, canSend: row.canSend };
+    return { stateId: row._id, companyId: row.companyId, memberId: row.memberId, folder: row.folder, sources: row.sources, processFrom: row.processFrom, canSend: row.canSend, returnOrigin: row.returnOrigin ?? null };
   },
 });
 

@@ -30,7 +30,8 @@ export function consentUrl(app: GoogleApp, input: { redirectUri: string; state: 
     response_type: "code",
     scope: input.scopes.join(" "),
     access_type: "offline",
-    include_granted_scopes: "true",
+    // Each tool is its own connection, so a grant carries only that tool's scopes.
+    include_granted_scopes: "false",
     // "consent" makes Google return a refresh token every time; "select_account" lets the Owner pick a different Google account.
     prompt: input.selectAccount ? "consent select_account" : "consent",
     state: input.state,
