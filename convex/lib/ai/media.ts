@@ -12,6 +12,8 @@
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
+import { featureVerdict } from "../billing/access";
+import { openExecution } from "../billing/executions";
 import { notFound, userError } from "../errors";
 import { recordEvent } from "../events";
 import { text } from "../text";
@@ -89,6 +91,9 @@ export async function queueGeneration(
   ctx: MutationCtx,
   input: { company: Doc<"companies">; member: Doc<"members">; kind: GenerationKind; prompt: string; sources: string[]; params: GenerationParams; promptVersion?: number },
 ): Promise<Id<"mediaJobs">> {
+  // Creative Studio is Expand's. Before the plan is known here, the credit hold decides, after reading it from billing.
+  const studio = featureVerdict(input.company, "creative_studio");
+  if (!studio.ok && (studio.block !== "plan" || input.company.plan !== undefined)) throw userError(studio.message, "limit");
   if (!featureOn(input.company, input.kind)) throw userError(input.kind === "video_generate" ? "The Owner has switched video generation off for this company." : "The Owner has switched image generation off for this company.", "not_allowed");
   const prompt = text(input.prompt, "The prompt", 4000);
   const params = checkedParams(input.kind, input.params);
@@ -127,6 +132,10 @@ export async function queueGeneration(
     heartbeatAt: now,
     createdAt: now,
   });
+  // Paid with Selestial Credits, per image or video delivered. Refused here, nothing is queued.
+  const opened = await openExecution(ctx, { company: input.company, key: `media:${jobId}`, agent: "studio", feature: "creative_studio", task: input.kind === "video_generate" ? "video_generation" : input.kind === "image_edit" ? "image_edit" : "image_generation", units: want.images + want.videos, autonomous: false, memberId: input.member._id, source: { table: "mediaJobs", id: jobId } });
+  if (!opened.ok) throw userError(opened.message, "limit");
+  await ctx.db.patch(jobId, { executionId: opened.executionId });
   await recordEvent(ctx, { companyId: input.company._id, type: "media_job.queued", actor: { kind: "member", memberId: input.member._id }, subject: { table: "mediaJobs", id: jobId }, data: { kind: input.kind, model: resolved.model.model } });
   await ctx.scheduler.runAfter(0, internal.media.run, { jobId });
   return jobId;

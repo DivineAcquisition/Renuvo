@@ -13,7 +13,6 @@ import { companyQuery, ownerMutation, ownerQuery } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { describeEvents } from "./lib/eventWords";
-import { BILLING_NOTES, PLANS } from "./lib/settings/plans";
 import { connectionList } from "./lib/settings/connections";
 import { businessSettingsOf, hoursWindowValidator, hoursKey, normalizeBusiness, revisionOf, servicesKey, serviceValidator, validTimezone } from "./lib/settings/business";
 import { text } from "./lib/text";
@@ -96,17 +95,6 @@ export const connections = companyQuery({
       connections: connectionList({ mailboxes: mailboxes.map((row) => ({ provider: row.provider, status: row.status })) }),
     };
   },
-});
-
-/** Selestial's plans. The Owner only. There is no active plan, charge or invoice to show. */
-export const billing = ownerQuery({
-  args: {},
-  handler: async () => ({
-    activePlan: null,
-    status: "not_started" as const,
-    plans: PLANS.map((plan) => ({ id: plan.id, name: plan.name, monthlyCents: plan.monthlyCents, includes: [...plan.includes] })),
-    notes: [...BILLING_NOTES],
-  }),
 });
 
 /** The company's own history, newest first, in words. The Owner only. Events hold ids and small facts, never message text. */

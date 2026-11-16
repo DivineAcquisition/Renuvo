@@ -17,6 +17,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { checkedNeed, openNeed } from "../../hiringNeeds";
 import { authorityFor } from "../authority";
+import { agentVerdict } from "../billing/access";
 import { AGENT_PROFILES } from "../departments";
 import { runTool as dispatchTool, type ToolInput as DispatchInput, type ToolName as DispatchToolName } from "../dispatch/tools";
 import { coverKey, currentCoverAction } from "../dispatch/workflow";
@@ -686,7 +687,7 @@ const TOOLS: ChatTool[] = [
       const capability = capabilityFor(kind, params);
       const resolved = resolveCapability(capability, await settingFor(ctx, capability));
       if (!resolved.ready) return refused(resolved.words);
-      const limit = mediaAllowance(ctx.company);
+      const limit = mediaAllowance();
       const row = await allowanceRow(ctx, ctx.company._id, monthKey(Date.now()));
       const used = kind === "video_generate" ? (row?.videosUsed ?? 0) + (row?.videosReserved ?? 0) : (row?.imagesUsed ?? 0) + (row?.imagesReserved ?? 0);
       const want = kind === "video_generate" ? 1 : (params.n ?? 1);
@@ -998,15 +999,26 @@ const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 
+/**
+ * Why a specialist's tool may not run for this company, or null. Chat answers general questions on any
+ * plan, but it never runs an agent's work that the agent's own screens could not: an unreleased agent, or
+ * one outside the company's verified plan, is closed to Chat as well.
+ */
+export function specialistBlock(company: Pick<Doc<"companies">, "plan">, tool: Pick<ChatTool, "specialist" | "kind">): string | null {
+  if (!tool.specialist || tool.kind === "unavailable") return null;
+  const verdict = agentVerdict(company, tool.specialist);
+  return verdict.ok ? null : verdict.message;
+}
+
 /** The tools a member with this role is offered. A tool they may not use is not offered, and refused if called anyway. */
-export function toolsFor(role: Role): ChatTool[] {
-  return ALL.filter((tool) => tool.kind === "unavailable" || roleAllows(role, tool.minimumRole));
+export function toolsFor(role: Role, company: Pick<Doc<"companies">, "plan">): ChatTool[] {
+  return ALL.filter((tool) => (tool.kind === "unavailable" || roleAllows(role, tool.minimumRole)) && specialistBlock(company, tool) === null);
 }
 
 /** The tool definitions a model is given. */
-export function toolSpecs(role: Role) {
+export function toolSpecs(role: Role, company: Pick<Doc<"companies">, "plan">) {
   return [
-    ...toolsFor(role).map((tool) => ({ name: tool.name, description: tool.description, input_schema: jsonSchema(tool.input) })),
+    ...toolsFor(role, company).map((tool) => ({ name: tool.name, description: tool.description, input_schema: jsonSchema(tool.input) })),
     { name: ASK_FOLLOWUP.name, description: ASK_FOLLOWUP.description, input_schema: jsonSchema(ASK_FOLLOWUP.input) },
   ];
 }

@@ -1,7 +1,6 @@
 /** Recording what each model call used, and the generation allowances per plan. */
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
-import { planOf } from "../chat/state";
 import { userError } from "../errors";
 import { estimateMicros, type Capability, type ModelEntry } from "./registry";
 import type { Feature } from "./schema";
@@ -46,13 +45,14 @@ export async function recordUsage(ctx: MutationCtx, input: UsageInput): Promise<
 }
 
 /**
- * Generations per company per month, by plan: the owner's decision of November 16, 2026. Provisional
- * and adjustable; MEDIA_IMAGES_PER_MONTH / MEDIA_VIDEOS_PER_MONTH on the deployment override every plan.
+ * A monthly ceiling on generations per company, to bound provider cost. Each generation is paid for with
+ * Selestial Credits (convex/lib/billing), and Creative Studio itself is Expand's; this ceiling only stops
+ * runaway use. MEDIA_IMAGES_PER_MONTH / MEDIA_VIDEOS_PER_MONTH override it.
  */
-export const MEDIA_PER_MONTH = { growth: { images: 40, videos: 4 }, scale: { images: 150, videos: 15 } } as const;
+export const MEDIA_PER_MONTH = { images: 150, videos: 15 } as const;
 
-export function mediaAllowance(company: Doc<"companies">): { images: number; videos: number } {
-  const plan = MEDIA_PER_MONTH[planOf(company)];
+export function mediaAllowance(): { images: number; videos: number } {
+  const plan = MEDIA_PER_MONTH;
   const images = Number(process.env.MEDIA_IMAGES_PER_MONTH);
   const videos = Number(process.env.MEDIA_VIDEOS_PER_MONTH);
   return { images: Number.isInteger(images) && images >= 0 ? images : plan.images, videos: Number.isInteger(videos) && videos >= 0 ? videos : plan.videos };
@@ -73,7 +73,7 @@ export async function allowanceRow(ctx: QueryCtx | MutationCtx, companyId: Id<"c
  */
 export async function reserve(ctx: MutationCtx, company: Doc<"companies">, want: { images: number; videos: number }): Promise<{ month: string }> {
   const month = monthKey(Date.now());
-  const limit = mediaAllowance(company);
+  const limit = mediaAllowance();
   const row = await allowanceRow(ctx, company._id, month);
   const used = { images: (row?.imagesUsed ?? 0) + (row?.imagesReserved ?? 0), videos: (row?.videosUsed ?? 0) + (row?.videosReserved ?? 0) };
   if (want.images && used.images + want.images > limit.images) throw userError(`This company has used this month's ${limit.images} image generations.`, "limit");

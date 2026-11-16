@@ -17,6 +17,7 @@ export const NAV = {
   links: [
     { href: "#agents", label: "The agents" },
     { href: "#how-it-works", label: "How it works" },
+    { href: "#pricing", label: "Pricing" },
     { href: "#philosophy", label: "Our philosophy" },
   ],
   cta: "Get early access",
@@ -182,6 +183,48 @@ export const PHILOSOPHY = {
     "For Selestial, sending a message is only a step. The work continues until there is a confirmed result, a clear next action, or a decision brought back to you.",
   ],
   closing: "You set the standard. Selestial carries the work forward.",
+} as const;
+
+/**
+ * Public pricing. The plans and prices are approved; credit allowances are not, so none is shown. Every
+ * agent and feature that is not working today says so.
+ */
+export const PRICING = {
+  id: "pricing",
+  eyebrow: "Pricing",
+  headline: "The right AI workforce for your cleaning company.",
+  lead: "Start with four essential agents. Expand into a complete team as your operation grows.",
+  plans: [
+    {
+      id: "operate",
+      name: "Operate",
+      price: "$299",
+      period: "/month",
+      summary: "Keep sales, hiring, dispatch, and retention moving from one workspace.",
+      today: ["Dispatch: offers, coverage, live jobs and cleaner text-message links", "Recruiter: your hiring inbox, invitations, applications, interviews and offers", "Company Chat", "Agreements, templates and AI-guided drafting", "A monthly allowance of Selestial Credits for AI work"],
+      later: ["Sales and Retention, included when released"],
+    },
+    {
+      id: "expand",
+      name: "Expand",
+      price: "$499",
+      period: "/month",
+      summary: "Add marketing, quality, customer care, and team coordination, with customer portals and advanced controls.",
+      today: ["Everything in Operate", "Creative Studio for images and video", "Advanced approval routing and template governance for agreements", "A larger monthly credit allowance"],
+      later: ["Marketing, Quality, Customer Care and Team Coordinator, included when released", "Customer portal, advanced workflow customization, and team and location governance, when available"],
+    },
+  ],
+  allowanceNote: "Monthly credit allowances will be published here once they are final.",
+  services: "Bespoke implementation, migration and custom development are scoped separately.",
+  faqs: [
+    { q: "Which agents does each plan include?", a: "Operate includes Sales, Retention, Recruiter and Dispatch. Expand adds Marketing, Quality, Customer Care and Team Coordinator. Today Dispatch and Recruiter are working; the others are included in their plan when each is released, and no plan or purchase makes one available sooner." },
+    { q: "What uses credits?", a: "Selestial Credits pay for defined AI work, such as one Company Chat answer, one hiring email read by AI, or one generated image. Each is charged once when it is completed. Viewing records, opening or answering a cleaner’s link, accepting a job, status changes and scheduled reminders use no credits." },
+    { q: "What happens when credits run out?", a: "New AI work pauses and the Owner is told. Schedules, records, cleaner links, active jobs and everything that does not use AI keep working. Nothing is bought automatically; you can buy a top-up or wait for the monthly reset." },
+    { q: "Do top-ups unlock agents?", a: "No. A top-up adds credits only. Agents and features come with the plan, and only once they are released." },
+    { q: "How do monthly credits reset?", a: "Included credits reset at the start of each billing period and do not roll over. Purchased credits are used after the included ones, do not reset, and can be used while you have an active plan." },
+    { q: "How is texting and calling charged?", a: "Text messages, calls and other outside services are measured separately from credits and priced openly. When AI writes a message that is then sent, the AI work and the message are shown as separate items." },
+    { q: "How do upgrades, downgrades and cancellation work?", a: "Upgrading shows the exact charge and takes effect once payment is confirmed; credits already used this month still count. Downgrading takes effect at renewal and lists what you would lose first; your records, completed work and signed agreements are kept. Cancelling stops the renewal, and the plan stays active until the end of the period you paid for." },
+  ],
 } as const;
 
 export const FINAL_CTA = {

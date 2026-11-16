@@ -5,6 +5,8 @@
  * Seeing a cleaner's schedule never grants their employment agreement: workforce documents are their own
  * class, checked on their own. Capabilities are checked against the member's role as it is now.
  */
+import { featureVerdict, verifiedPlan } from "../billing/access";
+import type { PlanFeature } from "../billing/catalog";
 import type { Doc } from "../../_generated/dataModel";
 import { notFound, userError } from "../errors";
 import type { Role } from "../roles";
@@ -54,28 +56,28 @@ export function requireCapability(role: Role, capability: Capability, what: stri
   if (!can(role, capability)) throw userError(`Your role cannot ${what}.`, "not_allowed");
 }
 
-/** Plans. Both include the core library, standard templates, guided drafting, versions, basic approval and signing as implemented. */
-export type Plan = "growth" | "scale";
-export const SCALE_FEATURES = ["advanced_approval", "template_governance", "customer_portal"] as const;
-export type ScaleFeature = (typeof SCALE_FEATURES)[number];
-
-export function planOf(company: Pick<Doc<"companies">, "plan">): Plan {
-  return company.plan ?? "growth";
-}
+/**
+ * Plans (convex/lib/billing/catalog.ts). Both include the core library, standard templates, guided
+ * drafting, versions, basic approval and signing as implemented. Advanced approval routing and template
+ * governance are Expand's; the customer portal is Expand's but not built.
+ */
+export const EXPAND_FEATURES = ["advanced_approval", "template_governance", "customer_portal"] as const;
+export type ExpandFeature = (typeof EXPAND_FEATURES)[number];
+const PLAN_FEATURE: Record<ExpandFeature, PlanFeature> = { advanced_approval: "advanced_approvals", template_governance: "template_governance", customer_portal: "customer_portal" };
 
 export function entitlements(company: Pick<Doc<"companies">, "plan">) {
-  const plan = planOf(company);
+  const plan = verifiedPlan(company);
   return {
     plan,
-    /** Read from the company's plan record, set by Selestial staff. There is no subscription or metering system behind it yet. */
-    source: "company plan record",
+    /** Autumn's verified plan, as billing sync last copied it. */
+    source: "verified subscription",
     core: { library: true, standardTemplates: true, guidedDrafting: true, versionHistory: true, basicApproval: true, signing: "as the connected provider allows" },
-    scale: { advanced_approval: plan === "scale", template_governance: plan === "scale", customer_portal: false },
-    notes: ["Customer portal access belongs to Scale but is not built yet, so it is unavailable on every plan.", "No usage limits or signature charges are defined or enforced."],
+    expand: { advanced_approval: featureVerdict(company, "advanced_approvals").ok, template_governance: featureVerdict(company, "template_governance").ok, customer_portal: false },
+    notes: ["The customer portal belongs to Expand but is not built yet, so it is unavailable on every plan.", "AI-guided drafting uses Selestial Credits, as Chat answers. Signatures have no separate charge defined."],
   };
 }
 
-export function requireScale(company: Pick<Doc<"companies">, "plan">, feature: ScaleFeature): void {
-  if (feature === "customer_portal") throw userError("The customer portal is not built yet.", "limit");
-  if (planOf(company) !== "scale") throw userError("This is part of the Scale plan. Core agreements, templates, approvals and signing are in every plan.", "limit");
+export function requireExpand(company: Pick<Doc<"companies">, "plan">, feature: ExpandFeature): void {
+  const verdict = featureVerdict(company, PLAN_FEATURE[feature]);
+  if (!verdict.ok) throw userError(verdict.block === "plan" ? `${verdict.message} Core agreements, templates, approvals and signing are in every plan.` : verdict.message, "limit");
 }

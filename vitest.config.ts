@@ -8,6 +8,7 @@ export default defineConfig({
     exclude: ["node_modules/**", ".claude/**"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "convex/**/*.test.ts"],
     server: { deps: { inline: ["convex-test"] } },
+    setupFiles: ["tests/setupBilling.ts"],
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },

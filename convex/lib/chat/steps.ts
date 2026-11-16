@@ -8,7 +8,7 @@ import type { Role } from "../roles";
 import { InputError, stableHash } from "./fields";
 import { addPart, setState } from "./state";
 import type { StepStatus } from "./schema";
-import { checkInput, roleAllows, TOOL_BY_NAME, type ChatTool, type Outcome, type ToolCtx } from "./tools";
+import { checkInput, roleAllows, specialistBlock, TOOL_BY_NAME, type ChatTool, type Outcome, type ToolCtx } from "./tools";
 import type { Work } from "./work";
 
 /** The most a tool result may put back in front of the model. */
@@ -73,6 +73,8 @@ export async function stepFromModel(
 ): Promise<StepAnswer> {
   const tool = TOOL_BY_NAME.get(input.name);
   if (!tool) return { content: JSON.stringify({ status: "refused", why: `There is no tool called ${input.name}.` }), isError: true, waiting: false };
+  const closed = specialistBlock(input.company, tool);
+  if (closed) return { content: JSON.stringify({ status: "refused", why: closed }), isError: true, waiting: false };
   let args: Record<string, unknown>;
   try {
     args = checkInput(tool, input.rawInput);
@@ -134,6 +136,8 @@ export async function decideStep(ctx: MutationCtx, input: { step: Doc<"chatActio
     result = (await ctx.db.get(step._id))!;
   } else if (!tool || !tool.confirm) {
     result = await settle(ctx, step, { status: "refused", why: "This action is no longer available." }, null);
+  } else if (specialistBlock(input.company, tool)) {
+    result = await settle(ctx, step, { status: "refused", why: specialistBlock(input.company, tool)! }, null);
   } else if (!roleAllows(input.role, tool.minimumRole)) {
     result = await settle(ctx, step, { status: "refused", why: `Only ${tool.minimumRole === "owner" ? "the Owner" : "Owners and Managers"} can approve this.` }, null);
   } else {

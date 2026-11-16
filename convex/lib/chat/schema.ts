@@ -167,6 +167,8 @@ export const chatTables = {
     error: v.optional(v.string()),
     /** The run this one retries. Tool calls it already carried out are not carried out again. */
     retryOf: v.optional(v.id("chatRuns")),
+    /** The credits held for this answer (convex/lib/billing). */
+    executionId: v.optional(v.id("aiExecutions")),
     startedAt: v.number(),
     endedAt: v.optional(v.number()),
   })

@@ -125,8 +125,8 @@ export function ReviewAndSignatures({ detail }: { detail: Detail }) {
                 onChange={(event) => void run(() => routing({ companyId, agreementId: id, required: event.target.checked }))}
               />
               Require a second person to approve
-              <ToneBadge tone="info">Scale</ToneBadge>
-              {detail.entitlements.plan !== "scale" ? <span className="text-xs text-muted-foreground">Available on the Scale plan.</span> : null}
+              <ToneBadge tone="info">Expand</ToneBadge>
+              {!detail.entitlements.expand.advanced_approval ? <span className="text-xs text-muted-foreground">Available on the Expand plan.</span> : null}
             </label>
           ) : null}
         </div>

@@ -6,6 +6,7 @@ import { defineSchema, defineTable } from "convex/server";
 
 import { agreementTables } from "./lib/agreements/schema";
 import { aiTables } from "./lib/ai/schema";
+import { billingTables } from "./lib/billing/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
 import { trustTables } from "./lib/trust/schema";
@@ -209,8 +210,12 @@ export default defineSchema({
     setupKey: v.optional(v.string()),
     /** Set only by Selestial staff. While set, nothing is sent for this company. */
     suspendedAt: v.optional(v.number()),
-    /** The Selestial plan, set by Selestial staff. Absent means Growth. It sets usage allowances such as chat answers. */
-    plan: v.optional(v.union(v.literal("growth"), v.literal("scale"))),
+    /**
+     * The verified plan, copied from Autumn by billing sync (convex/lib/billing) and nothing else. "growth"
+     * and "scale" are the retired, staff-set values: they grant nothing and are cleared by
+     * billing.clearLegacyPlans.
+     */
+    plan: v.optional(v.union(v.literal("operate"), v.literal("expand"), v.literal("growth"), v.literal("scale"))),
     /** AI features the Owner switched off. Absent means on, within the plan's allowances. */
     aiFeatures: v.optional(v.object({ imageGeneration: v.optional(v.boolean()), videoGeneration: v.optional(v.boolean()), photoReview: v.optional(v.boolean()), documentSearch: v.optional(v.boolean()), otherChatModels: v.optional(v.boolean()) })),
     createdAt: v.number(),
@@ -719,6 +724,7 @@ export default defineSchema({
 
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,
+  ...billingTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

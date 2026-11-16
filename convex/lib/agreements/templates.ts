@@ -9,7 +9,7 @@
 import type { Doc, Id } from "../../_generated/dataModel";
 import { notFound, userError } from "../errors";
 import { recordEvent } from "../events";
-import { can, mayDraft, requireScale } from "./access";
+import { can, mayDraft, requireExpand } from "./access";
 import { docType } from "./catalog";
 import { kitFor, type Kit } from "./compose";
 import { variablesOf, type Clause } from "./clauses";
@@ -143,4 +143,4 @@ export async function kitFromTemplate(ctx: Ctx | ReadCtx, template: Doc<"agreeme
 }
 
 export const reviewedVersion = (template: Pick<Doc<"agreementTemplates">, "review" | "currentVersion">) => (template.review && template.review.version === template.currentVersion ? template.review : null);
-export { requireScale };
+export { requireExpand };

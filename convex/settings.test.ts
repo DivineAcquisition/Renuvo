@@ -51,7 +51,7 @@ describe("who may read and change business settings", () => {
     const other = await company(s.t, "owner-b", "Beta Cleaning");
     expect(await refusal(other.as.query(api.settings.business, { companyId: s.companyId }))).toBe(NOT_FOUND);
     expect(await refusal(other.as.mutation(api.settings.saveBusiness, s.draft() as never))).toBe(NOT_FOUND);
-    expect(await refusal(other.as.query(api.settings.billing, { companyId: s.companyId }))).toBe(NOT_FOUND);
+    expect(await refusal(other.as.query(api.billing.planAndUsage, { companyId: s.companyId }))).toBe(NOT_FOUND);
   });
 
   it("stops a removed member at once", async () => {
@@ -216,19 +216,6 @@ describe("connections", () => {
         else process.env[key] = saved[key];
       }
     }
-  });
-});
-
-describe("plan and billing", () => {
-  it("shows the catalog to the Owner only, with no active plan or entitlement", async () => {
-    const s = await setup();
-    const billing = await s.as.query(api.settings.billing, { companyId: s.companyId });
-    expect(billing.plans.map((plan) => [plan.name, plan.monthlyCents])).toEqual([["Growth", 29900], ["Scale", 49900]]);
-    expect(billing).toMatchObject({ activePlan: null, status: "not_started" });
-    expect(billing.plans[0].includes.join(" ")).not.toMatch(/portal/i);
-    expect(billing.plans[1].includes.join(" ")).toMatch(/portal/i);
-    expect(billing.notes.join(" ")).toMatch(/Usage limits/);
-    for (const who of [s.manager, s.office]) expect(await refusal(who.query(api.settings.billing, { companyId: s.companyId }))).toBe(NOT_ALLOWED);
   });
 });
 

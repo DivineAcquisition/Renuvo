@@ -419,27 +419,22 @@ describe("Company Chat", () => {
     expect(mockChat.seen.at(-1)!.system).toContain("We do not clean inside ovens on standard visits.");
   });
 
-  it("gives each plan its own monthly allowance, and only Selestial staff change the plan", async () => {
+  it("charges each answer once, in credits, and plans come only from billing", async () => {
     const { t, as, companyId } = await setup();
-    expect(await as.query(api.chat.usage, { companyId })).toMatchObject({ plan: "growth", allowance: 300 });
-    expect(await refusal(as.mutation(api.chat.setCompanyPlan, { companyId, plan: "scale", note: "Upgraded" }))).toBe(NOT_FOUND);
-    const staff = { subject: "user_staff", email: "staff@selestial.example", emailVerified: true, name: "Staff" };
-    process.env.STAFF_BOOTSTRAP_EMAIL = staff.email;
-    try {
-      await t.withIdentity(staff).mutation(api.chat.setCompanyPlan, { companyId, plan: "scale", note: "Upgraded to Scale." });
-    } finally {
-      delete process.env.STAFF_BOOTSTRAP_EMAIL;
-    }
-    expect(await as.query(api.chat.usage, { companyId })).toMatchObject({ plan: "scale", allowance: 1000 });
+    await ask(t, as, companyId, "First question.");
+    const executions = await t.run(async (ctx) => ctx.db.query("aiExecutions").collect());
+    expect(executions).toEqual([expect.objectContaining({ agent: "chat", task: "chat_response_standard", units: 1, state: "completed", charged: 1, settlement: "confirmed", rateCardVersion: "fixture-2026-11" })]);
+    // The plan is whatever Autumn reports; there is no way to set it from Selestial.
+    expect(await as.query(api.chat.usage, { companyId })).toMatchObject({ plan: "expand", answers: 1, cap: null });
   });
 
-  it("counts usage against a monthly allowance and refuses past it", async () => {
+  it("keeps the deployment emergency cap on answers, on top of credits", async () => {
     const { t, as, companyId } = await setup();
     process.env.CHAT_MONTHLY_RUNS = "1";
     try {
       await ask(t, as, companyId, "First question.");
-      expect(await as.query(api.chat.usage, { companyId })).toMatchObject({ answers: 1, allowance: 1, tokens: 120 });
-      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Second question.", clientKey: key() }))).toMatch(/this month's 1 chat answers/);
+      expect(await as.query(api.chat.usage, { companyId })).toMatchObject({ answers: 1, cap: 1, tokens: 120 });
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Second question.", clientKey: key() }))).toMatch(/limited to 1 answers a month/);
     } finally {
       delete process.env.CHAT_MONTHLY_RUNS;
     }

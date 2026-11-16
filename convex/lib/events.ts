@@ -64,6 +64,10 @@ export const subjectValidator = v.union(
   // Creative Studio (convex/lib/ai/schema.ts).
   v.object({ table: v.literal("mediaAssets"), id: v.id("mediaAssets") }),
   v.object({ table: v.literal("mediaJobs"), id: v.id("mediaJobs") }),
+  // Plans and credits (convex/lib/billing/schema.ts).
+  v.object({ table: v.literal("billingAccounts"), id: v.id("billingAccounts") }),
+  v.object({ table: v.literal("aiExecutions"), id: v.id("aiExecutions") }),
+  v.object({ table: v.literal("billingIntents"), id: v.id("billingIntents") }),
 );
 export type Subject = typeof subjectValidator.type;
 

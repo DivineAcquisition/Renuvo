@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addMember, company, refusal, start, type T } from "../tests/harness";
+import { billing } from "../tests/setupBilling";
 import { api, internal } from "./_generated/api";
 import { NOT_FOUND } from "./lib/errors";
 import { mockSigning, resetMockSigning, signBody } from "./lib/agreements/signing";
@@ -619,13 +620,19 @@ describe("lifecycle, renewals and plans", () => {
     expect((await s.as.query(api.companyAgreements.list, { companyId: s.companyId })).rows).toHaveLength(1);
   });
 
-  it("checks the plan on the server: Scale routing is refused on Growth, core features are in both", async () => {
+  it("checks the verified plan on the server: Expand routing is refused on Operate, core features are in both", async () => {
     const s = await setup();
     const id = await s.make(s.as);
-    expect(await refusal(s.as.mutation(api.companyAgreements.setSecondApproval, { companyId: s.companyId, agreementId: id, required: true }))).toMatch(/Scale plan/);
-    const growth = (await s.as.query(api.companyAgreements.catalog, { companyId: s.companyId })).entitlements;
-    expect(growth).toMatchObject({ plan: "growth", core: { library: true, guidedDrafting: true, versionHistory: true, basicApproval: true }, scale: { advanced_approval: false, customer_portal: false } });
+    // A retired, staff-set value grants nothing.
     await s.t.run(async (ctx) => ctx.db.patch(s.companyId, { plan: "scale" }));
+    expect(await refusal(s.as.mutation(api.companyAgreements.setSecondApproval, { companyId: s.companyId, agreementId: id, required: true }))).toMatch(/needs an active Expand plan/);
+    billing.seed(s.companyId, { plan: "operate", grant: 1000 });
+    await s.t.action(internal.billing.syncCompany, { companyId: s.companyId });
+    expect(await refusal(s.as.mutation(api.companyAgreements.setSecondApproval, { companyId: s.companyId, agreementId: id, required: true }))).toMatch(/part of the Expand plan/);
+    const operate = (await s.as.query(api.companyAgreements.catalog, { companyId: s.companyId })).entitlements;
+    expect(operate).toMatchObject({ plan: "operate", core: { library: true, guidedDrafting: true, versionHistory: true, basicApproval: true }, expand: { advanced_approval: false, customer_portal: false } });
+    billing.seed(s.companyId, { plan: "expand", grant: 2000 });
+    await s.t.action(internal.billing.syncCompany, { companyId: s.companyId });
     await s.as.mutation(api.companyAgreements.setSecondApproval, { companyId: s.companyId, agreementId: id, required: true });
     await s.fill(s.as, id);
     const first = await s.approveNow(s.as, id);
@@ -635,9 +642,9 @@ describe("lifecycle, renewals and plans", () => {
     const second = await s.approveNow(s.manager, id);
     expect(second).toMatchObject({ complete: true });
     expect((await s.get(s.as, id)).workflow).toBe("approved");
-    const scale = (await s.as.query(api.companyAgreements.catalog, { companyId: s.companyId })).entitlements;
-    expect(scale.scale).toMatchObject({ advanced_approval: true, customer_portal: false });
-    expect(scale.notes.join(" ")).toMatch(/No usage limits or signature charges/);
+    const expand = (await s.as.query(api.companyAgreements.catalog, { companyId: s.companyId })).entitlements;
+    expect(expand.expand).toMatchObject({ advanced_approval: true, customer_portal: false });
+    expect(expand.notes.join(" ")).toMatch(/Selestial Credits/);
   });
 
   it("builds a PDF from the exact saved text and records the export without storing the words in the log", async () => {

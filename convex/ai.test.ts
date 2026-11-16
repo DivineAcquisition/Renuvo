@@ -144,28 +144,21 @@ describe("the AI layer", () => {
       expect(await refusal(as.mutation(api.aiAdmin.setCapability, { capability: "chat", enabled: true, evaluation: "approved" }))).toBe(NOT_FOUND);
     });
 
-    it("reviews a visit's photos as data, describes them, and decides nothing about the cleaner", async () => {
+    it("does not run Quality's photo review while Quality is unreleased, on any plan", async () => {
       const { t, as, companyId } = await setup();
       const visit = await visitWithPhotos(t, as, companyId);
       process.env.ANTHROPIC_API_KEY = "test";
-      const review = { photos: [{ label: "before 1", visible: "Cluttered counter", notVisible: "Sink" }], checklist: [{ item: "Wipe the kitchen counters", status: "visible_done", evidence: "after 2 shows a clear counter" }], insufficientEvidence: ["Bathrooms are not in any photo"], summary: "Counters look wiped; bathrooms are not shown." };
-      respond = (call) => (call.url.startsWith("https://api.anthropic.com/") ? json(200, { id: "msg_1", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [{ type: "text", text: JSON.stringify(review) }], stop_reason: "end_turn", stop_sequence: null, usage: { input_tokens: 900, output_tokens: 120 } }) : json(404, {}));
-      mockChat.script = [{ toolCalls: [{ name: "review_visit_photos", input: { jobId: visit.jobId } }] }, { text: "The counters look done; the bathrooms are not shown." }];
+      mockChat.script = [{ toolCalls: [{ name: "review_visit_photos", input: { jobId: visit.jobId } }] }, { text: "Photo review is not available yet." }];
       const sent = await as.mutation(api.chat.send, { companyId, text: "Check the photos from this visit.", clientKey: key() });
       await settle(t);
       const view = await as.query(api.chat.thread, { companyId, conversationId: sent.conversationId });
-      const step = Object.values(view.steps)[0] as { tool: string; status: string; summary: string; agent: string };
-      expect(step).toMatchObject({ tool: "review_visit_photos", status: "done", agent: "quality" });
-      expect(step.summary).toContain("bathrooms are not shown");
-      const request = JSON.parse(calls.find((call) => call.url.includes("api.anthropic.com"))!.body);
-      expect(request.model).toBe("claude-sonnet-5-5");
-      expect(request.system).toContain("Do not judge or blame the worker");
-      expect(request.messages[0].content.filter((block: { type: string }) => block.type === "image")).toHaveLength(2);
-      // Nothing about the cleaner or the visit changed.
-      const after = await t.run(async (ctx) => ({ cleaner: await ctx.db.get(visit.cleanerId), tasks: await ctx.db.query("tasks").collect() }));
-      expect(after.cleaner?.status).toBe("ready");
-      expect(after.tasks.filter((task) => task.agent === "dispatch" && /quality|photo/i.test(task.title))).toEqual([]);
-      expect((await t.run((ctx) => ctx.db.query("aiUsage").collect())).map((row) => row.feature)).toContain("photo_review");
+      // Not offered to the model, refused when asked for anyway, and no photo reached a provider.
+      expect(Object.values(view.steps)).toEqual([]);
+      expect(calls.filter((call) => call.url.includes("api.anthropic.com"))).toEqual([]);
+      expect((await t.run((ctx) => ctx.db.query("aiUsage").collect())).map((row) => row.feature)).not.toContain("photo_review");
+      const tools = await t.run(async (ctx) => (await import("./lib/chat/tools")).toolSpecs("owner", (await ctx.db.get(companyId))!).map((tool) => tool.name));
+      expect(tools).not.toContain("review_visit_photos");
+      expect(tools).not.toContain("request_creative");
     });
   });
 
@@ -289,7 +282,7 @@ describe("the AI layer", () => {
       process.env.OPENAI_API_KEY = "test";
       respond = (call) => (call.url === "https://api.openai.com/v1/images/generations" ? json(200, { data: [{ b64_json: PNG, revised_prompt: "A tidy kitchen" }], usage: { input_tokens: 20, output_tokens: 4000 } }) : json(404, {}));
       const jobId = await as.mutation(api.creative.generate, { companyId, kind: "image_generate", prompt: "A tidy kitchen illustration", params: { size: "1024x1024" } });
-      expect((await as.query(api.creative.allowance, { companyId })).images).toMatchObject({ used: 0, reserved: 1, limit: 40 });
+      expect((await as.query(api.creative.allowance, { companyId })).images).toMatchObject({ used: 0, reserved: 1, limit: 150 });
       await settle(t);
       const job = await t.run((ctx) => ctx.db.get(jobId));
       expect(job).toMatchObject({ state: "completed", provider: "openai", model: "gpt-image-2.6-sunburst" });
@@ -379,7 +372,7 @@ describe("the AI layer", () => {
       const [video] = (await as.query(api.creative.library, { companyId, paginationOpts: { numItems: 10, cursor: null } })).page;
       expect(video).toMatchObject({ kind: "video", origin: "generated" });
       expect(video.generation?.provenance).toMatch(/SynthID/);
-      expect((await as.query(api.creative.allowance, { companyId })).videos).toMatchObject({ used: 1, reserved: 0, limit: 4 });
+      expect((await as.query(api.creative.allowance, { companyId })).videos).toMatchObject({ used: 1, reserved: 0, limit: 15 });
     });
 
     it("stops a queued job before anything is sent, and gives its allowance back", async () => {

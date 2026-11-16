@@ -112,6 +112,8 @@ export const aiTables = {
   mediaJobs: defineTable({
     companyId: v.id("companies"),
     requestedBy: v.id("members"),
+    /** The credits held for this generation (convex/lib/billing). */
+    executionId: v.optional(v.id("aiExecutions")),
     kind: v.union(v.literal("image_generate"), v.literal("image_edit"), v.literal("video_generate")),
     capability: capabilityValidator,
     provider: v.string(),

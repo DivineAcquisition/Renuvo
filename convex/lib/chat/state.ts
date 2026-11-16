@@ -82,23 +82,13 @@ export function monthOf(at: number): string {
   return new Date(at).toISOString().slice(0, 7);
 }
 
-export type Plan = "growth" | "scale";
-
-/** Chat answers per company per month, by plan (the owner's decision, November 16, 2026). */
-export const CHAT_ANSWERS_PER_MONTH: Record<Plan, number> = { growth: 300, scale: 1000 };
-
-export function planOf(company: Doc<"companies">): Plan {
-  return company.plan ?? "growth";
-}
-
 /**
- * This company's monthly allowance. CHAT_MONTHLY_RUNS on the deployment overrides every plan, for an
- * emergency cap or a test; normally it is unset.
+ * Chat answers are paid for with Selestial Credits (convex/lib/billing). CHAT_MONTHLY_RUNS, when set on
+ * the deployment, is an emergency cap on answers per company per month; normally it is unset.
  */
-export function monthlyRunAllowance(company: Doc<"companies">): number {
+export function monthlyRunAllowance(): number | null {
   const raw = Number(process.env.CHAT_MONTHLY_RUNS);
-  if (Number.isInteger(raw) && raw > 0) return raw;
-  return CHAT_ANSWERS_PER_MONTH[planOf(company)];
+  return Number.isInteger(raw) && raw > 0 ? raw : null;
 }
 
 export async function usageRow(ctx: Ctx, companyId: Id<"companies">, month: string) {
