@@ -53,6 +53,9 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("interviews"), id: v.id("interviews") }),
   v.object({ table: v.literal("hiringOffers"), id: v.id("hiringOffers") }),
   v.object({ table: v.literal("onboardingHandoffs"), id: v.id("onboardingHandoffs") }),
+  // Company Chat (convex/lib/chat/schema.ts).
+  v.object({ table: v.literal("chatArtifacts"), id: v.id("chatArtifacts") }),
+  v.object({ table: v.literal("companyKnowledge"), id: v.id("companyKnowledge") }),
 );
 export type Subject = typeof subjectValidator.type;
 

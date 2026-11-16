@@ -5,6 +5,8 @@
  */
 import { v } from "convex/values";
 
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyQuery, ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
@@ -78,7 +80,7 @@ function checkedCriteria(criteria: Criterion[], questions: Question[], coverageA
   });
 }
 
-function checked(args: { [K in keyof typeof needFields]?: unknown } & Record<string, unknown>) {
+export function checkedNeed(args: { [K in keyof typeof needFields]?: unknown } & Record<string, unknown>) {
   const input = args as {
     title: string; titleAliases?: string[]; responsibilities: string; serviceTypes?: string[]; location: string; coverageAreas?: string[]; requiredAvailability: string; requiredSkills?: string[];
     experience?: string; equipment?: string; engagement: "contractor" | "employee"; openings: number; targetStartAt?: number; questions?: Question[]; criteria?: Criterion[]; interviewProcess?: string;
@@ -136,13 +138,21 @@ export const get = companyQuery({
   },
 });
 
+/**
+ * Opens a role for the Owner. Company Chat calls this too, after the Owner approves the exact role in the
+ * chat; either way the role opens with no pay, which the Owner approves separately.
+ */
+export async function openNeed(ctx: MutationCtx, companyId: Id<"companies">, member: Doc<"members">, args: Parameters<typeof checkedNeed>[0] & { fromTaskId?: Id<"tasks"> }): Promise<Id<"hiringNeeds">> {
+  const needId = await ctx.db.insert("hiringNeeds", { companyId, ...checkedNeed(args), status: "open", fromTaskId: args.fromTaskId, createdBy: member._id, createdAt: Date.now() });
+  await recordEvent(ctx, { companyId, type: "hiring_need.opened", actor: { kind: "member", memberId: member._id }, subject: { table: "hiringNeeds", id: needId }, data: { fromDispatchRequest: Boolean(args.fromTaskId) } });
+  return needId;
+}
+
 export const create = ownerMutation({
   args: needFields,
   handler: async (ctx, args) => {
     if (args.fromTaskId) await owned(ctx, args.fromTaskId);
-    const needId = await ctx.db.insert("hiringNeeds", { companyId: ctx.companyId, ...checked(args), status: "open", fromTaskId: args.fromTaskId, createdBy: ctx.member._id, createdAt: Date.now() });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "hiring_need.opened", actor: byMember(ctx), subject: { table: "hiringNeeds", id: needId }, data: { fromDispatchRequest: Boolean(args.fromTaskId) } });
-    return needId;
+    return openNeed(ctx, ctx.companyId, ctx.member, args);
   },
 });
 
@@ -150,7 +160,7 @@ export const update = ownerMutation({
   args: { needId: v.id("hiringNeeds"), ...needFields },
   handler: async (ctx, args) => {
     const need = await owned(ctx, args.needId);
-    await ctx.db.patch(need._id, checked(args));
+    await ctx.db.patch(need._id, checkedNeed(args));
     await recordEvent(ctx, { companyId: ctx.companyId, type: "hiring_need.changed", actor: byMember(ctx), subject: { table: "hiringNeeds", id: need._id } });
     return null;
   },

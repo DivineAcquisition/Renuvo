@@ -60,6 +60,13 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "interviews", index: "by_company_application" },
   { table: "hiringOffers", index: "by_company_application" },
   { table: "onboardingHandoffs", index: "by_company_status" },
+  // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
+  { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
+  { table: "chatActionSteps", index: "by_company_key" },
+  { table: "chatArtifacts", index: "by_company_creator_updated" },
+  { table: "chatArtifactVersions", index: "by_company_artifact_version" },
+  { table: "companyKnowledge", index: "by_company_status" },
+  { table: "chatUsage", index: "by_company_month" },
 ];
 
 /** Company tables kept out of the export, and why. */
@@ -67,6 +74,9 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
   sendIntents: "Internal bookkeeping for the sending check: the same facts are in each message and in the event log.",
+  conversations: "Chats are private to the member who wrote them until sharing exists; what a chat did to the business is exported as chatActionSteps, and its drafts as chatArtifacts.",
+  chatUploads: "Internal file references for chat attachments; the files themselves are private to the member who uploaded them.",
+  chatMessages: "The words of private chats, for the same reason as conversations.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 
