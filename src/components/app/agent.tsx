@@ -1,5 +1,6 @@
+import Image from "next/image";
+
 import { CheckCircle2, Hand, Hourglass, LightningIcon, PauseCircleIcon, type LucideIcon } from "@/components/icons";
-import { AGENT_ICON } from "@/lib/marketing/agents";
 import { cn } from "@/lib/utils";
 
 import type { AgentState } from "../../../convex/overview";
@@ -18,23 +19,29 @@ export const STATE: Record<AgentState, { label: string; dot: string; pulse: bool
   not_built: { label: "Not built yet", dot: "bg-border", pulse: false, icon: null },
 };
 
-/** An agent's tile with a dot for its state. The dot breathes only while the agent is acting or waiting on you. */
-export function AgentAvatar({ agent, state, size = "md" }: { agent: AgentId; state?: AgentState; size?: "xs" | "sm" | "md" | "lg" }) {
-  const Icon = AGENT_ICON[agent];
+const PIXELS = { xs: 20, sm: 28, md: 36, lg: 44 } as const;
+
+/** Where an agent's portrait is served from: the same faces the public site uses. */
+export function agentPortrait(agent: AgentId): string {
+  return `/agents/${agent}.webp`;
+}
+
+/**
+ * An agent's face with a dot for its state. The dot breathes only while the agent is acting or waiting on
+ * you. Decorative: the agent's name is always written beside it. An agent not built yet is shown faded.
+ */
+export function AgentAvatar({ agent, state, size = "md" }: { agent: AgentId; state?: AgentState; size?: keyof typeof PIXELS }) {
   const look = state ? STATE[state] : null;
+  const pixels = PIXELS[size];
   return (
-    <span
-      className={cn(
-        "relative flex shrink-0 items-center justify-center rounded-lg border bg-brand-500/10 text-brand-300",
-        state === "not_built" ? "border-dashed border-border bg-muted text-muted-foreground" : "border-brand-500/30",
-        size === "xs" && "size-5 rounded-md",
-        size === "sm" && "size-7",
-        size === "md" && "size-9",
-        size === "lg" && "size-11 rounded-xl",
-      )}
-      aria-hidden
-    >
-      <Icon className={cn(size === "xs" ? "size-3" : size === "sm" ? "size-3.5" : size === "md" ? "size-4" : "size-5")} />
+    <span className={cn("relative inline-flex shrink-0", size === "xs" ? "size-5" : size === "sm" ? "size-7" : size === "md" ? "size-9" : "size-11")} aria-hidden data-agent-avatar={agent}>
+      <Image
+        src={agentPortrait(agent)}
+        alt=""
+        width={pixels * 2}
+        height={pixels * 2}
+        className={cn("size-full rounded-full object-cover ring-1", state === "not_built" ? "opacity-50 grayscale ring-border" : "ring-brand-500/30")}
+      />
       {look && state !== "not_built" ? (
         <span className={cn("absolute -right-0.5 -top-0.5 rounded-full border-2 border-background", size === "xs" ? "size-2" : "size-2.5", look.dot, look.pulse && "live-pulse")} />
       ) : null}

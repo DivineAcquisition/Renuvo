@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
 
+import { agentPortrait, type AgentId as FacedAgent } from "@/components/app/agent";
 import { LogoMark } from "@/components/brand/logo";
 import {
   BroomIcon,
@@ -72,6 +74,9 @@ const AGENT_ICON: Record<AgentId, LucideIcon> = {
   recruiter: UserPlusIcon,
   "team-coordinator": IdCardIcon,
 };
+
+/** The agents that have a portrait (public/agents). The others keep their icon until they get one. */
+const PORTRAIT: ReadonlySet<AgentId> = new Set<FacedAgent>(["sales", "recruiter", "dispatch", "retention"]);
 
 // ── Remembered state ────────────────────────────────────────────────────────────────────────────────
 
@@ -194,11 +199,16 @@ function AgentRow({ agent, open, active, facts, onToggle, onNavigate }: { agent:
   const built = agent.workflow === "built";
   const here = active.agent === agent.id;
   const badge = agentBadge(agent.id, facts);
+  const portrait = PORTRAIT.has(agent.id) ? agentPortrait(agent.id as FacedAgent) : null;
   const name = (
     <>
-      <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md border", built ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-dashed border-border text-muted-foreground")} aria-hidden>
-        <Icon className="size-3.5" />
-      </span>
+      {portrait ? (
+        <Image src={portrait} alt="" width={48} height={48} aria-hidden className={cn("size-6 shrink-0 rounded-full object-cover ring-1", built ? "ring-brand-500/30" : "opacity-50 grayscale ring-border")} />
+      ) : (
+        <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-md border", built ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-dashed border-border text-muted-foreground")} aria-hidden>
+          <Icon className="size-3.5" />
+        </span>
+      )}
       <span className="min-w-0 flex-1 truncate">{agent.label}</span>
     </>
   );
