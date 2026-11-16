@@ -2,11 +2,13 @@ import { v } from "convex/values";
 
 import { companyQuery, ownerMutation, signedInMutation, signedInQuery } from "./lib/builders";
 import { isTimezone } from "./lib/availability";
+import { acceptTerms, NOT_CURRENT } from "./lib/compliance/agreements";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { roleOf } from "./lib/roles";
 import { agentValidator } from "./lib/statuses";
 import { text } from "./lib/text";
+import { currentVersion } from "./lib/trust/documents";
 
 function timezone(value: string): string {
   const zone = value.trim();
@@ -28,7 +30,7 @@ function setupKey(value: string | undefined): string | undefined {
  * connection) gets the company they already made and nothing new is created.
  */
 export const create = signedInMutation({
-  args: { name: v.string(), timezone: v.string(), setupKey: v.optional(v.string()) },
+  args: { name: v.string(), timezone: v.string(), setupKey: v.optional(v.string()), acceptTerms: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const key = setupKey(args.setupKey);
     if (key !== undefined) {
@@ -38,6 +40,8 @@ export const create = signedInMutation({
         .first();
       if (made) return made._id;
     }
+    // The terms the creator agreed to on the setup screen must be the ones in force now.
+    if (args.acceptTerms !== undefined && args.acceptTerms !== currentVersion("terms").id) throw userError(NOT_CURRENT);
     const now = Date.now();
     const companyId = await ctx.db.insert("companies", {
       name: text(args.name, "Company name", 160),
@@ -49,6 +53,8 @@ export const create = signedInMutation({
     });
     const memberId = await ctx.db.insert("members", { companyId, userId: ctx.userId, email: ctx.email, name: ctx.name, role: "owner", status: "active", createdAt: now });
     await recordEvent(ctx, { companyId, type: "company.created", actor: { kind: "member", memberId }, subject: { table: "companies", id: companyId } });
+    // In the same transaction as the company, so a company never exists without the acceptance it was made with.
+    if (args.acceptTerms !== undefined) await acceptTerms(ctx, { companyId, documentId: args.acceptTerms, memberId, userId: ctx.userId });
     return companyId;
   },
 });

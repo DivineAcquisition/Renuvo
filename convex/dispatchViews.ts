@@ -264,6 +264,7 @@ function nextActionFor(link: Doc<"actionLinks">, state: ReturnType<typeof linkSt
     if (assignment.status !== "offered") return "Nothing: the offer was answered or ended.";
     if (!lastText || lastText.status === "not_sent") return "No text went out. Contact the cleaner and record their answer, or issue the link again.";
     if (lastText.status === "failed" || lastText.status === "unconfirmed") return "The text did not go. Check the number, then issue the link again.";
+    if (lastText.status === "held") return "The text is held for quiet hours. It goes when they end, unless something stops it first.";
     return "Waiting for the cleaner's answer.";
   }
   if (assignment.status !== "accepted") return "Nothing: the cleaner is no longer on this job.";

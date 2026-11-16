@@ -4,6 +4,7 @@
  */
 import { defineSchema, defineTable } from "convex/server";
 
+import { complianceTables } from "./lib/compliance/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
 
@@ -119,6 +120,8 @@ export const checkInValidator = v.object({
 export default defineSchema({
   // ── Selestial staff (convex/lib/trust/staffSchema.ts) ─────────────────────────────────────────────
   ...staffTables,
+  // ── Messaging consent, the compliance profile, agreements (convex/lib/compliance/schema.ts) ──────
+  ...complianceTables,
 
   // ── Public site ────────────────────────────────────────────────────────────────────────────────
   earlyAccessRequests: defineTable({
@@ -160,6 +163,8 @@ export default defineSchema({
     createdBy: v.optional(v.string()),
     /** Chosen by the creator's browser for one setup, so a create that is sent twice makes one company. */
     setupKey: v.optional(v.string()),
+    /** Set only by Selestial staff. While set, nothing is sent for this company. */
+    suspendedAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_creator_setupKey", ["createdBy", "setupKey"]),
 
@@ -432,6 +437,8 @@ export default defineSchema({
       v.literal("offer_withdrawn"),
       v.literal("assignment_ended"),
       v.literal("operator_alert"),
+      /** The answer to a STOP, HELP or START the person texted (convex/inbound.ts). */
+      v.literal("compliance_reply"),
     ),
     cleanerId: v.optional(v.id("cleaners")),
     jobId: v.optional(v.id("jobs")),

@@ -44,6 +44,45 @@ export async function company(t: T, subject: string, name: string) {
   return { as, companyId };
 }
 
+/**
+ * A messaging setup that can text: a sender name, a texting number and an approved registration. In the
+ * product only Selestial staff can mark a registration approved, so tests write it directly. Each
+ * company gets its own number, since inbound texts find the company by it.
+ */
+export async function readyMessaging(t: T, companyId: Id<"companies">, senderName = "Test Cleaning") {
+  return t.run(async (ctx) => {
+    const count = (await ctx.db.query("complianceProfiles").collect()).length;
+    const smsNumber = `+1512555${String(1000 + count).padStart(4, "0")}`;
+    const now = Date.now();
+    await ctx.db.insert("complianceProfiles", {
+      companyId,
+      identity: {},
+      messaging: {
+        senderName,
+        smsNumber,
+        registration: { status: "approved", updatedAt: now, updatedBy: "staff" },
+        quietHours: { start: "21:00", end: "08:00", appliesToOperational: false },
+        frequency: { marketingPerWeek: 2, recruitingPerWeek: 7 },
+      },
+      updatedAt: now,
+    });
+    return smsNumber;
+  });
+}
+
+/** A cleaner's permission for work texts, as their onboarding form would give it. */
+export async function workTextsAllowed(as: ReturnType<T["withIdentity"]>, companyId: Id<"companies">, cleanerId: Id<"cleaners">) {
+  await as.mutation(api.consent.record, {
+    companyId,
+    recipient: { kind: "cleaner", id: cleanerId },
+    channel: "sms",
+    category: "operational",
+    status: "granted",
+    source: "onboarding",
+    evidence: "Signed onboarding form.",
+  });
+}
+
 /** A link secret for tests. It is not a real one: nothing outside the test run is signed with it. */
 export const TEST_LINK_SECRET = "test-only-secret-for-action-links-0123456789";
 
@@ -129,6 +168,7 @@ export async function dispatchCleaner(
   });
   await as.mutation(api.cleaners.setStatus, { companyId, cleanerId, status: "ready" });
   await as.mutation(api.availability.setWeek, { companyId, cleanerId, windows: [{ weekday: TUESDAY, startMinute: 8 * 60, endMinute: 17 * 60 }] });
+  await workTextsAllowed(as, companyId, cleanerId);
   if (employee) await as.mutation(api.cleaners.setPay, { companyId, cleanerId, pay: { kind: "hourly", hourlyCents: options.hourlyCents! } });
   else if (options.shareBps !== null) await as.mutation(api.cleaners.setPay, { companyId, cleanerId, pay: { kind: "share", shareBps: options.shareBps ?? 5000 } });
   return cleanerId;

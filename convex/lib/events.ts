@@ -33,6 +33,12 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("messages"), id: v.id("messages") }),
   v.object({ table: v.literal("actionLinks"), id: v.id("actionLinks") }),
   v.object({ table: v.literal("coverageRequests"), id: v.id("coverageRequests") }),
+  // Messaging consent and the compliance profile (convex/lib/compliance/schema.ts).
+  v.object({ table: v.literal("complianceProfiles"), id: v.id("complianceProfiles") }),
+  v.object({ table: v.literal("consentDisclosures"), id: v.id("consentDisclosures") }),
+  v.object({ table: v.literal("contactPermissions"), id: v.id("contactPermissions") }),
+  v.object({ table: v.literal("suppressions"), id: v.id("suppressions") }),
+  v.object({ table: v.literal("agreementAcceptances"), id: v.id("agreementAcceptances") }),
 );
 export type Subject = typeof subjectValidator.type;
 

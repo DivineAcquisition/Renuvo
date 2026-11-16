@@ -14,9 +14,9 @@ import { coverJob } from "./workflow";
 const SYSTEM: Actor = { kind: "system" };
 const DAY = 24 * 60 * 60 * 1000;
 
-/** The provider never took the message, or nobody knows whether it did. */
+/** The provider never took the message, or nobody knows whether it did. A text held for quiet hours has not gone either. */
 export function neverReached(message: Doc<"messages"> | null): boolean {
-  return message !== null && (message.status === "failed" || message.status === "unconfirmed" || message.status === "queued" || message.status === "sending");
+  return message !== null && (message.status === "failed" || message.status === "unconfirmed" || message.status === "queued" || message.status === "held" || message.status === "sending");
 }
 
 async function contactHandoff(ctx: MutationCtx, message: Doc<"messages">, what: string) {

@@ -8,11 +8,14 @@
  * @module
  */
 
+import type * as agreements from "../agreements.js";
 import type * as approvals from "../approvals.js";
 import type * as assignments from "../assignments.js";
 import type * as availability from "../availability.js";
 import type * as cleaners from "../cleaners.js";
 import type * as companies from "../companies.js";
+import type * as compliance from "../compliance.js";
+import type * as consent from "../consent.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as details from "../details.js";
@@ -22,6 +25,7 @@ import type * as dispatchTools from "../dispatchTools.js";
 import type * as dispatchViews from "../dispatchViews.js";
 import type * as earlyAccess from "../earlyAccess.js";
 import type * as events from "../events.js";
+import type * as inbound from "../inbound.js";
 import type * as invitations from "../invitations.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_access from "../lib/access.js";
@@ -30,6 +34,12 @@ import type * as lib_assessment from "../lib/assessment.js";
 import type * as lib_authority from "../lib/authority.js";
 import type * as lib_availability from "../lib/availability.js";
 import type * as lib_builders from "../lib/builders.js";
+import type * as lib_compliance_agreements from "../lib/compliance/agreements.js";
+import type * as lib_compliance_ledger from "../lib/compliance/ledger.js";
+import type * as lib_compliance_permissions from "../lib/compliance/permissions.js";
+import type * as lib_compliance_profile from "../lib/compliance/profile.js";
+import type * as lib_compliance_readiness from "../lib/compliance/readiness.js";
+import type * as lib_compliance_recipients from "../lib/compliance/recipients.js";
 import type * as lib_departments from "../lib/departments.js";
 import type * as lib_dispatch_assignmentState from "../lib/dispatch/assignmentState.js";
 import type * as lib_dispatch_coverage from "../lib/dispatch/coverage.js";
@@ -58,6 +68,7 @@ import type * as lib_guard from "../lib/guard.js";
 import type * as lib_invitationTerms from "../lib/invitationTerms.js";
 import type * as lib_invitations from "../lib/invitations.js";
 import type * as lib_messaging_outbox from "../lib/messaging/outbox.js";
+import type * as lib_messaging_policy from "../lib/messaging/policy.js";
 import type * as lib_messaging_provider from "../lib/messaging/provider.js";
 import type * as lib_permissionCatalog from "../lib/permissionCatalog.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
@@ -66,6 +77,7 @@ import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_taskState from "../lib/taskState.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_time from "../lib/time.js";
+import type * as lib_trust_documents from "../lib/trust/documents.js";
 import type * as lib_trust_staffSchema from "../lib/trust/staffSchema.js";
 import type * as links from "../links.js";
 import type * as members from "../members.js";
@@ -83,11 +95,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agreements: typeof agreements;
   approvals: typeof approvals;
   assignments: typeof assignments;
   availability: typeof availability;
   cleaners: typeof cleaners;
   companies: typeof companies;
+  compliance: typeof compliance;
+  consent: typeof consent;
   crons: typeof crons;
   customers: typeof customers;
   details: typeof details;
@@ -97,6 +112,7 @@ declare const fullApi: ApiFromModules<{
   dispatchViews: typeof dispatchViews;
   earlyAccess: typeof earlyAccess;
   events: typeof events;
+  inbound: typeof inbound;
   invitations: typeof invitations;
   jobs: typeof jobs;
   "lib/access": typeof lib_access;
@@ -105,6 +121,12 @@ declare const fullApi: ApiFromModules<{
   "lib/authority": typeof lib_authority;
   "lib/availability": typeof lib_availability;
   "lib/builders": typeof lib_builders;
+  "lib/compliance/agreements": typeof lib_compliance_agreements;
+  "lib/compliance/ledger": typeof lib_compliance_ledger;
+  "lib/compliance/permissions": typeof lib_compliance_permissions;
+  "lib/compliance/profile": typeof lib_compliance_profile;
+  "lib/compliance/readiness": typeof lib_compliance_readiness;
+  "lib/compliance/recipients": typeof lib_compliance_recipients;
   "lib/departments": typeof lib_departments;
   "lib/dispatch/assignmentState": typeof lib_dispatch_assignmentState;
   "lib/dispatch/coverage": typeof lib_dispatch_coverage;
@@ -133,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invitationTerms": typeof lib_invitationTerms;
   "lib/invitations": typeof lib_invitations;
   "lib/messaging/outbox": typeof lib_messaging_outbox;
+  "lib/messaging/policy": typeof lib_messaging_policy;
   "lib/messaging/provider": typeof lib_messaging_provider;
   "lib/permissionCatalog": typeof lib_permissionCatalog;
   "lib/rateLimit": typeof lib_rateLimit;
@@ -141,6 +164,7 @@ declare const fullApi: ApiFromModules<{
   "lib/taskState": typeof lib_taskState;
   "lib/text": typeof lib_text;
   "lib/time": typeof lib_time;
+  "lib/trust/documents": typeof lib_trust_documents;
   "lib/trust/staffSchema": typeof lib_trust_staffSchema;
   links: typeof links;
   members: typeof members;

@@ -8,21 +8,55 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { internalAction, internalMutation, type MutationCtx } from "./_generated/server";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
 import { linkPath, linkState, siteOrigin, tokenFor } from "./lib/dispatch/links";
 import { recordEvent } from "./lib/events";
+import type { SendIntent } from "./lib/messaging/outbox";
+import { checkSend } from "./lib/messaging/policy";
 import { messagingProvider } from "./lib/messaging/provider";
 
 const MAX_ATTEMPTS = 3;
 const STUCK_AFTER = 5 * 60 * 1000;
 
-/** Takes a queued message for sending. Null means there is nothing to send: someone else has it, or it was withdrawn. */
+/**
+ * What a message was planned for. A message planned before the sending policy existed has no row, and
+ * is read as what every such message was: a Dispatch text about work, to its cleaner.
+ */
+async function intentOf(ctx: MutationCtx, message: Doc<"messages">): Promise<SendIntent> {
+  const row = await ctx.db
+    .query("sendIntents")
+    .withIndex("by_message", (q) => q.eq("messageId", message._id))
+    .first();
+  if (row) return { category: row.category, origin: row.origin, agent: row.agent, recipient: row.recipient, reply: row.reply };
+  return { category: "operational", origin: "dispatch", ...(message.cleanerId ? { recipient: { kind: "cleaner" as const, id: message.cleanerId } } : {}) };
+}
+
+/**
+ * Takes a queued or held message for sending. Null means there is nothing to send: someone else has it,
+ * it was withdrawn, or the sending policy refused it or held it again.
+ */
 export const claim = internalMutation({
   args: { messageId: v.id("messages") },
   handler: async (ctx, args) => {
     const message = await ctx.db.get(args.messageId);
-    if (!message || message.status !== "queued" || !message.to) return null;
+    if (!message || (message.status !== "queued" && message.status !== "held") || !message.to) return null;
+    // The policy is asked again now: a STOP, a withdrawn permission, a suspension or a pause that came
+    // after the message was planned stops it here. A refusal is final; only "not yet" holds it again.
+    const answer = await checkSend(ctx, { companyId: message.companyId, channel: "sms", to: message.to, now: Date.now(), messageId: message._id, ...(await intentOf(ctx, message)) });
+    if (!answer.ok) {
+      const subject = { table: "messages" as const, id: message._id };
+      if (answer.retryAt !== undefined) {
+        await ctx.db.patch(message._id, { status: "held", problem: answer.words });
+        await ctx.scheduler.runAt(answer.retryAt, internal.messaging.deliver, { messageId: message._id });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code, retryAt: answer.retryAt } });
+        return null;
+      }
+      await ctx.db.patch(message._id, { status: "not_sent", problem: answer.words });
+      await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code } });
+      return null;
+    }
     let body = message.body;
     if (message.linkId) {
       const link = await ctx.db.get(message.linkId);

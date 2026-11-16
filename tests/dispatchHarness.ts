@@ -4,7 +4,7 @@ import { vi } from "vitest";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { mockOutbox } from "../convex/lib/messaging/provider";
-import { company, dispatchCleaner, dispatchJob, dispatchPlace, HOUR, JOB_END, JOB_START, NOW, start, type T } from "./harness";
+import { company, dispatchCleaner, dispatchJob, dispatchPlace, HOUR, JOB_END, JOB_START, NOW, readyMessaging, start, type T } from "./harness";
 
 export type As = ReturnType<T["withIdentity"]>;
 
@@ -32,6 +32,8 @@ export const PHONES = { Lena: "+15550101010", Rosa: "+15550102020", Mia: "+15550
 export async function setup(names: (keyof typeof PHONES)[] = ["Lena", "Rosa"], phones: Partial<Record<keyof typeof PHONES, string | null>> = {}) {
   const t = start();
   const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+  // Texting is set up and approved, and every cleaner made by dispatchCleaner agreed to work texts.
+  const smsNumber = await readyMessaging(t, companyId, "Alpha Cleaning");
   const place = await dispatchPlace(as, companyId);
   const cleaners = {} as Record<keyof typeof PHONES, Id<"cleaners">>;
   const phone = {} as Record<keyof typeof PHONES, string>;
@@ -50,7 +52,7 @@ export async function setup(names: (keyof typeof PHONES)[] = ["Lena", "Rosa"], p
   const record = (jobId: Id<"jobs">) => as.query(api.dispatchViews.jobRecord, { companyId, jobId });
   const board = async (jobId: Id<"jobs">) => (await as.query(api.dispatchViews.board, { companyId, from: JOB_START - 24 * HOUR, to: JOB_END + 24 * HOUR })).jobs.find((row) => row.jobId === jobId)!;
   const tasks = (status: "open" | "waiting" | "needs_decision" | "done" | "cancelled", agent: "dispatch" | "recruiter" = "dispatch") => as.query(api.tasks.list, { companyId, status, agent });
-  return { t, as, companyId, place, cleaners, phone, allow, autonomous, job, record, board, tasks };
+  return { t, as, companyId, smsNumber, place, cleaners, phone, allow, autonomous, job, record, board, tasks };
 }
 
 /** A job taken to an accepted cleaner through the texted link, with the cleaner's job token. */

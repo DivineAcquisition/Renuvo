@@ -98,13 +98,16 @@ export const crewRoleValidator = literals(CREW_ROLES);
  * One outbound message. queued: planned. sending: handed to the provider, outcome not known yet.
  * sent: the provider accepted it. delivered: the provider confirmed the handset got it. failed: it did
  * not go. unconfirmed: a send was started and never settled, so nobody knows; it is not sent again
- * without a person. not_sent: there was nothing to send to, or messaging is not connected.
+ * without a person. not_sent: there was nothing to send to, messaging is not connected, or the sending
+ * policy (convex/lib/messaging/policy.ts) refused it. held: the policy said not yet (quiet hours), and it
+ * is planned for the end of that window, when the policy is asked again.
  */
-export const MESSAGE_STATUSES = ["queued", "sending", "sent", "delivered", "failed", "unconfirmed", "not_sent"] as const;
+export const MESSAGE_STATUSES = ["queued", "held", "sending", "sent", "delivered", "failed", "unconfirmed", "not_sent"] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 export const messageStatusValidator = literals(MESSAGE_STATUSES);
 export const MESSAGE_CHANGES: Record<MessageStatus, readonly MessageStatus[]> = {
-  queued: ["sending", "not_sent", "failed"],
+  queued: ["sending", "held", "not_sent", "failed"],
+  held: ["sending", "not_sent", "failed"],
   sending: ["sent", "delivered", "failed", "queued", "unconfirmed"],
   sent: ["delivered", "failed"],
   delivered: [],
