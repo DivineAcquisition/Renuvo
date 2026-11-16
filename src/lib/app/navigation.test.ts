@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { AGENT_PROFILES, DEPARTMENTS as BACKEND_DEPARTMENTS } from "../../../convex/lib/departments";
 import { AGENTS as BACKEND_AGENTS } from "../../../convex/lib/statuses";
-import { AGENT_IDS, AGENTS, APP_ROOT, BADGE_KINDS, CHAT_PAGES, DEFAULT_DEPARTMENT, DEPARTMENT_IDS, DEPARTMENTS, EXISTING_ROUTES, FOOTER_ITEMS, LANDING_PATH, NAV_ITEMS, PERSISTENT_ITEMS, SETTINGS_PAGES, SHARED_ITEMS, SIDEBAR_SECTIONS, type Badge } from "./navigation";
+import { AGENT_IDS, AGREEMENT_PAGES, AGENTS, APP_ROOT, BADGE_KINDS, CHAT_PAGES, DEFAULT_DEPARTMENT, DEPARTMENT_IDS, DEPARTMENTS, EXISTING_ROUTES, FOOTER_ITEMS, LANDING_PATH, NAV_ITEMS, PERSISTENT_ITEMS, SETTINGS_PAGES, SHARED_ITEMS, SIDEBAR_SECTIONS, type Badge } from "./navigation";
 import {
   activeFor,
   agentsIn,
@@ -84,7 +84,7 @@ describe("the navigation definition", () => {
     expect(SIDEBAR_SECTIONS).toEqual(["business", "departments", "persistent", "agents", "shared", "footer"]);
     expect(PERSISTENT_ITEMS.map((item) => item.label)).toEqual(["Home", "Approvals", "Inbox", "Search"]);
     // Integrations joined Company on the owner's request of November 16, 2026; Chat leads Company the same day.
-    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Chat", "Customers & Properties", "Cleaners", "Finance", "Reports", "Integrations"]);
+    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Chat", "Customers & Properties", "Cleaners", "Agreements", "Finance", "Reports", "Integrations"]);
     expect(FOOTER_ITEMS.map((item) => item.label)).toEqual(["Settings"]);
   });
 
@@ -183,7 +183,7 @@ describe("what is available today", () => {
       .filter((row) => row.destination.availability.status === "live" || (row.destination.availability.status === "planned" && row.destination.availability.notice))
       .map((row) => row.destination.path);
     for (const pattern of APP_PAGES) {
-      const known = live.includes(pattern) || EXISTING_ROUTES.some((route) => route.pattern === pattern) || SETTINGS_PAGES.some((page) => page.path === pattern) || CHAT_PAGES.some((page) => page.path === pattern);
+      const known = live.includes(pattern) || EXISTING_ROUTES.some((route) => route.pattern === pattern) || SETTINGS_PAGES.some((page) => page.path === pattern) || CHAT_PAGES.some((page) => page.path === pattern) || AGREEMENT_PAGES.some((page) => page.path === pattern);
       expect(known, `${pattern} is a page that the navigation does not account for`).toBe(true);
     }
     for (const route of EXISTING_ROUTES) expect(APP_PAGES, route.pattern).toContain(route.pattern);
@@ -291,6 +291,7 @@ describe("navigation behavior", () => {
     // Chat is a company destination, never an agent's tab.
     for (const agent of AGENTS) expect(agent.tabs.some((tab) => /chat/i.test(tab.label))).toBe(false);
     for (const page of CHAT_PAGES) expect(APP_PAGES, page.path).toContain(page.path);
+    for (const page of AGREEMENT_PAGES) expect(APP_PAGES, page.path).toContain(page.path);
   });
 
   it("highlights the right thing on today's pages", () => {

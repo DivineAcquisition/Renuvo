@@ -67,6 +67,15 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "chatArtifactVersions", index: "by_company_artifact_version" },
   { table: "companyKnowledge", index: "by_company_status" },
   { table: "chatUsage", index: "by_company_month" },
+  // Company agreements (convex/lib/agreements/schema.ts). The export is the Owner's, so restricted documents are included.
+  { table: "agreements", index: "by_company_updated" },
+  { table: "agreementVersions", index: "by_company_agreement_version" },
+  { table: "agreementLinks", index: "by_company_agreement" },
+  { table: "agreementComments", index: "by_company_agreement" },
+  { table: "agreementTemplates", index: "by_company_status" },
+  { table: "agreementTemplateVersions", index: "by_company_template_version" },
+  { table: "agreementFiles", index: "by_company_created", omit: ["storageId"], why: "Internal file references. The original files themselves are not in the file." },
+  { table: "agreementSignatureRequests", index: "by_company_agreement", omit: ["signedFileId", "providerRequestId"], why: "Internal file and provider references." },
 ];
 
 /** Company tables kept out of the export, and why. */

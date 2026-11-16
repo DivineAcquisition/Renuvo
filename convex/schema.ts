@@ -4,6 +4,7 @@
  */
 import { defineSchema, defineTable } from "convex/server";
 
+import { agreementTables } from "./lib/agreements/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
 import { trustTables } from "./lib/trust/schema";
@@ -645,6 +646,7 @@ export default defineSchema({
 
   // ── Company Chat: conversations, runs, action receipts, drafts and confirmed knowledge ─────────
   ...chatTables,
+  ...agreementTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

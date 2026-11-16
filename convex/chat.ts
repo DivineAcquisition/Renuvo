@@ -10,6 +10,8 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { companyMutation, companyQuery, ownerMutation, staffMutation, type MemberAccess } from "./lib/builders";
+import { mayRead } from "./lib/agreements/access";
+import { DOC_TYPE_BY_KEY } from "./lib/agreements/catalog";
 import { readableArtifact } from "./lib/chat/artifacts";
 import type { ContextRef } from "./lib/chat/schema";
 import { isLive, lastSeq, latestRun, monthlyRunAllowance, monthOf, ownConversation, planOf, usageRow } from "./lib/chat/state";
@@ -307,9 +309,11 @@ export const thread = companyQuery({
     ).reverse();
     const stepIds = new Set<Id<"chatActionSteps">>();
     const artifactIds = new Set<Id<"chatArtifacts">>();
+    const agreementIds = new Set<Id<"agreements">>();
     for (const message of messages) for (const part of message.parts ?? []) {
       if (part.kind === "step") stepIds.add(part.stepId);
       if (part.kind === "artifact") artifactIds.add(part.artifactId);
+      if (part.kind === "agreement") agreementIds.add(part.agreementId);
     }
     const steps: Record<string, unknown> = {};
     for (const stepId of stepIds) {
@@ -321,6 +325,12 @@ export const thread = companyQuery({
       const artifact = await ctx.db.get(artifactId);
       if (artifact && artifact.createdBy === ctx.member._id) artifacts[artifactId] = { artifactId, title: artifact.title, kind: artifact.kind, state: artifact.state, currentVersion: artifact.currentVersion };
     }
+    // An agreement card is shown only to someone who may read that document today; to anyone else it is not there.
+    const agreements: Record<string, unknown> = {};
+    for (const agreementId of agreementIds) {
+      const agreement = await ctx.db.get(agreementId);
+      if (agreement && agreement.companyId === ctx.companyId && mayRead(ctx.role, agreement.access)) agreements[agreementId] = { agreementId, title: agreement.title, workflow: agreement.workflow, currentVersion: agreement.currentVersion, typeLabel: DOC_TYPE_BY_KEY.get(agreement.docType)?.label ?? agreement.docType };
+    }
     const run = await latestRun(ctx, conversation);
     return {
       conversation: sessionRow(conversation),
@@ -328,6 +338,7 @@ export const thread = companyQuery({
       messages: messages.map((message) => ({ messageId: message._id, role: message.role, status: message.status, text: message.text ?? null, parts: message.parts ?? [], contextRefs: message.contextRefs ?? [], attachments: (message.attachments ?? []).map((file) => ({ name: file.name, size: file.size, state: file.state, note: file.note ?? null })), createdAt: message.createdAt })),
       steps,
       artifacts,
+      agreements,
     };
   },
 });

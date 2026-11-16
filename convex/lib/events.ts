@@ -53,6 +53,11 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("interviews"), id: v.id("interviews") }),
   v.object({ table: v.literal("hiringOffers"), id: v.id("hiringOffers") }),
   v.object({ table: v.literal("onboardingHandoffs"), id: v.id("onboardingHandoffs") }),
+  // Company agreements (convex/lib/agreements/schema.ts).
+  v.object({ table: v.literal("agreements"), id: v.id("agreements") }),
+  v.object({ table: v.literal("agreementTemplates"), id: v.id("agreementTemplates") }),
+  v.object({ table: v.literal("agreementSignatureRequests"), id: v.id("agreementSignatureRequests") }),
+  v.object({ table: v.literal("agreementFiles"), id: v.id("agreementFiles") }),
   // Company Chat (convex/lib/chat/schema.ts).
   v.object({ table: v.literal("chatArtifacts"), id: v.id("chatArtifacts") }),
   v.object({ table: v.literal("companyKnowledge"), id: v.id("companyKnowledge") }),

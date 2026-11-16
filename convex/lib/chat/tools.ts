@@ -33,6 +33,7 @@ import { createArtifact, readableArtifact, reviseArtifact, setArtifactState, STA
 import { CalcError, evaluate } from "./calc";
 import { check, jsonSchema, stableHash, type Field } from "./fields";
 import { compareScenarios, PricingError, type PricingInput } from "./pricing";
+import { AGREEMENT_TOOLS } from "./agreementTools";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ export type ToolCtx = MutationCtx & {
 export type Preview = { summary: string; lines: string[]; bindsTo: string };
 
 export type Outcome =
-  | { status: "done" | "proposed"; summary: string; data: Record<string, unknown>; link?: Link; record?: RecordRef; artifact?: { artifactId: Id<"chatArtifacts">; version: number } }
+  | { status: "done" | "proposed"; summary: string; data: Record<string, unknown>; link?: Link; record?: RecordRef; artifact?: { artifactId: Id<"chatArtifacts">; version: number }; agreement?: { agreementId: Id<"agreements">; version: number } }
   | { status: "refused" | "unavailable"; why: string; data?: Record<string, unknown> }
   | { status: "needs_approval"; preview: Preview };
 
@@ -869,12 +870,13 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-export const TOOL_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));
-export const ALL_TOOLS: readonly ChatTool[] = TOOLS;
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS];
+export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
+export const ALL_TOOLS: readonly ChatTool[] = ALL;
 
 /** The tools a member with this role is offered. A tool they may not use is not offered, and refused if called anyway. */
 export function toolsFor(role: Role): ChatTool[] {
-  return TOOLS.filter((tool) => tool.kind === "unavailable" || roleAllows(role, tool.minimumRole));
+  return ALL.filter((tool) => tool.kind === "unavailable" || roleAllows(role, tool.minimumRole));
 }
 
 /** The tool definitions a model is given. */

@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
 import { useOfferChatContext } from "@/components/app/chat/chat-context";
 import { useCompany } from "@/components/app/company";
 import { DetailActions } from "@/components/app/detail-actions";
+import { AgreementsForRecord } from "@/components/app/agreements/record";
 import { DetailView } from "@/components/app/detail-view";
 import { useNow } from "@/components/app/use-now";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -39,7 +40,16 @@ function Body({ target, onOpen }: { target: EventRef; onOpen: Open }) {
       </div>
     );
   }
-  return <DetailView detail={detail} now={now} timezone={company.timezone} onOpen={onOpen} actions={<DetailActions detail={detail} now={now} timezone={company.timezone} />} />;
+  return (
+    <>
+      <DetailView detail={detail} now={now} timezone={company.timezone} onOpen={onOpen} actions={<DetailActions detail={detail} now={now} timezone={company.timezone} />} />
+      {target.kind === "job" ? (
+        <div className="border-t border-border px-5 py-4 sm:px-6">
+          <AgreementsForRecord table="jobs" id={target.id} />
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 export function DetailProvider({ children }: { children: React.ReactNode }) {

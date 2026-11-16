@@ -77,6 +77,8 @@ export const partValidator = v.union(
   v.object({ kind: v.literal("text"), text: v.string() }),
   v.object({ kind: v.literal("step"), stepId: v.id("chatActionSteps") }),
   v.object({ kind: v.literal("artifact"), artifactId: v.id("chatArtifacts"), version: v.number() }),
+  /** An agreement in the Agreements workspace. Chat and Agreements show the same record. */
+  v.object({ kind: v.literal("agreement"), agreementId: v.id("agreements"), version: v.number() }),
   v.object({ kind: v.literal("choices"), question: v.string(), options: v.array(v.string()) }),
   v.object({ kind: v.literal("notice"), tone: v.union(v.literal("info"), v.literal("warning"), v.literal("error")), text: v.string() }),
 );

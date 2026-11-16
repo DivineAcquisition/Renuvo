@@ -113,6 +113,7 @@ export const load = internalQuery({
             const step = await ctx.db.get(part.stepId);
             if (step) lines.push(`[Action ${step.tool}: ${step.status}${step.summary ? `. ${step.summary}` : ""}]`);
           } else if (part.kind === "artifact") lines.push(`[Draft ${part.artifactId}, version ${part.version}]`);
+          else if (part.kind === "agreement") lines.push(`[Agreement ${part.agreementId}, version ${part.version}]`);
           else if (part.kind === "choices") lines.push(`${part.question} (choices: ${part.options.join(" / ")})`);
           else lines.push(`[${part.text}]`);
         }

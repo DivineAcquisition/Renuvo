@@ -58,7 +58,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   section("billing", "Plan & billing", "platform", "Selestial's plans and prices. There is no subscription to start yet.", "The Owner only.", ["plan", "subscription", "invoice", "payment", "growth", "scale", "price"], "owner"),
   section("security", "Account security", "platform", "Your sign-in: password, devices and sessions.", "Your own account.", ["password", "two-factor", "2fa", "mfa", "sessions", "sign in", "login"]),
   section("compliance", "Trust & compliance", "trust", "Business identity, messaging registration, consent, quiet hours, data rights and readiness.", "Everyone reads. The Owner changes.", ["legal", "identity", "ein", "consent", "quiet hours", "tcpa", "privacy", "export", "delete", "data", "readiness", "10dlc"]),
-  section("agreements", "Agreements", "trust", "Which version of Selestial's Terms the company accepted, who, and when.", "Everyone reads. The Owner accepts.", ["terms", "accept", "contract", "versions"]),
+  section("agreements", "Selestial Terms & Agreements", "trust", "Which version of Selestial's own Terms the company accepted, who, and when. Your customer and workforce agreements are under Agreements in the main menu.", "Everyone reads. The Owner accepts.", ["terms", "accept", "selestial", "platform", "versions"]),
   section("activity", "Activity log", "trust", "A record of what changed in the company and who changed it.", "The Owner only.", ["audit", "history", "log", "events", "who changed"], "owner"),
 ];
 

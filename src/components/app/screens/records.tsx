@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
+import { AgreementsForRecord } from "@/components/app/agreements/record";
 import { canManage, useCompany } from "@/components/app/company";
 import { FormError, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
@@ -55,6 +56,9 @@ export function CustomersPanel() {
                 <Badge variant="outline" size="sm">
                   {KIND[customer.kind]}
                 </Badge>
+                <div className="basis-full">
+                  <AgreementsForRecord table="customers" id={customer._id} />
+                </div>
               </li>
             ))}
           </ul>
@@ -103,6 +107,7 @@ function CleanerRow({ cleaner }: { cleaner: Doc<"cleaners"> }) {
         </span>
       </div>
       <FormError message={error} />
+      {canManage(role) ? <AgreementsForRecord table="cleaners" id={cleaner._id} title="Workforce documents you can see" /> : null}
     </li>
   );
 }

@@ -46,6 +46,7 @@ async function settle(ctx: MutationCtx, step: Doc<"chatActionSteps">, outcome: O
   } else if (outcome.status === "done" || outcome.status === "proposed") {
     await ctx.db.patch(step._id, { status: outcome.status, summary: outcome.summary, result: JSON.stringify(outcome.data).slice(0, 20_000), link: outcome.link, record: outcome.record, completedAt: now });
     if (outcome.artifact && messageId) await addPart(ctx, messageId, { kind: "artifact", artifactId: outcome.artifact.artifactId, version: outcome.artifact.version });
+    if (outcome.agreement && messageId) await addPart(ctx, messageId, { kind: "agreement", agreementId: outcome.agreement.agreementId, version: outcome.agreement.version });
   }
   return (await ctx.db.get(step._id))!;
 }

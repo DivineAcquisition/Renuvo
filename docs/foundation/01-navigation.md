@@ -161,6 +161,7 @@ Three states describe each destination:
 | Finance | `/app/finance` | **Planned.** Shown to the Owner only. |
 | Reports | `/app/reports` | **Interim** at `/app/insights`. Weekly measures only. |
 | Integrations | `/app/integrations` | **Live** as a list of every integration, what it does and which agents use it. Each connection is built in phases (`docs/integrations/00-plan.md`); none connects yet. |
+| Agreements | `/app/agreements` | **Live.** The company's own customer, workforce and business agreements (`docs/agreements/00-architecture.md`). Selestial's own Terms are under Settings. |
 | Settings | `/app/settings` | **Live.** A routed workspace; its sections are listed in `src/lib/app/settings.ts` and described in `05-settings.md`. |
 
 ### Agent destinations

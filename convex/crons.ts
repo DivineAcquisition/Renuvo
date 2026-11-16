@@ -32,4 +32,9 @@ crons.interval("recruiter removes applicant details past retention", { hours: 24
 // Company Chat: a response whose worker stopped reporting is closed honestly instead of spinning forever.
 crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.chatRuns.sweep, {});
 
+// Agreements: signing requests past their expiry are closed, renewal dates open a task for a person (never a renewal), and abandoned uploads are removed.
+crons.interval("expire agreement signing requests", { minutes: 30 }, internal.agreementSigning.sweep, {});
+crons.daily("remind about agreement renewals and expiries", { hourUTC: 13, minuteUTC: 11 }, internal.agreementRenewals.sweep, {});
+crons.daily("remove abandoned agreement uploads", { hourUTC: 8, minuteUTC: 29 }, internal.agreementFiles.cleanup, {});
+
 export default crons;

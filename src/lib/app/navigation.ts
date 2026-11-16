@@ -87,7 +87,7 @@ export const DEPARTMENTS: readonly Department[] = [
 
 // ── Company-wide items ──────────────────────────────────────────────────────────────────────────────
 
-export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "finance" | "reports" | "integrations" | "settings";
+export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "agreements" | "finance" | "reports" | "integrations" | "settings";
 
 export type NavItem = Destination & {
   id: NavItemId;
@@ -161,6 +161,16 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     accessNote: "Pay rates are shown to the Owner only. A list and an add form so far; a page for each cleaner is still to build.",
   },
   {
+    id: "agreements",
+    label: "Agreements",
+    section: "shared",
+    purpose: "The company's own customer, workforce and business agreements: build them with Selestial, start from a template or upload one, review, send for signature and keep them through renewal.",
+    path: `${APP_ROOT}/agreements`,
+    availability: LIVE,
+    minimumRole: "office",
+    accessNote: "Customer documents are open to everyone who works customers. Workforce documents are the Owner's and Managers', and pay or classification documents are the Owner's alone. Selestial's own terms are under Settings › Selestial Terms & Agreements.",
+  },
+  {
     id: "finance",
     label: "Finance",
     section: "shared",
@@ -209,6 +219,18 @@ export const NAV_ITEMS: readonly NavItem[] = [...PERSISTENT_ITEMS, ...SHARED_ITE
 
 /** Pages inside Settings. They have no sidebar entry: Settings links to them. They are derived from the settings catalog (settings.ts), the one place they are defined. */
 export const SETTINGS_PAGES: readonly { path: string; label: string; purpose: string }[] = SETTINGS_SECTIONS.map(({ path, label, purpose }) => ({ path, label, purpose }));
+
+/** Pages inside Agreements. The first six are its navigation; the rest are reached from them. They have no sidebar entry of their own. */
+export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/agreements/all`, label: "All Agreements", purpose: "Every agreement the person may read, searchable and filterable." },
+  { path: `${APP_ROOT}/agreements/templates`, label: "Templates", purpose: "Selestial's starting texts and the company's own approved templates." },
+  { path: `${APP_ROOT}/agreements/templates/[id]`, label: "Template", purpose: "One company template: its clauses, versions, review and defaults." },
+  { path: `${APP_ROOT}/agreements/awaiting-signatures`, label: "Awaiting Signatures", purpose: "Documents out for signature, with each signer's status." },
+  { path: `${APP_ROOT}/agreements/renewals`, label: "Renewals & Changes", purpose: "Agreements approaching renewal or expiry, and amendments in progress." },
+  { path: `${APP_ROOT}/agreements/archive`, label: "Archive", purpose: "Agreements set aside. They are kept, not deleted." },
+  { path: `${APP_ROOT}/agreements/new`, label: "New agreement", purpose: "Build with Selestial, use a template, or upload an agreement." },
+  { path: `${APP_ROOT}/agreements/[id]`, label: "Agreement", purpose: "One agreement: its document, parties, terms, versions, review and signatures, and activity." },
+];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */
 export const CHAT_PAGES: readonly { path: string; label: string; purpose: string }[] = [

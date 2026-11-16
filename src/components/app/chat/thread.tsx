@@ -33,6 +33,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { newClientKey, money, SPECIALIST_NAMES, STARTERS, STEP_WORDS, toolWords, type StepStatus } from "@/lib/app/chat/session";
+import { WORKFLOW } from "@/lib/app/agreements";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
@@ -42,6 +43,7 @@ type Thread = FunctionReturnType<typeof api.chat.thread>;
 type Message = Thread["messages"][number];
 type Part = Message["parts"][number];
 type Step = { stepId: string; tool: string; agent: string | null; status: StepStatus; summary: string | null; preview: { summary: string; lines: string[] } | null; link: { href: string; label: string } | null; record: { kind: "job" | "approval" | "task"; id: string } | null; result: string | null; mine: boolean };
+type AgreementCardData = { agreementId: string; title: string; workflow: string; currentVersion: number; typeLabel: string };
 type Artifact = { artifactId: string; title: string; kind: string; state: string; currentVersion: number };
 
 // ── Small pieces ─────────────────────────────────────────────────────────────────────────────────
@@ -251,6 +253,28 @@ function WorkLog({ steps }: { steps: Step[] }) {
 
 const ARTIFACT_STATE: Record<string, string> = { draft: "Draft", terms_approved: "Terms approved", sent: "Sent", signed: "Signed" };
 
+/** The agreement a tool wrote: the same record Agreements shows, opened there. */
+function AgreementCard({ agreement, version }: { agreement: AgreementCardData | undefined; version: number }) {
+  if (!agreement) return null;
+  return (
+    <Link href={`/app/agreements/${agreement.agreementId}`} className="group flex w-full items-center gap-3 rounded-xl border border-brand-500/30 bg-card px-3.5 py-3 text-left hover:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-brand-500/30 bg-brand-500/10 text-brand-300" aria-hidden>
+        <FileText className="size-4.5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-strong">{agreement.title}</span>
+        <span className="block text-xs text-muted-foreground">
+          {agreement.typeLabel} · {WORKFLOW[agreement.workflow]?.label ?? agreement.workflow} · version {version}
+          {agreement.currentVersion > version ? ` (now at ${agreement.currentVersion})` : ""}
+        </span>
+      </span>
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-300">
+        Open in Agreements <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </span>
+    </Link>
+  );
+}
+
 function ArtifactCard({ artifact, version }: { artifact: Artifact | undefined; version: number }) {
   const { openArtifact } = useChat();
   if (!artifact) return null;
@@ -351,6 +375,7 @@ function AgentTurn({ message, thread, last, onChoice, onRetry }: { message: Mess
             if (group.kind === "steps") return <WorkLog key={`steps-${index}`} steps={group.steps} />;
             const { part } = group;
             if (part.kind === "text") return part.text.trim() ? <Markdown key={group.index} source={part.text} streaming={streaming && group.index === lastText} /> : null;
+            if (part.kind === "agreement") return <AgreementCard key={group.index} agreement={(thread as { agreements?: Record<string, unknown> }).agreements?.[part.agreementId] as AgreementCardData | undefined} version={part.version} />;
             if (part.kind === "artifact") return <ArtifactCard key={group.index} artifact={thread.artifacts[part.artifactId] as Artifact | undefined} version={part.version} />;
             if (part.kind === "notice") return <NoticeLine key={group.index} tone={part.tone} text={part.text} />;
             if (part.kind === "choices")
