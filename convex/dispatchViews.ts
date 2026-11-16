@@ -16,6 +16,7 @@ import { jobAssignments } from "./lib/dispatch/facts";
 import { linkState } from "./lib/dispatch/links";
 import { affectedLaterJobs, arrivalEndsAt, jobChecklist, jobEvidence } from "./lib/dispatch/live";
 import { dispatchPolicy } from "./lib/dispatch/policy";
+import { dispatchSettings } from "./lib/dispatch/settings";
 import { coverKey, jobApprovals } from "./lib/dispatch/workflow";
 import { liveTaskByKey } from "./lib/taskState";
 
@@ -55,6 +56,21 @@ async function jobRow(ctx: Ctx, job: Doc<"jobs">) {
   const names = new Map<string, string>();
   for (const row of assignments) if (!names.has(row.cleanerId)) names.set(row.cleanerId, (await ctx.db.get(row.cleanerId))?.name ?? "A cleaner");
   const crew = assignments.filter((row) => row.status === "accepted");
+  // The last thing the provider reported for each open offer's text, read once for the job. An offer whose
+  // text did not go is a contact problem to fix, never the cleaner's silence.
+  const texts = assignments.some((row) => row.status === "offered")
+    ? await ctx.db
+        .query("messages")
+        .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
+        .take(200)
+    : [];
+  const lastText = (assignmentId: Id<"assignments">) => {
+    const mine = texts.filter((row) => row.assignmentId === assignmentId && (row.purpose === "offer" || row.purpose === "backup_offer"));
+    const last = mine[mine.length - 1];
+    return last ? { status: last.status, problem: last.problem ?? null } : null;
+  };
+  // What a cleaner is paid is the Owner's to see, here as everywhere else.
+  const pay = (row: Doc<"assignments">) => (ctx.role === "owner" ? row.payCents : null);
   return {
     jobId: job._id,
     customer: customer?.name ?? null,
@@ -84,6 +100,7 @@ async function jobRow(ctx: Ctx, job: Doc<"jobs">) {
       cleanerId: row.cleanerId,
       name: names.get(row.cleanerId)!,
       role: row.role ?? null,
+      payCents: pay(row),
       checkedInAt: row.checkIn?.at ?? null,
       /** Whether the phone gave a position at check-in. False means not given, not "elsewhere". */
       checkInHasPosition: row.checkIn ? row.checkIn.lat !== undefined : null,
@@ -91,10 +108,10 @@ async function jobRow(ctx: Ctx, job: Doc<"jobs">) {
       contactStage: row.contact?.stage ?? null,
       completion: row.completion ?? null,
     })),
-    offers: assignments.filter((row) => row.status === "offered").map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, role: row.role ?? null, kind: row.offerKind ?? "initial", offeredAt: row.offeredAt, respondBy: row.respondBy })),
+    offers: assignments.filter((row) => row.status === "offered").map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, role: row.role ?? null, kind: row.offerKind ?? "initial", offeredAt: row.offeredAt, respondBy: row.respondBy, payCents: pay(row), /** Null when no text was ever planned for this offer. */ text: lastText(row._id) })),
     ended: assignments
       .filter((row) => row.status !== "offered" && row.status !== "accepted")
-      .map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, status: row.status, cause: row.endCause ?? null, reason: row.endReason ?? null })),
+      .map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, status: row.status, cause: row.endCause ?? null, reason: row.endReason ?? null, offeredAt: row.offeredAt, respondedAt: row.respondedAt ?? null, wasAccepted: row.status === "cancelled" && row.respondedAt !== undefined })),
   };
 }
 
@@ -184,8 +201,8 @@ export const schedule = companyQuery({
         ]),
       });
     }
-    const settings = ctx.company.dispatch;
-    return { timezone: ctx.company.timezone, travelBufferMinutes: settings?.travelBufferMinutes ?? 30, jobs, cleaners: out };
+    // 200 is the most this reads. A screen that gets exactly that many says the list may be incomplete.
+    return { timezone: ctx.company.timezone, travelBufferMinutes: dispatchSettings(ctx.company).travelBufferMinutes, jobs, cleaners: out, truncated: jobs.length === 200, cleanersTruncated: cleaners.length === 200 };
   },
 });
 
@@ -195,7 +212,8 @@ export const offersAndCoverage = companyQuery({
   handler: async (ctx, args) => {
     const offers = [];
     const coverage = [];
-    for (const job of await jobsBetween(ctx, args.from, args.to)) {
+    const jobs = await jobsBetween(ctx, args.from, args.to);
+    for (const job of jobs) {
       const row = await jobRow(ctx, job);
       for (const offer of row.offers) offers.push({ jobId: row.jobId, customer: row.customer, startsAt: row.startsAt, ...offer, messages: await delivery(ctx, offer.assignmentId) });
       for (const request of await jobCoverageRequests(ctx, job)) {
@@ -209,7 +227,7 @@ export const offersAndCoverage = companyQuery({
         .take(100)
     ).filter((task) => task.handoffTo === "recruiter" || task.key?.startsWith("recruiter."));
     const policy = dispatchPolicy(ctx.company);
-    return { broadcastEnabled: policy.broadcastEnabled, offers, coverage, recruiterHandoffs: urgent.map((task) => ({ taskId: task._id, title: task.title, dueAt: task.dueAt, about: task.about ?? null })) };
+    return { truncated: jobs.length === 200, broadcastEnabled: policy.broadcastEnabled, offers, coverage, recruiterHandoffs: urgent.map((task) => ({ taskId: task._id, title: task.title, dueAt: task.dueAt, about: task.about ?? null })) };
   },
 });
 

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export type Indicators = {
   jobs: { total: number; completed: number; inProgress: number; upcoming: number };
-  coverage: { needing: number; accepted: number; awaiting: number; uncovered: number };
+  coverage: { needing: number; accepted: number; awaiting: number; partly: number; uncovered: number };
   decisions: { count: number; nextDeadline: number | null };
   payments: { state: "not_set_up" };
 };

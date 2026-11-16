@@ -40,11 +40,11 @@ function Coverage() {
   const open = useDetail();
   const week = useQuery(api.overview.schedule, now ? { companyId, asOf: now, view: "week" } : "skip");
   if (!week) return <Skeleton className="h-32 rounded-2xl" />;
-  const gaps = week.visits.filter((visit) => visit.state === "needs_coverage" || visit.state === "awaiting_acceptance");
+  const gaps = week.visits.filter((visit) => visit.state === "needs_coverage" || visit.state === "awaiting_acceptance" || visit.state === "partly_staffed");
   return (
-    <Panel title="Visits without an accepted cleaner, next seven days" flush>
+    <Panel title="Visits short of an accepted cleaner, next seven days" flush>
       {gaps.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-muted-foreground">Every visit in the next seven days has a cleaner who accepted.</p>
+        <p className="px-5 py-8 text-center text-sm text-muted-foreground">Every visit in the next seven days has every cleaner it needs, accepted.</p>
       ) : (
         <ScheduleTable visits={gaps} dayStarts={week.dayStarts} now={now} timezone={timezone} onOpen={open} />
       )}
