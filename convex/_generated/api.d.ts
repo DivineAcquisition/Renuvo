@@ -66,12 +66,14 @@ import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_taskState from "../lib/taskState.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_time from "../lib/time.js";
+import type * as lib_trust_staffSchema from "../lib/trust/staffSchema.js";
 import type * as links from "../links.js";
 import type * as members from "../members.js";
 import type * as messaging from "../messaging.js";
 import type * as overview from "../overview.js";
 import type * as permissions from "../permissions.js";
 import type * as properties from "../properties.js";
+import type * as staff from "../staff.js";
 import type * as tasks from "../tasks.js";
 
 import type {
@@ -139,12 +141,14 @@ declare const fullApi: ApiFromModules<{
   "lib/taskState": typeof lib_taskState;
   "lib/text": typeof lib_text;
   "lib/time": typeof lib_time;
+  "lib/trust/staffSchema": typeof lib_trust_staffSchema;
   links: typeof links;
   members: typeof members;
   messaging: typeof messaging;
   overview: typeof overview;
   permissions: typeof permissions;
   properties: typeof properties;
+  staff: typeof staff;
   tasks: typeof tasks;
 }>;
 

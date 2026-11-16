@@ -3,6 +3,8 @@
  * index that starts with it. Times are milliseconds since 1970. Money is whole cents.
  */
 import { defineSchema, defineTable } from "convex/server";
+
+import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
 
 import { actorValidator, eventDataValidator, subjectValidator } from "./lib/events";
@@ -115,6 +117,9 @@ export const checkInValidator = v.object({
 });
 
 export default defineSchema({
+  // ── Selestial staff (convex/lib/trust/staffSchema.ts) ─────────────────────────────────────────────
+  ...staffTables,
+
   // ── Public site ────────────────────────────────────────────────────────────────────────────────
   earlyAccessRequests: defineTable({
     name: v.string(),

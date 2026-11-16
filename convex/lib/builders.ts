@@ -138,6 +138,69 @@ export function signedInMutation<V extends AnyValidators, R>(def: {
   } as any);
 }
 
+// ── Selestial staff: the people who run Selestial, not members of a cleaning company ─────────────
+
+export type StaffAccess = SignedIn & { staff: Doc<"staff"> };
+
+/**
+ * The signed-in person's staff record, or null. A person is staff only with a confirmed email that
+ * matches an active staff row. The very first admin can be named by STAFF_BOOTSTRAP_EMAIL on the
+ * deployment; that setting matters only while the staff table has no active admin.
+ */
+export async function staffFor(ctx: QueryCtx, who: SignedIn): Promise<Doc<"staff"> | "bootstrap" | null> {
+  if (!who.emailVerified || !who.email) return null;
+  const rows = await ctx.db
+    .query("staff")
+    .withIndex("by_email", (q) => q.eq("email", who.email))
+    .take(5);
+  const row = rows.find((item) => item.status === "active");
+  if (row) return row.userId && row.userId !== who.userId ? null : row;
+  const bootstrap = process.env.STAFF_BOOTSTRAP_EMAIL?.trim().toLowerCase();
+  if (!bootstrap || bootstrap !== who.email) return null;
+  const anyAdmin = await ctx.db.query("staff").take(50);
+  return anyAdmin.some((item) => item.status === "active" && item.role === "admin") ? null : "bootstrap";
+}
+
+async function requireStaff(ctx: MutationCtx | QueryCtx, who: SignedIn, writable: boolean): Promise<Doc<"staff">> {
+  const found = await staffFor(ctx, who);
+  if (!found) notFound();
+  if (found !== "bootstrap") {
+    if (writable && !found.userId) await (ctx as MutationCtx).db.patch(found._id, { userId: who.userId });
+    return found;
+  }
+  if (!writable) {
+    // A read before the first write: answer as an admin that has not been saved yet.
+    return { _id: "bootstrap" as Id<"staff">, _creationTime: 0, email: who.email, name: who.name, role: "admin", status: "active", addedAt: 0, addedBy: "bootstrap", userId: who.userId };
+  }
+  const id = await (ctx as MutationCtx).db.insert("staff", { userId: who.userId, email: who.email, name: who.name, role: "admin", status: "active", addedAt: Date.now(), addedBy: "bootstrap" });
+  return (await ctx.db.get(id))!;
+}
+
+/** For Selestial staff only. Anyone else, signed in or not, gets "Not found.", as if the function did not exist. */
+export function staffQuery<V extends AnyValidators, R>(def: { args: V; handler: (ctx: QueryCtx & StaffAccess, args: ObjectType<V>) => R }): RegisteredQuery<"public", ObjectType<V>, R> {
+  return query({
+    args: def.args,
+    handler: async (ctx: QueryCtx, args: ObjectType<V>) => {
+      const who = signedIn(await requireIdentity(ctx));
+      const staff = await requireStaff(ctx, who, false);
+      return def.handler({ ...ctx, ...who, staff }, args);
+    },
+  } as any);
+}
+
+/** For Selestial staff only. `adminOnly` limits it to staff admins. */
+export function staffMutation<V extends AnyValidators, R>(def: { args: V; adminOnly?: boolean; handler: (ctx: MutationCtx & StaffAccess, args: ObjectType<V>) => R }): RegisteredMutation<"public", ObjectType<V>, R> {
+  return mutation({
+    args: def.args,
+    handler: async (ctx: MutationCtx, args: ObjectType<V>) => {
+      const who = signedIn(await requireIdentity(ctx));
+      const staff = await requireStaff(ctx, who, true);
+      if (def.adminOnly && staff.role !== "admin") notAllowed();
+      return def.handler({ ...ctx, ...who, staff }, args);
+    },
+  } as any);
+}
+
 function sameSecret(given: string, expected: string): boolean {
   if (given.length !== expected.length) return false;
   let diff = 0;
