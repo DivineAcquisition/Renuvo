@@ -78,7 +78,12 @@ export type Detail = {
     };
   };
   approval: null | { status: Doc<"approvals">["status"]; canDecide: boolean; carriesOut: boolean; note: string | null; authorizes: string | null; ifWaiting: string | null; jobId: Id<"jobs"> | null };
-  task: null | { status: Doc<"tasks">["status"]; agent: Agent };
+  task: null | {
+    status: Doc<"tasks">["status"];
+    agent: Agent;
+    /** The newest reading of a cleaner's text on a reply task, when Dispatch read one. */
+    reading: null | { readingId: Id<"replyReadings">; status: Doc<"replyReadings">["status"]; intent: Doc<"replyReadings">["intent"] | null; reader: string | null; outcome: string | null };
+  };
 };
 
 async function history(ctx: Ctx, subjectIds: string[], asOf: number): Promise<Described[]> {
@@ -299,6 +304,15 @@ async function approvalDetail(ctx: Ctx, approvalId: Id<"approvals">, asOf: numbe
   };
 }
 
+async function latestReading(ctx: Ctx, taskId: Id<"tasks">): Promise<NonNullable<Detail["task"]>["reading"]> {
+  const row = await ctx.db
+    .query("replyReadings")
+    .withIndex("by_company_task", (q) => q.eq("companyId", ctx.companyId).eq("taskId", taskId))
+    .order("desc")
+    .first();
+  return row ? { readingId: row._id, status: row.status, intent: row.intent ?? null, reader: row.reader ?? null, outcome: row.outcome ?? null } : null;
+}
+
 async function taskDetail(ctx: Ctx, taskId: Id<"tasks">, asOf: number): Promise<Detail> {
   const task = await owned(ctx, taskId);
   const context: Fact[] = [{ label: "Done when", value: task.completionCondition, ref: null }];
@@ -340,7 +354,7 @@ async function taskDetail(ctx: Ctx, taskId: Id<"tasks">, asOf: number): Promise<
     history: await history(ctx, [task._id], asOf),
     job: null,
     approval: null,
-    task: { status: task.status, agent: task.agent },
+    task: { status: task.status, agent: task.agent, reading: await latestReading(ctx, task._id) },
   };
 }
 

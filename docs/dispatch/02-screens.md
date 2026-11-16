@@ -102,3 +102,20 @@ message once per event. Incoming texts go through the same STOP / HELP / START h
 from a cleaner or customer on record becomes one task per number for a person to read. Nothing acts on
 what a text says, and a text is never taken as an answer to an offer. Texts coming in arrive at the
 number's messaging profile webhook, so the company's number needs a profile pointed at this deployment.
+
+## Cleaner replies
+
+A text to the company's number from a number that belongs to exactly one cleaner becomes a task for a
+person, and is also read against that cleaner's own open offers and visits that have not ended
+(`convex/dispatchReplies.ts`, reader in `convex/lib/dispatch/replyReader.ts`). The reader sees the
+visits only as short labels (V1, V2…) and can name only one of them; the text sits inside tags and is
+never an instruction. `DISPATCH_MODEL=claude` with `ANTHROPIC_API_KEY` uses Claude (structured JSON,
+low effort, server-side refusal fallback); anything else, or any failure, uses the rules reader, which
+answers only when one visit and the words leave no doubt.
+
+The reading is checked against the record as it is now. A clear "running late" (with a time), "can't
+come" or "no" to an offer is carried out by Dispatch only when the Owner sets "Act on a cleaner's text"
+to Execute and report (it starts on Propose). Taking a job by text always needs a person. Anything
+unclear changes nothing. A person applies or dismisses a reading on the reply task; applying runs the
+same functions as the cleaner's link, so every check runs again. One number gets at most ten readings
+an hour. The Claude reader has not been run against the live API in this build: no key was available.

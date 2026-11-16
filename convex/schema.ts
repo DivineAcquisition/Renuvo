@@ -633,6 +633,30 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_company_job", ["companyId", "jobId"]),
 
+  /**
+   * A cleaner's text, read against the visits they are on or were offered. The reading is a proposal:
+   * it is checked against the record before anything changes, and a person decides anything unclear.
+   * Only an excerpt of the text is kept, with any link taken out.
+   */
+  replyReadings: defineTable({
+    companyId: v.id("companies"),
+    cleanerId: v.id("cleaners"),
+    excerpt: v.string(),
+    receivedAt: v.number(),
+    status: v.union(v.literal("reading"), v.literal("proposed"), v.literal("applied"), v.literal("unclear"), v.literal("dismissed"), v.literal("not_applied")),
+    reader: v.optional(v.string()),
+    intent: v.optional(v.union(v.literal("accept_offer"), v.literal("decline_offer"), v.literal("running_late"), v.literal("cannot_attend"), v.literal("other"))),
+    assignmentId: v.optional(v.id("assignments")),
+    etaMinutes: v.optional(v.number()),
+    reason: v.optional(v.string()),
+    /** What happened when it was applied, or why it could not be. */
+    outcome: v.optional(v.string()),
+    taskId: v.optional(v.id("tasks")),
+    decidedAt: v.optional(v.number()),
+  })
+    .index("by_company_received", ["companyId", "receivedAt"])
+    .index("by_company_task", ["companyId", "taskId"]),
+
   /** One use of one Dispatch tool: who or what allowed it, what went in, what came out, what it touched. */
   toolRuns: defineTable({
     companyId: v.id("companies"),

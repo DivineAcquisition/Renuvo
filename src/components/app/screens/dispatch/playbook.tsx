@@ -34,7 +34,7 @@ const SECTION_ACTIONS: Record<SectionId, string[]> = {
   assignment: ["dispatch.request_acceptance", "dispatch.send_replacement_offer", "dispatch.override_time_between_jobs"],
   coverage: ["dispatch.run_backup_coverage", "dispatch.broadcast_offer", "dispatch.reassign_confirmed_visit", "dispatch.request_urgent_hire"],
   "day-of": ["dispatch.send_reminder", "dispatch.declare_no_show", "dispatch.close_visit"],
-  communication: ["dispatch.notify_running_late"],
+  communication: ["dispatch.act_on_cleaner_reply", "dispatch.notify_running_late"],
   permissions: [],
 };
 

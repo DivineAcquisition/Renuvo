@@ -399,6 +399,32 @@ function ApprovalActions({ detail, now }: { detail: Detail; now: number }) {
   );
 }
 
+/** Dispatch's reading of a cleaner's text: a person applies it, with every check run again, or dismisses it. */
+function ReadingActions({ reading }: { reading: NonNullable<NonNullable<Detail["task"]>["reading"]> }) {
+  const { companyId, role } = useCompany();
+  const apply = useMutation(api.dispatchReplies.apply);
+  const dismiss = useMutation(api.dispatchReplies.dismiss);
+  const { busy, error, run } = useRun();
+  const [done, setDone] = useState<string | null>(null);
+  if (reading.status === "reading") return <p className="text-sm text-muted-foreground">Dispatch is reading the text…</p>;
+  if (!canManage(role)) return <p className="text-sm text-muted-foreground">Owners and Managers apply what Dispatch reads from a text.</p>;
+  return (
+    <div className="grid gap-2 rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
+      <p className="text-xs text-muted-foreground">Read by {reading.reader === "claude" ? "Claude" : "rule"}. Applying runs every check again, the same as the cleaner’s own link.</p>
+      <FormError message={error} />
+      {done ? <p className="text-sm text-strong">{done}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" size="sm" loading={busy} onClick={() => void run(async () => setDone((await apply({ companyId, readingId: reading.readingId })).words))}>
+          Apply it
+        </Button>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => dismiss({ companyId, readingId: reading.readingId }))}>
+          That’s not what they meant
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function TaskActions({ detail, timezone }: { detail: Detail; timezone: string }) {
   const { companyId } = useCompany();
   const taskId = detail.ref.id as Id<"tasks">;
@@ -411,9 +437,11 @@ function TaskActions({ detail, timezone }: { detail: Detail; timezone: string })
   const [time, setTime] = useState("");
   const { busy, error, run, setError } = useRun();
   const status = detail.task!.status;
+  const reading = detail.task!.reading;
   if (status === "done" || status === "cancelled") return <p className="text-sm text-muted-foreground">This task is closed.</p>;
   return (
     <div className="grid gap-3">
+      {reading && (reading.status === "proposed" || reading.status === "reading") ? <ReadingActions reading={reading} /> : null}
       {open ? (
         <form
           className="grid gap-3 rounded-xl border border-border bg-muted p-3"

@@ -12,6 +12,7 @@
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
+import { startReading } from "./dispatchReplies";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { readProfile } from "./lib/compliance/profile";
 import { activeSuppressions, addSuppression, currentPermission, excerpt, liftSuppression, setPermission, withdrawChannel } from "./lib/compliance/permissions";
@@ -95,13 +96,14 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
     const from = normalAddress("sms", args.from);
     if (!from) return { kind: "bad_number", replied: false };
     const kind = classify(args.body);
-    if (kind === "ignored") {
-      // Not a keyword. Someone on record who texts the company's number is answered by a person: nothing
-      // acts on what they wrote, and it is never treated as an answer to an offer.
+    // Not a keyword. Someone on record who texts the company's number is answered by a person, and a
+    // cleaner's text is also read against their own visits (dispatchReplies.ts).
+    const ordinary = async (): Promise<InboundResult> => {
       const known = await recipientsAt(ctx, companyId, "sms", from);
       if (known.length > 0) await replyTask(ctx, companyId, from, known, args.body, args.receivedAt);
-      return { kind, replied: false };
-    }
+      return { kind: "ignored", replied: false };
+    };
+    if (kind === "ignored") return ordinary();
 
     const profile = await readProfile(ctx, companyId);
     const sender = profile.messaging.senderName ?? (await ctx.db.get(companyId))?.name ?? "this business";
@@ -132,8 +134,8 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
 
     if (kind === "start") {
       const stops = (await activeSuppressions(ctx, companyId, "sms", from)).filter((row) => row.reason === "stop_keyword");
-      // START means something only after a STOP. Otherwise it is an ordinary reply, and is left alone.
-      if (stops.length === 0) return { kind: "ignored", replied: false };
+      // START means something only after a STOP. Otherwise it is an ordinary reply, such as "Yes" to an offer.
+      if (stops.length === 0) return ordinary();
       for (const row of stops) await liftSuppression(ctx, row, { liftedBy: byRecipient, note: "Replied START.", actor: SYSTEM });
       for (const person of people) {
         for (const category of CATEGORIES) {
@@ -167,8 +169,14 @@ async function replyTask(ctx: MutationCtx, companyId: Id<"companies">, address: 
   const who = person ? person.name : `${people.length} people who share ${address}`;
   const question = `${who} texted the company's number: "${excerpt(body) ?? ""}". Read it and act on it yourself: a text is not recorded as an answer to an offer, an ETA or a check-in. Reply by phone or from your own texting tool.`.slice(0, 1000);
   const existing = await liveTaskByKey(ctx, companyId, key);
+  // A text from exactly one cleaner is also read against that cleaner's own visits (dispatchReplies.ts).
+  const read = async (taskId: Id<"tasks">) => {
+    // Each reading may call a model, so one number gets at most ten an hour; the task still shows every text.
+    if (person?.kind === "cleaner" && (await allow(ctx, `reply-read:${companyId}:${address}`, 10, HOUR))) await startReading(ctx, { companyId, cleanerId: person.id as Id<"cleaners">, excerpt: excerpt(body) ?? "", receivedAt: at, taskId });
+  };
   if (existing) {
     await setTaskState(ctx, existing, "needs_decision", { openQuestion: question, dueAt: at + HOUR, withPersonSince: existing.withPersonSince ?? Date.now() }, SYSTEM, { sameStatus: true });
+    await read(existing._id);
     return;
   }
   // Rate-limited per number, so a stream of texts cannot open a stream of tasks.
@@ -186,6 +194,7 @@ async function replyTask(ctx: MutationCtx, companyId: Id<"companies">, address: 
     actor: SYSTEM,
   });
   await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: question, dueAt: at + HOUR, withPersonSince: Date.now() }, SYSTEM);
+  await read(taskId);
 }
 
 /** A task for a person to read a plain-words opt-out and confirm it. Opened once per number while it is open. */
