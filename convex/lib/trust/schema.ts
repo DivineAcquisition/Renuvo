@@ -223,5 +223,6 @@ export const trustTables = {
     keptReasons: v.array(v.string()),
   })
     .index("by_company_at", ["companyId", "at"])
-    .index("by_company_subject", ["companyId", "subject.id"]),
+    .index("by_company_subject", ["companyId", "subject.id"])
+    .index("by_at", ["at"]),
 };

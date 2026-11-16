@@ -149,14 +149,13 @@ export const PRIVACY: DocumentText = {
         {
           list: [
             "Account information: while the account exists.",
-            `A company's records: while the company uses ${FACTS.product}, until the company deletes them or closes its account.`,
+            `A company's records: while the company uses ${FACTS.product}. When a company leaves, we delete its records within 90 days.`,
+            `Requests to ${FACTS.product} (privacy requests, security reports and security questions), and the records that a deletion was done: three years after the request or deletion is closed, then deleted.`,
+            "Data exports: the download file is deleted 24 hours after it is ready.",
             "Opt-out records: kept, so that an opt-out is never forgotten, even after other details are deleted.",
             "The activity log: when a person's details are erased, the log keeps the record ids of what happened, without those details.",
             "Backups: managed by our database provider. They are not rewritten when one record is erased.",
           ],
-        },
-        {
-          p: "No automatic deletion schedule is set today. If one is set, this section will describe it.",
         },
       ],
     },

@@ -55,10 +55,11 @@ describe("the trust registry", () => {
     const live = SEED.providers.filter((row) => row.status !== "planned").map((row) => row.key);
     expect(live).toEqual(["clerk", "convex", "vercel", "resend"]);
     expect(SEED.providers.find((row) => row.key === "resend")?.status).toBe("connected_not_live");
-    // Every public claim is verified; the sale-of-data sentence waits for the owner.
+    // Every public claim is verified.
     for (const row of SEED.claims) if (row.public) expect(row.status, row.key).toBe("implemented_verified");
-    expect(SEED.claims.find((row) => row.area === "sale_of_data")).toMatchObject({ status: "decision_required", public: false });
-    expect(SEED.claims.find((row) => row.area === "messaging")).toMatchObject({ status: "implemented_unverified", public: false });
+    // The owner made this commitment on 2026-11-16; it is backed by that decision and the Privacy notice.
+    expect(SEED.claims.find((row) => row.area === "sale_of_data")).toMatchObject({ status: "implemented_verified", public: true });
+    expect(SEED.claims.find((row) => row.area === "messaging")).toMatchObject({ status: "implemented_verified", public: true });
     // Every evidence file a verified claim names exists in this repository.
     for (const row of SEED.claims.filter((item) => item.status === "implemented_verified")) {
       for (const file of row.evidence.match(/convex\/[\w/.]+\.ts/g) ?? []) expect(() => readFileSync(path.join(process.cwd(), file)), `${row.key}: ${file}`).not.toThrow();
@@ -84,7 +85,7 @@ describe("the trust registry", () => {
       securityTxtExpiresOn: SEED.settings.securityTxtExpiresOn,
     });
     expect(snapshot.providers.map((row) => row.key).sort()).toEqual(["clerk", "convex", "resend", "vercel"]);
-    expect(snapshot.claims.map((row) => row.key).sort()).toEqual(["access-company-members", "audit-append-only", "links-scoped", "permissions-per-action"]);
+    expect(snapshot.claims.map((row) => row.key).sort()).toEqual(["access-company-members", "audit-append-only", "links-scoped", "messaging-permission-checks", "no-sale-of-data", "permissions-per-action"]);
     expect(snapshot.publications.map((row) => row.documentId)).not.toContain("cookies-2026-11-16");
     const words = JSON.stringify(snapshot);
     for (const hidden of ["evidence", "SECRET-EVIDENCE-TEXT", "agreementRef", "reviewStatus", "Boss", "note", "test.ts", "decision_required"]) expect(words, hidden).not.toContain(hidden);

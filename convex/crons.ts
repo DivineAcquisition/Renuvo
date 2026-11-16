@@ -20,4 +20,7 @@ crons.interval("find sends that never finished", { minutes: 5 }, internal.messag
 // A company's data export can be downloaded for a day; then its file is deleted.
 crons.interval("expire company data exports", { minutes: 15 }, internal.dataRights.expireExports, {});
 
+// Requests to Selestial and deletion records are kept three years after they close (Privacy notice).
+crons.daily("delete requests and deletion records past retention", { hourUTC: 7, minuteUTC: 17 }, internal.retention.purge, {});
+
 export default crons;

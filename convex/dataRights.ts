@@ -38,6 +38,8 @@ export const EXPORTS_PER_COMPANY_PER_DAY = 3;
 const PREPARING_GIVES_UP_AFTER = HOUR;
 /** Requests to delete the company in a day. */
 const DELETION_REQUESTS_PER_DAY = 3;
+/** A company that leaves has its records deleted within this many days (Privacy notice, "How long we keep it"). */
+export const COMPANY_DELETION_DAYS = 90;
 const PAGE_SIZE = 500;
 
 // ── Exports ───────────────────────────────────────────────────────────────────────────────────────
@@ -323,6 +325,8 @@ export const requestCompanyDeletion = ownerMutation({
         companyId: ctx.companyId,
         routing: "selestial",
         verification: { method: "Signed in as the company's Owner.", verifiedAt: Date.now(), by: "system" },
+        // The Privacy notice promises deletion within this many days of a company leaving.
+        dueOn: new Date(Date.now() + COMPANY_DELETION_DAYS * DAY).toISOString().slice(0, 10),
       },
       { by: "owner", action: "received", detail: "Asked for from the company's settings by its Owner." },
     );

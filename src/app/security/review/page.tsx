@@ -30,7 +30,7 @@ export default async function Page() {
         <>
           <div>
             <h2>How we answer</h2>
-            <p className="mt-1">A person answers with what we have checked. If something is not in place or not verified yet, we say so rather than guess.</p>
+            <p className="mt-1">A person answers with what we have checked. If something is not in place or not verified yet, we say so rather than guess. Data processing terms are available on request.</p>
           </div>
           <div>
             <h2>Read first</h2>

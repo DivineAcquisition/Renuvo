@@ -47,6 +47,18 @@ export const SECURITY: DocumentText = {
         {
           p: "Actions a customer, cleaner or applicant would see start on Propose in every new workspace. What agents and people do is written to an activity log. Entries are added to the log and never edited.",
         },
+        {
+          p: "Some decisions always need a person, whatever the settings. They are not permissions, so nothing can switch them on for an agent:",
+        },
+        {
+          list: [
+            "Any consequence for a cleaner, including rejecting or ending a worker.",
+            "Any decision that follows a background check.",
+            "Paying out a pay run.",
+            "Changing prices, pay rates or policies.",
+            "Anything legal, an injury, property damage or a payment dispute.",
+          ],
+        },
       ],
     },
     {
@@ -144,7 +156,7 @@ export const SECURITY: DocumentText = {
       heading: "Asking for a security review",
       blocks: [
         {
-          p: `If your business needs to review ${FACTS.product}'s security before using it, use the [security review request](/security/review) or write to [${FACTS.securityEmail}](mailto:${FACTS.securityEmail}). We answer from what is true today, including the things this page does not yet claim.`,
+          p: `If your business needs to review ${FACTS.product}'s security before using it, use the [security review request](/security/review) or write to [${FACTS.securityEmail}](mailto:${FACTS.securityEmail}). We answer from what is true today, including the things this page does not yet claim. Data processing terms are available on request.`,
         },
       ],
     },

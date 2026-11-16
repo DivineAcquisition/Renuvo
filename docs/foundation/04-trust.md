@@ -147,19 +147,20 @@ proven by a test or check here), **unverified** (built, not yet proven live), **
 | Website hosting and request logs | Provider | Vercel | external | yes | Vercel project; provider's own terms |
 | Database and file storage | Provider | Convex | verified | yes | convex/schema.ts |
 | Where providers process data | Selestial | Clerk, Convex, Vercel | external | no | Needs each provider's region settings and data processing terms checked. |
-| Data processing terms with providers and customers | Selestial | — | decision | no | — |
+| Data processing terms with providers and customers | Selestial | — | external | no | Security overview security-2026-11-16, /security/review |
 | Encryption at rest and in transit | Provider | Convex, Vercel, Clerk | external | no | Needs each provider's security documentation reviewed and recorded. |
 | Backups and restoration | Provider | Convex | external | no | — |
 | Second factor for Selestial staff | Selestial | Clerk | planned | no | — |
 | Security certification (SOC 2, ISO 27001) | Selestial | — | decision | no | — |
-| Independent security assessment | Selestial | — | decision | no | — |
-| Personal information is not sold | Selestial | — | decision | no | Privacy notice privacy-2026-11-16, approved by the owner 2026-11-16 |
+| Independent security assessment | Selestial | — | planned | no | — |
+| Personal information is not sold | Selestial | — | verified | yes | Privacy notice privacy-2026-11-16 and the owner's commitment of 2026-11-16; shown as a claim on /security |
 | Privacy and security requests | Selestial | — | verified | yes | convex/requests.ts, convex/requests.test.ts, src/lib/trust/requests.test.ts, tests/e2e/trust.mjs (a privacy request and a vulnerability report saved from a real browser) |
+| How long records are kept | Selestial | Convex | verified | yes | convex/retention.ts, convex/crons.ts, convex/dataRights.ts (COMPANY_DELETION_DAYS), convex/retention.test.ts |
 | Export and deletion | Cleaning company | Convex | verified | no | convex/dataRights.ts, convex/dataRights.test.ts (every company table is exported or left out with a reason). Not tested on a very large company. |
 | Selestial subscription charges | Selestial | — | decision | yes | No payment code in the repository. |
 | Customer payments to cleaning businesses and cleaner pay | Cleaning company | — | planned | yes | convex/lib/dispatch/pay.ts |
 | AI model providers | Selestial | — | planned | yes | convex/lib/dispatch/*, PR #77 convex/lib/recruiter/model.ts |
-| Model training on customer data | Selestial | — | decision | no | — |
+| Model training on customer data | Selestial | — | planned | no | — |
 | Use of business records across companies | Selestial | — | decision | no | — |
 
 #### Cleaning company
@@ -191,8 +192,8 @@ production and no tracking tool is switched on.
 
 ### Ready in this repository
 
-- The ten public pages, the footer groups and the landing trust section (three cards today:
-  permissions, access, audit; the messaging card waits for its claim to be verified and public).
+- The ten public pages, the footer groups and the landing trust section (four cards: permissions,
+  access, audit, and messaging checks, which the owner chose to state before texting is live).
 - The five documents, version `*-2026-11-16`, published on the owner's approval with no outside legal
   review, recorded on each publication row.
 - Cookie choices: banner, preferences, withdrawal, GPC, versioning and expiry; tools load only after a
@@ -226,6 +227,10 @@ production and no tracking tool is switched on.
 6. **Sign-in service dashboard.** The development instance still requires a phone number and username at
    sign-up (see `03-authentication.md`), and staff second-factor sign-in is not enforced.
 7. **security.txt** expires 2027-11-15. Renew it in the staff console before then.
+8. **Penetration test.** The owner decided on an outside penetration test before public launch.
+   Record it in the staff console when done; nothing is claimed until then.
+9. **Company deletions.** A company's deletion request is due 90 days out, as the Privacy notice
+   promises. Staff carry it out; there is no automatic company deletion.
 
 ### Known gaps in the code
 
@@ -241,28 +246,33 @@ production and no tracking tool is switched on.
 - The staff console has not been driven in a browser yet (it is covered by type checks and the record
   tests behind each function).
 
-## Unresolved decisions
+## Decisions
 
-Each of these needs the owner's answer. Nothing here was guessed into the documents or the site.
+Made by the owner on 2026-11-16 and applied:
 
-1. **Messaging claim.** Show "Texts go out only after checking…" on the site once texting is live, or now?
-   (The check is built and tested; texting itself is not live.)
-2. **AI claim.** Show "No AI model provider is connected…" in public? It is true today and changes the
-   day the Recruiter connects a model.
-3. **Model training and cross-company use.** What will Selestial say about training models on, or
-   learning across, companies' records?
-4. **"Does not sell personal information."** The Privacy notice says it; should it also appear as a
-   claim on the Security page?
-5. **Retention.** How long records, requests, exports and deletion records are kept. Nothing is stated.
-6. **Data processing terms** for cleaning companies, and with each provider.
-7. **Billing.** Price, billing cycle, cancellation and refunds (the Terms say they will be shown before
-   any fee).
-8. **Service levels.** Availability, support hours and response times. None promised.
-9. **Researchers.** Offer a safe-harbour statement for good-faith security research? Not offered today.
-10. **Assessment.** Whether and when to get an independent security test or a certification.
-11. **Messaging defaults.** Quiet hours 21:00–08:00 with work texts excluded, and a shared number needing
-    every person's permission: keep both?
-12. **Human-only actions.** List in the Security overview and Terms the actions that always need a person
-    (consequences for a cleaner, decisions after a background check, pay runs, price and policy changes)?
-13. **Terms additions to confirm:** companies must tell cleaners what is recorded (check-ins, location,
-    photos), and features may stop if a provider stops a service.
+| Question | Decision | Where it shows |
+|---|---|---|
+| State the messaging checks before texting is live | Yes, now | Claim `messaging-permission-checks`, landing card, `/security` |
+| AI and customer data | No training promise. When a provider is connected, name it and what it receives | Subprocessors page and Privacy notice, on connection |
+| Retention | While active; deleted within 90 days of leaving. Requests and deletion records three years after closing | Privacy notice; `convex/retention.ts`, a daily job |
+| Safe harbour for researchers | Not offered | Security overview, as written |
+| "Does not sell personal information" | Also a claim on `/security` | Claim `no-sale-of-data` |
+| Default quiet hours | 21:00–08:00, work texts still go | `convex/lib/compliance/profile.ts` |
+| A number shared by several people | Every one of them must have agreed | `convex/lib/messaging/policy.ts` |
+| Actions that always need a person | Listed in the Security overview and Terms | Checked against `PERSON_ONLY` by a test |
+| Terms additions (cleaners told what is recorded; provider outages) | Keep both | Terms |
+| Billing | Shown before any fee applies | Terms, as written |
+| Service levels | No promises yet | Terms, as written |
+| Data processing terms | On request, case by case | Security overview, `/security/review` |
+| Independent assessment | Outside penetration test before public launch | Launch readiness above |
+
+The 2026-11-16 documents were edited in place for these decisions rather than given new versions,
+because they had not been served anywhere public yet. From the first production publication on, any
+change is a new version.
+
+Still open:
+
+1. **Use of business records across companies** (benchmarks, product improvement). Not done; the
+   Privacy notice says it would need a reviewed purpose and a notice update first.
+2. **Certification** such as SOC 2: not planned. The site claims none.
+3. **Outside legal review** of the documents: declined by the owner; recorded on each publication.

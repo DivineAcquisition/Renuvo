@@ -104,6 +104,9 @@ export const TERMS: DocumentText = {
           p: `${FACTS.product}'s agents carry out work for your business, such as offering jobs to cleaners and sending reminders. Each agent may act only within the permissions the Owner sets for each action: Off, Propose, Execute and report, or Execute. Actions that a customer, cleaner or applicant would see start on Propose, so a person approves them until the Owner chooses otherwise.`,
         },
         {
+          p: "Some decisions always need a person, whatever the settings, and no agent takes them: any consequence for a cleaner, including rejecting or ending a worker; any decision that follows a background check; paying out a pay run; changing prices, pay rates or policies; and anything legal, an injury, property damage or a payment dispute.",
+        },
+        {
           p: "When the Owner lets an agent act without approval, or when a person approves an action an agent proposes, your business is responsible for that action as if your own staff had taken it.",
         },
         {

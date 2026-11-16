@@ -94,6 +94,7 @@ import type * as overview from "../overview.js";
 import type * as permissions from "../permissions.js";
 import type * as properties from "../properties.js";
 import type * as requests from "../requests.js";
+import type * as retention from "../retention.js";
 import type * as staff from "../staff.js";
 import type * as tasks from "../tasks.js";
 import type * as trust from "../trust.js";
@@ -191,6 +192,7 @@ declare const fullApi: ApiFromModules<{
   permissions: typeof permissions;
   properties: typeof properties;
   requests: typeof requests;
+  retention: typeof retention;
   staff: typeof staff;
   tasks: typeof tasks;
   trust: typeof trust;
