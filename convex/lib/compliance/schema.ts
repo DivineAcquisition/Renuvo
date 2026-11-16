@@ -134,7 +134,67 @@ export const messagingSetupValidator = v.object({
 });
 export type MessagingSetup = typeof messagingSetupValidator.type;
 
+/**
+ * A cleaning company's request for a texting number and its carrier registration. The Owner asks;
+ * Selestial staff approve, because buying the number and filing the registration are charged to
+ * Selestial's Telnyx account. Each step's Telnyx reference is kept so a retry continues, never repeats.
+ */
+export const TEXTING_REQUEST_STATUSES = ["requested", "approved", "provisioning", "waiting_on_carriers", "active", "failed", "rejected", "cancelled"] as const;
+export type TextingRequestStatus = (typeof TEXTING_REQUEST_STATUSES)[number];
+
+export const brandDetailsValidator = v.object({
+  displayName: v.string(),
+  companyName: v.string(),
+  ein: v.string(),
+  phone: v.string(),
+  street: v.string(),
+  city: v.string(),
+  state: v.string(),
+  postalCode: v.string(),
+  email: v.string(),
+  website: v.string(),
+  vertical: v.string(),
+});
+
 export const complianceTables = {
+  textingRequests: defineTable({
+    companyId: v.id("companies"),
+    status: literals(TEXTING_REQUEST_STATUSES),
+    /** The number the Owner chose, and what Telnyx said it costs when they chose it. */
+    phoneNumber: v.string(),
+    upfrontCents: v.optional(v.number()),
+    monthlyCents: v.optional(v.number()),
+    brand: brandDetailsValidator,
+    /** The consent wording the campaign is filed with. It is also kept on file as the company's work-text wording. */
+    consentWording: v.string(),
+    requestedBy: v.id("members"),
+    requestedAt: v.number(),
+    decidedAt: v.optional(v.number()),
+    decidedBy: v.optional(v.id("staff")),
+    note: v.optional(v.string()),
+    /** Where provisioning stands, in words, and the step it is on. */
+    step: v.optional(v.string()),
+    problem: v.optional(v.string()),
+    numberOrderId: v.optional(v.string()),
+    brandId: v.optional(v.string()),
+    campaignId: v.optional(v.string()),
+    assignedAt: v.optional(v.number()),
+    lastCheckedAt: v.optional(v.number()),
+    activeAt: v.optional(v.number()),
+  })
+    .index("by_company_requested", ["companyId", "requestedAt"])
+    .index("by_status_requested", ["status", "requestedAt"]),
+
+  /** One search for numbers an Owner can pick from. Results are shown to that company only. */
+  numberSearches: defineTable({
+    companyId: v.id("companies"),
+    areaCode: v.string(),
+    status: v.union(v.literal("pending"), v.literal("done"), v.literal("failed")),
+    results: v.optional(v.array(v.object({ phoneNumber: v.string(), locality: v.union(v.string(), v.null()), region: v.union(v.string(), v.null()), upfrontCents: v.union(v.number(), v.null()), monthlyCents: v.union(v.number(), v.null()) }))),
+    problem: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_company_created", ["companyId", "createdAt"]),
+
   /** One per company: who the company is and how it sends. Recipient choices are not here. */
   complianceProfiles: defineTable({
     companyId: v.id("companies"),

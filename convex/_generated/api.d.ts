@@ -77,12 +77,14 @@ import type * as lib_events from "../lib/events.js";
 import type * as lib_guard from "../lib/guard.js";
 import type * as lib_invitationTerms from "../lib/invitationTerms.js";
 import type * as lib_invitations from "../lib/invitations.js";
+import type * as lib_messaging_campaign from "../lib/messaging/campaign.js";
 import type * as lib_messaging_email from "../lib/messaging/email.js";
 import type * as lib_messaging_outbox from "../lib/messaging/outbox.js";
 import type * as lib_messaging_policy from "../lib/messaging/policy.js";
 import type * as lib_messaging_provider from "../lib/messaging/provider.js";
 import type * as lib_messaging_resend from "../lib/messaging/resend.js";
 import type * as lib_messaging_telnyx from "../lib/messaging/telnyx.js";
+import type * as lib_messaging_telnyxAccount from "../lib/messaging/telnyxAccount.js";
 import type * as lib_permissionCatalog from "../lib/permissionCatalog.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_recruiter_applications from "../lib/recruiter/applications.js";
@@ -139,6 +141,7 @@ import type * as requests from "../requests.js";
 import type * as retention from "../retention.js";
 import type * as staff from "../staff.js";
 import type * as tasks from "../tasks.js";
+import type * as texting from "../texting.js";
 import type * as trust from "../trust.js";
 
 import type {
@@ -217,12 +220,14 @@ declare const fullApi: ApiFromModules<{
   "lib/guard": typeof lib_guard;
   "lib/invitationTerms": typeof lib_invitationTerms;
   "lib/invitations": typeof lib_invitations;
+  "lib/messaging/campaign": typeof lib_messaging_campaign;
   "lib/messaging/email": typeof lib_messaging_email;
   "lib/messaging/outbox": typeof lib_messaging_outbox;
   "lib/messaging/policy": typeof lib_messaging_policy;
   "lib/messaging/provider": typeof lib_messaging_provider;
   "lib/messaging/resend": typeof lib_messaging_resend;
   "lib/messaging/telnyx": typeof lib_messaging_telnyx;
+  "lib/messaging/telnyxAccount": typeof lib_messaging_telnyxAccount;
   "lib/permissionCatalog": typeof lib_permissionCatalog;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/recruiter/applications": typeof lib_recruiter_applications;
@@ -279,6 +284,7 @@ declare const fullApi: ApiFromModules<{
   retention: typeof retention;
   staff: typeof staff;
   tasks: typeof tasks;
+  texting: typeof texting;
   trust: typeof trust;
 }>;
 
