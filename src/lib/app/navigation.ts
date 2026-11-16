@@ -182,6 +182,12 @@ export const FOOTER_ITEMS: readonly NavItem[] = [
 
 export const NAV_ITEMS: readonly NavItem[] = [...PERSISTENT_ITEMS, ...SHARED_ITEMS, ...FOOTER_ITEMS];
 
+/** Pages inside Settings. They have no sidebar entry: Settings links to them, and readiness blockers link to their sections. */
+export const SETTINGS_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/settings/compliance`, label: "Trust & Compliance", purpose: "Readiness per operation, business identity, messaging setup, consent wording, the company's data, and agreements." },
+  { path: `${APP_ROOT}/settings/agreements`, label: "Agreements", purpose: "Which version of Selestial's Terms the company accepted, who, and when." },
+];
+
 // ── Agents and their work tabs ──────────────────────────────────────────────────────────────────────
 
 export type WorkTab = Destination & {

@@ -82,9 +82,8 @@ export function ConsentControls({ tools }: { tools: TrackingTool[] }) {
 
 function Preferences({ tools, onClose, onSave, failed }: { tools: TrackingTool[]; onClose: () => void; onSave: (analytics: boolean, advertising: boolean) => void; failed: boolean }) {
   const snap = useConsent();
-  const now = Date.now();
-  const [analytics, setAnalytics] = useState(() => allowed("analytics", snap.choice, snap.gpc, now));
-  const [advertising, setAdvertising] = useState(() => allowed("advertising", snap.choice, snap.gpc, now));
+  const [analytics, setAnalytics] = useState(() => allowed("analytics", snap.choice, snap.gpc, Date.now()));
+  const [advertising, setAdvertising] = useState(() => allowed("advertising", snap.choice, snap.gpc, Date.now()));
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
 

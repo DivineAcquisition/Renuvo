@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { accepted, dispatchTestEnv, flush, linkFor, PHONES, setup } from "../tests/dispatchHarness";
-import { company, dispatchCleaner, dispatchJob, dispatchPlace, JOB_END, JOB_START, refusal, TEST_LINK_SECRET, type T } from "../tests/harness";
+import { company, dispatchCleaner, dispatchJob, dispatchPlace, JOB_END, readyMessaging, JOB_START, refusal, TEST_LINK_SECRET, type T } from "../tests/harness";
 import { api } from "./_generated/api";
 import type { TableNames } from "./_generated/dataModel";
 import { NOT_ALLOWED, NOT_FOUND } from "./lib/errors";
@@ -50,6 +50,7 @@ function tamper(token: string, part: "id" | "signature"): string {
 /** A second company, Beta, with its own cleaner (Noor) holding an accepted job. Same test deployment. */
 async function beta(t: T) {
   const { as, companyId } = await company(t, "owner-b", "Beta Cleaning");
+  await readyMessaging(t, companyId, "Beta Cleaning");
   const place = await dispatchPlace(as, companyId);
   const cleanerId = await dispatchCleaner(as, companyId, "Noor");
   await as.mutation(api.cleaners.update, { companyId, cleanerId, phone: PHONES.Noor });

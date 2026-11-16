@@ -639,7 +639,7 @@ function Erase() {
           <ul className="mt-2 grid gap-1">
             {history.map((row) => (
               <li key={row._id} className="text-muted-foreground">
-                {when(row.at)} · {row.subjectTable === "customers" ? "A customer" : "A cleaner"}
+                {when(row.at)} · {row.subject.kind === "customer" ? "A customer" : "A cleaner"}
               </li>
             ))}
           </ul>

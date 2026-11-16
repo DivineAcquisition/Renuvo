@@ -39,13 +39,19 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "events", index: "by_company_at" },
   { table: "dataExports", index: "by_company_created", omit: ["storageId"], why: "Internal file references." },
   { table: "deletionRecords", index: "by_company_at" },
-  // Messaging consent, the compliance profile and agreements are being built alongside this. Add each
-  // of their company tables here (or to NOT_EXPORTED with a reason) when they arrive.
+  // Messaging consent, the compliance profile and agreements (convex/lib/compliance/schema.ts).
+  { table: "complianceProfiles", index: "by_company" },
+  { table: "consentDisclosures", index: "by_company_created" },
+  { table: "contactPermissions", index: "by_company_recipient" },
+  { table: "permissionHistory", index: "by_company_recipient_at" },
+  { table: "suppressions", index: "by_company_at" },
+  { table: "agreementAcceptances", index: "by_company_at" },
 ];
 
 /** Company tables kept out of the export, and why. */
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
+  sendIntents: "Internal bookkeeping for the sending check: the same facts are in each message and in the event log.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 
