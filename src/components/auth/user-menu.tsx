@@ -60,7 +60,7 @@ export function UserMenu() {
             {email && email !== name ? <p className="truncate text-xs text-muted-foreground">{email}</p> : null}
           </div>
           <div className="my-1 h-px bg-border" />
-          <Link role="menuitem" href="/app/settings#security" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-strong hover:bg-muted focus-visible:bg-muted focus-visible:outline-none">
+          <Link role="menuitem" href="/app/settings/security" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-strong hover:bg-muted focus-visible:bg-muted focus-visible:outline-none">
             <KeyIcon className="size-4 text-muted-foreground" aria-hidden />
             Security
           </Link>

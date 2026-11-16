@@ -217,8 +217,29 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const { companyId, timezone } = useCompany();
   const customers = useQuery(api.customers.list, { companyId });
   const create = useMutation(api.jobs.create);
+  const business = useQuery(api.settings.business, { companyId });
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
+  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
+  const templates = (business?.services ?? []).filter((service) => service.status === "active");
+  const template = templates.find((service) => service.id === form.serviceId);
+  /** Fills the fields from the template. Everything stays editable; the visit keeps a copy of the template as it is now. */
+  const choose = (serviceId: string) => {
+    const picked = templates.find((service) => service.id === serviceId);
+    setForm((current) =>
+      picked
+        ? { ...current, serviceId, serviceType: picked.name, scope: picked.scope, skills: picked.skills.join(", "), price: picked.startingPriceCents === undefined ? "" : (picked.startingPriceCents / 100).toFixed(2) }
+        : { ...current, serviceId: "" },
+    );
+  };
+  /** With a template chosen, the end follows the start by the template's duration. */
+  const startAt = (from: string) =>
+    setForm((current) => {
+      const picked = templates.find((service) => service.id === current.serviceId);
+      const [hours, minutes] = from.split(":").map(Number);
+      if (!picked || Number.isNaN(hours) || Number.isNaN(minutes)) return { ...current, from };
+      const end = hours * 60 + minutes + picked.durationMinutes;
+      return end < 24 * 60 ? { ...current, from, to: `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}` } : { ...current, from };
+    });
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
   if (customers && customers.length === 0) return <p className="text-sm text-muted-foreground">Add a customer under Customers & Properties first, then schedule their visit here.</p>;
   return (
@@ -235,6 +256,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
             companyId,
             customerId: form.customerId as Id<"customers">,
             propertyId: form.propertyId as Id<"properties">,
+            ...(form.serviceId ? { serviceId: form.serviceId } : {}),
             serviceType: form.serviceType,
             scope: form.scope,
             requiredSkills: list(form.skills),
@@ -266,6 +288,18 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
             </SelectInput>
           )}
         </Field>
+        {templates.length > 0 ? (
+          <Field label="Service template" hint={template ? `${template.durationMinutes} minutes, ${template.defaultCrew} ${template.defaultCrew === 1 ? "cleaner" : "cleaners"}. Fields below can still be changed.` : "Optional. Fills the fields below from Settings."}>
+            <SelectInput value={form.serviceId} onChange={(event) => choose(event.target.value)}>
+              <option value="">No template</option>
+              {templates.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+        ) : null}
         <Field label="Service">
           <TextInput value={form.serviceType} onChange={set("serviceType")} required maxLength={80} />
         </Field>
@@ -284,7 +318,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
           <TextInput type="date" value={form.date} onChange={set("date")} required />
         </Field>
         <Field label="Starts">
-          <TextInput type="time" value={form.from} onChange={set("from")} required />
+          <TextInput type="time" value={form.from} onChange={(event) => startAt(event.target.value)} required />
         </Field>
         <Field label="Ends">
           <TextInput type="time" value={form.to} onChange={set("to")} required />

@@ -159,7 +159,7 @@ Three states describe each destination:
 | Cleaners | `/app/cleaners` | **Live.** A list and an add form; no page per cleaner yet. |
 | Finance | `/app/finance` | **Planned.** Shown to the Owner only. |
 | Reports | `/app/reports` | **Interim** at `/app/insights`. Weekly measures only. |
-| Settings | `/app/settings` | **Live.** Company, people, agent permissions and pause, Dispatch settings. |
+| Settings | `/app/settings` | **Live.** A routed workspace; its sections are listed in `src/lib/app/settings.ts` and described in `05-settings.md`. |
 
 ### Agent destinations
 
