@@ -300,7 +300,7 @@ export const AGENTS: readonly AgentNav[] = [
       ["schedule", "Schedule", LIVE],
       ["offers-coverage", "Offers & Coverage", LIVE],
       ["live-jobs", "Live Jobs", LIVE],
-      ["action-links", "Action Links"],
+      ["action-links", "Action Links", LIVE],
       ["playbook", "Playbook"],
     ],
   }),

@@ -310,8 +310,9 @@ describe("navigation behavior", () => {
     expect(linkTo("dispatch.dispatch-board")).toBe("/app/agents/dispatch/dispatch-board");
     expect(linkTo("dispatch.offers-coverage")).toBe("/app/agents/dispatch/offers-coverage");
     expect(linkTo("dispatch.live-jobs")).toBe("/app/agents/dispatch/live-jobs");
+    expect(linkTo("dispatch.action-links")).toBe("/app/agents/dispatch/action-links");
     // The Dispatch tabs that are not built stay unlinked.
-    for (const tab of ["action-links", "playbook"]) expect(linkTo(`dispatch.${tab}`), tab).toBeNull();
+    for (const tab of ["playbook"]) expect(linkTo(`dispatch.${tab}`), tab).toBeNull();
     expect(linkTo("reports")).toBe("/app/insights");
     expect(linkTo("finance")).toBeNull();
     expect(linkTo("dispatch")).toBe("/app/agents/dispatch");

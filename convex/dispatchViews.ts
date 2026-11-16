@@ -326,6 +326,8 @@ async function linkRows(ctx: Ctx, links: Doc<"actionLinks">[]) {
       jobId: link.jobId,
       assignmentId: link.assignmentId,
       jobStartsAt: job?.startsAt ?? null,
+      customer: job ? ((await ctx.db.get(job.customerId))?.name ?? null) : null,
+      serviceType: job?.serviceType ?? null,
       allowed: link.allowed,
       status: state,
       issuedAt: link.issuedAt,
