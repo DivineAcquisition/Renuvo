@@ -10,12 +10,17 @@ import { addressValidator } from "./schema";
 type Address = typeof addressValidator.type;
 
 function address(value: Address): Address {
+  // A map location is kept only as a pair, and only when it is a real place on Earth.
+  const located = typeof value.lat === "number" && typeof value.lng === "number" && Math.abs(value.lat) <= 90 && Math.abs(value.lng) <= 180;
+  const placeId = optionalText(value.placeId, "Place id", 300);
   return {
     line1: text(value.line1, "Street address", 200),
     line2: optionalText(value.line2, "Address line 2", 200),
     city: text(value.city, "City", 120),
     region: text(value.region, "State or region", 80),
     postalCode: text(value.postalCode, "Postal code", 20).toUpperCase(),
+    ...(placeId ? { placeId } : {}),
+    ...(located ? { lat: value.lat, lng: value.lng } : {}),
   };
 }
 

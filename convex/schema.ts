@@ -40,6 +40,11 @@ export const addressValidator = v.object({
   city: v.string(),
   region: v.string(),
   postalCode: v.string(),
+  /** Google's place id, when the address was picked from address search. */
+  placeId: v.optional(v.string()),
+  /** The map location from address search, for travel times and service areas. Absent when typed. */
+  lat: v.optional(v.number()),
+  lng: v.optional(v.number()),
 });
 
 /** How a cleaner is paid. Contractors get a share of the job (basis points); employees an hourly rate. */

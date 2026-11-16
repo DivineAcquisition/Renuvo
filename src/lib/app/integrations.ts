@@ -16,7 +16,7 @@ export type IntegrationStatus =
   /** Built and ready to connect. */
   | { kind: "available" }
   /** Built into the product, switched on by a setting Selestial manages (no account to connect). */
-  | { kind: "built_in"; needs: string }
+  | { kind: "built_in"; needs: "google-maps-key" }
   /** Not built yet. `phase` is the build phase in docs/integrations/00-plan.md. */
   | { kind: "planned"; phase: number };
 
@@ -52,7 +52,7 @@ export const INTEGRATIONS: readonly Integration[] = [
   { id: "paypal", name: "PayPal and Venmo", category: "payments", does: "Let customers pay an invoice with PayPal or Venmo.", agents: ["retention"], status: planned(4) },
 
   // Google
-  { id: "google-address", name: "Address search", category: "google", does: "Every address field suggests real US addresses as you type, and saves the map location so Dispatch knows where each property is.", agents: ["dispatch", "sales"], status: planned(2), note: "Built in: no account to connect. Selestial provides the Google Maps key." },
+  { id: "google-address", name: "Address search", category: "google", does: "Every address field suggests real US addresses as you type, and saves the map location so Dispatch knows where each property is.", agents: ["dispatch", "sales"], status: { kind: "built_in", needs: "google-maps-key" }, note: "Built in: no account to connect. Selestial provides the Google Maps key." },
   { id: "google-maps-travel", name: "Travel times", category: "google", does: "Dispatch uses real drive times between visits to choose cleaners and order the day.", agents: ["dispatch", "team-coordinator"], status: planned(3) },
   { id: "google-drive", name: "Google Drive", category: "google", does: "Agents read your price sheets, policies and scripts from a folder you choose, and file what they make: job photos and checklists, signed agreements, quotes, applicant resumes and new documents.", agents: ["marketing", "sales", "dispatch", "quality", "recruiter"], status: planned(3) },
   { id: "google-calendar", name: "Google Calendar", category: "google", does: "Visits and interviews appear in your calendar, and busy times there block scheduling. Both ways.", agents: ["dispatch", "recruiter", "team-coordinator"], status: planned(3) },

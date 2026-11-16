@@ -5,6 +5,7 @@ import { useCompany } from "@/components/app/company";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { Lock } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
+import { mapsKey } from "@/lib/app/address";
 import { CATEGORIES, integrationsIn, type Integration } from "@/lib/app/integrations";
 import { AGENTS, type AgentId } from "@/lib/app/navigation";
 import { cn } from "@/lib/utils";
@@ -15,7 +16,7 @@ const AGENT_LABEL = Object.fromEntries(AGENTS.map((agent) => [agent.id, agent.la
 function Status({ integration }: { integration: Integration }) {
   const { status } = integration;
   if (status.kind === "available") return <Badge variant="success">Ready to connect</Badge>;
-  if (status.kind === "built_in") return <Badge variant="info">Built in</Badge>;
+  if (status.kind === "built_in") return mapsKey() ? <Badge variant="success">Built in</Badge> : <Badge variant="warning">Waiting on setup</Badge>;
   return <Badge variant="outline">Coming in phase {status.phase}</Badge>;
 }
 
