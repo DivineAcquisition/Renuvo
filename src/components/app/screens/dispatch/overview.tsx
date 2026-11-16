@@ -186,7 +186,7 @@ export function DispatchOverviewScreen() {
           </div>
         </Panel>
 
-        {overview.truncated ? <Incomplete what="visits" /> : null}
+        {overview.truncated ? <Incomplete what="visits" shown={200} total={overview.total} /> : null}
 
         <section aria-label="Today and tomorrow, counted">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

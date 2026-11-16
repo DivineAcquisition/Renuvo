@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { accepted, dispatchTestEnv, flush, PHONES, setup } from "../tests/dispatchHarness";
 import { HOUR, JOB_START, refusal } from "../tests/harness";
 import { api, internal } from "./_generated/api";
-import { mockReply, rulesReplyModel } from "./lib/dispatch/replyReader";
+import { mockReply, rulesReplyModel, type ReplyOption } from "./lib/dispatch/replyReader";
 
 type S = Awaited<ReturnType<typeof setup>>;
 
@@ -111,9 +111,9 @@ describe("Dispatch: reading a cleaner's text back", () => {
   });
 
   it("the rules reader answers only when there is one visit the words can be about", async () => {
-    const job = { ref: "V1", kind: "job" as const, when: "Tue at 10:00 AM", service: "standard", area: "Austin", state: "Not checked in yet." };
-    const offer = { ...job, ref: "V2", kind: "offer" as const };
-    const read = (t: string, options = [job]) => rulesReplyModel.read({ text: t, options });
+    const job: ReplyOption = { ref: "V1", kind: "job", when: "Tue at 10:00 AM", service: "standard", area: "Austin", state: "Not checked in yet." };
+    const offer: ReplyOption = { ...job, ref: "V2", kind: "offer" };
+    const read = (t: string, options: ReplyOption[] = [job]) => rulesReplyModel.read({ text: t, options });
     expect(await read("running 15 mins late")).toMatchObject({ intent: "running_late", ref: "V1", etaMinutes: 15, clear: true });
     expect(await read("running late, 1 hour")).toMatchObject({ intent: "running_late", etaMinutes: 60, clear: true });
     expect(await read("running late")).toMatchObject({ clear: false });

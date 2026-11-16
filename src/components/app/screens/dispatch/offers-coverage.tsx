@@ -178,7 +178,7 @@ export function OffersCoverageScreen() {
       </div>
       {data?.truncated || board?.truncated ? (
         <div className="mb-4">
-          <Incomplete what="visits" />
+          <Incomplete what="visits" shown={board?.jobs.length} total={board?.total ?? data?.total} />
         </div>
       ) : null}
       <FormError message={error} />

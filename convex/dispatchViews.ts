@@ -4,6 +4,7 @@
  * status, its crew's assignments, its offers and its review are separate facts, shown side by side.
  * Anything not known is returned as null, never as a guess.
  */
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -127,13 +128,58 @@ async function jobsBetween(ctx: Ctx, from: number, to: number) {
 
 const range = { from: v.number(), to: v.number() };
 
+/** Counting stops here: a range with more visits than this is reported as "more than" this. */
+export const COUNT_LIMIT = 4000;
+
+/**
+ * How many visits fall in the range, read from the index alone so it stays cheap. Screens that show a
+ * page of visits say "N of total", never a count of the page as if it were the whole.
+ */
+async function countBetween(ctx: Ctx, from: number, to: number): Promise<{ total: number; atLeast: boolean }> {
+  let total = 0;
+  let cursor: string | null = null;
+  for (;;) {
+    const page: { page: unknown[]; isDone: boolean; continueCursor: string } = await ctx.db
+      .query("jobs")
+      .withIndex("by_company_start", (q) => q.eq("companyId", ctx.companyId).gte("startsAt", from).lt("startsAt", to))
+      .paginate({ numItems: 500, cursor });
+    total += page.page.length;
+    if (page.isDone) return { total, atLeast: false };
+    if (total >= COUNT_LIMIT) return { total, atLeast: true };
+    cursor = page.continueCursor;
+  }
+}
+
+/** The number of visits in a range, for screens that show a page of them. */
+export const rangeTotal = companyQuery({
+  args: range,
+  handler: async (ctx, args) => countBetween(ctx, args.from, args.to),
+});
+
+/**
+ * Dispatch Board, one page at a time, earliest first. The board loads further pages as a person asks
+ * for them, so a company with thousands of visits in a range sees all of them, not the first 200.
+ */
+export const boardPage = companyQuery({
+  args: { ...range, paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("jobs")
+      .withIndex("by_company_start", (q) => q.eq("companyId", ctx.companyId).gte("startsAt", args.from).lt("startsAt", args.to))
+      .paginate({ ...args.paginationOpts, numItems: Math.min(Math.max(args.paginationOpts.numItems, 1), 100) });
+    const rows: JobRow[] = [];
+    for (const job of page.page) rows.push(await jobRow(ctx, job));
+    return { ...page, page: rows };
+  },
+});
+
 /** Dispatch Board: every job in the range in its column, with the records the column was worked out from. */
 export const board = companyQuery({
   args: range,
   handler: async (ctx, args) => {
     const rows: JobRow[] = [];
     for (const job of await jobsBetween(ctx, args.from, args.to)) rows.push(await jobRow(ctx, job));
-    return { groups: BOARD_GROUPS, jobs: rows, truncated: rows.length === 200 };
+    return { groups: BOARD_GROUPS, jobs: rows, truncated: rows.length === 200, total: rows.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: rows.length, atLeast: false } };
   },
 });
 
@@ -166,6 +212,7 @@ export const overview = companyQuery({
       /** The agent's own work: what it is doing next and by when, and what it has handed to a person or another queue. */
       tasks: tasks.map((task) => ({ taskId: task._id, title: task.title, status: task.status, nextAction: task.nextAction ?? null, openQuestion: task.openQuestion ?? null, dueAt: task.dueAt, about: task.about ?? null, handoffTo: task.handoffTo ?? null, withPerson: task.withPersonSince !== undefined, trigger: task.trigger ?? null, escalation: task.escalation ?? null, completionCondition: task.completionCondition })),
       truncated: rows.length === 200,
+      total: rows.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: rows.length, atLeast: false },
     };
   },
 });
@@ -203,7 +250,7 @@ export const schedule = companyQuery({
       });
     }
     // 200 is the most this reads. A screen that gets exactly that many says the list may be incomplete.
-    return { timezone: ctx.company.timezone, travelBufferMinutes: dispatchSettings(ctx.company).travelBufferMinutes, jobs, cleaners: out, truncated: jobs.length === 200, cleanersTruncated: cleaners.length === 200 };
+    return { timezone: ctx.company.timezone, travelBufferMinutes: dispatchSettings(ctx.company).travelBufferMinutes, jobs, cleaners: out, truncated: jobs.length === 200, cleanersTruncated: cleaners.length === 200, total: jobs.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: jobs.length, atLeast: false } };
   },
 });
 
@@ -228,7 +275,7 @@ export const offersAndCoverage = companyQuery({
         .take(100)
     ).filter((task) => task.handoffTo === "recruiter" || task.key?.startsWith("recruiter."));
     const policy = dispatchPolicy(ctx.company);
-    return { truncated: jobs.length === 200, broadcastEnabled: policy.broadcastEnabled, offers, coverage, recruiterHandoffs: urgent.map((task) => ({ taskId: task._id, title: task.title, dueAt: task.dueAt, about: task.about ?? null })) };
+    return { truncated: jobs.length === 200, total: jobs.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: jobs.length, atLeast: false }, broadcastEnabled: policy.broadcastEnabled, offers, coverage, recruiterHandoffs: urgent.map((task) => ({ taskId: task._id, title: task.title, dueAt: task.dueAt, about: task.about ?? null })) };
   },
 });
 
@@ -285,7 +332,7 @@ export const liveJobs = companyQuery({
         ).map((report) => ({ reportId: report._id, kind: report.kind, text: report.text, status: report.status, assignmentId: report.assignmentId })),
       });
     }
-    return { asOf: now, jobs: out, truncated: all.length === 200 };
+    return { asOf: now, jobs: out, truncated: all.length === 200, total: all.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: all.length, atLeast: false } };
   },
 });
 

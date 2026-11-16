@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
@@ -16,7 +16,7 @@ import { clock, dayName, durationLabel, until, whenLabel } from "@/lib/app/forma
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../../convex/_generated/api";
-import { arrivalLabel, DELIVERY, Filter, GROUPS, GroupBadge, Incomplete, RangePicker, Staffing, useRange, type JobRow } from "./shared";
+import { arrivalLabel, DELIVERY, Filter, GROUPS, GroupBadge, RangePicker, Staffing, useRange, type JobRow } from "./shared";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -119,7 +119,10 @@ export function DispatchBoardScreen() {
   const now = useNow();
   const open = useDetail();
   const range = useRange(now, timezone, "today");
-  const board = useQuery(api.dispatchViews.board, now ? { companyId, from: range.from, to: range.to } : "skip");
+  // One page at a time, so a range with thousands of visits is not cut off at a fixed number.
+  const paged = usePaginatedQuery(api.dispatchViews.boardPage, now ? { companyId, from: range.from, to: range.to } : "skip", { initialNumItems: 100 });
+  const totals = useQuery(api.dispatchViews.rangeTotal, now ? { companyId, from: range.from, to: range.to } : "skip");
+  const board = paged.status === "LoadingFirstPage" ? undefined : { jobs: paged.results };
   const [layout, setLayout] = useState<"board" | "list">("board");
   const [adding, setAdding] = useState(false);
   const [filters, setFilters] = useState({ group: "all", service: "all", cleaner: "all", urgency: "all" });
@@ -178,9 +181,19 @@ export function DispatchBoardScreen() {
         </div>
       </div>
 
-      {board?.truncated ? (
-        <div className="mb-4">
-          <Incomplete what="visits" />
+      {board && totals && (paged.status !== "Exhausted" || totals.atLeast) ? (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
+          <span>
+            Showing {board.jobs.length.toLocaleString()} of {totals.atLeast ? "more than " : ""}
+            {totals.total.toLocaleString()} visits in this range, earliest first. Groups and filters cover only what is loaded.
+          </span>
+          {paged.status === "CanLoadMore" ? (
+            <Button variant="outline" size="xs" onClick={() => paged.loadMore(100)}>
+              Load 100 more
+            </Button>
+          ) : paged.status === "LoadingMore" ? (
+            <span className="text-xs">Loading…</span>
+          ) : null}
         </div>
       ) : null}
 

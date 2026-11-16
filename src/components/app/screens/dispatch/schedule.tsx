@@ -334,7 +334,7 @@ export function DispatchScheduleScreen() {
       </div>
       {data?.truncated || data?.cleanersTruncated ? (
         <div className="mb-4">
-          <Incomplete what={data.truncated ? "visits" : "cleaners"} />
+          <Incomplete what={data.truncated ? "visits" : "cleaners"} shown={data.truncated ? data.jobs.length : undefined} total={data.truncated ? data.total : undefined} />
         </div>
       ) : null}
 

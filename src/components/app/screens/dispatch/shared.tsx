@@ -73,12 +73,18 @@ export function arrivalLabel(row: Pick<JobRow, "startsAt" | "arrivalEndsAt">, ti
   return row.arrivalEndsAt > row.startsAt ? `Arrive ${clock(row.startsAt, timezone)} to ${clock(row.arrivalEndsAt, timezone)}` : `Arrive ${clock(row.startsAt, timezone)}`;
 }
 
-/** Shown when a list hit the most a query reads, so a total is never taken for the whole. */
-export function Incomplete({ what }: { what: string }) {
+/**
+ * Shown when a screen holds fewer records than the range has, so a page is never taken for the whole.
+ * `total` is counted from the record; `atLeast` means there were more than the count went up to.
+ */
+export function Incomplete({ what, shown, total }: { what: string; shown?: number; total?: { total: number; atLeast: boolean } }) {
+  const all = total ? `${total.atLeast ? "more than " : ""}${total.total.toLocaleString()}` : null;
   return (
     <p role="status" className="flex items-start gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
       <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-      <span>This list stops at 200 {what}, so it may not be all of them and the counts here are not totals. Choose a shorter range to see everything in it.</span>
+      <span>
+        {all && shown !== undefined ? `Showing ${shown.toLocaleString()} of ${all} ${what} in this range.` : `This list stops at 200 ${what}, so it may not be all of them.`} The counts here cover only what is shown. Choose a shorter range{what === "visits" ? ", or use the Dispatch Board, which loads every page," : ""} to see everything.
+      </span>
     </p>
   );
 }

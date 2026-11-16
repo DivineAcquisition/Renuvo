@@ -367,3 +367,42 @@ describe("Dispatch: the crew's photos are the company's to see, and only theirs"
     expect(await refusal(other.as.query(api.dispatchViews.jobPhotos, { companyId: other.companyId, jobId: a.jobId }))).toBe("Not found.");
   });
 });
+
+describe("Dispatch: a busy range is paged, and its total is counted, never guessed", () => {
+  let undo = () => {};
+  beforeEach(() => {
+    undo = dispatchTestEnv();
+  });
+  afterEach(() => undo());
+
+  it("pages the board through 250 visits and tells the capped screens the real total", async () => {
+    const s = await setup([]);
+    await s.t.run(async (ctx) => {
+      for (let i = 0; i < 250; i += 1) {
+        await ctx.db.insert("jobs", { companyId: s.companyId, ...s.place, serviceType: "standard", scope: "x", requiredSkills: [], startsAt: JOB_START + i * 60_000, endsAt: JOB_START + i * 60_000 + HOUR, status: "scheduled", createdAt: NOW });
+      }
+    });
+    const range = { companyId: s.companyId, from: JOB_START - HOUR, to: JOB_START + 24 * HOUR };
+    expect(await s.as.query(api.dispatchViews.rangeTotal, range)).toEqual({ total: 250, atLeast: false });
+
+    const seen: number[] = [];
+    let cursor: string | null = null;
+    for (;;) {
+      const page: { page: { startsAt: number }[]; isDone: boolean; continueCursor: string } = await s.as.query(api.dispatchViews.boardPage, { ...range, paginationOpts: { numItems: 100, cursor } });
+      seen.push(...page.page.map((row) => row.startsAt));
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
+    // Every visit once, earliest first.
+    expect(seen).toHaveLength(250);
+    expect(new Set(seen).size).toBe(250);
+    expect([...seen].sort((a, b) => a - b)).toEqual(seen);
+
+    // The screens that still read a fixed number say how many there are in all.
+    const board = await s.as.query(api.dispatchViews.board, range);
+    expect(board).toMatchObject({ truncated: true, total: { total: 250, atLeast: false } });
+    expect(board.jobs).toHaveLength(200);
+    const live = await s.as.query(api.dispatchViews.liveJobs, range);
+    expect(live.total).toEqual({ total: 250, atLeast: false });
+  });
+});

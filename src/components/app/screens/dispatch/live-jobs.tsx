@@ -348,7 +348,7 @@ export function LiveJobsScreen() {
       ) : null}
       {live?.truncated ? (
         <div className="mb-4">
-          <Incomplete what="visits" />
+          <Incomplete what="visits" shown={live.jobs.length} total={live.total} />
         </div>
       ) : null}
       {live === undefined ? (

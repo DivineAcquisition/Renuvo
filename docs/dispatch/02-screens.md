@@ -77,8 +77,7 @@ opened". A text's `delivered` means the provider confirmed the handset got it, a
   withdrawn, everyone who had accepted is asked again for the new time at the pay they accepted, and a
   cleaner who cannot work it is told and their place reopens. These assignments end with cause
   `job_moved`, which does not count against asking the same cleaner again.
-- **Lists stop at 200 visits.** Each screen says so when it reaches that, instead of showing a total.
-  Real pagination is still to do.
+- **Lists and totals.** The Dispatch Board loads visits a page at a time (`dispatchViews.boardPage`) and shows "N of total" from `dispatchViews.rangeTotal`, which counts from the index (exact up to 4,000, then "more than"). The other screens still read up to 200 visits and, when they reach that, say how many there are in all.
 - **Crew pay** is the Owner's setting in Playbook (`dispatchPolicy.crewPayMode`, `leadPremiumPercent`):
   a cleaner on a share gets their share of the whole price (the default) or that share split across the
   cleaners the visit needs, with an optional lead premium. Pay is worked out for the role the offer
