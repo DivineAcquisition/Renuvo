@@ -119,6 +119,42 @@ export function Requirements({ rows, extra }: { rows: Requirement[]; extra?: str
   );
 }
 
+/**
+ * Agreement to the Terms and the Privacy Policy, ticked by the person themselves (never pre-ticked).
+ * The documents open in a new tab, so what is typed in the form is not lost.
+ */
+export function ConsentField({ checked, onChange, disabled }: { checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) {
+  const id = useId();
+  const link = "rounded font-medium text-[#5126c7] underline underline-offset-4 hover:text-[#3f1ca3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]";
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl border border-[#e4e0f5] bg-[#f8f6ff] px-3.5 py-3">
+      <input
+        id={id}
+        type="checkbox"
+        name="legal-accepted"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        required
+        className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-[#b9c0cf] accent-[#6838ef] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]"
+      />
+      <label htmlFor={id} className="cursor-pointer text-sm leading-relaxed text-[#475467]">
+        I agree to Selestial&rsquo;s{" "}
+        <a href="/terms" target="_blank" rel="noopener" className={link}>
+          Terms of Service
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>{" "}
+        and{" "}
+        <a href="/privacy" target="_blank" rel="noopener" className={link}>
+          Privacy Policy
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+        .
+      </label>
+    </div>
+  );
+}
+
 /** The main button of a form. While the request runs it is disabled, so it cannot be sent twice. */
 export function SubmitButton({ busy, children, busyLabel, disabled }: { busy: boolean; children: React.ReactNode; busyLabel: string; disabled?: boolean }) {
   return (

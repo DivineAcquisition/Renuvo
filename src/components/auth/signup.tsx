@@ -4,7 +4,7 @@ import { useAuth, useSignUp } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { CodeField, Notice, PasswordField, QuietButton, Requirements, SubmitButton, TextField, useCooldown } from "@/components/auth/fields";
+import { CodeField, ConsentField, Notice, PasswordField, QuietButton, Requirements, SubmitButton, TextField, useCooldown } from "@/components/auth/fields";
 import { enter, goOn, useNext, useSkipWhenSignedIn } from "@/components/auth/flow";
 import { AuthLink, AuthShell, useEvents, type TraceStep } from "@/components/auth/shell";
 import { codeOf, problemOf, type AuthProblem } from "@/lib/auth/errors";
@@ -12,7 +12,7 @@ import { meets, requirements, splitName, type PasswordPolicy } from "@/lib/auth/
 import { AUTH, inviteTokenIn, withNext } from "@/lib/auth/routes";
 
 /** What this form collects. If the sign-in service asks for anything else, the screen says setup is unfinished. */
-const COLLECTED = new Set(["email_address", "password", "first_name", "last_name"]);
+const COLLECTED = new Set(["email_address", "password", "first_name", "last_name", "legal_accepted"]);
 
 function signupSteps(at: "form" | "sending" | "code" | "checking" | "entering" | "failed", invited: boolean): TraceStep[] {
   const order = ["form", "sending", "code", "checking", "entering"];
@@ -34,6 +34,7 @@ export function SignupScreen({ policy }: { policy: PasswordPolicy | null }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<AuthProblem | null>(null);
   const [touched, setTouched] = useState(false);
@@ -45,12 +46,13 @@ export function SignupScreen({ policy }: { policy: PasswordPolicy | null }) {
     event.preventDefault();
     setTouched(true);
     if (busy || !signUp) return;
-    if (password !== confirm) return;
+    if (password !== confirm || !agreed) return;
     setBusy(true);
     setProblem(null);
     note("Creating your account");
     const { firstName, lastName } = splitName(name);
-    const { error } = await signUp.password({ emailAddress: email.trim(), password, firstName, lastName });
+    // The agreement is sent with the account, so the sign-in service records when it was given.
+    const { error } = await signUp.password({ emailAddress: email.trim(), password, firstName, lastName, legalAccepted: true });
     if (error) {
       setProblem(problemOf(error));
       note(codeOf(error) === "form_identifier_exists" ? "This email already has an account" : "Account not created");
@@ -131,7 +133,8 @@ export function SignupScreen({ policy }: { policy: PasswordPolicy | null }) {
             <AuthLink href={withNext(AUTH.login, next)}>Sign in</AuthLink> or <AuthLink href={AUTH.forgot}>reset your password</AuthLink>.
           </p>
         ) : null}
-        <SubmitButton busy={busy} busyLabel="Creating your account" disabled={!signUp || name.trim() === "" || email.trim() === "" || !meets(policy, password) || confirm === ""}>
+        <ConsentField checked={agreed} onChange={setAgreed} disabled={busy} />
+        <SubmitButton busy={busy} busyLabel="Creating your account" disabled={!signUp || name.trim() === "" || email.trim() === "" || !meets(policy, password) || confirm === "" || !agreed}>
           Create account
         </SubmitButton>
       </form>

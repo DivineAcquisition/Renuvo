@@ -41,7 +41,8 @@ export async function makePerson(run, label, password, name) {
   serial += 1;
   const email = `sel-${label}-${run}+clerk_test@example.com`;
   const [first_name, ...rest] = name.split(" ");
-  const base = { email_address: [email], password, first_name, last_name: rest.join(" "), skip_password_checks: false };
+  // Test people stand for someone who signed up, so they carry the agreement the sign-up form records.
+  const base = { email_address: [email], password, first_name, last_name: rest.join(" "), skip_password_checks: false, legal_accepted_at: new Date().toISOString() };
   let user;
   try {
     user = await api("POST", "/users", base);
