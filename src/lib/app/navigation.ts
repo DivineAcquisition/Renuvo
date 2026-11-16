@@ -420,7 +420,6 @@ export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes
   { pattern: `${APP_ROOT}/team`, today: "Redirects to Settings, where agent permissions and pause now live.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/schedule`, today: "Redirects to Dispatch › Schedule.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/integrations`, today: "Redirects to Settings › Integrations (moved November 16, 2026).", becomes: "Removed once old links have had time to move." },
-  { pattern: `${APP_ROOT}/settings/google`, today: "Redirects to Settings › Integrations with the Google account panel open, so Google's earlier sign-in returns still land.", becomes: "Removed once no Google sign-in can still return here." },
   { pattern: `${APP_ROOT}/settings/connections`, today: "Redirects to Settings › Integrations (Connections was folded in on November 16, 2026).", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/insights`, today: "The week's measures.", becomes: "Reports, at /app/reports, with a redirect from here." },
   {

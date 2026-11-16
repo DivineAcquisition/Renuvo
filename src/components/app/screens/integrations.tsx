@@ -4,12 +4,12 @@ import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AgentAvatar, eyebrow } from "@/components/app/agent";
 import { useCompany } from "@/components/app/company";
 import { IntegrationMark } from "@/components/app/integration-mark";
-import { GoogleSettings } from "@/components/app/settings/google";
+import { GoogleToolPanel, useConnectGoogle, type Feature } from "@/components/app/integrations/google-tool";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { messageOf } from "@/components/app/form";
 import { ArrowRight, CheckCircle2, ChevronDown, Lock, Plug, Search, Sparkles, X } from "@/components/icons";
@@ -65,7 +65,39 @@ const secondary = cn(action, "border border-border bg-card text-strong hover:bg-
  * What a person can do from the card. Built: go to where it is set up. Planned: the Owner asks for it.
  * Built in: nothing to do. The server checks the Owner again, so the button only saves a trip.
  */
-function CardAction({ integration, live, requested, onGoogle }: { integration: Integration; live: Live | null; requested: { requestedAt: number } | null; onGoogle: () => void }) {
+/** Google cards connect their own tool: Drive, Calendar, Business Profile, or Ads (Local Services leads come through Ads). */
+const GOOGLE_FEATURE: Record<string, Feature | undefined> = { "google-drive": "drive", "google-calendar": "calendar", "google-business-profile": "business_profile", "google-ads": "ads", "google-local-services-ads": "ads" };
+const CARD_OF_FEATURE: Record<string, string> = { drive: "google-drive", calendar: "google-calendar", business_profile: "google-business-profile", ads: "google-ads", conversions: "google-ads" };
+
+/** A Google card's button: Connect starts that tool's own Google sign-in; Manage opens it in the card. */
+function GoogleCardAction({ feature, live, owner, open, onToggle, name }: { feature: Feature; live: Live | null; owner: boolean; open: boolean; onToggle: () => void; name: string }) {
+  const { busy, error, connect } = useConnectGoogle(feature);
+  const fresh = live?.state === "ready";
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        {fresh && owner ? (
+          <button type="button" disabled={busy} onClick={() => connect()} className={primary}>
+            <Plug className="size-3.5" aria-hidden />
+            {busy ? "Opening Google…" : `Connect ${name}`}
+            <ArrowRight className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+        <button type="button" onClick={onToggle} aria-expanded={open} className={secondary}>
+          {open ? "Close" : fresh ? "Details" : live?.state === "connected" ? "Manage" : "Set up"}
+          <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
+        </button>
+      </div>
+      {error ? (
+        <p role="alert" className="text-xs text-destructive-foreground">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CardAction({ integration, live, requested, open, onToggle }: { integration: Integration; live: Live | null; requested: { requestedAt: number } | null; open: boolean; onToggle: () => void }) {
   const { companyId, role } = useCompany();
   const ask = useMutation(api.integrations.request);
   const [busy, setBusy] = useState(false);
@@ -77,22 +109,17 @@ function CardAction({ integration, live, requested, onGoogle }: { integration: I
 
   if (status.kind === "available") {
     if (live?.state === "not_set_up") return <p className="text-xs text-muted-foreground">Selestial still has to switch this on for your account.</p>;
+    const feature = GOOGLE_FEATURE[integration.id];
+    if (feature) return <GoogleCardAction feature={feature} live={live} owner={owner} open={open} onToggle={onToggle} name={integration.name} />;
+    if (status.href === "#google") return <p className="text-xs text-muted-foreground">Built in: nothing to connect.</p>;
     const label = live?.state === "connected" ? "Manage" : live?.state === "in_progress" ? "See progress" : owner ? `Connect ${integration.name.replace(/^Business /, "")}` : "See setup";
     return (
       <div className="flex flex-wrap items-center gap-2">
-        {status.href === "#google" ? (
-          <button type="button" onClick={onGoogle} className={live?.state === "ready" && owner ? primary : secondary}>
-            {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
-            {live?.state === "ready" && owner ? "Connect Google" : label}
-            <ArrowRight className="size-3.5" aria-hidden />
-          </button>
-        ) : (
-          <Link href={status.href} className={live?.state === "ready" && owner ? primary : secondary}>
-            {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
-            {label}
-            <ArrowRight className="size-3.5" aria-hidden />
-          </Link>
-        )}
+        <Link href={status.href} className={live?.state === "ready" && owner ? primary : secondary}>
+          {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
+          {label}
+          <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
         <span className="text-[11px] text-muted-foreground">In {status.setUpWhere}</span>
       </div>
     );
@@ -169,11 +196,12 @@ function UsedBy({ agents, highlight }: { agents: AgentId[]; highlight: AgentId |
   );
 }
 
-function IntegrationCard({ integration, highlight, overview, onGoogle }: { integration: Integration; highlight: AgentId | null; overview: Overview | undefined; onGoogle: () => void }) {
+function IntegrationCard({ integration, highlight, overview, open, onToggle, result }: { integration: Integration; highlight: AgentId | null; overview: Overview | undefined; open: boolean; onToggle: () => void; result: string | null }) {
   const live = liveOf(integration, overview);
   const requested = overview?.requested.find((row) => row.integrationId === integration.id) ?? null;
+  const feature = GOOGLE_FEATURE[integration.id];
   return (
-    <li className={cn("group flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-brand-500/40", live?.state === "connected" ? "border-success/40" : "border-border")}>
+    <li id={`card-${integration.id}`} className={cn("group flex scroll-mt-20 flex-col gap-3 rounded-xl border bg-card p-4 transition-colors hover:border-brand-500/40", live?.state === "connected" ? "border-success/40" : "border-border", open && feature && "sm:col-span-2 xl:col-span-3")}>
       <div className="flex items-center gap-3">
         <IntegrationMark id={integration.id} size="lg" />
         <div className="min-w-0">
@@ -185,7 +213,8 @@ function IntegrationCard({ integration, highlight, overview, onGoogle }: { integ
       <Abilities can={integration.can} />
       {integration.note ? <p className="text-xs leading-relaxed text-muted-foreground">{integration.note}</p> : null}
       <div className="mt-auto grid gap-3 border-t border-border pt-3">
-        <CardAction integration={integration} live={live} requested={requested} onGoogle={onGoogle} />
+        <CardAction integration={integration} live={live} requested={requested} open={open} onToggle={onToggle} />
+        {open && feature ? <GoogleToolPanel feature={feature} result={result} /> : null}
         <UsedBy agents={integration.agents} highlight={highlight} />
       </div>
     </li>
@@ -225,49 +254,19 @@ function AgentTools({ agent, selected, onSelect }: { agent: AgentId; selected: b
   );
 }
 
-/**
- * The company's Google tools, on this page rather than a Settings tab of its own: a row saying which are
- * connected, opening into each tool's own connection and setup (files, calendars, locations, ad accounts).
- */
-function GoogleAccount({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  const { companyId } = useCompany();
-  const status = useQuery(api.google.status, { companyId });
-  const on = status?.tools.filter((tool) => tool.granted) ?? [];
-  const expired = status?.tools.some((tool) => tool.connection?.status === "expired") ?? false;
-  const words = !status ? "Loading…" : on.length ? `${on.length} of ${status.tools.length} connected${expired ? "; one needs reconnecting" : ""}` : expired ? "Reconnect needed" : "None connected yet";
-  const anyOn = on.length > 0;
-  return (
-    <section id="google" className="mb-5 scroll-mt-20 rounded-2xl border border-border bg-card">
-      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3.5 text-left sm:px-5">
-        <IntegrationMark id="google-local-services-ads" size="lg" />
-        <span className="min-w-0 flex-1">
-          <span className="block font-medium text-strong">Google tools</span>
-          <span className="block truncate text-xs text-muted-foreground">Drive, Calendar, Business Profile, Ads and conversions, each connected on its own. {words}.</span>
-        </span>
-        <span className={cn(open ? secondary : anyOn ? secondary : primary, "shrink-0")}>
-          {open ? "Close" : anyOn ? "Manage" : "Set up"}
-          <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
-        </span>
-      </button>
-      {open ? (
-        <div className="border-t border-border p-4 sm:p-5">
-          <GoogleSettings />
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 export function IntegrationsScreen({ embedded = false }: { embedded?: boolean }) {
   const { companyId, role } = useCompany();
   const overview = useQuery(api.integrations.overview, { companyId });
   const params = useSearchParams();
-  // Google's sign-in comes back with ?result=…, and old Google links with ?google=1: open the panel for them.
-  const [googleOpen, setGoogleOpen] = useState(() => params.get("google") !== null || params.get("result") !== null);
-  const openGoogle = () => {
-    setGoogleOpen(true);
-    requestAnimationFrame(() => document.getElementById("google")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-  };
+  // Google's sign-in comes back with ?tool=<feature>&result=…: that tool's card opens with the result.
+  const returned = params.get("tool");
+  const result = params.get("result");
+  const [openCard, setOpenCard] = useState<string | null>(() => (returned ? (CARD_OF_FEATURE[returned] ?? null) : null));
+  useEffect(() => {
+    if (openCard && returned) requestAnimationFrame(() => document.getElementById(`card-${openCard}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    // Only on arrival from Google.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [agent, setAgent] = useState<AgentId | null>(null);
   const [query, setQuery] = useState("");
 
@@ -306,8 +305,6 @@ export function IntegrationsScreen({ embedded = false }: { embedded?: boolean })
           {role === "owner" ? "Only you, as the Owner, can connect, disconnect or request an integration. Everyone in your company can see what is connected." : "Only the Owner can connect, disconnect or request an integration. You can see what is connected."}
         </p>
       </section>
-
-      <GoogleAccount open={googleOpen} onToggle={() => setGoogleOpen((before) => !before)} />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <label className="relative block w-full sm:max-w-xs">
@@ -353,7 +350,7 @@ export function IntegrationsScreen({ embedded = false }: { embedded?: boolean })
                 <p className="mb-4 text-sm text-muted-foreground">{category.lead}</p>
                 <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {inGroup.map((integration) => (
-                    <IntegrationCard key={integration.id} integration={integration} highlight={agent} overview={overview} onGoogle={openGoogle} />
+                    <IntegrationCard key={integration.id} integration={integration} highlight={agent} overview={overview} open={openCard === integration.id} onToggle={() => setOpenCard((current) => (current === integration.id ? null : integration.id))} result={openCard === integration.id && returned && CARD_OF_FEATURE[returned] === integration.id ? result : null} />
                   ))}
                 </ul>
               </Panel>

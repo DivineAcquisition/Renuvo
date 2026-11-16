@@ -129,29 +129,29 @@ http.route({
       const stateHash = await hashToken(state);
       // The company's Google connection first; a state it does not know belongs to the Gmail inbox flow.
       const google = await ctx.runMutation(internal.google.takeState, { stateHash });
-      if (google.kind === "expired") return afterGoogle("expired", google.returnOrigin);
+      if (google.kind === "expired") return afterGoogle("expired", google.returnOrigin, google.feature);
       if (google.kind === "ok") {
         const app = googleConnectApp();
         const redirect = googleConnectRedirect();
-        if (!code || params.get("error") || !app || !redirect) return afterGoogle(params.get("error") === "access_denied" ? "declined" : "failed", google.returnOrigin);
+        if (!code || params.get("error") || !app || !redirect) return afterGoogle(params.get("error") === "access_denied" ? "declined" : "failed", google.returnOrigin, google.features[0]);
         let tokens;
         try {
           tokens = await googleExchange(app, code, redirect);
         } catch {
-          return afterGoogle("failed", google.returnOrigin);
+          return afterGoogle("failed", google.returnOrigin, google.features[0]);
         }
         const who = identityFrom(tokens.idToken);
-        if (!who?.email) return afterGoogle("failed", google.returnOrigin);
+        if (!who?.email) return afterGoogle("failed", google.returnOrigin, google.features[0]);
         const done = await ctx.runMutation(internal.google.completeConnect, { companyId: google.companyId, memberId: google.memberId, feature: google.features[0], connectionId: google.connectionId, googleSub: who.sub, email: who.email, scopes: tokens.scopes, hasRefreshToken: Boolean(tokens.refreshToken) });
-        if (!done.ok) return afterGoogle(done.reason, google.returnOrigin);
+        if (!done.ok) return afterGoogle(done.reason, google.returnOrigin, google.features[0]);
         if (tokens.refreshToken) {
           const sealed = await seal(tokens.refreshToken, done.connectionId);
-          if (!sealed) return afterGoogle("failed", google.returnOrigin);
+          if (!sealed) return afterGoogle("failed", google.returnOrigin, google.features[0]);
           await ctx.runMutation(internal.google.storeCredential, { connectionId: done.connectionId, sealedRefreshToken: sealed });
         }
         // Partial consent is kept as it is: only what Google actually granted is switched on.
         const missing = google.features.filter((f) => !done.enabled.includes(f));
-        return afterGoogle(missing.length ? `partial:${missing.join(",")}` : "connected", google.returnOrigin);
+        return afterGoogle(missing.length ? `partial:${missing.join(",")}` : "connected", google.returnOrigin, google.features[0]);
       }
       const taken = await ctx.runMutation(internal.recruiterMailbox.takeState, { stateHash });
       if (!taken) return afterConnect("expired");
