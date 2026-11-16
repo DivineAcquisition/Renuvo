@@ -6,6 +6,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
+import { missingSetup } from "@/components/app/not-set-up";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { UserMenu } from "@/components/auth/user-menu";
 import { LogoMark } from "@/components/brand/logo";
@@ -25,6 +26,20 @@ import type { Id } from "../../../convex/_generated/dataModel";
  * draw, and to anyone who is not staff it looks like a page that does not exist.
  */
 export function StaffGate({ children }: { children: React.ReactNode }) {
+  // A deployment with no sign-in or record (a preview without settings) has no providers to ask.
+  if (missingSetup().length > 0) return <NotFound />;
+  return <StaffCheck>{children}</StaffCheck>;
+}
+
+function NotFound() {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-muted/50 p-6">
+      <p className="text-base font-semibold text-strong">Not found.</p>
+    </main>
+  );
+}
+
+function StaffCheck({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const me = useQuery(api.staff.me, isAuthenticated ? {} : "skip");
   if (isLoading || (isAuthenticated && me === undefined)) {
@@ -35,13 +50,7 @@ export function StaffGate({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!me) {
-    return (
-      <main className="grid min-h-dvh place-items-center bg-muted/50 p-6">
-        <p className="text-base font-semibold text-strong">Not found.</p>
-      </main>
-    );
-  }
+  if (!me) return <NotFound />;
   return <StaffShell role={me.role}>{children}</StaffShell>;
 }
 
