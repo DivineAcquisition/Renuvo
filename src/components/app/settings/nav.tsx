@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useId, useMemo, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
+import { SectionMark } from "@/components/app/settings/marks";
 import { SETTINGS_GROUPS, SETTINGS_ROOT, searchSections, sectionForPath, sectionsFor, type SettingsSection } from "@/lib/app/settings";
 import { cn } from "@/lib/utils";
 
@@ -28,8 +29,9 @@ export function SettingsNavList({ sections, activePath, onNavigate }: { sections
                       href={row.path}
                       aria-current={active ? "page" : undefined}
                       onClick={onNavigate}
-                      className={cn("block rounded-lg px-2.5 py-1.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-500/40", active ? "bg-brand-500/10 font-medium text-strong" : "text-muted-foreground hover:bg-muted hover:text-strong")}
+                      className={cn("flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-500/40", active ? "bg-brand-500/10 font-medium text-strong" : "text-muted-foreground hover:bg-muted hover:text-strong")}
                     >
+                      <SectionMark id={row.id} size="sm" />
                       {row.label}
                     </Link>
                   </li>
@@ -56,7 +58,7 @@ export function SettingsNav() {
   const sections = useMemo(() => searchSections(query, sectionsFor(role)), [query, role]);
   const current = sectionForPath(pathname);
   return (
-    <nav aria-label="Settings" className="lg:sticky lg:top-20 lg:self-start">
+    <nav aria-label="Settings" className="rounded-2xl border border-border bg-card p-3 lg:sticky lg:top-20 lg:self-start">
       <div className="flex items-center justify-between gap-2 lg:hidden">
         <Link href={SETTINGS_ROOT} className="text-sm font-medium text-strong">
           {current ? current.label : "Settings"}

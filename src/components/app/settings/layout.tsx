@@ -10,7 +10,7 @@ import { SettingsNav } from "@/components/app/settings/nav";
 export function SettingsLayout({ children }: { children: React.ReactNode }) {
   return (
     <BusinessDraftProvider>
-      <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
+      <div className="grid gap-5 lg:grid-cols-[15.5rem_minmax(0,1fr)] lg:gap-8">
         <SettingsNav />
         <div className="min-w-0">{children}</div>
       </div>

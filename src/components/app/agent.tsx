@@ -33,7 +33,7 @@ export function agentPortrait(agent: string): string {
  * An agent's face with a dot for its state. The dot breathes only while the agent is acting or waiting on
  * you. Decorative: the agent's name is always written beside it. An agent not built yet is shown faded.
  */
-export function AgentAvatar({ agent, state, size = "md" }: { agent: AgentId; state?: AgentState; size?: keyof typeof PIXELS }) {
+export function AgentAvatar({ agent, state, size = "md" }: { agent: AgentId | (string & {}); state?: AgentState; size?: keyof typeof PIXELS }) {
   const look = state ? STATE[state] : null;
   const pixels = PIXELS[size];
   return (
