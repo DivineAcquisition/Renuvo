@@ -34,6 +34,21 @@ What Selestial connects to, why, and the order it is built in. The list itself i
   nothing. A broken connection says what broke and how to fix it.
 - **Disconnecting stops use at once** and says what stops working.
 
+## The page
+
+- **Agents first.** The top of the page is a tool belt: each agent with its face, how many tools it works
+  with and their logos. Picking an agent filters the page to its tools. A search box finds a tool by name
+  or by what it does.
+- **Each card** shows the logo, where it stands (a dot and words, like an agent's state), what it does, the
+  tools it gives agents as short commands (`src/lib/app/integrations.ts`, `can`), and the agents that use it.
+- **Logos** are the brands' own marks from Simple Icons (CC0), stored as paths in
+  `src/lib/app/integration-brands.ts` and drawn on a white tile so colours read the same in light and
+  dark. Simple Icons has no mark for Outlook, OneDrive, Checkr, Jobber, Housecall Pro, ZenMaid or
+  Launch27, so those show a letter in the brand's colour (Outlook and OneDrive in Microsoft blue, the
+  others grey). To use an official logo, add its file and point the entry in
+  `src/components/app/integration-mark.tsx` at it. The texting number is Selestial's own feature and uses
+  a chat glyph. Logos belong to their owners and are shown only to say which service a card is about.
+
 ## Phases
 
 | Phase | What | Needs from the owner |
