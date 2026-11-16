@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { AddressField } from "@/components/app/address-field";
+import { Guard } from "@/components/app/settings/guard";
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { Button } from "@/components/ui/button";
@@ -231,32 +232,49 @@ function PropertySelect({ customerId, value, onChange }: { customerId: Id<"custo
   );
 }
 
+type Template = { id: string; name: string; scope: string; skills: string[]; startingPriceCents?: number; durationMinutes: number; defaultCrew: number };
+
+/** The service templates from Settings. Reading them is optional: if they cannot be read, visits are made by typing, as before. */
+function TemplateField({ serviceId, onChoose }: { serviceId: string; onChoose: (template: Template | null) => void }) {
+  const { companyId } = useCompany();
+  const business = useQuery(api.settings.business, { companyId });
+  const templates = (business?.services ?? []).filter((service) => service.status === "active");
+  if (templates.length === 0) return null;
+  const template = templates.find((service) => service.id === serviceId);
+  return (
+    <Field label="Service template" hint={template ? `${template.durationMinutes} minutes, ${template.defaultCrew} ${template.defaultCrew === 1 ? "cleaner" : "cleaners"}. Fields below can still be changed.` : "Optional. Fills the fields below from Settings."}>
+      <SelectInput value={serviceId} onChange={(event) => onChoose(templates.find((service) => service.id === event.target.value) ?? null)}>
+        <option value="">No template</option>
+        {templates.map((service) => (
+          <option key={service.id} value={service.id}>
+            {service.name}
+          </option>
+        ))}
+      </SelectInput>
+    </Field>
+  );
+}
+
 /** A visit for a customer at one of their properties, on the company's clock. */
 export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const { companyId, timezone } = useCompany();
   const customers = useQuery(api.customers.list, { companyId });
   const create = useMutation(api.jobs.create);
-  const business = useQuery(api.settings.business, { companyId });
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
-  const templates = (business?.services ?? []).filter((service) => service.status === "active");
-  const template = templates.find((service) => service.id === form.serviceId);
+  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
   /** Fills the fields from the template. Everything stays editable; the visit keeps a copy of the template as it is now. */
-  const choose = (serviceId: string) => {
-    const picked = templates.find((service) => service.id === serviceId);
+  const choose = (picked: Template | null) =>
     setForm((current) =>
       picked
-        ? { ...current, serviceId, serviceType: picked.name, scope: picked.scope, skills: picked.skills.join(", "), price: picked.startingPriceCents === undefined ? "" : (picked.startingPriceCents / 100).toFixed(2) }
-        : { ...current, serviceId: "" },
+        ? { ...current, serviceId: picked.id, duration: picked.durationMinutes, serviceType: picked.name, scope: picked.scope, skills: picked.skills.join(", "), price: picked.startingPriceCents === undefined ? "" : (picked.startingPriceCents / 100).toFixed(2) }
+        : { ...current, serviceId: "", duration: 0 },
     );
-  };
   /** With a template chosen, the end follows the start by the template's duration. */
   const startAt = (from: string) =>
     setForm((current) => {
-      const picked = templates.find((service) => service.id === current.serviceId);
       const [hours, minutes] = from.split(":").map(Number);
-      if (!picked || Number.isNaN(hours) || Number.isNaN(minutes)) return { ...current, from };
-      const end = hours * 60 + minutes + picked.durationMinutes;
+      if (!current.duration || Number.isNaN(hours) || Number.isNaN(minutes)) return { ...current, from };
+      const end = hours * 60 + minutes + current.duration;
       return end < 24 * 60 ? { ...current, from, to: `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}` } : { ...current, from };
     });
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -307,18 +325,9 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
             </SelectInput>
           )}
         </Field>
-        {templates.length > 0 ? (
-          <Field label="Service template" hint={template ? `${template.durationMinutes} minutes, ${template.defaultCrew} ${template.defaultCrew === 1 ? "cleaner" : "cleaners"}. Fields below can still be changed.` : "Optional. Fills the fields below from Settings."}>
-            <SelectInput value={form.serviceId} onChange={(event) => choose(event.target.value)}>
-              <option value="">No template</option>
-              {templates.map((service) => (
-                <option key={service.id} value={service.id}>
-                  {service.name}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-        ) : null}
+        <Guard fallback={() => null}>
+          <TemplateField serviceId={form.serviceId} onChoose={choose} />
+        </Guard>
         <Field label="Service">
           <TextInput value={form.serviceType} onChange={set("serviceType")} required maxLength={80} />
         </Field>

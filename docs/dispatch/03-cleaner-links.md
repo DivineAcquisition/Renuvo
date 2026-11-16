@@ -51,7 +51,16 @@ exists, and the owner sees that no text went.
 
 A failed send is retried up to three times when the provider says it may work. A text that fails for
 good, or whose fate is unknown, ends the offer as **undelivered**, sends the cleaner's contact details to
-a person to check, and moves on. It is never recorded as the cleaner not answering. A cleaner with no
+a person to check, and moves on. It is never recorded as the cleaner not answering.
+
+The sending policy (`convex/lib/messaging/policy.ts`) can also refuse a text before it goes. For an
+offer, a refusal is treated the same way: the cleaner was never asked, so the offer is never recorded
+as their silence. When the reason is about that cleaner (they replied STOP, no permission on record, no
+usable number, too many texts this week) and Dispatch made the offer, it ends at once as undelivered, a
+person is told why, and Dispatch asks the next cleaner. When the reason stops every text (sending not
+set up, the company suspended, Dispatch paused), the offer stays open for a person to make by hand and
+one task says texts are not going out; left alone, it ends as undelivered at its deadline. An offer a
+person made stays theirs. A cleaner with no
 phone on file is not texted; the office contacts them and records the answer (`assignments.recordAnswer`).
 
 ## Pages (`src/app/c`, `src/components/cleaner`)

@@ -102,6 +102,7 @@ async function plan(ctx: MutationCtx, input: Plan): Promise<Doc<"messages">> {
     attempts: 0,
     provider: provider?.name,
     problem: problem ?? undefined,
+    refusal: status === "not_sent" && code ? code : undefined,
     queuedAt: now,
   });
   // What the message is for, kept so the policy can be asked again at sending time and the weekly limit counted.
@@ -120,6 +121,10 @@ async function plan(ctx: MutationCtx, input: Plan): Promise<Doc<"messages">> {
       ...(retryAt !== undefined ? { retryAt } : {}),
     },
   });
+  // An offer whose text the policy refused was never made to the cleaner. Dispatch deals with it in its own step.
+  if (status === "not_sent" && code && input.assignmentId && (input.purpose === "offer" || input.purpose === "backup_offer")) {
+    await ctx.scheduler.runAfter(0, internal.dispatchOps.offerTextRefused, { messageId, byAgent: input.actor.kind === "agent" });
+  }
   if (status === "queued") await ctx.scheduler.runAfter(0, internal.messaging.deliver, { messageId });
   if (status === "held") await ctx.scheduler.runAt(retryAt!, internal.messaging.deliver, { messageId });
   return (await ctx.db.get(messageId))!;

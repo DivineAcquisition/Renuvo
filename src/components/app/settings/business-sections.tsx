@@ -1,5 +1,6 @@
 "use client";
 
+import { Unavailable } from "@/components/app/settings/guard";
 import { useBusinessDraft } from "@/components/app/settings/business-draft";
 import { Field, FormError, SelectInput, TextArea, TextInput } from "@/components/app/form";
 import { Panel } from "@/components/app/shell";
@@ -101,7 +102,8 @@ function HoursEditor() {
 
 /** Company name and time zone, the postal codes it works in, and the hours appointments may be booked. */
 export function BusinessSection() {
-  const { draft, saved, canEdit, edit, configured } = useBusinessDraft();
+  const { draft, saved, canEdit, edit, configured, unavailable } = useBusinessDraft();
+  if (unavailable) return <Unavailable error={unavailable} />;
   if (!draft || !saved) return <Skeleton className="h-72 rounded-2xl" />;
   return (
     <div className="grid gap-5">
@@ -146,7 +148,8 @@ export function BusinessSection() {
 
 /** The service catalog. Services are archived, never deleted, so earlier visits keep their record. */
 export function ServicesSection() {
-  const { draft, saved, canEdit, edit } = useBusinessDraft();
+  const { draft, saved, canEdit, edit, unavailable } = useBusinessDraft();
+  if (unavailable) return <Unavailable error={unavailable} />;
   if (!draft || !saved) return <Skeleton className="h-72 rounded-2xl" />;
   const set = (id: string, patch: Partial<(typeof draft.services)[number]>) => edit((current) => ({ ...current, services: current.services.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const savedIds = new Set(saved.services.map((s) => s.id));

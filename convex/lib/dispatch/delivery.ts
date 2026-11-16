@@ -8,15 +8,63 @@ import type { MutationCtx } from "../../_generated/server";
 import type { Actor } from "../events";
 import { messageByKey } from "../messaging/outbox";
 import { endAssignment } from "./assignmentState";
+import { liveTaskByKey, openTask, setTaskState } from "../taskState";
 import { handOff } from "./handoffs";
 import { coverJob } from "./workflow";
 
 const SYSTEM: Actor = { kind: "system" };
 const DAY = 24 * 60 * 60 * 1000;
 
-/** The provider never took the message, or nobody knows whether it did. A text held for quiet hours has not gone either. */
+/**
+ * The provider never took the message, or nobody knows whether it did. A text held for quiet hours has
+ * not gone either, and neither has one the sending policy refused. (A text that was not sent because
+ * there is no number on file is different: the office reaches that cleaner by hand.)
+ */
 export function neverReached(message: Doc<"messages"> | null): boolean {
-  return message !== null && (message.status === "failed" || message.status === "unconfirmed" || message.status === "queued" || message.status === "held" || message.status === "sending");
+  if (message === null) return false;
+  if (message.status === "not_sent") return message.refusal !== undefined;
+  return message.status === "failed" || message.status === "unconfirmed" || message.status === "queued" || message.status === "held" || message.status === "sending";
+}
+
+/** Refusals that are about this one cleaner. The others stop every text the company sends. */
+const ABOUT_THE_CLEANER = new Set(["no_address", "suppressed", "no_permission", "frequency"]);
+
+export const sendingBlockedKey = (companyId: string) => `dispatch.sending_blocked:${companyId}`;
+
+/**
+ * The sending policy refused an offer's text, so the cleaner was never asked. When the reason is about
+ * that cleaner and Dispatch made the offer, the offer ends as undelivered, a person is told why, and
+ * Dispatch asks the next cleaner. When the reason stops every text (sending not set up, suspended,
+ * Dispatch paused), moving on would only burn through every cleaner, so the offer stays for a person to
+ * make by hand and one task says texts are not going out. An offer a person made also stays theirs.
+ * In every case the offer later ends as undelivered, never as the cleaner's silence.
+ */
+export async function afterOfferTextRefused(ctx: MutationCtx, message: Doc<"messages">, byAgent: boolean) {
+  const assignment = message.assignmentId ? await ctx.db.get(message.assignmentId) : null;
+  if (!assignment || assignment.status !== "offered" || message.status !== "not_sent" || !message.refusal) return;
+  if (!byAgent) return;
+  if (ABOUT_THE_CLEANER.has(message.refusal)) {
+    await endAssignment(ctx, assignment, "cancelled", SYSTEM, { endReason: `The offer text was not sent: ${message.problem ?? "the sending policy refused it."}`.slice(0, 500), endCause: "undelivered", data: { cause: "undelivered", policy: message.refusal } });
+    await contactHandoff(ctx, message, "An offer was not sent.");
+    await coverJob(ctx, assignment.jobId);
+    return;
+  }
+  const key = sendingBlockedKey(assignment.companyId);
+  if (await liveTaskByKey(ctx, assignment.companyId, key)) return;
+  const question = `Dispatch's texts are not going out: ${message.problem ?? "the sending policy is refusing them."} Offers are still recorded. Reach the cleaners yourself and record their answers, or fix sending so Dispatch can ask them.`;
+  const taskId = await openTask(ctx, {
+    companyId: assignment.companyId,
+    agent: "dispatch",
+    title: "Dispatch's texts to cleaners are not going out",
+    nextAction: "Fix sending, or reach the cleaners yourself",
+    dueAt: Date.now() + DAY,
+    completionCondition: "Texts go out again, or a person is handling the offers by hand",
+    about: { table: "assignments", id: assignment._id },
+    key,
+    actor: SYSTEM,
+  });
+  await ctx.db.patch(taskId, { trigger: "The sending policy refused an offer text for a reason that applies to every text.", escalation: "An offer nobody could be texted about ends as undelivered at its deadline and waits for a person." });
+  await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: question.slice(0, 1000), dueAt: Date.now() + DAY, withPersonSince: Date.now() }, SYSTEM);
 }
 
 async function contactHandoff(ctx: MutationCtx, message: Doc<"messages">, what: string) {

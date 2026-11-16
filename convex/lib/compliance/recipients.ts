@@ -2,7 +2,7 @@
  * Who a permission is about, and the addresses on their record. A recipient must belong to the company:
  * another company's person reads as missing.
  */
-import type { Id } from "../../_generated/dataModel";
+import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { sendablePhone } from "../messaging/provider";
 import { CLEANER_STATUSES, RECORD_STATUSES } from "../statuses";
@@ -22,8 +22,8 @@ export function normalAddress(channel: Channel, value: string | undefined | null
 }
 
 /**
- * The customer or cleaner a recipient names, if it is in this company. Applicants are not records here
- * yet, so an applicant cannot be checked and reads as missing.
+ * The customer, cleaner or applicant a recipient names, if it is in this company. An applicant whose
+ * details were removed reads as missing.
  */
 export async function recipientRecord(ctx: Ctx, companyId: Id<"companies">, recipient: Recipient): Promise<RecipientRecord | null> {
   if (recipient.kind === "cleaner") {
@@ -38,7 +38,18 @@ export async function recipientRecord(ctx: Ctx, companyId: Id<"companies">, reci
     if (!doc || doc.companyId !== companyId) return null;
     return { kind: "customer", id: doc._id, name: doc.name, phone: normalAddress("sms", doc.phone), email: normalAddress("email", doc.email) };
   }
+  if (recipient.kind === "applicant") {
+    const id = ctx.db.normalizeId("applicants", recipient.id);
+    const doc = id ? await ctx.db.get(id) : null;
+    if (!doc || doc.companyId !== companyId || doc.redactedAt) return null;
+    return applicantRecord(doc);
+  }
   return null;
+}
+
+/** Applicants keep a phone as digits with the country code; the policy keeps it with a leading plus. */
+function applicantRecord(doc: Doc<"applicants">): RecipientRecord {
+  return { kind: "applicant", id: doc._id, name: doc.name ?? "An applicant", phone: normalAddress("sms", doc.phone), email: normalAddress("email", doc.email) };
 }
 
 const SCAN_LIMIT = 2000;
@@ -69,5 +80,17 @@ export async function recipientsAt(ctx: Ctx, companyId: Id<"companies">, channel
       if (normalAddress(channel, doc[field]) === address) out.push({ kind: "customer", id: doc._id, name: doc.name, phone: normalAddress("sms", doc.phone), email: normalAddress("email", doc.email) });
     }
   }
+  // Applicants are found through their own indexes, so a STOP or an unsubscribe reaches them too.
+  const applicants =
+    channel === "email"
+      ? await ctx.db
+          .query("applicants")
+          .withIndex("by_company_email", (q) => q.eq("companyId", companyId).eq("email", address))
+          .take(20)
+      : await ctx.db
+          .query("applicants")
+          .withIndex("by_company_phone", (q) => q.eq("companyId", companyId).eq("phone", address.replace(/^\+/, "")))
+          .take(20);
+  for (const doc of applicants) if (!doc.redactedAt) out.push(applicantRecord(doc));
   return out;
 }

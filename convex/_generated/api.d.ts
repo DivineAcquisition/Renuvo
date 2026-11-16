@@ -66,7 +66,6 @@ import type * as lib_chat_fields from "../lib/chat/fields.js";
 import type * as lib_chat_model from "../lib/chat/model.js";
 import type * as lib_chat_pricing from "../lib/chat/pricing.js";
 import type * as lib_chat_prompt from "../lib/chat/prompt.js";
-import type * as lib_chat_schema from "../lib/chat/schema.js";
 import type * as lib_chat_state from "../lib/chat/state.js";
 import type * as lib_chat_steps from "../lib/chat/steps.js";
 import type * as lib_chat_titles from "../lib/chat/titles.js";
@@ -118,6 +117,7 @@ import type * as lib_recruiter_applications from "../lib/recruiter/applications.
 import type * as lib_recruiter_approvals from "../lib/recruiter/approvals.js";
 import type * as lib_recruiter_calendar from "../lib/recruiter/calendar.js";
 import type * as lib_recruiter_claude from "../lib/recruiter/claude.js";
+import type * as lib_recruiter_consent from "../lib/recruiter/consent.js";
 import type * as lib_recruiter_contact from "../lib/recruiter/contact.js";
 import type * as lib_recruiter_decisions from "../lib/recruiter/decisions.js";
 import type * as lib_recruiter_delivery from "../lib/recruiter/delivery.js";
@@ -242,7 +242,6 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/model": typeof lib_chat_model;
   "lib/chat/pricing": typeof lib_chat_pricing;
   "lib/chat/prompt": typeof lib_chat_prompt;
-  "lib/chat/schema": typeof lib_chat_schema;
   "lib/chat/state": typeof lib_chat_state;
   "lib/chat/steps": typeof lib_chat_steps;
   "lib/chat/titles": typeof lib_chat_titles;
@@ -294,6 +293,7 @@ declare const fullApi: ApiFromModules<{
   "lib/recruiter/approvals": typeof lib_recruiter_approvals;
   "lib/recruiter/calendar": typeof lib_recruiter_calendar;
   "lib/recruiter/claude": typeof lib_recruiter_claude;
+  "lib/recruiter/consent": typeof lib_recruiter_consent;
   "lib/recruiter/contact": typeof lib_recruiter_contact;
   "lib/recruiter/decisions": typeof lib_recruiter_decisions;
   "lib/recruiter/delivery": typeof lib_recruiter_delivery;

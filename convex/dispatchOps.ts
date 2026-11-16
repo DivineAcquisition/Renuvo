@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, managerMutation, ownerMutation } from "./lib/builders";
+import { afterOfferTextRefused } from "./lib/dispatch/delivery";
 import { assignmentLinks, issueLink, linkPath, linkState, revokeLink, siteOrigin, tokenFor } from "./lib/dispatch/links";
 import { declareNoShow, jobChecklist, noCheckInKey, noShowConditions, watchJob } from "./lib/dispatch/live";
 import { checkedPolicy, dispatchPolicy, POLICY_LIMITS } from "./lib/dispatch/policy";
@@ -49,6 +50,16 @@ export const monitor = internalMutation({
     if (!page.isDone) await ctx.scheduler.runAfter(0, internal.dispatchOps.monitor, { status, cursor: page.continueCursor });
     else if (status === "scheduled") await ctx.scheduler.runAfter(0, internal.dispatchOps.monitor, { status: "in_progress" });
     return page.page.length;
+  },
+});
+
+/** The sending policy refused an offer's text. Dispatch ends the offer or tells a person, in its own step. */
+export const offerTextRefused = internalMutation({
+  args: { messageId: v.id("messages"), byAgent: v.boolean() },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (message) await afterOfferTextRefused(ctx, message, args.byAgent);
+    return null;
   },
 });
 

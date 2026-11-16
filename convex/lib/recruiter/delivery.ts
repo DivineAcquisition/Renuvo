@@ -8,6 +8,8 @@
  */
 import type { Doc } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import { addSuppression } from "../compliance/permissions";
+import { normalAddress } from "../compliance/recipients";
 import { askPerson, isActive, setStage, SYSTEM } from "./applications";
 import { DAY } from "./settings";
 
@@ -43,7 +45,12 @@ export async function afterApplicantMessage(ctx: MutationCtx, message: Doc<"mess
     : bounced
       ? `The email to ${application.contact.address ?? "the address on file"} bounced.`
       : `An email could not be sent. ${message.problem ?? ""}`.trim();
-  if (bounced) await ctx.db.patch(application._id, { contact: { ...application.contact, bouncedAt: Date.now() } });
+  if (bounced) {
+    await ctx.db.patch(application._id, { contact: { ...application.contact, bouncedAt: Date.now() } });
+    // The shared do-not-send list is kept by address, so no agent writes to a dead address again.
+    const address = normalAddress("email", message.to ?? application.contact.address);
+    if (address) await addSuppression(ctx, { companyId: application.companyId, channel: "email", address, scope: "all", reason: "bounce", note: "The address rejected an email.", at: Date.now(), actor: SYSTEM });
+  }
   const fresh = (await ctx.db.get(application._id))!;
   const next = { what: `${what} ${unknown ? "Check with the applicant before anything else is sent." : "Correct the address, or reach them another way."}`, by: "owner" as const, dueAt: Date.now() + DAY };
   if (bounced && (fresh.stage === "received" || fresh.stage === "invitation_awaiting_approval" || fresh.stage === "invited" || fresh.stage === "application_started")) {

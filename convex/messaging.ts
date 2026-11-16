@@ -49,9 +49,8 @@ export const claim = internalMutation({
     if (!message || (message.status !== "queued" && message.status !== "held") || !message.to) return null;
     // The policy is asked again now: a STOP, a withdrawn permission, a suspension or a pause that came
     // after the message was planned stops it here. A refusal is final; only "not yet" holds it again.
-    // Messages to applicants pass the Recruiter's own send gate below instead, until the Recruiter moves
-    // onto this policy (the owner's decision); the policy's texting check would refuse their emails.
-    const answer = message.applicationId ? ({ ok: true } as const) : await checkSend(ctx, { companyId: message.companyId, channel: "sms", to: message.to, now: Date.now(), messageId: message._id, ...(await intentOf(ctx, message)) });
+    // Messages to applicants are asked this too, and then also pass the Recruiter's own gate below.
+    const answer = await checkSend(ctx, { companyId: message.companyId, channel: message.channel ?? "sms", to: message.to, now: Date.now(), messageId: message._id, ...(await intentOf(ctx, message)) });
     if (!answer.ok) {
       const subject = { table: "messages" as const, id: message._id };
       if (answer.retryAt !== undefined) {
@@ -60,8 +59,12 @@ export const claim = internalMutation({
         await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code, retryAt: answer.retryAt } });
         return null;
       }
-      await ctx.db.patch(message._id, { status: "not_sent", problem: answer.words });
+      await ctx.db.patch(message._id, { status: "not_sent", problem: answer.words, refusal: answer.code });
       await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code } });
+      if (message.assignmentId && (message.purpose === "offer" || message.purpose === "backup_offer")) {
+        const intent = await intentOf(ctx, message);
+        await ctx.scheduler.runAfter(0, internal.dispatchOps.offerTextRefused, { messageId: message._id, byAgent: intent.agent !== undefined });
+      }
       return null;
     }
     let body = message.body;

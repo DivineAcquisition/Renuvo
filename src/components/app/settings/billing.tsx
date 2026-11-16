@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 
 import { useCompany } from "@/components/app/company";
+import { Guard } from "@/components/app/settings/guard";
 import { Panel } from "@/components/app/shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { money } from "@/lib/app/format";
@@ -10,7 +11,7 @@ import { money } from "@/lib/app/format";
 import { api } from "../../../../convex/_generated/api";
 
 /** Only the Owner reaches the query: for anyone else it is skipped, never sent. */
-export function PlanBilling() {
+function PlanBillingInner() {
   const { companyId, role } = useCompany();
   const billing = useQuery(api.settings.billing, role === "owner" ? { companyId } : "skip");
   if (role !== "owner") return <OwnerOnly what="Plan & billing" />;
@@ -60,5 +61,13 @@ export function OwnerOnly({ what }: { what: string }) {
       <p className="text-base font-semibold text-strong">{what} is for the Owner</p>
       <p className="mx-auto mt-1.5 max-w-md text-sm text-muted-foreground">Ask the company&apos;s Owner if you need something from this page.</p>
     </div>
+  );
+}
+
+export function PlanBilling() {
+  return (
+    <Guard>
+      <PlanBillingInner />
+    </Guard>
   );
 }

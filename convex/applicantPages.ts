@@ -14,6 +14,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { applicantMutation, applicantQuery, type ApplicantAccess } from "./lib/builders";
 import { notFound, userError } from "./lib/errors";
 import { recordEvent, type Actor } from "./lib/events";
+import { recordTextConsent } from "./lib/recruiter/consent";
 import { firstName, isActive, setStage, settleTask, withdrawApplication } from "./lib/recruiter/applications";
 import { assertSubmittable, ATTEST_WORDING, cleanAnswers, completion, formFields, SMS_CONSENT_WORDING } from "./lib/recruiter/form";
 import { bookSlot, cancelInterviewTime, liveInterview, openSlots } from "./lib/recruiter/interviews";
@@ -125,6 +126,7 @@ export const saveDraft = applicantMutation({
     // Permission to text is the applicant's own tick against the exact wording, with the number they gave. Unticking removes it.
     const consent = answers.smsConsent === true && typeof answers.phone === "string" ? { at: ctx.applicant.smsConsent?.phone === answers.phone ? ctx.applicant.smsConsent.at : now, wording: SMS_CONSENT_WORDING, phone: answers.phone } : undefined;
     if (JSON.stringify(consent) !== JSON.stringify(ctx.applicant.smsConsent)) await ctx.db.patch(ctx.applicant._id, { smsConsent: consent });
+    await recordTextConsent(ctx, ctx.applicant, consent !== undefined, asApplicant(ctx));
     return { savedAt: now };
   },
 });
@@ -213,6 +215,7 @@ export const submit = applicantMutation({
       ? { ...ctx.application.contact, status: "direct" as const, address: email, bouncedAt: email === ctx.application.contact.address ? ctx.application.contact.bouncedAt : undefined, evidence: [...ctx.application.contact.evidence.filter((entry) => !(entry.address === email && entry.where === where)), { address: email, kind: "direct" as const, where }].slice(-30) }
       : ctx.application.contact;
     await ctx.db.patch(ctx.applicant._id, { name: typeof answers.fullName === "string" ? answers.fullName : ctx.applicant.name, email: email ?? ctx.applicant.email, phone: phone ?? ctx.applicant.phone, location: typeof answers.city === "string" ? answers.city : ctx.applicant.location, smsConsent: answers.smsConsent === true && phone ? (ctx.applicant.smsConsent?.phone === phone ? ctx.applicant.smsConsent : { at: now, wording: SMS_CONSENT_WORDING, phone }) : undefined });
+    await recordTextConsent(ctx, ctx.applicant, answers.smsConsent === true && Boolean(phone), asApplicant(ctx));
     const fresh = (await ctx.db.get(ctx.application._id))!;
     await setStage(ctx, fresh, "application_submitted", asApplicant(ctx), { facts, contact, formStartedAt: fresh.formStartedAt ?? now, submittedAt: now, questionSince: undefined, nextAction: { what: "Screen the application", by: "recruiter", dueAt: now + DAY } });
     await settleTask(ctx, fresh, "decision", "The applicant submitted the application.");
