@@ -83,7 +83,8 @@ describe("the navigation definition", () => {
     expect(AGENTS).toHaveLength(8);
     expect(SIDEBAR_SECTIONS).toEqual(["business", "departments", "persistent", "agents", "shared", "footer"]);
     expect(PERSISTENT_ITEMS.map((item) => item.label)).toEqual(["Home", "Approvals", "Inbox", "Search"]);
-    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Customers & Properties", "Cleaners", "Finance", "Reports"]);
+    // Integrations joined Company on the owner's request of November 16, 2026.
+    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Customers & Properties", "Cleaners", "Finance", "Reports", "Integrations"]);
     expect(FOOTER_ITEMS.map((item) => item.label)).toEqual(["Settings"]);
   });
 

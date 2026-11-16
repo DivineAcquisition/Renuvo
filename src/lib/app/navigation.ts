@@ -85,7 +85,7 @@ export const DEPARTMENTS: readonly Department[] = [
 
 // ── Company-wide items ──────────────────────────────────────────────────────────────────────────────
 
-export type NavItemId = "home" | "approvals" | "inbox" | "search" | "customers" | "cleaners" | "finance" | "reports" | "settings";
+export type NavItemId = "home" | "approvals" | "inbox" | "search" | "customers" | "cleaners" | "finance" | "reports" | "integrations" | "settings";
 
 export type NavItem = Destination & {
   id: NavItemId;
@@ -163,6 +163,16 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     path: `${APP_ROOT}/reports`,
     availability: interim(`${APP_ROOT}/insights`, "Everything beyond the weekly measures: agent performance, longer periods, breakdowns."),
     minimumRole: "office",
+  },
+  {
+    id: "integrations",
+    label: "Integrations",
+    section: "shared",
+    purpose: "The accounts and services Selestial works with: payments, Google, texting, accounting, hiring and imports.",
+    path: `${APP_ROOT}/integrations`,
+    availability: LIVE,
+    minimumRole: "office",
+    accessNote: "Everyone can see what is connected. Only the Owner connects or disconnects, by the owner's decision on November 16, 2026. The list is live; each connection is built in phases (docs/integrations/00-plan.md).",
   },
 ];
 
