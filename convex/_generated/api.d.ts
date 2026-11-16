@@ -100,6 +100,7 @@ import type * as lib_recruiter_applications from "../lib/recruiter/applications.
 import type * as lib_recruiter_approvals from "../lib/recruiter/approvals.js";
 import type * as lib_recruiter_calendar from "../lib/recruiter/calendar.js";
 import type * as lib_recruiter_claude from "../lib/recruiter/claude.js";
+import type * as lib_recruiter_consent from "../lib/recruiter/consent.js";
 import type * as lib_recruiter_contact from "../lib/recruiter/contact.js";
 import type * as lib_recruiter_decisions from "../lib/recruiter/decisions.js";
 import type * as lib_recruiter_delivery from "../lib/recruiter/delivery.js";
@@ -255,6 +256,7 @@ declare const fullApi: ApiFromModules<{
   "lib/recruiter/approvals": typeof lib_recruiter_approvals;
   "lib/recruiter/calendar": typeof lib_recruiter_calendar;
   "lib/recruiter/claude": typeof lib_recruiter_claude;
+  "lib/recruiter/consent": typeof lib_recruiter_consent;
   "lib/recruiter/contact": typeof lib_recruiter_contact;
   "lib/recruiter/decisions": typeof lib_recruiter_decisions;
   "lib/recruiter/delivery": typeof lib_recruiter_delivery;
