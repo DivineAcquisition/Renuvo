@@ -15,9 +15,10 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { recordEvent, type Actor } from "./events";
+import { INVITATION_DAYS } from "./invitationTerms";
 
 /** How long an invitation link works. The one place this is set. */
-export const INVITATION_DAYS = 7;
+export { INVITATION_DAYS };
 const DAY = 24 * 60 * 60 * 1000;
 
 export function invitationExpiry(now: number): number {

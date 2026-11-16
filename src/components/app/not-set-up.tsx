@@ -29,9 +29,10 @@ export function NotSetUp({ title, body, items }: { title: string; body: string; 
   );
 }
 
+/** What this deployment still lacks before anyone can sign in. The words are for a log or a test, not a screen. */
 export function missingSetup(): string[] {
   const missing: string[] = [];
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()) missing.push("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY");
-  if (!process.env.NEXT_PUBLIC_CONVEX_URL?.trim()) missing.push("NEXT_PUBLIC_CONVEX_URL");
+  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim()) missing.push("sign-in");
+  if (!process.env.NEXT_PUBLIC_CONVEX_URL?.trim()) missing.push("live record");
   return missing;
 }

@@ -10,6 +10,7 @@
  * This is routing, not access control. Sign-in and every read and write are checked elsewhere.
  * These are pure functions: no request, no Next.js. src/proxy.ts applies them.
  */
+import { isAuthPath } from "./auth/routes";
 
 export const HOST_ROLES = ["public", "app", "link", "admin", "docs", "status"] as const;
 export type HostRole = (typeof HOST_ROLES)[number];
@@ -108,7 +109,7 @@ export function roleOfPath(pathname: string): PathRole {
   // Crawler rules, icons, domain checks and Clerk's own proxy path are needed wherever the app answers.
   if (path === "/robots.txt" || path === "/icon.svg" || path === "/favicon.ico") return "shared";
   if (under(path, "/.well-known") || under(path, "/__clerk")) return "shared";
-  if (under(path, "/app") || under(path, "/sign-in") || under(path, "/sign-up")) return "app";
+  if (under(path, "/app") || isAuthPath(path)) return "app";
   if (under(path, "/c")) return "link";
   return "public";
 }

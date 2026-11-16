@@ -55,6 +55,7 @@ import type * as lib_errors from "../lib/errors.js";
 import type * as lib_eventWords from "../lib/eventWords.js";
 import type * as lib_events from "../lib/events.js";
 import type * as lib_guard from "../lib/guard.js";
+import type * as lib_invitationTerms from "../lib/invitationTerms.js";
 import type * as lib_invitations from "../lib/invitations.js";
 import type * as lib_messaging_outbox from "../lib/messaging/outbox.js";
 import type * as lib_messaging_provider from "../lib/messaging/provider.js";
@@ -127,6 +128,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventWords": typeof lib_eventWords;
   "lib/events": typeof lib_events;
   "lib/guard": typeof lib_guard;
+  "lib/invitationTerms": typeof lib_invitationTerms;
   "lib/invitations": typeof lib_invitations;
   "lib/messaging/outbox": typeof lib_messaging_outbox;
   "lib/messaging/provider": typeof lib_messaging_provider;
