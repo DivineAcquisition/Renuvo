@@ -3,7 +3,7 @@ import { BotIcon, Building2, HistoryIcon, KeyIcon, PackageOpen, Plug, ScrollText
 import { cn } from "@/lib/utils";
 
 /** Sections that belong to one agent wear that agent's face. The rest wear an icon. */
-const AGENT_OF: Record<string, string> = { dispatch: "dispatch", recruiting: "recruiter" };
+const AGENT_OF: Record<string, "dispatch" | "recruiter"> = { dispatch: "dispatch", recruiting: "recruiter" };
 
 const ICON: Record<string, LucideIcon> = {
   business: Building2,

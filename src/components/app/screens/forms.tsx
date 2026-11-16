@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
+import { AddressField } from "@/components/app/address-field";
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,10 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
   const createCustomer = useMutation(api.customers.create);
   const createProperty = useMutation(api.properties.create);
   const { busy, error, run } = useRun();
-  const [form, setForm] = useState({ name: "", kind: "home" as Kind, email: "", phone: "", line1: "", city: "", region: "", postalCode: "", access: "" });
+  const [form, setForm] = useState({ name: "", kind: "home" as Kind, email: "", phone: "", line1: "", line2: "", city: "", region: "", postalCode: "", access: "" });
+  // The place picked from address search. Typing in the street field afterwards drops it, so a changed
+  // address never keeps the old map location.
+  const [place, setPlace] = useState<{ placeId: string; lat?: number; lng?: number } | null>(null);
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
   return (
     <form
@@ -53,7 +57,7 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
             companyId,
             customerId,
             kind: form.kind,
-            address: { line1: form.line1, city: form.city, region: form.region, postalCode: form.postalCode },
+            address: { line1: form.line1, line2: form.line2 || undefined, city: form.city, region: form.region, postalCode: form.postalCode, ...(place ?? {}) },
             accessInstructions: form.access || undefined,
           });
           onDone();
@@ -80,9 +84,24 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
           <TextInput type="tel" value={form.phone} onChange={set("phone")} />
         </Field>
       </div>
-      <Field label="Property address">
-        <TextInput value={form.line1} onChange={set("line1")} required autoComplete="address-line1" />
-      </Field>
+      <AddressField
+        label="Property address"
+        value={form.line1}
+        required
+        onChange={(line1) => {
+          setPlace(null);
+          setForm((current) => ({ ...current, line1 }));
+        }}
+        onPick={({ placeId, lat, lng, ...picked }) => {
+          setPlace({ placeId, lat, lng });
+          setForm((current) => ({ ...current, line1: picked.line1, line2: picked.line2 ?? "", city: picked.city, region: picked.region, postalCode: picked.postalCode }));
+        }}
+      />
+      {form.line2 ? (
+        <Field label="Unit">
+          <TextInput value={form.line2} onChange={set("line2")} autoComplete="address-line2" />
+        </Field>
+      ) : null}
       <div className="grid grid-cols-3 gap-3">
         <Field label="City">
           <TextInput value={form.city} onChange={set("city")} required />

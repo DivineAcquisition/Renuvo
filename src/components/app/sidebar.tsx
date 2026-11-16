@@ -20,6 +20,7 @@ import {
   HouseIcon,
   InsightsIcon,
   LightningIcon,
+  PlugZap,
   Search,
   SirenIcon,
   Wallet,
@@ -53,6 +54,7 @@ const ITEM_ICON: Record<NavItemId, LucideIcon> = {
   cleaners: BroomIcon,
   finance: Wallet,
   reports: InsightsIcon,
+  integrations: PlugZap,
   settings: GearIcon,
 };
 
