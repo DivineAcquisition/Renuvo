@@ -14,6 +14,7 @@ import { actorValidator, eventDataValidator, subjectValidator } from "./lib/even
 import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
+import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
 import {
   agentValidator,
   approvalStatusValidator,
@@ -41,6 +42,11 @@ export const addressValidator = v.object({
   city: v.string(),
   region: v.string(),
   postalCode: v.string(),
+  /** Google's place id, when the address was picked from address search. */
+  placeId: v.optional(v.string()),
+  /** The map location from address search, for travel times and service areas. Absent when typed. */
+  lat: v.optional(v.number()),
+  lng: v.optional(v.number()),
 });
 
 /** How a cleaner is paid. Contractors get a share of the job (basis points); employees an hourly rate. */
@@ -176,6 +182,10 @@ export default defineSchema({
     dispatch: v.optional(dispatchSettingsValidator),
     dispatchPolicy: v.optional(dispatchPolicyValidator),
     recruiter: v.optional(recruiterSettingsValidator),
+    /** Where the company works, when appointments may be, and its services (convex/lib/settings/business.ts). */
+    businessSettings: v.optional(businessSettingsValidator),
+    /** Counts saves of the business settings, so a stale browser tab cannot overwrite a newer save. Absent means zero. */
+    settingsRevision: v.optional(v.number()),
     /** The sign-in subject of whoever created the company. */
     createdBy: v.optional(v.string()),
     /** Chosen by the creator's browser for one setup, so a create that is sent twice makes one company. */
@@ -298,6 +308,8 @@ export default defineSchema({
     serviceType: v.string(),
     scope: v.string(),
     requiredSkills: v.array(v.string()),
+    /** The service template this job was made from, as it was then. Later edits to the template do not reach it. */
+    serviceSnapshot: v.optional(serviceSnapshotValidator),
     /** The price of the service in cents, from the company's pricing. It is not a payment. */
     priceCents: v.optional(v.number()),
     startsAt: v.number(),

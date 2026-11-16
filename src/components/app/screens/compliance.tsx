@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { AddressField } from "@/components/app/address-field";
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { PageHeader, Panel } from "@/components/app/shell";
@@ -164,9 +165,20 @@ function IdentityForm({ profile }: { profile: Profile }) {
       <Field label="Trading name" hint="If customers know you by another name.">
         <TextInput value={form.tradingName} onChange={set("tradingName")} disabled={!owner} />
       </Field>
-      <Field label="Street address" className="sm:col-span-2">
-        <TextInput value={form.line1} onChange={set("line1")} disabled={!owner} autoComplete="address-line1" />
-      </Field>
+      <AddressField
+        label="Street address"
+        className="sm:col-span-2"
+        value={form.line1}
+        disabled={!owner}
+        onChange={(line1) => {
+          setSaved(false);
+          setForm((current) => ({ ...current, line1 }));
+        }}
+        onPick={(picked) => {
+          setSaved(false);
+          setForm((current) => ({ ...current, line1: picked.line1, line2: picked.line2 ?? current.line2, city: picked.city, region: picked.region, postalCode: picked.postalCode, country: "US" }));
+        }}
+      />
       <Field label="Address line 2">
         <TextInput value={form.line2} onChange={set("line2")} disabled={!owner} autoComplete="address-line2" />
       </Field>
@@ -482,7 +494,7 @@ function AgentAuthority() {
             <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />Every action an agent takes is written to the activity log with what it was based on.
           </li>
         </ul>
-        <Link href="/app/settings#agents" className="inline-flex items-center gap-1 font-medium text-brand-600 underline-offset-2 hover:underline">
+        <Link href="/app/settings/agents" className="inline-flex items-center gap-1 font-medium text-brand-600 underline-offset-2 hover:underline">
           Open agent permissions
           <ArrowRight className="size-3.5" aria-hidden />
         </Link>

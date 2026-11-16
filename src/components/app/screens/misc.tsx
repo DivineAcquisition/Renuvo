@@ -4,14 +4,10 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { DispatchSettings } from "@/components/app/dispatch-view";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { WeekMeasures } from "@/components/app/overview/week-measures";
-import { AgentPermissions } from "@/components/app/screens/agent-permissions";
-import { ComplianceLink } from "@/components/app/screens/compliance";
-import { NotBuilt, PageHeader, Panel } from "@/components/app/shell";
+import { NotBuilt, PageHeader } from "@/components/app/shell";
 import { useNow } from "@/components/app/use-now";
-import { SecuritySettings } from "@/components/auth/security";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,7 +73,7 @@ function deliveryWords(delivery: { state: string; at?: number; problem?: string 
   return `Email not sent. ${delivery.problem ?? ""}`.trim();
 }
 
-function Invitations() {
+export function Invitations() {
   const { companyId } = useCompany();
   const invitations = useQuery(api.invitations.list, { companyId });
   const create = useMutation(api.invitations.create);
@@ -189,89 +185,5 @@ function Invitations() {
       )}
       <FormError message={rowRun.error} />
     </div>
-  );
-}
-
-function People() {
-  const { companyId, role } = useCompany();
-  const members = useQuery(api.members.list, { companyId });
-  return (
-    <Panel title="People">
-      {members ? (
-        <ul className="divide-y divide-border">
-          {members
-            .filter((member) => member.status === "active")
-            .map((member) => (
-              <li key={member.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
-                <span>
-                  <span className="font-medium text-strong">{member.name}</span>
-                  <span className="block text-xs text-muted-foreground">{member.email}</span>
-                </span>
-                <Badge variant="outline" size="sm" className="capitalize">
-                  {member.role}
-                </Badge>
-              </li>
-            ))}
-        </ul>
-      ) : (
-        <Skeleton className="h-16" />
-      )}
-      {role === "owner" ? <Invitations /> : null}
-    </Panel>
-  );
-}
-
-function CompanyDetails() {
-  const company = useCompany();
-  const update = useMutation(api.companies.update);
-  const [name, setName] = useState(company.name);
-  const [timezone, setTimezone] = useState(company.timezone);
-  const { busy, error, run } = useRun();
-  const owner = company.role === "owner";
-  return (
-    <Panel title="Company">
-      <form
-        className="grid gap-3 sm:grid-cols-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void run(() => update({ companyId: company.companyId, name, timezone }));
-        }}
-      >
-        <Field label="Name">
-          <TextInput value={name} onChange={(event) => setName(event.target.value)} required disabled={!owner} />
-        </Field>
-        <Field label="Time zone" hint="Schedules, availability and deadlines use this clock.">
-          <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} required disabled={!owner} />
-        </Field>
-        <div className="sm:col-span-2">
-          <FormError message={error} />
-          {owner ? (
-            <Button type="submit" variant="primary" size="sm" loading={busy} disabled={name === company.name && timezone === company.timezone}>
-              Save
-            </Button>
-          ) : (
-            <p className="text-xs text-muted-foreground">Only the Owner changes these.</p>
-          )}
-        </div>
-      </form>
-    </Panel>
-  );
-}
-
-export function SettingsScreen({ extra }: { extra?: React.ReactNode }) {
-  return (
-    <>
-      <PageHeader title="Settings" lead="Your company, its people, what each agent may do, and how Dispatch works." />
-      <div className="grid gap-5">
-        <CompanyDetails />
-        <People />
-        <ComplianceLink />
-        <SecuritySettings />
-        <AgentPermissions />
-        <DispatchSettings />
-        {extra}
-        <NotBuilt title="Services, pricing, coverage and policies are not built yet" body="Before Sales and Retention act, the company's rules are saved here as values the system can enforce: services and durations, pricing and discount limits, service areas and hours, cancellation and refund policies." />
-      </div>
-    </>
   );
 }

@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
+import { AddressField } from "@/components/app/address-field";
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,10 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
   const createCustomer = useMutation(api.customers.create);
   const createProperty = useMutation(api.properties.create);
   const { busy, error, run } = useRun();
-  const [form, setForm] = useState({ name: "", kind: "home" as Kind, email: "", phone: "", line1: "", city: "", region: "", postalCode: "", access: "" });
+  const [form, setForm] = useState({ name: "", kind: "home" as Kind, email: "", phone: "", line1: "", line2: "", city: "", region: "", postalCode: "", access: "" });
+  // The place picked from address search. Typing in the street field afterwards drops it, so a changed
+  // address never keeps the old map location.
+  const [place, setPlace] = useState<{ placeId: string; lat?: number; lng?: number } | null>(null);
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
   return (
     <form
@@ -53,7 +57,7 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
             companyId,
             customerId,
             kind: form.kind,
-            address: { line1: form.line1, city: form.city, region: form.region, postalCode: form.postalCode },
+            address: { line1: form.line1, line2: form.line2 || undefined, city: form.city, region: form.region, postalCode: form.postalCode, ...(place ?? {}) },
             accessInstructions: form.access || undefined,
           });
           onDone();
@@ -80,9 +84,24 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
           <TextInput type="tel" value={form.phone} onChange={set("phone")} />
         </Field>
       </div>
-      <Field label="Property address">
-        <TextInput value={form.line1} onChange={set("line1")} required autoComplete="address-line1" />
-      </Field>
+      <AddressField
+        label="Property address"
+        value={form.line1}
+        required
+        onChange={(line1) => {
+          setPlace(null);
+          setForm((current) => ({ ...current, line1 }));
+        }}
+        onPick={({ placeId, lat, lng, ...picked }) => {
+          setPlace({ placeId, lat, lng });
+          setForm((current) => ({ ...current, line1: picked.line1, line2: picked.line2 ?? "", city: picked.city, region: picked.region, postalCode: picked.postalCode }));
+        }}
+      />
+      {form.line2 ? (
+        <Field label="Unit">
+          <TextInput value={form.line2} onChange={set("line2")} autoComplete="address-line2" />
+        </Field>
+      ) : null}
       <div className="grid grid-cols-3 gap-3">
         <Field label="City">
           <TextInput value={form.city} onChange={set("city")} required />
@@ -217,8 +236,29 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const { companyId, timezone } = useCompany();
   const customers = useQuery(api.customers.list, { companyId });
   const create = useMutation(api.jobs.create);
+  const business = useQuery(api.settings.business, { companyId });
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
+  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
+  const templates = (business?.services ?? []).filter((service) => service.status === "active");
+  const template = templates.find((service) => service.id === form.serviceId);
+  /** Fills the fields from the template. Everything stays editable; the visit keeps a copy of the template as it is now. */
+  const choose = (serviceId: string) => {
+    const picked = templates.find((service) => service.id === serviceId);
+    setForm((current) =>
+      picked
+        ? { ...current, serviceId, serviceType: picked.name, scope: picked.scope, skills: picked.skills.join(", "), price: picked.startingPriceCents === undefined ? "" : (picked.startingPriceCents / 100).toFixed(2) }
+        : { ...current, serviceId: "" },
+    );
+  };
+  /** With a template chosen, the end follows the start by the template's duration. */
+  const startAt = (from: string) =>
+    setForm((current) => {
+      const picked = templates.find((service) => service.id === current.serviceId);
+      const [hours, minutes] = from.split(":").map(Number);
+      if (!picked || Number.isNaN(hours) || Number.isNaN(minutes)) return { ...current, from };
+      const end = hours * 60 + minutes + picked.durationMinutes;
+      return end < 24 * 60 ? { ...current, from, to: `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}` } : { ...current, from };
+    });
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
   if (customers && customers.length === 0) return <p className="text-sm text-muted-foreground">Add a customer under Customers & Properties first, then schedule their visit here.</p>;
   return (
@@ -235,6 +275,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
             companyId,
             customerId: form.customerId as Id<"customers">,
             propertyId: form.propertyId as Id<"properties">,
+            ...(form.serviceId ? { serviceId: form.serviceId } : {}),
             serviceType: form.serviceType,
             scope: form.scope,
             requiredSkills: list(form.skills),
@@ -266,6 +307,18 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
             </SelectInput>
           )}
         </Field>
+        {templates.length > 0 ? (
+          <Field label="Service template" hint={template ? `${template.durationMinutes} minutes, ${template.defaultCrew} ${template.defaultCrew === 1 ? "cleaner" : "cleaners"}. Fields below can still be changed.` : "Optional. Fills the fields below from Settings."}>
+            <SelectInput value={form.serviceId} onChange={(event) => choose(event.target.value)}>
+              <option value="">No template</option>
+              {templates.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+        ) : null}
         <Field label="Service">
           <TextInput value={form.serviceType} onChange={set("serviceType")} required maxLength={80} />
         </Field>
@@ -284,7 +337,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
           <TextInput type="date" value={form.date} onChange={set("date")} required />
         </Field>
         <Field label="Starts">
-          <TextInput type="time" value={form.from} onChange={set("from")} required />
+          <TextInput type="time" value={form.from} onChange={(event) => startAt(event.target.value)} required />
         </Field>
         <Field label="Ends">
           <TextInput type="time" value={form.to} onChange={set("to")} required />

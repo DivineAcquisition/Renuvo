@@ -149,7 +149,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
       const def = typeof data.action === "string" ? actionDef(data.action) : undefined;
       text = def ? `set "${def.label}" to ${LEVEL_WORDS[String(data.to)] ?? String(data.to)}` : "changed a permission";
     } else if (subject.table === "companies") {
-      text = { created: "created the company", updated: "updated the company's details", agents_paused_changed: data.paused ? `paused ${String(data.paused)}` : "resumed every agent", dispatch_settings_changed: "changed how Dispatch works" }[what] ?? null;
+      text = { created: "created the company", updated: "updated the company's details", agents_paused_changed: data.paused ? `paused ${String(data.paused)}` : "resumed every agent", dispatch_settings_changed: "changed how Dispatch works", dispatch_policy_changed: "changed Dispatch's day-of and evidence rules", business_settings_changed: data.sections ? `changed business settings (${String(data.sections)})` : "changed business settings", playbook_changed: "changed the recruiting rules" }[what] ?? null;
     }
 
     out.push({ id: event._id, at: event.at, type: event.type, actor, text: text ?? `${thing} ${what?.replace(/_/g, " ") ?? ""}`.trim(), ref });

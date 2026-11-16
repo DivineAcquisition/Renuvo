@@ -64,7 +64,7 @@ The order is fixed (`SIDEBAR_SECTIONS`).
    overview, a separate arrow that opens its tabs, the nested work tabs, and
    room for one status or attention badge.
 5. **Shared business navigation.** Customers & Properties, Cleaners, Finance,
-   Reports. Company-wide.
+   Reports, Integrations. Company-wide.
 6. **Footer.** Settings only.
 
 **Shared records are shared.** An agent tab is a view over the company's
@@ -160,7 +160,8 @@ Three states describe each destination:
 | Cleaners | `/app/cleaners` | **Live.** A list and an add form; no page per cleaner yet. |
 | Finance | `/app/finance` | **Planned.** Shown to the Owner only. |
 | Reports | `/app/reports` | **Interim** at `/app/insights`. Weekly measures only. |
-| Settings | `/app/settings` | **Live.** Company, people, agent permissions and pause, Dispatch settings. |
+| Integrations | `/app/integrations` | **Live** as a list of every integration, what it does and which agents use it. Each connection is built in phases (`docs/integrations/00-plan.md`); none connects yet. |
+| Settings | `/app/settings` | **Live.** A routed workspace; its sections are listed in `src/lib/app/settings.ts` and described in `05-settings.md`. |
 
 ### Agent destinations
 
@@ -281,6 +282,7 @@ shown, never a guessed one.
 | Cleaners | Everyone | Pay rates are shown to the Owner only. |
 | Settings | Everyone | Only the Owner changes company details, people, authority and billing. |
 | Finance | Owner only | The owner's decision. |
+| Integrations | Everyone sees; Owner connects | Only the Owner connects or disconnects (the owner's decision, November 16). |
 
 ## 7. What remains
 

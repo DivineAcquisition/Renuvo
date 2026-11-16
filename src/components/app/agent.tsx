@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import { CheckCircle2, Hand, Hourglass, LightningIcon, PauseCircleIcon, type LucideIcon } from "@/components/icons";
+import type { AgentId as NavAgentId } from "@/lib/app/navigation";
 import { cn } from "@/lib/utils";
 
 import type { AgentState } from "../../../convex/overview";
@@ -21,8 +22,11 @@ export const STATE: Record<AgentState, { label: string; dot: string; pulse: bool
 
 const PIXELS = { xs: 20, sm: 28, md: 36, lg: 44 } as const;
 
-/** Where an agent's portrait is served from: the same faces the public site uses. */
-export function agentPortrait(agent: AgentId): string {
+/**
+ * Where an agent's portrait is served from: public/agents/<id>.webp, the same faces the public site uses.
+ * Every agent in the navigation has one, including those not built yet.
+ */
+export function agentPortrait(agent: string): string {
   return `/agents/${agent}.webp`;
 }
 
@@ -30,7 +34,7 @@ export function agentPortrait(agent: AgentId): string {
  * An agent's face with a dot for its state. The dot breathes only while the agent is acting or waiting on
  * you. Decorative: the agent's name is always written beside it. An agent not built yet is shown faded.
  */
-export function AgentAvatar({ agent, state, size = "md" }: { agent: AgentId; state?: AgentState; size?: keyof typeof PIXELS }) {
+export function AgentAvatar({ agent, state, size = "md" }: { agent: AgentId | NavAgentId; state?: AgentState; size?: keyof typeof PIXELS }) {
   const look = state ? STATE[state] : null;
   const pixels = PIXELS[size];
   return (

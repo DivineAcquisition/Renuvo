@@ -12,6 +12,8 @@
  * The document that explains it: docs/foundation/01-navigation.md.
  */
 
+import { SETTINGS_SECTIONS } from "./settings";
+
 // ── Identifiers. Stable, used in URLs and stored state. Display labels are separate and may change. ──
 
 export const DEPARTMENT_IDS = ["growth", "operations", "team"] as const;
@@ -85,7 +87,7 @@ export const DEPARTMENTS: readonly Department[] = [
 
 // ── Company-wide items ──────────────────────────────────────────────────────────────────────────────
 
-export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "finance" | "reports" | "settings";
+export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "finance" | "reports" | "integrations" | "settings";
 
 export type NavItem = Destination & {
   id: NavItemId;
@@ -177,6 +179,16 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     availability: interim(`${APP_ROOT}/insights`, "Everything beyond the weekly measures: agent performance, longer periods, breakdowns."),
     minimumRole: "office",
   },
+  {
+    id: "integrations",
+    label: "Integrations",
+    section: "shared",
+    purpose: "The accounts and services Selestial works with: payments, Google, texting, accounting, hiring and imports.",
+    path: `${APP_ROOT}/integrations`,
+    availability: LIVE,
+    minimumRole: "office",
+    accessNote: "Everyone can see what is connected. Only the Owner connects or disconnects, by the owner's decision on November 16, 2026. The list is live; each connection is built in phases (docs/integrations/00-plan.md).",
+  },
 ];
 
 /** One footer item. Business rules, agent permissions, connections, notifications and platform billing live inside it. */
@@ -185,7 +197,7 @@ export const FOOTER_ITEMS: readonly NavItem[] = [
     id: "settings",
     label: "Settings",
     section: "footer",
-    purpose: "Business configuration, agent permissions, connections, notifications and Selestial's own billing.",
+    purpose: "Business hours and services, people, agent permissions and rules, connections, security, compliance and Selestial's own plans.",
     path: `${APP_ROOT}/settings`,
     availability: LIVE,
     minimumRole: "office",
@@ -195,11 +207,8 @@ export const FOOTER_ITEMS: readonly NavItem[] = [
 
 export const NAV_ITEMS: readonly NavItem[] = [...PERSISTENT_ITEMS, ...SHARED_ITEMS, ...FOOTER_ITEMS];
 
-/** Pages inside Settings. They have no sidebar entry: Settings links to them, and readiness blockers link to their sections. */
-export const SETTINGS_PAGES: readonly { path: string; label: string; purpose: string }[] = [
-  { path: `${APP_ROOT}/settings/compliance`, label: "Trust & Compliance", purpose: "Readiness per operation, business identity, messaging setup, consent wording, the company's data, and agreements." },
-  { path: `${APP_ROOT}/settings/agreements`, label: "Agreements", purpose: "Which version of Selestial's Terms the company accepted, who, and when." },
-];
+/** Pages inside Settings. They have no sidebar entry: Settings links to them. They are derived from the settings catalog (settings.ts), the one place they are defined. */
+export const SETTINGS_PAGES: readonly { path: string; label: string; purpose: string }[] = SETTINGS_SECTIONS.map(({ path, label, purpose }) => ({ path, label, purpose }));
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */
 export const CHAT_PAGES: readonly { path: string; label: string; purpose: string }[] = [
