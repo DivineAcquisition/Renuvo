@@ -24,7 +24,7 @@ const str = (value: unknown, what: string): string => {
 };
 const developer = (): string => {
   const value = adsDeveloperToken();
-  if (!value) throw new GoogleError("not_configured", "GOOGLE_ADS_DEVELOPER_TOKEN is not set on this deployment.");
+  if (!value) throw new GoogleError("not_configured", "Google Ads isn’t available yet.");
   return value;
 };
 const enc = (text: string) => new TextEncoder().encode(text);

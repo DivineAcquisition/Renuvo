@@ -126,7 +126,7 @@ export const REGISTRY: Record<Capability, CapabilityEntry> = {
     inputs: ["text", "image", "pdf", "tools"],
     outputs: ["text", "tool calls"],
     cancellation: "stops_stream",
-    dataNote: "Anthropic. With OPENROUTER_CHAT_MODEL set, OpenRouter may continue a reply when Anthropic is down; tool results already carried out go with it and are never repeated.",
+    dataNote: "Anthropic, with a backup model that can finish a reply if Anthropic is down. Anything already done is never repeated.",
   },
   reasoning: {
     capability: "reasoning",
@@ -289,7 +289,7 @@ export function resolve(capability: Capability, override?: Override | null): Res
   const enabled = override ? override.enabled : !entry.optional;
   if (!enabled) return { ready: false, entry, reason: "disabled", words: `${entry.label} is switched off for Selestial right now.` };
   if (!providerConfigured(entry.primary.provider)) {
-    return { ready: false, entry, reason: "not_configured", words: `${entry.label} needs ${PROVIDER_NAMES[entry.primary.provider]}, which is not connected on this deployment (${PROVIDER_KEYS[entry.primary.provider]}).` };
+    return { ready: false, entry, reason: "not_configured", words: `${entry.label} isn’t available yet.` };
   }
   const extra = capability === "chat" ? [openRouterChatModel()].filter((row): row is ModelEntry => row !== null) : [];
   const fallbacks = [...entry.fallbacks, ...extra].filter((row) => providerConfigured(row.provider));

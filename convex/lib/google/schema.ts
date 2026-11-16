@@ -232,7 +232,7 @@ export const googleTables = {
   /** What the Owner can choose from (calendars, locations, ad accounts, a folder's readable files), as Google last listed it. */
   googleChoices: defineTable({
     companyId: v.id("companies"),
-    kind: v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents")),
+    kind: v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents"), v.literal("conversion_actions")),
     scope: v.optional(v.string()),
     items: v.array(v.object({ id: v.string(), label: v.string(), detail: v.optional(v.string()) })),
     problem: v.optional(v.string()),

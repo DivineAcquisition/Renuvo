@@ -45,7 +45,7 @@ export type Answer<T> =
 
 async function call<T>(path: string, body: Record<string, unknown>, options: { idempotencyKey?: string; degradable?: boolean } = {}): Promise<Answer<T>> {
   const config = autumnConfig();
-  if (!config) return { kind: "unavailable", status: null, message: "Billing is not connected on this deployment." };
+  if (!config) return { kind: "unavailable", status: null, message: "Billing isn’t available right now." };
   let response: Response;
   try {
     response = await (transport ?? fetch)(`${BASE}${path}`, {

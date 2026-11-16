@@ -28,7 +28,6 @@ import { activeConnection } from "./lib/google/connection";
 import { enabledFeatures, FEATURE_INFO, FEATURES, missingScopes, scopesFor, type Feature } from "./lib/google/features";
 import { GoogleError } from "./lib/google/http";
 import { consentUrl, googleApp, redirectUri, refresh, revoke } from "./lib/google/oauth";
-import { endpoints, platformStatus } from "./lib/google/platform";
 import { featureValidator, resourceKindValidator } from "./lib/google/schema";
 import { appOrigin, returnOrigin } from "./lib/invitations";
 import { hashToken, randomToken, secretsConfigured, unseal } from "./lib/recruiter/secrets";
@@ -44,8 +43,6 @@ export function afterGoogle(outcome: string, origin?: string | null, feature?: s
 export const status = companyQuery({
   args: {},
   handler: async (ctx) => {
-    const jobs = await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "failed")).order("desc").take(5);
-    const uncertain = await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "uncertain")).order("desc").take(5);
     const tools = [];
     const allResources = [];
     for (const feature of FEATURES) {
@@ -57,7 +54,6 @@ export const status = companyQuery({
         feature,
         label: FEATURE_INFO[feature].label,
         does: FEATURE_INFO[feature].does,
-        needsPlatform: FEATURE_INFO[feature].needsPlatform ?? [],
         connection: connection ? { id: connection._id, email: connection.email, status: connection.status, problem: connection.problem ?? null, connectedAt: connection.connectedAt, lastRefreshAt: connection.lastRefreshAt ?? null } : null,
         granted: connection?.status === "connected" && enabledFeatures(connection.grantedScopes).includes(feature),
         missing: connection ? missingScopes(feature, connection.grantedScopes) : [...FEATURE_INFO[feature].scopes],
@@ -69,10 +65,6 @@ export const status = companyQuery({
       ready: googleApp() !== null && redirectUri() !== null && (await secretsConfigured()),
       tools,
       resources: allResources,
-      // Only the Owner sees which platform settings are missing; it is setup information, not company data.
-      platform: ctx.role === "owner" ? platformStatus() : [],
-      endpoints: ctx.role === "owner" ? endpoints() : null,
-      problems: [...jobs, ...uncertain].map((job) => ({ kind: job.kind, status: job.status, error: job.lastError ?? null, at: job.updatedAt })),
     };
   },
 });
@@ -84,8 +76,8 @@ export const startConnect = ownerMutation({
   handler: async (ctx, args) => {
     const app = googleApp();
     const redirect = redirectUri();
-    if (!app || !redirect) throw userError("Connecting Google is not set up on this deployment: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and the site address are needed.");
-    if (!(await secretsConfigured())) throw userError("Connecting Google is not set up on this deployment: MAILBOX_TOKEN_KEY, the key that protects stored authorizations, is missing.");
+    if (!app || !redirect) throw userError("Connecting Google isn’t available yet. Please try again a little later.");
+    if (!(await secretsConfigured())) throw userError("Connecting Google isn’t available yet. Please try again a little later.");
     const existing = await activeConnection(ctx, ctx.companyId, args.feature);
     // Reconnecting keeps the same Google account; "a different account" replaces it.
     const same = existing && !args.differentAccount ? existing : null;
@@ -231,11 +223,11 @@ export const markExpired = internalMutation({
 /** An access token for one connection, or why there is none. For use inside actions only. */
 export async function accessTokenFor(ctx: ActionCtx, connectionId: Id<"googleConnections">): Promise<{ ok: true; token: string; companyId: Id<"companies">; scopes: string[] } | { ok: false; why: string; kind: "not_connected" | "auth" | "not_configured" | "server" }> {
   const app = googleApp();
-  if (!app) return { ok: false, why: "Google is not set up on this deployment.", kind: "not_configured" };
+  if (!app) return { ok: false, why: "Google isn’t available right now.", kind: "not_configured" };
   const credential = await ctx.runQuery(internal.google.credentialFor, { connectionId });
   if (!credential) return { ok: false, why: "Google is not connected.", kind: "not_connected" };
   const refreshToken = await unseal(credential.sealedRefreshToken, connectionId);
-  if (!refreshToken) return { ok: false, why: "The stored authorization cannot be read on this deployment (the encryption key changed). Reconnect Google.", kind: "not_configured" };
+  if (!refreshToken) return { ok: false, why: "Google needs to be reconnected.", kind: "not_configured" };
   try {
     const fresh = await refresh(app, refreshToken);
     await ctx.runMutation(internal.google.markRefreshed, { connectionId, scopes: fresh.scopes });
@@ -318,10 +310,10 @@ export const setResourceAccess = internalMutation({
 
 // ── What the Owner can choose from ──────────────────────────────────────────────────────────────
 
-const choiceKind = v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents"));
+const choiceKind = v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents"), v.literal("conversion_actions"));
 
 /** Asks Google, as the company, what can be chosen. The answer lands in `choices`. */
-const CHOICE_FEATURE = { calendars: "calendar", locations: "business_profile", ads_accounts: "ads", folder_contents: "drive" } as const;
+const CHOICE_FEATURE = { calendars: "calendar", locations: "business_profile", ads_accounts: "ads", folder_contents: "drive", conversion_actions: "ads" } as const;
 
 export const refreshChoices = ownerMutation({
   args: { kind: choiceKind, scope: v.optional(v.string()) },

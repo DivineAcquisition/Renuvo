@@ -67,7 +67,7 @@ export function SignupScreen({ policy }: { policy: PasswordPolicy | null }) {
       return;
     }
     if (extra.length > 0) {
-      setProblem({ message: "New accounts are not fully set up on this deployment yet: the sign-in service is asking for details this form does not collect. Nothing was created.", kind: "setup" });
+      setProblem({ message: "We couldn’t create your account just now. Nothing was created. Please try again later.", kind: "setup" });
       note("Sign-up settings need changing");
       await signUp.reset();
       setBusy(false);

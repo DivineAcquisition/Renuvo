@@ -88,8 +88,8 @@ const BY_CODE: Record<string, AuthProblem> = {
 
   // Setup gaps. The person cannot fix these; the screen says so plainly.
   captcha_invalid: { message: "The security check did not pass. Reload the page and try again.", kind: "unknown" },
-  sign_up_mode_restricted: { message: "New accounts are not open on this deployment yet.", kind: "setup" },
-  sign_up_restricted_waitlist: { message: "New accounts are not open on this deployment yet.", kind: "setup" },
+  sign_up_mode_restricted: { message: "New accounts aren’t open yet.", kind: "setup" },
+  sign_up_restricted_waitlist: { message: "New accounts aren’t open yet.", kind: "setup" },
 };
 
 /** Words for whatever went wrong. Unknown problems get one honest sentence, never the raw text. */

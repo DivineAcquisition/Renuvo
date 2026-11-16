@@ -228,7 +228,7 @@ export const notify = internalAction({
     const found: ToNotify = await ctx.runQuery(internal.requests.forNotify, { requestId: args.requestId });
     if (!found.ready) return record({ kind: "not_configured", problem: "No verified inbox is set for this kind of request." });
     const provider = emailProvider();
-    if (!provider) return record({ kind: "not_configured", problem: "Email sending isn't set up yet, so the email wasn't sent." });
+    if (!provider) return record({ kind: "not_configured", problem: "Email isn’t available right now." });
     const message = trustRequestEmail({ kind: found.kind, subtype: found.subtype, reference: found.reference, receivedAt: found.receivedAt });
     try {
       // One key for every try, so the provider drops a repeat instead of sending the email twice.

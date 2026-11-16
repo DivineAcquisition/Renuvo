@@ -90,7 +90,7 @@ async function checkAllowance(ctx: MutationCtx & MemberAccess) {
   const month = monthOf(Date.now());
   const row = await usageRow(ctx, ctx.companyId, month);
   const cap = monthlyRunAllowance();
-  if (cap !== null && row && row.runs >= cap) throw userError(`Company Chat is limited to ${cap} answers a month on this deployment for now. The limit resets at the start of next month (UTC).`, "limit");
+  if (cap !== null && row && row.runs >= cap) throw userError(`Company Chat is limited to ${cap} answers a month for now. The limit resets at the start of next month.`, "limit");
   if (!(await allow(ctx, `chat.send:${ctx.member._id}`, SENDS_PER_WINDOW, SEND_WINDOW_MS))) throw userError("That is a lot of messages in a few minutes. Wait a moment and send again.", "limit");
   if (row) await ctx.db.patch(row._id, { runs: row.runs + 1 });
   else await ctx.db.insert("chatUsage", { companyId: ctx.companyId, month, runs: 1, inputTokens: 0, outputTokens: 0 });

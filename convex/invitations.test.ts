@@ -104,7 +104,7 @@ describe("inviting a person", () => {
         state: "pending",
         createdAt: NOW,
         expiresAt: NOW + LIFETIME,
-        delivery: { state: "not_sent", at: NOW, problem: "Email sending isn't set up yet, so the email wasn't sent." },
+        delivery: { state: "not_sent", at: NOW, problem: "Email isn’t available right now." },
       },
     ]);
     expect((await s.members()).find((row) => row.email === "mia@example.com")).toMatchObject({ role: "manager", status: "invited" });
@@ -143,7 +143,7 @@ describe("inviting a person", () => {
     const s = await setup();
     const made = await s.invite("mia");
     delete process.env.ACTION_LINK_SECRET;
-    expect(await refusal(s.as.mutation(api.invitations.create, { companyId: s.companyId, email: "noor@example.com", name: "Noor", role: "office" }))).toBe("Invitation links need setup by Selestial's team before they can be used.");
+    expect(await refusal(s.as.mutation(api.invitations.create, { companyId: s.companyId, email: "noor@example.com", name: "Noor", role: "office" }))).toBe("Invitation links aren’t available right now.");
     expect(await s.listed()).toHaveLength(1);
     expect(await s.members()).toHaveLength(2);
     // A link made earlier opens nothing either, for a visitor or for someone signed in.
@@ -631,7 +631,7 @@ describe("the invitation email", () => {
     expect(made.delivery).toBe("queued");
     await flush(s.t);
     expect(mockEmailOutbox).toHaveLength(0);
-    expect((await s.listed())[0].delivery).toMatchObject({ state: "not_sent", problem: "Invitation links need setup by Selestial's team before they can be used." });
+    expect((await s.listed())[0].delivery).toMatchObject({ state: "not_sent", problem: "Invitation links aren’t available right now." });
 
     process.env.SITE_ORIGIN = "https://selestial.test";
     await s.as.mutation(api.invitations.reissue, { companyId: s.companyId, invitationId: made.invitationId });
@@ -648,7 +648,7 @@ describe("the invitation email", () => {
     }
     await flush(s.t);
     expect(mockEmailOutbox).toHaveLength(0);
-    for (const row of await s.listed()) expect(row.delivery).toMatchObject({ state: "not_sent", problem: "Email sending isn't set up yet, so the email wasn't sent." });
+    for (const row of await s.listed()) expect(row.delivery).toMatchObject({ state: "not_sent", problem: "Email isn’t available right now." });
   });
 });
 

@@ -31,7 +31,7 @@ export class AiError extends Error {
 const WORDS: Record<AiErrorKind, string> = {
   refusal: "The model declined this request. Try rephrasing what you need.",
   invalid_output: "The model's answer could not be read, so nothing was done with it.",
-  not_configured: "This AI feature is not connected on this deployment yet.",
+  not_configured: "This AI feature isn’t available yet.",
   rate_limited: "The AI provider is busy right now. Try again in a minute.",
   outage: "The AI provider had a problem. Try again.",
   timeout: "The AI provider took too long to answer.",

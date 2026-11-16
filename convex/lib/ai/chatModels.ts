@@ -88,6 +88,6 @@ export function chatModelState(option: ChatModelOption, company: Doc<"companies"
   if (chat && !chat.enabled) return { available: false, why: "Company Chat is switched off for Selestial right now." };
   if (staffOff.has(option.key)) return { available: false, why: `${option.label} is switched off by Selestial right now.` };
   if (option.route === "openrouter" && company.aiFeatures?.otherChatModels === false) return { available: false, why: "Your Owner has turned off models from other providers. Settings › AI & usage." };
-  if (!providerConfigured(option.entry.provider)) return { available: false, why: `${option.label} is not connected on this deployment yet.` };
+  if (!providerConfigured(option.entry.provider)) return { available: false, why: `${option.label} isn’t available yet.` };
   return { available: true };
 }

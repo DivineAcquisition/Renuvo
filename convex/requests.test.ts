@@ -103,7 +103,7 @@ describe("public requests", () => {
     const rows = await requests(t);
     expect(rows.map((row) => row.notify.state)).toEqual(["not_configured", "not_configured"]);
     expect(rows[0].notify.problem).toBe("No verified inbox is set for this kind of request.");
-    expect(rows[1].notify.problem).toBe("Email sending isn't set up yet, so the email wasn't sent.");
+    expect(rows[1].notify.problem).toBe("Email isn’t available right now.");
     expect(mockEmailOutbox).toEqual([]);
   });
 

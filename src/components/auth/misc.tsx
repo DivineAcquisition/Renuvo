@@ -65,7 +65,7 @@ const REASONS: Record<string, { title: string; body: string }> = {
   used: { title: "That link was already used", body: "Each link works once. If you have finished what it was for, sign in. Otherwise ask for a new one." },
   session: { title: "Your session ended", body: "For your safety, sessions end after a while. Sign in again to continue." },
   access: { title: "You do not have access to that", body: "You are signed in, but your account is not part of that workspace, or your access was removed. Ask the workspace Owner if you think this is a mistake." },
-  setup: { title: "Sign-in is not finished being set up", body: "Something on this deployment still needs configuring before sign-in can work. Nothing is wrong with your account." },
+  setup: { title: "Sign-in is not finished being set up", body: "Sign-in isn’t available right now. Nothing is wrong with your account. Please try again later." },
 };
 
 /** One page for a link or a session that cannot be used, with a way forward from each. */

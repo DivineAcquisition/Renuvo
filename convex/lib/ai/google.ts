@@ -20,7 +20,7 @@ export const INLINE_VIDEO_LIMIT = 18 * 1024 * 1024;
 
 function key(): string {
   const value = process.env.GEMINI_API_KEY?.trim();
-  if (!value) throw aiError("not_configured", "Google Gemini is not connected on this deployment (GEMINI_API_KEY).");
+  if (!value) throw aiError("not_configured", "This AI model isn’t available right now.");
   return value;
 }
 const headers = () => ({ "x-goog-api-key": key(), "Content-Type": "application/json" });

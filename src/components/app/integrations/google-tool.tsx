@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { canManage, useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
@@ -27,20 +27,20 @@ export function googleResultWords(result: string): string {
   return "Not connected. Try again.";
 }
 
-/** What each kind of chosen item is, in words. */
-const KIND_WORDS: Record<string, string> = {
-  drive_source: "Drive folder Selestial reads",
-  drive_output: "Drive folder Selestial saves to",
-  calendar_sync: "Calendar for jobs and interviews",
-  calendar_busy: "Calendar for busy times",
-  business_location: "Business Profile location",
-  ads_account: "Google Ads account",
-  conversion_destination: "Conversion action",
+const ACCESS_WORDS = { verified: "Ready", unverified: "Checking…", lost: "Needs attention" } as const;
+
+const DRAFT_WORDS: Record<string, string> = { draft: "draft", approved: "approved, being created", created_paused: "ready, paused", active: "running", failed: "couldn’t be created" };
+const REPORT_WORDS: Record<string, string> = { queued: "sending", sent: "reported", rejected: "not accepted", skipped: "not reported" };
+
+const USE_WORDS: Record<string, (purpose: string | null) => string> = {
+  drive_source: () => "your team can ask about it",
+  drive_output: (purpose) => (purpose ? `${purpose} are saved here` : "files are saved here"),
+  calendar_sync: () => "visits and interviews go here",
+  calendar_busy: () => "busy times are respected",
+  business_location: () => "reviews",
+  ads_account: () => "ads and leads",
+  conversion_destination: () => "booked visits are reported here",
 };
-
-const DRAFT_WORDS: Record<string, string> = { draft: "Draft", approved: "Approved", created_paused: "Created, paused", active: "Running", failed: "Couldn't be created" };
-
-const ACCESS_WORDS = { verified: "Checked with Google", unverified: "Checking with Google…", lost: "Not reachable" } as const;
 
 type Status = NonNullable<ReturnType<typeof useQuery<typeof api.google.status>>>;
 type Tool = Status["tools"][number];
@@ -149,19 +149,16 @@ function Resources({ tool, owner, companyId }: { tool: Tool; owner: boolean; com
   const { busy, error, run } = useRun();
   return (
     <div className="grid gap-3">
-      <span className="text-sm font-medium text-strong">What Selestial may use</span>
-      {tool.resources.length === 0 ? <p className="text-sm text-muted-foreground">Nothing chosen yet. Selestial can use only what is listed here.</p> : null}
+      <span className="text-sm font-medium text-strong">What Selestial uses</span>
+      {tool.resources.length === 0 ? <p className="text-sm text-muted-foreground">Nothing added yet.</p> : null}
       <ul className="grid gap-2">
         {tool.resources.map((r) => (
           <li key={r.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border px-3 py-2">
             <span className="grid gap-0.5">
               <span className="text-sm font-medium text-strong">
-                {r.label} <span className="font-normal text-muted-foreground">· {KIND_WORDS[r.kind] ?? "Shared item"}{r.purpose ? ` for ${r.purpose}` : ""}</span>
+                {r.label} <span className="font-normal text-muted-foreground">· {USE_WORDS[r.kind](r.purpose)}</span>
               </span>
-              <span className="text-xs text-muted-foreground">
-                {ACCESS_WORDS[r.access]}
-                {r.accessNote ? `: ${r.accessNote}` : ""}
-              </span>
+              <span className="text-xs text-muted-foreground">{r.access === "verified" ? ACCESS_WORDS.verified : r.accessNote && r.access === "lost" ? r.accessNote : ACCESS_WORDS[r.access]}</span>
             </span>
             {owner ? (
               <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => remove({ companyId, resourceId: r.id }))}>
@@ -174,10 +171,10 @@ function Resources({ tool, owner, companyId }: { tool: Tool; owner: boolean; com
       {owner ? (
         <>
           {tool.feature === "drive" ? <ChooseDrive companyId={companyId} email={tool.connection?.email} /> : null}
-          {tool.feature === "calendar" ? <ChooseFromList companyId={companyId} kind="calendars" title="Calendars" options={[{ kind: "calendar_sync", label: "Put visits and interviews here" }, { kind: "calendar_busy", label: "Use busy times from here" }]} /> : null}
-          {tool.feature === "business_profile" ? <ChooseFromList companyId={companyId} kind="locations" title="Business Profile locations" options={[{ kind: "business_location", label: "Read reviews and reply (with approval)" }]} /> : null}
-          {tool.feature === "ads" ? <ChooseFromList companyId={companyId} kind="ads_accounts" title="Google Ads accounts" options={[{ kind: "ads_account", label: "Read results, take Local Services leads, draft campaigns" }]} /> : null}
-          {tool.feature === "conversions" ? <ChooseConversion companyId={companyId} /> : null}
+          {tool.feature === "calendar" ? <ChooseFromList companyId={companyId} kind="calendars" title="Your calendars" empty="No calendars found." options={[{ kind: "calendar_sync", label: "Put visits and interviews here" }, { kind: "calendar_busy", label: "Respect busy times here" }]} /> : null}
+          {tool.feature === "business_profile" ? <ChooseFromList companyId={companyId} kind="locations" title="Your locations" empty="No locations found." options={[{ kind: "business_location", label: "Reviews" }]} /> : null}
+          {tool.feature === "ads" ? <ChooseFromList companyId={companyId} kind="ads_accounts" title="Your ad accounts" empty="No ad accounts found." options={[{ kind: "ads_account", label: "Ads and leads" }]} /> : null}
+          {tool.feature === "conversions" ? <ChooseFromList companyId={companyId} kind="conversion_actions" title="Where to report booked visits" empty="Add a Google Ads account first, then pick a conversion here." options={[{ kind: "conversion_destination", label: "Booked visits" }]} /> : null}
         </>
       ) : null}
       <FormError message={error} />
@@ -197,118 +194,83 @@ function ChooseDrive({ companyId, email }: { companyId: Id<"companies">; email?:
     });
   return (
     <div className="grid gap-2 rounded-lg border border-border p-3">
-      <span className="text-sm font-medium text-strong">Google Drive</span>
-      <p className="text-xs text-muted-foreground">Selestial sees only files and folders chosen here or created by Selestial. Choosing a folder does not share the files already in it: pick those files too.</p>
+      <span className="text-sm font-medium text-strong">Add files or folders</span>
+      <p className="text-xs text-muted-foreground">Selestial only sees what you add here. Adding a folder doesn’t include the files already in it, so add those files too.</p>
       <div className="flex flex-wrap items-end gap-2">
-        <Field label="Use it for" className="min-w-48">
+        <Field label="Add" className="min-w-48">
           <SelectInput value={purpose} onChange={(e) => setPurpose(e.target.value)}>
-            <option value="knowledge">Knowledge Chat may read</option>
+            <option value="knowledge">Information your team can ask about</option>
             {PURPOSES.map((p) => (
               <option key={p} value={p}>
-                Save {p} here
+                A folder to save {p} in
               </option>
             ))}
           </SelectInput>
         </Field>
         {picker ? (
           <Button type="button" variant="outline" disabled={busy} onClick={() => void pickFromDrive({ folders: purpose !== "knowledge", loginHint: email }).then((items) => (items.length ? save(items) : undefined)).catch((e: Error) => setError(e.message))}>
-            Choose in Google Drive
+            Pick from Google Drive
           </Button>
         ) : null}
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <Field label={picker ? "Or paste a Drive link" : "Paste a Drive link or id"} className="min-w-64 flex-1">
+        <Field label={picker ? "Or paste a Google Drive link" : "Paste a Google Drive link"} className="min-w-64 flex-1">
           <TextInput value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://drive.google.com/drive/folders/…" />
         </Field>
-        <Button type="button" variant="outline" disabled={busy || !driveIdFrom(link)} onClick={() => void save([{ id: driveIdFrom(link)!, name: "Drive item" }]).then(() => setLink(""))}>
+        <Button type="button" variant="outline" disabled={busy || !driveIdFrom(link)} onClick={() => void save([{ id: driveIdFrom(link)!, name: "From Google Drive" }]).then(() => setLink(""))}>
           Add
         </Button>
       </div>
-      {!picker ? <p className="text-xs text-muted-foreground">Google’s file picker isn’t available yet. Paste a link to a folder or file instead; it works for anything Selestial can already open.</p> : null}
       <FormError message={error} />
     </div>
   );
 }
 
-type Kind = "calendar_sync" | "calendar_busy" | "business_location" | "ads_account";
+type Kind = "calendar_sync" | "calendar_busy" | "business_location" | "ads_account" | "conversion_destination";
+type ChoiceKind = "calendars" | "locations" | "ads_accounts" | "conversion_actions";
 
-function ChooseFromList({ companyId, kind, title, options }: { companyId: Id<"companies">; kind: "calendars" | "locations" | "ads_accounts"; title: string; options: { kind: Kind; label: string }[] }) {
+/** What Google offers to pick from, listed as soon as it opens. */
+function ChooseFromList({ companyId, kind, title, empty, options }: { companyId: Id<"companies">; kind: ChoiceKind; title: string; empty: string; options: { kind: Kind; label: string }[] }) {
   const choices = useQuery(api.google.choices, { companyId, kind });
   const refresh = useMutation(api.google.refreshChoices);
   const add = useMutation(api.google.addResource);
   const { busy, error, run } = useRun();
   const [target, setTarget] = useState<Kind>(options[0].kind);
-  const [login, setLogin] = useState("");
+  const asked = useRef(false);
+  useEffect(() => {
+    if (choices === null && !asked.current) {
+      asked.current = true;
+      void refresh({ companyId, kind }).catch(() => undefined);
+    }
+  }, [choices, companyId, kind, refresh]);
   return (
     <div className="grid gap-2 rounded-lg border border-border p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium text-strong">{title}</span>
-        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(() => refresh({ companyId, kind }))}>
-          {choices ? "List again" : "List from Google"}
+        <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => refresh({ companyId, kind }))}>
+          Refresh
         </Button>
       </div>
       {options.length > 1 ? (
-        <Field label="Use it to">
-          <SelectInput value={target} onChange={(e) => setTarget(e.target.value as Kind)}>
-            {options.map((o) => (
-              <option key={o.kind} value={o.kind}>
-                {o.label}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-      ) : (
-        <p className="text-xs text-muted-foreground">{options[0].label}</p>
-      )}
-      {kind === "ads_accounts" ? (
-        <Field label="Manager account id (only if access is through a manager account)">
-          <TextInput value={login} onChange={(e) => setLogin(e.target.value)} placeholder="123-456-7890" />
-        </Field>
+        <SelectInput aria-label="What to use it for" value={target} onChange={(e) => setTarget(e.target.value as Kind)}>
+          {options.map((o) => (
+            <option key={o.kind} value={o.kind}>
+              {o.label}
+            </option>
+          ))}
+        </SelectInput>
       ) : null}
-      {choices?.problem ? <p className="text-xs text-muted-foreground">{choices.problem}</p> : null}
+      {!choices ? <p className="text-xs text-muted-foreground">Looking in your Google account…</p> : choices.problem ? <p className="text-xs text-muted-foreground">{choices.problem}</p> : choices.items.length === 0 ? <p className="text-xs text-muted-foreground">{empty}</p> : null}
       <ul className="grid gap-1">
         {(choices?.items ?? []).map((item) => (
           <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
-            <span className="min-w-0 truncate">
-              {item.label} {item.detail ? <span className="text-xs text-muted-foreground">· {item.detail}</span> : null}
-            </span>
-            <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => add({ companyId, kind: target, externalId: item.id, label: item.label, detail: kind === "locations" ? item.detail : kind === "ads_accounts" ? login.replace(/\D/g, "") || undefined : undefined }))}>
-              Choose
+            <span className="min-w-0 truncate">{item.label}</span>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(() => add({ companyId, kind: target, externalId: item.id, label: item.label, detail: kind === "locations" || kind === "conversion_actions" ? item.detail : undefined }))}>
+              Use
             </Button>
           </li>
         ))}
       </ul>
-      <FormError message={error} />
-    </div>
-  );
-}
-
-function ChooseConversion({ companyId }: { companyId: Id<"companies"> }) {
-  const add = useMutation(api.google.addResource);
-  const { busy, error, run } = useRun();
-  const [account, setAccount] = useState("");
-  const [action, setAction] = useState("");
-  const [login, setLogin] = useState("");
-  return (
-    <div className="grid gap-2 rounded-lg border border-border p-3">
-      <span className="text-sm font-medium text-strong">Where booked jobs are reported</span>
-      <p className="text-xs text-muted-foreground">The Google Ads conversion action that counts a booked job. Find its id in Google Ads under Goals › Conversions.</p>
-      <div className="grid gap-2 sm:grid-cols-3">
-        <Field label="Ad account id">
-          <TextInput value={account} onChange={(e) => setAccount(e.target.value)} placeholder="123-456-7890" />
-        </Field>
-        <Field label="Conversion action id">
-          <TextInput value={action} onChange={(e) => setAction(e.target.value)} />
-        </Field>
-        <Field label="Manager account id (optional)">
-          <TextInput value={login} onChange={(e) => setLogin(e.target.value)} />
-        </Field>
-      </div>
-      <div>
-        <Button type="button" variant="outline" disabled={busy || !/^\d{6,}$/.test(action.trim()) || account.replace(/\D/g, "").length !== 10} onClick={() => void run(() => add({ companyId, kind: "conversion_destination", externalId: action.trim(), label: `Conversion action ${action.trim()}`, detail: `${account.replace(/\D/g, "")}${login.replace(/\D/g, "") ? `:${login.replace(/\D/g, "")}` : ""}` }))}>
-          Use this conversion action
-        </Button>
-      </div>
       <FormError message={error} />
     </div>
   );
@@ -322,18 +284,18 @@ function DrivePanel({ companyId, manager }: { companyId: Id<"companies">; manage
   const [note, setNote] = useState<string | null>(null);
   const { role } = useCompany();
   return (
-    <Panel title="Drive, Docs and Sheets">
+    <Panel title="Your documents">
       <div className="grid gap-3 px-4 py-4 sm:px-5">
         <ul className="grid gap-2">
           {(sources ?? []).map((s) => (
             <li key={s.resourceId} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border px-3 py-2">
               <span className="grid gap-0.5">
                 <span className="text-sm font-medium text-strong">{s.label}</span>
-                <span className="text-xs text-muted-foreground">{s.files.length ? `${s.files.length} file${s.files.length === 1 ? "" : "s"} read: ${s.files.map((f) => f.name).join(", ")}` : "Not read yet."} New text is proposed as company knowledge for the Owner to confirm.</span>
+                <span className="text-xs text-muted-foreground">{s.files.length ? s.files.map((f) => f.name).join(", ") : "Being read…"}</span>
               </span>
               {role === "owner" ? (
-                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(async () => { await read({ companyId, resourceId: s.resourceId }); setNote("Reading queued."); })}>
-                  Read again
+                <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(async () => { await read({ companyId, resourceId: s.resourceId }); setNote("Reading it again now."); })}>
+                  Refresh
                 </Button>
               ) : null}
             </li>
@@ -361,18 +323,14 @@ function CalendarPanel({ companyId, manager }: { companyId: Id<"companies">; man
   const { busy, error, run } = useRun();
   const [note, setNote] = useState<string | null>(null);
   return (
-    <Panel title="Calendar">
+    <Panel title="Your calendar">
       <div className="grid gap-3 px-4 py-4 sm:px-5">
-        <p className="text-sm text-muted-foreground">Visits and confirmed interviews are copied to the calendar you chose every few minutes. Selestial stays the source: if someone moves or deletes one of these events in Google, a task asks a person to decide, and the visit is not changed.</p>
-        {(busyTimes ?? []).map((row) => (
-          <p key={row.calendarId} className="text-xs text-muted-foreground">
-            {row.calendarId}: {row.problem ? `not readable (${row.problem})` : `${row.busy.length} busy block${row.busy.length === 1 ? "" : "s"} in the next week, read ${new Date(row.fetchedAt).toLocaleTimeString()}`}.
-          </p>
-        ))}
+        <p className="text-sm text-muted-foreground">Visits and interviews stay up to date on your calendar. If one is moved or deleted in Google, Selestial asks you before changing anything.</p>
+        {(busyTimes ?? []).some((row) => row.problem) ? <p className="text-xs text-muted-foreground">One of your calendars couldn’t be read. Check it’s still shared with this Google account.</p> : null}
         {manager ? (
           <div>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => { const r = await sync({ companyId }); setNote(r.repeated ? "A sync is already queued." : "Sync queued."); })}>
-              Sync now
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void run(async () => { const r = await sync({ companyId }); setNote(r.repeated ? "Already updating." : "Updating your calendar now."); })}>
+              Update now
             </Button>
           </div>
         ) : null}
@@ -391,7 +349,7 @@ function ReviewsPanel({ companyId, manager }: { companyId: Id<"companies">; mana
   const { busy, error, run } = useRun();
   const [texts, setTexts] = useState<Record<string, string>>({});
   return (
-    <Panel title="Business Profile reviews" action={manager ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(() => syncNow({ companyId }))}>Read reviews now</Button> : undefined}>
+    <Panel title="Your reviews" action={manager ? <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(() => syncNow({ companyId }))}>Check for new reviews</Button> : undefined}>
       <div className="grid gap-3 px-4 py-4 sm:px-5">
         <p className="text-xs text-muted-foreground">A reply is posted publicly only after an Owner or Manager approves its exact text. Review requests treat every customer with a finished visit the same, whatever they thought of it.</p>
         {reviews?.length === 0 ? <p className="text-sm text-muted-foreground">No reviews read yet.</p> : null}
@@ -437,23 +395,23 @@ function LeadsPanel({ companyId, owner }: { companyId: Id<"companies">; owner: b
   const [shown, setShown] = useState<{ key: string; webhookUrl: string } | null>(null);
   if (!leads) return null;
   return (
-    <Panel title="Google Ads lead forms and Local Services leads">
+    <Panel title="Leads">
       <div className="grid gap-3 px-4 py-4 sm:px-5">
-        <p className="text-sm text-muted-foreground">Each lead reaches Sales once, matched to a customer already on file by email or phone. Local Services leads are read from the ad accounts you chose every 15 minutes.</p>
+        <p className="text-sm text-muted-foreground">New leads from your Google lead forms and Local Services Ads go straight to Sales. A returning customer is recognized, not added twice.</p>
         {owner ? (
           <div className="grid gap-2 rounded-lg border border-border p-3">
-            <span className="text-sm text-strong">{leads.hasKey ? `Lead form key made ${new Date(leads.keyCreatedAt!).toLocaleDateString()}.` : "No lead form key yet."}</span>
+            <span className="text-sm text-strong">{leads.hasKey ? "Lead forms are set up." : "Connect your Google lead forms so leads arrive here."}</span>
             {shown ? (
               <div className="grid gap-1 text-sm">
-                <span>In Google Ads, open the lead form › Lead delivery › Webhook integration, and enter:</span>
+                <span>In Google Ads, open your lead form, go to Lead delivery, and paste these two values:</span>
                 <code className="break-all rounded bg-muted px-2 py-1 text-xs">URL: {shown.webhookUrl}</code>
                 <code className="break-all rounded bg-muted px-2 py-1 text-xs">Key: {shown.key}</code>
-                <span className="text-xs text-muted-foreground">The key is shown only now. Selestial keeps only a fingerprint of it.</span>
+                <span className="text-xs text-muted-foreground">Copy the key now. For your security it isn’t shown again.</span>
               </div>
             ) : null}
             <div>
               <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(async () => setShown(await rotate({ companyId })))}>
-                {leads.hasKey ? "Make a new key (the old one stops working)" : "Make a lead form key"}
+                {leads.hasKey ? "Set up again" : "Set up lead forms"}
               </Button>
             </div>
           </div>
@@ -461,7 +419,7 @@ function LeadsPanel({ companyId, owner }: { companyId: Id<"companies">; owner: b
         <ul className="grid gap-1">
           {leads.leads.slice(0, 20).map((l) => (
             <li key={l._id} className="text-sm">
-              {l.name ?? l.email ?? l.phone ?? "Lead"} <span className="text-xs text-muted-foreground">· {l.source === "local_services" ? "Local Services" : "Lead form"}{l.test ? " · Google test data" : ""} · {new Date(l.receivedAt).toLocaleString()}</span>
+              {l.name ?? l.email ?? l.phone ?? "Lead"} <span className="text-xs text-muted-foreground">· {l.source === "local_services" ? "Local Services" : "Lead form"}{l.test ? " · test" : ""} · {new Date(l.receivedAt).toLocaleString()}</span>
             </li>
           ))}
         </ul>
@@ -498,7 +456,7 @@ function AdsPanel({ companyId, owner }: { companyId: Id<"companies">; owner: boo
             <li key={d._id} className="grid gap-1 rounded-lg border border-border p-3 text-sm">
               <span className="font-medium text-strong">{d.name}</span>
               <span className="text-xs text-muted-foreground">
-                ${(d.dailyBudgetCents / 100).toFixed(2)} a day · {DRAFT_WORDS[d.state] ?? "Draft"} · {d.keywords.slice(0, 5).join(", ")}
+                ${(d.dailyBudgetCents / 100).toFixed(2)} a day · {DRAFT_WORDS[d.state] ?? d.state} · {d.keywords.slice(0, 5).join(", ")}
                 {d.problem ? ` · ${d.problem}` : ""}
               </span>
               {owner && (d.state === "draft" || d.state === "failed") ? (
@@ -533,17 +491,17 @@ function ConversionsPanel({ companyId, owner }: { companyId: Id<"companies">; ow
   const [personalization, setPersonalization] = useState(false);
   if (!settings) return null;
   return (
-    <Panel title="Booked jobs reported to Google Ads">
+    <Panel title="Booked-visit reporting">
       <div className="grid gap-3 px-4 py-4 sm:px-5">
-        <p className="text-sm text-muted-foreground">A visit booked by a customer who came from a Google ad is reported once, with its price, so Google Ads learns which clicks become customers. Nothing is reported until the Owner records the consent basis.</p>
-        <p className="text-sm text-strong">{settings.consent ? `Reporting is on. Consent basis: ${settings.consent.basis}` : "Reporting is off."}</p>
+        <p className="text-sm text-muted-foreground">When someone who clicked your ad books a visit, Google Ads is told, so your ads find more customers like them. It starts once you confirm your customers’ consent.</p>
+        <p className="text-sm text-strong">{settings.consent ? "Reporting is on." : "Reporting is off."}</p>
         {owner ? (
           <div className="grid gap-2">
-            <Field label="Consent basis (what your customers agreed to)">
+            <Field label="How your customers agreed to this">
               <TextArea rows={2} value={basis} onChange={(e) => setBasis(e.target.value)} />
             </Field>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={userData} onChange={(e) => setUserData(e.target.checked)} /> Customers consented to ad user data</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={personalization} onChange={(e) => setPersonalization(e.target.checked)} /> Customers consented to ad personalization</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={userData} onChange={(e) => setUserData(e.target.checked)} /> Customers agreed to share their data with Google for ads</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={personalization} onChange={(e) => setPersonalization(e.target.checked)} /> Customers agreed to personalized ads</label>
             <div className="flex gap-2">
               <Button type="button" size="sm" variant="outline" disabled={busy || !basis.trim()} onClick={() => void run(() => save({ companyId, adUserData: userData, adPersonalization: personalization, basis }))}>
                 Save and turn reporting on
@@ -559,7 +517,7 @@ function ConversionsPanel({ companyId, owner }: { companyId: Id<"companies">; ow
         <ul className="grid gap-1 text-xs">
           {settings.recent.slice(0, 10).map((c) => (
             <li key={c._id}>
-              ${(c.valueCents / 100).toFixed(2)} · {({ queued: "Waiting to send", sent: "Sent to Google Ads", rejected: "Google Ads didn't accept it", skipped: "Not sent" } as Record<string, string>)[c.status] ?? "Recorded"}
+              ${(c.valueCents / 100).toFixed(2)} · {REPORT_WORDS[c.status] ?? c.status}
               {c.reason ? ` · ${c.reason}` : ""}
             </li>
           ))}

@@ -62,13 +62,13 @@ describe("connecting Google", () => {
     vi.useRealTimers();
   });
 
-  it("names exactly what is missing when the deployment is not set up, and connects nothing", async () => {
+  it("says plainly that Google is not available yet when setup is missing, naming no settings, and connects nothing", async () => {
     vi.stubEnv("GOOGLE_CLIENT_ID", "");
     const { as, companyId } = await company(t, "owner", "Alpha");
-    expect(await refusal(as.mutation(api.google.startConnect, { companyId, feature: "drive" }))).toMatch(/GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET/);
+    expect(await refusal(as.mutation(api.google.startConnect, { companyId, feature: "drive" }))).toMatch(/isn’t available yet/);
     vi.stubEnv("GOOGLE_CLIENT_ID", ENV.GOOGLE_CLIENT_ID);
     vi.stubEnv("MAILBOX_TOKEN_KEY", "");
-    expect(await refusal(as.mutation(api.google.startConnect, { companyId, feature: "drive" }))).toMatch(/MAILBOX_TOKEN_KEY/);
+    expect(await refusal(as.mutation(api.google.startConnect, { companyId, feature: "drive" }))).toMatch(/isn’t available yet/);
     expect((await as.query(api.google.status, { companyId })).tools.every((tool) => tool.connection === null)).toBe(true);
   });
 
@@ -92,11 +92,10 @@ describe("connecting Google", () => {
     await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile] });
     expect(await refusal(manager.mutation(api.google.addResource, { companyId, kind: "drive_output", externalId: "folder-1", label: "Photos" }))).toMatch(/not allowed|owner/i);
     expect(await refusal(manager.mutation(api.google.disconnect, { companyId, feature: "drive" }))).toMatch(/not allowed|owner/i);
-    // Anyone in the company sees what is connected, but not the platform setup.
+    // Anyone in the company sees what is connected.
     const seen = await manager.query(api.google.status, { companyId });
     expect(seen.tools.find((tool) => tool.feature === "drive")?.connection?.email).toBe("owner@alpha.test");
     expect(seen.canManage).toBe(false);
-    expect(seen.platform).toEqual([]);
   });
 
   it("sends the Owner back to the Selestial address they started from, and never to another site", async () => {
@@ -183,7 +182,7 @@ describe("connecting Google", () => {
     const row = (await as.query(api.google.status, { companyId })).resources[0];
     expect(row.access).toBe("verified");
     // Choosing a folder does not share the files already in it.
-    expect(row.accessNote).toMatch(/0 files .*not shared by choosing the folder/);
+    expect(row.accessNote).toMatch(/files already in this folder, pick them too/);
   });
 
   it("an expired grant marks the connection expired, and work for it stops", async () => {

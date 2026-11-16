@@ -71,7 +71,7 @@ export function telnyxProvider(fetcher: typeof fetch = fetch): MessagingProvider
       if (known) return { ok: false, ...known };
       if (response.status === 429) return { ok: false, retryable: true, problem: "Telnyx asked us to slow down. The text will be tried again." };
       if (response.status >= 500) return { ok: false, retryable: true, problem: "Telnyx had a problem on its side. The text will be tried again." };
-      if (response.status === 401 || response.status === 403) return { ok: false, retryable: false, problem: "Telnyx refused the API key. Check TELNYX_API_KEY on the deployment." };
+      if (response.status === 401 || response.status === 403) return { ok: false, retryable: false, problem: "Texting isn’t available right now." };
       return { ok: false, retryable: false, problem: `Telnyx would not send this text (${typeof code === "string" ? `code ${code}` : `status ${response.status}`}).` };
     },
   };

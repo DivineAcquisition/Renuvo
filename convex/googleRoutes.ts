@@ -100,7 +100,7 @@ export const requestDayPlan = managerMutation({
   args: { day: v.string() },
   handler: async (ctx, args) => {
     dayBounds(args.day, ctx.company.timezone);
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON || !process.env.GOOGLE_CLOUD_PROJECT) throw userError("Day plans are not set up on this deployment (GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_CLOUD_PROJECT).");
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON || !process.env.GOOGLE_CLOUD_PROJECT) throw userError("Day plans aren’t available yet.");
     return enqueue(ctx, { companyId: ctx.companyId, kind: "route_proposal", key: `route_proposal:${args.day}:${Math.floor(Date.now() / 300_000)}`, payload: { day: args.day }, requestedBy: ctx.member._id });
   },
 });
@@ -143,7 +143,7 @@ export const propose = internalAction({
   args: { companyId: v.id("companies"), day: v.string() },
   handler: async (ctx, args): Promise<{ ok: true; routes: { cleanerId: string; name: string; visits: { jobId: string; start: string }[] }[]; skipped: string[]; withoutMapPoint: string[]; note: string } | { ok: false; why: string }> => {
     const project = process.env.GOOGLE_CLOUD_PROJECT?.trim();
-    if (!project) return { ok: false, why: "GOOGLE_CLOUD_PROJECT is not set." };
+    if (!project) return { ok: false, why: "Day plans aren’t available yet." };
     const input = await ctx.runQuery(internal.googleRoutes.planInput, args);
     if (!input) return { ok: false, why: "The company was not found." };
     if (input.visits.length === 0 || input.workers.length === 0) return { ok: true, routes: [], skipped: input.visits.map((v) => v.id), withoutMapPoint: input.withoutMapPoint, note: "No open visit with a map point has an eligible cleaner." };

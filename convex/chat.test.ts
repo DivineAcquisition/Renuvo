@@ -384,7 +384,7 @@ describe("Company Chat", () => {
     try {
       const conversationId = await ask(t, as, companyId, "What should I charge?");
       const view = await thread(as, companyId, conversationId);
-      expect(view.run).toMatchObject({ status: "failed", error: expect.stringMatching(/No model is connected/) });
+      expect(view.run).toMatchObject({ status: "failed", error: expect.stringMatching(/Company Chat isn’t available/) });
       expect(view.messages.at(-1)!.parts.filter((part) => part.kind === "text")).toEqual([]);
     } finally {
       if (before) process.env.ANTHROPIC_API_KEY = before;

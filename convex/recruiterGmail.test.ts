@@ -160,9 +160,9 @@ describe("connecting Gmail and working through it", () => {
   it("is refused plainly when the deployment is not set up for it", async () => {
     const s = await setup();
     vi.stubEnv("MAILBOX_TOKEN_KEY", "");
-    expect(await refusal(s.as.mutation(api.recruiterMailbox.startGmailConnect, { companyId: s.companyId }))).toContain("Connecting an inbox isn't available yet");
+    expect(await refusal(s.as.mutation(api.recruiterMailbox.startGmailConnect, { companyId: s.companyId }))).toContain("isn’t available yet");
     vi.stubEnv("GOOGLE_CLIENT_ID", "");
-    expect(await refusal(s.as.mutation(api.recruiterMailbox.startGmailConnect, { companyId: s.companyId }))).toBe("Connecting Gmail isn't available yet. Selestial's team needs to finish setting it up.");
+    expect(await refusal(s.as.mutation(api.recruiterMailbox.startGmailConnect, { companyId: s.companyId }))).toBe("Connecting Gmail isn’t available yet. Please try again a little later.");
   });
 
   it("stores the authorization sealed, uses the state once, and reads the inbox straight away", async () => {

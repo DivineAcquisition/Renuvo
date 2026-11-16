@@ -54,7 +54,7 @@ describe("Telnyx: sending", () => {
     expect(await send(answer(400, "49999"))).toMatchObject({ ok: false, retryable: false, problem: "Telnyx would not send this text (code 49999)." });
     expect(await send(answer(429))).toMatchObject({ ok: false, retryable: true });
     expect(await send(answer(503))).toMatchObject({ ok: false, retryable: true });
-    expect(await send(answer(401))).toMatchObject({ ok: false, retryable: false, problem: expect.stringContaining("TELNYX_API_KEY") });
+    expect(await send(answer(401))).toMatchObject({ ok: false, retryable: false, problem: "Texting isn’t available right now." });
     expect(await telnyxProvider(async () => new Response("{}")).send({ to: "+15550101010", body: "x", idempotencyKey: "m", attempt: 1 })).toMatchObject({ ok: false, problem: "The company has no texting number to send from." });
     delete process.env.TELNYX_API_KEY;
     expect(await send(answer(200))).toMatchObject({ ok: false, problem: expect.stringContaining("API key is not set") });

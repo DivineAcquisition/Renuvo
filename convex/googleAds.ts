@@ -37,7 +37,7 @@ export const rotateLeadKey = ownerMutation({
   args: {},
   handler: async (ctx) => {
     const url = endpoints().leadFormWebhook;
-    if (!url) throw userError("This deployment has no public site address (CONVEX_SITE_URL), so Google cannot reach it.");
+    if (!url) throw userError("Google lead forms aren’t available yet. Please try again a little later.");
     for (const old of await ctx.db.query("googleLeadKeys").withIndex("by_company", (q) => q.eq("companyId", ctx.companyId)).take(10)) await ctx.db.delete(old._id);
     const key = await randomToken();
     await ctx.db.insert("googleLeadKeys", { companyId: ctx.companyId, keyHash: await hashToken(key), createdBy: ctx.member._id, createdAt: Date.now() });
@@ -386,5 +386,13 @@ export const sweepLocalServices = internalMutation({
       queued += 1;
     }
     return queued;
+  },
+});
+
+export const adsAccountsFor = internalQuery({
+  args: { companyId: v.id("companies") },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", args.companyId).eq("kind", "ads_account")).take(20);
+    return rows.filter((r) => r.access !== "lost").map((r) => ({ id: r.externalId.replace(/-/g, ""), login: r.detail ?? null }));
   },
 });

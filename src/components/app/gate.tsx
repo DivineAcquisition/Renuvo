@@ -258,7 +258,7 @@ function SignedIn({ children }: { children: React.ReactNode }) {
   if (!isSignedIn || !userId) return <ToSignIn />;
   if (!isAuthenticated) {
     // The sign-in service knows this person, but the record did not accept their session. That is a setup gap.
-    return <NotSetUp title="You are signed in, but the workspace did not accept it" body="Sign-in and the live record are not connected to each other on this deployment yet. Nothing is wrong with your account. The setup steps are in the authentication guide in the repository." />;
+    return <NotSetUp title="You are signed in, but the workspace did not accept it" body="We couldn’t open your workspace just now. Nothing is wrong with your account. Please try again in a few minutes." />;
   }
   return <Companies userId={userId}>{children}</Companies>;
 }
@@ -267,7 +267,7 @@ function SignedIn({ children }: { children: React.ReactNode }) {
 export function AppGate({ children }: { children: React.ReactNode }) {
   const missing = missingSetup();
   if (missing.length > 0) {
-    return <NotSetUp title="The app is not set up yet" body="This deployment is not connected to its sign-in service or its live record yet, so nobody can come in. The setup steps are in the authentication guide in the repository." />;
+    return <NotSetUp title="We’ll be right back" body="Selestial isn’t available right now. Please try again in a few minutes." />;
   }
   return <SignedIn>{children}</SignedIn>;
 }

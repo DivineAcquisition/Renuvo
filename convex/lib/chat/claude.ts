@@ -48,7 +48,7 @@ export function claudeChatModel(apiKey: string, entry: ModelEntry, options: { fe
         return { stop, text, toolCalls, content: message.content, usage: { inputTokens: message.usage.input_tokens + (message.usage.cache_read_input_tokens ?? 0) + (message.usage.cache_creation_input_tokens ?? 0), outputTokens: message.usage.output_tokens }, model: message.model };
       } catch (error) {
         if (error instanceof Anthropic.APIUserAbortError) throw new ModelError("Stopped.", false);
-        if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) throw new ModelError("The model provider did not accept this deployment's key. An administrator needs to check ANTHROPIC_API_KEY.", false);
+        if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) throw new ModelError("Company Chat isn’t available right now. Please try again later.", false);
         // Busy or down: another allowed provider may continue. A bad request or a refusal never qualifies.
         if (error instanceof Anthropic.RateLimitError) throw new ModelError("The model is busy right now. Try again in a minute.", true, true);
         if (error instanceof Anthropic.BadRequestError) throw new ModelError("The model could not take this request. Try rephrasing, or start a new chat if this one is very long.", false);

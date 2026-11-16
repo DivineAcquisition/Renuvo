@@ -311,7 +311,7 @@ export const revealActionLink = managerMutation({
     const link = await owned(ctx, args.linkId);
     if (linkState(link, Date.now()) !== "active") throw userError("This link is no longer active. Issue a new one.");
     const token = await tokenFor(link);
-    if (!token) throw userError("Team links need setup by Selestial's team before they can be used.");
+    if (!token) throw userError("Action links aren’t available right now.");
     await recordEvent(ctx, { companyId: ctx.companyId, type: "link.revealed", actor: byMember(ctx), subject: { table: "actionLinks", id: link._id }, data: { purpose: link.purpose, assignmentId: link.assignmentId } });
     return { url: `${siteOrigin()}${linkPath(link.purpose, token)}` };
   },
@@ -336,7 +336,7 @@ export const reissueLink = managerMutation({
     if (expiresAt <= now) throw userError("The time this link would cover has passed.");
     for (const old of await assignmentLinks(ctx, assignment)) if (old.purpose === purpose) await revokeLink(ctx, old, "Replaced by a new link.", byMember(ctx));
     const link = await issueLink(ctx, { assignment, purpose, expiresAt, actor: byMember(ctx) });
-    if (!link) throw userError("Team links need setup by Selestial's team before they can be used.");
+    if (!link) throw userError("Action links aren’t available right now.");
     const message = await queueMessage(ctx, {
       companyId: ctx.companyId,
       purpose: purpose === "offer" ? (assignment.offerKind === "backup" ? "backup_offer" : "offer") : "assignment_confirmed",

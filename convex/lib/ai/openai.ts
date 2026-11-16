@@ -13,7 +13,7 @@ const BASE = "https://api.openai.com/v1";
 
 function key(): string {
   const value = process.env.OPENAI_API_KEY?.trim();
-  if (!value) throw aiError("not_configured", "OpenAI is not connected on this deployment (OPENAI_API_KEY).");
+  if (!value) throw aiError("not_configured", "This AI model isn’t available right now.");
   return value;
 }
 

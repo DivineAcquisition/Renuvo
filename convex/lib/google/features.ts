@@ -28,29 +28,27 @@ export const FEATURE_INFO: Record<Feature, { label: string; scopes: readonly str
   drive: {
     label: "Google Drive, Docs and Sheets",
     scopes: [SCOPE.driveFile],
-    does: "Read the files and folders you pick, and save photos, resumes, agreements, reports and new documents into the folders you pick. Selestial sees only files you pick or that it creates.",
-    needsPlatform: ["NEXT_PUBLIC_GOOGLE_PICKER_API_KEY", "NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER"],
+    does: "Selestial reads the files you pick and saves photos, agreements, reports and documents to the folders you pick. It only sees what you pick or what it creates.",
   },
   calendar: {
     label: "Google Calendar",
     scopes: [SCOPE.calendarList, SCOPE.calendarEvents, SCOPE.calendarFreeBusy],
-    does: "Put visits and interviews on the calendar you choose, read busy times from the calendars you choose, and notice when an event Selestial made is moved or deleted.",
+    does: "Visits and interviews appear on the calendar you choose, and busy times on your calendars are respected when scheduling.",
   },
   business_profile: {
     label: "Google Business Profile",
     scopes: [SCOPE.business],
-    does: "Read reviews for the locations you choose, draft replies, and publish only the replies you approve.",
+    does: "See reviews for your locations and reply to them. Nothing is posted until you approve it.",
   },
   ads: {
-    label: "Google Ads and Local Services Ads",
+    label: "Google Ads",
     scopes: [SCOPE.ads],
-    does: "Read the ad accounts you choose and their results, take in leads from lead forms and Local Services Ads, and prepare campaign drafts. Nothing is turned on or spends money without your approval.",
-    needsPlatform: ["GOOGLE_ADS_DEVELOPER_TOKEN"],
+    does: "See how your ads perform, get leads from lead forms and Local Services Ads, and prepare campaigns. Nothing runs or spends money without your approval.",
   },
   conversions: {
-    label: "Google Ads conversion reporting",
+    label: "Booked-job reporting",
     scopes: [SCOPE.dataManager],
-    does: "Report booked jobs that came from a Google ad back to Google Ads, with the consent you record, so the ads learn which clicks become customers.",
+    does: "Let Google Ads know when someone who clicked an ad books a visit, so your ads find more customers like them.",
   },
 };
 
