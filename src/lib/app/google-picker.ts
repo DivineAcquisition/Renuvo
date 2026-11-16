@@ -41,7 +41,7 @@ function load(src: string): Promise<void> {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function pickFromDrive(options: { folders: boolean; loginHint?: string }): Promise<Picked[]> {
   const config = pickerConfig();
-  if (!config) throw new Error("Google's file chooser is not set up on this deployment.");
+  if (!config) throw new Error("Picking from Google Drive isn’t available right now. You can paste a link instead.");
   await Promise.all([load("https://accounts.google.com/gsi/client"), load("https://apis.google.com/js/api.js")]);
   const w = window as any;
   await new Promise<void>((resolve) => w.gapi.load("picker", { callback: resolve }));

@@ -17,9 +17,9 @@ import { accessTokenFor } from "./google";
 import { recordEvent } from "./lib/events";
 import { listCalendars } from "./lib/google/calendar";
 import { accounts as businessAccounts, locations as businessLocations } from "./lib/google/business";
-import { accessibleCustomers } from "./lib/google/ads";
+import { accessibleCustomers, search as adsSearch } from "./lib/google/ads";
 import { FOLDER, getFile, listChildren } from "./lib/google/drive";
-import { GoogleError } from "./lib/google/http";
+import { GoogleError, plainProblem } from "./lib/google/http";
 import { backoff, MAX_ATTEMPTS } from "./lib/google/jobs";
 import { adsDeveloperToken } from "./lib/google/platform";
 import { allow } from "./lib/rateLimit";
@@ -131,47 +131,47 @@ export const verifyResource = internalAction({
     if (!resource) return null;
     const access = await accessTokenFor(ctx, resource.connectionId);
     if (!access.ok) {
-      await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "lost", note: access.why });
+      await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "lost", note: "Google access ended. Reconnect to continue." });
       return null;
     }
     try {
       if (resource.kind === "drive_source" || resource.kind === "drive_output") {
         const file = await getFile(access.token, resource.externalId);
-        if (file.trashed) throw new GoogleError("not_found", "It is in the trash.");
-        if (resource.kind === "drive_output" && file.mimeType === FOLDER && file.capabilities?.canAddChildren === false) throw new GoogleError("forbidden", "Selestial can see this folder but cannot add files to it.");
+        if (file.trashed) throw new GoogleError("not_found", "It’s in the trash.");
+        if (resource.kind === "drive_output" && file.mimeType === FOLDER && file.capabilities?.canAddChildren === false) throw new GoogleError("forbidden", "Your Google account can’t add files to this folder.");
         if (file.mimeType === FOLDER) {
           const children = await listChildren(access.token, file.id);
-          const note = resource.kind === "drive_source" ? `${children.length} file${children.length === 1 ? "" : "s"} in this folder can be read. Files already in a folder are not shared by choosing the folder: pick them in Google's file chooser to add them.` : "Selestial can save files here.";
+          const note = resource.kind === "drive_source" ? (children.length ? `Ready. Selestial can read ${children.length} file${children.length === 1 ? "" : "s"} here.` : "Ready. To let Selestial read files already in this folder, pick them too.") : "Ready. Selestial can save files here.";
           await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note, detail: file.mimeType });
-        } else await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: file.capabilities?.canDownload === false ? "Visible, but downloading is restricted by its owner." : "Selestial can read this file.", detail: file.mimeType });
+        } else await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: file.capabilities?.canDownload === false ? "Its owner doesn’t allow downloads, so Selestial can’t read it." : "Ready.", detail: file.mimeType });
       } else if (resource.kind === "calendar_sync" || resource.kind === "calendar_busy") {
         const calendars = await listCalendars(access.token);
         const found = calendars.find((c) => c.id === resource.externalId);
-        if (!found) throw new GoogleError("not_found", "This calendar is not in the account's calendar list.");
-        if (resource.kind === "calendar_sync" && !["owner", "writer"].includes(found.accessRole ?? "")) throw new GoogleError("forbidden", "The account can read this calendar but cannot add events to it.");
-        await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: `Access: ${found.accessRole ?? "unknown"}.`, detail: found.timeZone });
+        if (!found) throw new GoogleError("not_found", "This calendar isn’t in your Google account.");
+        if (resource.kind === "calendar_sync" && !["owner", "writer"].includes(found.accessRole ?? "")) throw new GoogleError("forbidden", "Your Google account can’t add events to this calendar.");
+        await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: "Ready.", detail: found.timeZone });
       } else if (resource.kind === "business_location") {
         const account = resource.detail ?? "";
         const locations = await businessLocations(access.token, account);
-        if (!locations.some((l) => l.name === resource.externalId)) throw new GoogleError("not_found", "This location is not in the account.");
-        await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: "Reviews can be read for this location." });
+        if (!locations.some((l) => l.name === resource.externalId)) throw new GoogleError("not_found", "This location isn’t in your Google account.");
+        await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: "Ready." });
       } else if (resource.kind === "ads_account" || resource.kind === "conversion_destination") {
         const developer = adsDeveloperToken();
-        if (!developer) throw new GoogleError("not_configured", "The Google Ads developer token (GOOGLE_ADS_DEVELOPER_TOKEN) is not set on this deployment.");
+        if (!developer) throw new GoogleError("not_configured", "Google Ads isn’t available yet.");
         const account = resource.kind === "ads_account" ? resource.externalId : (resource.detail ?? "").split(":")[0];
         const reachable = await accessibleCustomers(access.token, developer);
-        if (!reachable.includes(account.replace(/-/g, ""))) throw new GoogleError("not_found", "The connected Google account cannot reach this ad account.");
-        await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: "The connected account can reach this ad account." });
+        if (!reachable.includes(account.replace(/-/g, ""))) throw new GoogleError("not_found", "Your Google account can’t reach this ad account.");
+        await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: "Ready." });
       }
     } catch (error) {
-      await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "lost", note: error instanceof Error ? error.message : "Could not be checked." });
+      await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "lost", note: plainProblem(error) });
     }
     return null;
   },
 });
 
 export const storeChoices = internalMutation({
-  args: { companyId: v.id("companies"), kind: v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents")), scope: v.optional(v.string()), items: v.array(v.object({ id: v.string(), label: v.string(), detail: v.optional(v.string()) })), problem: v.optional(v.string()) },
+  args: { companyId: v.id("companies"), kind: v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents"), v.literal("conversion_actions")), scope: v.optional(v.string()), items: v.array(v.object({ id: v.string(), label: v.string(), detail: v.optional(v.string()) })), problem: v.optional(v.string()) },
   handler: async (ctx, args) => {
     for (const old of await ctx.db.query("googleChoices").withIndex("by_company_kind", (q) => q.eq("companyId", args.companyId).eq("kind", args.kind)).take(20)) await ctx.db.delete(old._id);
     await ctx.db.insert("googleChoices", { ...args, items: args.items.slice(0, 300), fetchedAt: Date.now() });
@@ -181,7 +181,7 @@ export const storeChoices = internalMutation({
 
 /** Lists what the Owner can choose from, as Google sees it now, into googleChoices for the page to show. */
 export const listChoices = internalAction({
-  args: { connectionId: v.id("googleConnections"), kind: v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents")), scope: v.optional(v.string()) },
+  args: { connectionId: v.id("googleConnections"), kind: v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents"), v.literal("conversion_actions")), scope: v.optional(v.string()) },
   handler: async (ctx, args): Promise<null> => {
     const access = await accessTokenFor(ctx, args.connectionId);
     const companyId = access.ok ? access.companyId : null;
@@ -196,18 +196,27 @@ export const listChoices = internalAction({
         for (const account of await businessAccounts(access.token)) {
           for (const location of await businessLocations(access.token, account.name)) items.push({ id: location.name, label: location.title ?? location.name, detail: account.name });
         }
-        await store(items, items.length ? undefined : "No Business Profile locations are managed by this Google account.");
+        await store(items, items.length ? undefined : "This Google account doesn’t manage any Business Profile locations.");
       } else if (args.kind === "ads_accounts") {
         const developer = adsDeveloperToken();
-        if (!developer) return await store([], "The Google Ads developer token (GOOGLE_ADS_DEVELOPER_TOKEN) is not set on this deployment."), null;
+        if (!developer) return await store([], "Google Ads isn’t available yet."), null;
         const ids = await accessibleCustomers(access.token, developer);
-        await store(ids.map((id) => ({ id, label: `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` })), ids.length ? undefined : "This Google account cannot reach any Google Ads account.");
+        await store(ids.map((id) => ({ id, label: `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` })), ids.length ? undefined : "This Google account doesn’t have any Google Ads accounts.");
+      } else if (args.kind === "conversion_actions") {
+        const developer = adsDeveloperToken();
+        if (!developer) return await store([], "Google Ads isn’t available yet."), null;
+        const items: { id: string; label: string; detail?: string }[] = [];
+        for (const account of await ctx.runQuery(internal.googleAds.adsAccountsFor, { companyId })) {
+          const rows = await adsSearch<{ conversionAction?: { id?: string; name?: string } }>(access.token, developer, account.id, "SELECT conversion_action.id, conversion_action.name FROM conversion_action WHERE conversion_action.status = 'ENABLED'", account.login ?? undefined);
+          for (const row of rows) if (row.conversionAction?.id) items.push({ id: String(row.conversionAction.id), label: row.conversionAction.name ?? "Conversion", detail: account.id });
+        }
+        await store(items, items.length ? undefined : "Choose a Google Ads account first, or add a conversion in Google Ads.");
       } else if (args.kind === "folder_contents" && args.scope) {
         const children = await listChildren(access.token, args.scope);
-        await store(children.map((f) => ({ id: f.id, label: f.name, detail: f.mimeType })), children.length ? undefined : "Selestial cannot see any files in this folder yet. Pick files in Google's file chooser to share them.");
+        await store(children.map((f) => ({ id: f.id, label: f.name, detail: f.mimeType })), children.length ? undefined : "No files here yet.");
       }
     } catch (error) {
-      await store([], error instanceof Error ? error.message : "Google did not answer.");
+      await store([], plainProblem(error));
     }
     return null;
   },

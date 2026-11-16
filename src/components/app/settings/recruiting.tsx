@@ -110,7 +110,7 @@ function HiringInbox({ canEdit, companyId }: { canEdit: boolean; companyId: Id<"
           </Button>
         </div>
       ) : canEdit ? (
-        <p className="text-xs text-muted-foreground">Connecting Gmail is not set up on this deployment yet.</p>
+        <p className="text-xs text-muted-foreground">Connecting Gmail isn’t available yet.</p>
       ) : (
         <p className="text-xs text-muted-foreground">Only the Owner connects the hiring inbox.</p>
       )}

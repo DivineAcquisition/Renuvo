@@ -93,7 +93,7 @@ export function openRouterChatModel(entry: ModelEntry): ChatModel {
     name: "openrouter",
     async respond(request) {
       const key = process.env.OPENROUTER_API_KEY?.trim();
-      if (!key) throw new ModelError("OpenRouter is not connected on this deployment.", false);
+      if (!key) throw new ModelError("This AI model isn’t available right now.", false);
       try {
         const response = await providerFetch("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",

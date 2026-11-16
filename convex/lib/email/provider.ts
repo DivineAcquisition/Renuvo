@@ -71,7 +71,7 @@ export const mockEmailProvider: EmailProvider = {
 
 /** What a refusal from Resend means, by its status. The body is never read into a result. */
 function refused(status: number): EmailResult {
-  if (status === 401 || status === 403) return { ok: false, retryable: false, problem: "The email service did not accept this deployment's key or sending address." };
+  if (status === 401 || status === 403) return { ok: false, retryable: false, problem: "Email couldn’t be sent right now." };
   if (status === 409) return { ok: false, retryable: false, problem: "The email service is already handling this message." };
   if (status === 429) return { ok: false, retryable: true, problem: "The email service is busy. It can be tried again shortly." };
   if (status >= 500) return { ok: false, retryable: true, problem: "The email service is not answering right now." };

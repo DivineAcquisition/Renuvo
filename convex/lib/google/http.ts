@@ -95,3 +95,14 @@ export async function googleCall<T>(url: string, token: string | null, init: Cal
   if (response.status >= 500) throw new GoogleError(method === "GET" ? "server" : "uncertain", message, response.status);
   throw new GoogleError("invalid", message, response.status);
 }
+
+/** What went wrong with Google, in words for the person using Selestial. Technical detail stays in the job record. */
+export function plainProblem(error: unknown): string {
+  const kind = error instanceof GoogleError ? error.kind : null;
+  if (kind === "not_found") return "Selestial can’t find this in your Google account. It may have been moved or deleted.";
+  if (kind === "forbidden") return "Your Google account doesn’t let Selestial use this.";
+  if (kind === "auth") return "Google access ended. Reconnect to continue.";
+  if (kind === "not_configured") return "This isn’t available yet.";
+  if (kind === "rate_limited" || kind === "server" || kind === "uncertain") return "Google didn’t answer just now. Selestial will try again.";
+  return "Something went wrong with Google. Please try again.";
+}

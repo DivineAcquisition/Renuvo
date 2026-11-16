@@ -100,19 +100,19 @@ export function chatModel(override?: Override | null, key?: string | null): Mode
   const choice = process.env.CHAT_MODEL?.trim().toLowerCase();
   const option = chatModelOption(key) ?? chatModelOption(DEFAULT_CHAT_MODEL)!;
   if (choice === "mock") return { model: mock, label: option.key === DEFAULT_CHAT_MODEL ? "mock" : `mock:${option.key}`, fallback: process.env.CHAT_MOCK_FALLBACK === "1" ? { model: mockFallback, label: "mock-fallback" } : null };
-  if (choice === "off") return { model: null, why: "Company Chat's model is switched off on this deployment." };
+  if (choice === "off") return { model: null, why: "Company Chat is switched off." };
   const resolved = resolve("chat", override);
   if (!resolved.ready && resolved.reason !== "not_configured") return { model: null, why: resolved.words };
   const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
   if (option.route === "openrouter") {
-    if (!providerConfigured("openrouter")) return { model: null, why: `${option.label} is not connected on this deployment yet. An administrator needs to set OPENROUTER_API_KEY.` };
+    if (!providerConfigured("openrouter")) return { model: null, why: `${option.label} isn’t available yet.` };
     return {
       model: openRouterChatModel(option.entry),
       label: `openrouter:${option.entry.model}`,
       fallback: anthropicKey ? { model: claudeChatModel(anthropicKey, REGISTRY.chat.primary), label: `anthropic:${REGISTRY.chat.primary.model}` } : null,
     };
   }
-  if (!resolved.ready || !anthropicKey) return { model: null, why: "No model is connected to Company Chat on this deployment yet, so no answer was written. An administrator needs to set ANTHROPIC_API_KEY." };
+  if (!resolved.ready || !anthropicKey) return { model: null, why: "Company Chat isn’t available yet, so no answer was written." };
   const backup = resolved.fallbacks.find((row) => row.provider === "openrouter");
   return {
     model: claudeChatModel(anthropicKey, option.entry),

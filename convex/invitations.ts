@@ -48,9 +48,9 @@ const ACCEPT_WINDOW = 10 * MINUTE;
 /** How many times one email is tried when the email service says trying again may work. */
 const MAX_SEND_ATTEMPTS = 3;
 
-const LINKS_NOT_SET_UP = "Invitation links are not set up on this deployment.";
-const EMAIL_NOT_CONNECTED = "Email is not connected on this deployment.";
-const NO_APP_ADDRESS = "The app's address is not set on this deployment.";
+const LINKS_NOT_SET_UP = "Invitation links aren’t available right now.";
+const EMAIL_NOT_CONNECTED = "Email isn’t available right now.";
+const NO_APP_ADDRESS = "Invitation links aren’t available right now.";
 
 type GrantableRole = Doc<"invitations">["role"];
 type Delivery = Doc<"invitations">["delivery"];

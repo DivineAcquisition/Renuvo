@@ -15,7 +15,6 @@ import { BUILT, isIntegrationId } from "./lib/integrations";
 import { googleApp } from "./lib/recruiter/gmail";
 import { enabledFeatures, type Feature } from "./lib/google/features";
 import { activeConnections } from "./lib/google/connection";
-import { mapsServerKey } from "./lib/google/platform";
 import type { Doc } from "./_generated/dataModel";
 import { secretsConfigured } from "./lib/recruiter/secrets";
 
@@ -68,7 +67,6 @@ export const overview = companyQuery({
         "google-business-profile": googleCard("business_profile", ["business_location"]),
         "google-ads": googleCard("ads", ["ads_account"]),
         "google-local-services-ads": googleCard("ads", ["ads_account"]),
-        "google-maps-travel": { state: (mapsServerKey() ? "connected" : "not_set_up") as LiveState, detail: null },
         "texting-number": { state: textingState, detail: texting?.status === "active" ? (texting.phoneNumber ?? null) : null },
       },
       requested: requests.map((row) => ({ integrationId: row.integrationId, requestedAt: row.requestedAt })),

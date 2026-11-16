@@ -192,7 +192,7 @@ describe("the AI layer", () => {
     it("offers only Selestial's list, and only what staff, the Owner and the deployment allow", async () => {
       const { t, as, companyId } = await setup();
       expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "openai/gpt-6.1-sol" }))).toMatch(/not offered/);
-      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "grok-4.7" }))).toMatch(/not connected/);
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "grok-4.7" }))).toMatch(/isn’t available/);
       process.env.OPENROUTER_API_KEY = "test";
       process.env.ANTHROPIC_API_KEY = "test";
       process.env.STAFF_BOOTSTRAP_EMAIL = staff.email;

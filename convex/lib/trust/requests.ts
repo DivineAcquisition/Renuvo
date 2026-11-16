@@ -50,7 +50,7 @@ export async function inboxFor(ctx: { db: QueryCtx["db"] | MutationCtx["db"] }, 
 
 async function plannedNotify(ctx: { db: QueryCtx["db"] | MutationCtx["db"] }, kind: RequestKind): Promise<NotifyPlan> {
   if (!(await inboxFor(ctx, kind))) return { state: "not_configured", problem: "No verified inbox is set for this kind of request." };
-  if (!emailProvider()) return { state: "not_configured", problem: "Email is not connected on this deployment." };
+  if (!emailProvider()) return { state: "not_configured", problem: "Email isn’t available right now." };
   return { state: "pending" };
 }
 

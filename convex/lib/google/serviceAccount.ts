@@ -29,7 +29,7 @@ async function signingKey(pem: string): Promise<CryptoKey> {
 
 export async function serviceAccountToken(scope = "https://www.googleapis.com/auth/cloud-platform", fetcher?: Fetch): Promise<string> {
   const key = readKey();
-  if (!key) throw new GoogleError("not_configured", "Route Optimization is not set up: GOOGLE_SERVICE_ACCOUNT_JSON is missing or not a service-account key.");
+  if (!key) throw new GoogleError("not_configured", "Day plans aren’t available yet.");
   const now = Math.floor(Date.now() / 1000);
   const header = textB64(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = textB64(JSON.stringify({ iss: key.client_email, scope, aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 }));
