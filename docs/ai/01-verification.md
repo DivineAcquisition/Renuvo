@@ -1,6 +1,6 @@
 # Live AI: verification
 
-Automated: `convex/ai.test.ts` (15 tests), plus the Company Chat suite and the existing suites (445
+Automated: `convex/ai.test.ts` (15 tests), plus the Company Chat suite and the existing suites (460
 passing in all; the 19 live evaluation cases skip without keys). Provider HTTP is replaced at `fetch` with each provider's documented response, so the
 real adapters, job engine and allowance logic run. No provider is contacted.
 
