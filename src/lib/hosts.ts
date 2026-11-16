@@ -109,7 +109,7 @@ export function roleOfPath(pathname: string): PathRole {
   // Crawler rules, icons, domain checks and Clerk's own proxy path are needed wherever the app answers.
   if (path === "/robots.txt" || path === "/icon.svg" || path === "/favicon.ico") return "shared";
   if (under(path, "/.well-known") || under(path, "/__clerk")) return "shared";
-  if (under(path, "/app") || isAuthPath(path)) return "app";
+  if (under(path, "/app") || under(path, "/staff") || isAuthPath(path)) return "app";
   if (under(path, "/c")) return "link";
   return "public";
 }

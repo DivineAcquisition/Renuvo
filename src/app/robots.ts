@@ -9,5 +9,5 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const host = (await headers()).get("host") ?? "";
   if (!indexable(host, map)) return { rules: { userAgent: "*", disallow: "/" } };
   const origin = publicOrigin(map);
-  return { rules: { userAgent: "*", allow: "/", disallow: ["/app", "/login", "/signup", "/auth", "/forgot-password", "/reset-password", "/invite", "/c"] }, ...(origin ? { sitemap: `${origin}/sitemap.xml` } : {}) };
+  return { rules: { userAgent: "*", allow: "/", disallow: ["/app", "/staff", "/login", "/signup", "/auth", "/forgot-password", "/reset-password", "/invite", "/c"] }, ...(origin ? { sitemap: `${origin}/sitemap.xml` } : {}) };
 }

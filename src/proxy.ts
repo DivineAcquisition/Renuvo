@@ -17,7 +17,7 @@ const withSession = clerkMiddleware(
   async (auth, request) => {
     const { pathname, search, searchParams } = request.nextUrl;
     const { userId } = await auth();
-    if (under(pathname, "/app") && !userId) {
+    if ((under(pathname, "/app") || under(pathname, "/staff")) && !userId) {
       return NextResponse.redirect(new URL(withNext(AUTH.login, `${pathname}${search}`), request.url));
     }
     if (userId && SIGNED_OUT_ONLY.includes(pathname)) {
@@ -46,7 +46,7 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
   // Only the public site is for search engines.
   if (decision.noindex) response.headers.set("x-robots-tag", NOINDEX);
   // Signed-in pages and sign-in pages are never kept by a shared cache or shown from history after sign-out.
-  if (under(pathname, "/app") || isAuthPath(pathname)) {
+  if (under(pathname, "/app") || under(pathname, "/staff") || isAuthPath(pathname)) {
     response.headers.set("cache-control", "private, no-store");
     response.headers.set("referrer-policy", "same-origin");
   }

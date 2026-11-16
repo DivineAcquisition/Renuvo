@@ -22,7 +22,7 @@ export const AFTER_SIGN_IN = "/app";
 export const NEXT_PARAM = "next";
 
 /** The only places a "next" may point: the workspace, and an invitation. */
-const ALLOWED_PREFIXES = ["/app", "/invite/"] as const;
+const ALLOWED_PREFIXES = ["/app", "/staff", "/invite/"] as const;
 
 /**
  * A destination from the address bar is never trusted. It is used only when it is a plain path
