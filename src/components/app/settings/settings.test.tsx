@@ -245,7 +245,7 @@ describe("the Usage tab", () => {
     data["billing:planAndUsage"] = connected;
     data["billingUsage:usage"] = { ...base, overview: { updating: false, syncedAt: 1, available: 4994, usedThisCycle: 6, reserved: 2, nextResetAt: Date.UTC(2026, 11, 1), monthly: { granted: 5000, remaining: 4994 }, purchased: { granted: 0, remaining: 0, expiresAt: null }, plan: "operate", zero: false } };
     const html = render();
-    for (const text of ["Available credits", "4,994", "Used this cycle", "Reserved credits", "Next reset", "Monthly credits", "Purchased credits", "Buy credits", "Manage spending", "Usage over time", "Where credits went", "Work delivered", "Activity and credit history", "Recruiting workflow", "Spending controls", "Hard limits", "What costs credits?", "From 200 credits", "Texts, email and calls"]) expect(html, text).toContain(text);
+    for (const text of ["Available", "4,994", "credits left", "Used this cycle", "Reserved", "Resets", "Monthly credits", "Purchased credits", "Buy credits", "Manage spending", "Usage over time", "Agents at work", "Company Chat", "Recruiter", "Work delivered", "Activity and credit history", "Recruiting workflow", "Spending controls", "Hard limits", "What costs credits?", "From 200 credits", "Texts, email and calls"]) expect(html, text).toContain(text);
     // Credits and money are never added together.
     expect(html).not.toMatch(/\$\d/);
     search = "";

@@ -5,11 +5,15 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { AiFeatures } from "@/components/app/billing/ai-features";
 import { UsageDashboard } from "@/components/app/billing/usage";
+import { AvatarStack, CreditRing, HeroCard, HeroStat, Motion, SegmentedTabs } from "@/components/app/billing/visuals";
 import { useCompany } from "@/components/app/company";
 import { FormError, useRun } from "@/components/app/form";
 import { Guard } from "@/components/app/settings/guard";
 import { Panel } from "@/components/app/shell";
+import { Check, Coins, Gauge, Wallet } from "@/components/icons";
+import { BorderBeam } from "@/components/ui/border-beam";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { money } from "@/lib/app/format";
@@ -33,17 +37,14 @@ function useTab(): Tab {
   return tabOf(useSearchParams());
 }
 
+const TABS = [
+  { id: "plan", label: "Plan", href: "/app/settings/billing?tab=plan", icon: Wallet },
+  { id: "usage", label: "Usage", href: "/app/settings/billing?tab=usage", icon: Gauge },
+  { id: "billing", label: "Billing", href: "/app/settings/billing?tab=billing", icon: Coins },
+] as const;
+
 function Tabs() {
-  const tab = useTab();
-  return (
-    <nav aria-label="Plan & Usage sections" className="flex gap-1 overflow-x-auto border-b border-border">
-      {(["plan", "usage", "billing"] as const).map((id) => (
-        <Link key={id} href={`/app/settings/billing?tab=${id}`} aria-current={tab === id ? "page" : undefined} className={`-mb-px min-h-10 border-b-2 px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand-500 ${tab === id ? "border-brand-500 font-medium text-strong" : "border-transparent text-muted-foreground hover:text-strong"}`}>
-          {id === "plan" ? "Plan" : id === "usage" ? "Usage" : "Billing"}
-        </Link>
-      ))}
-    </nav>
-  );
+  return <SegmentedTabs label="Plan & Usage sections" tabs={TABS} active={useTab()} />;
 }
 
 function PlanUsageInner() {
@@ -53,6 +54,7 @@ function PlanUsageInner() {
   if (role !== "owner") return <OwnerOnly what="Plan & Usage" />;
   if (!data) return <Skeleton className="h-96 rounded-2xl" />;
   return (
+    <Motion>
     <div className="grid gap-5">
       {!data.connected ? (
         <div role="status" className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5">
@@ -63,7 +65,13 @@ function PlanUsageInner() {
         <ConnectedView data={data} />
       )}
       {!data.connected || tabOf(params) === "plan" ? <Comparison catalog={data.catalog} current={data.plan} canBuy={data.connected && !!data.account} /> : null}
+      {!data.connected ? (
+        <Guard>
+          <AiFeatures />
+        </Guard>
+      ) : null}
     </div>
+    </Motion>
   );
 }
 
@@ -94,7 +102,15 @@ function ConnectedView({ data }: { data: Connected }) {
       <Tabs />
       {intentId ? <IntentDialog intentId={intentId} onClose={() => setIntentId(null)} /> : null}
       {tab === "plan" ? <CurrentPlan data={data} onIntent={setIntentId} /> : null}
-      {tab === "usage" ? <UsageDashboard /> : null}
+      {tab === "usage" ? (
+        <UsageDashboard
+          afterOverview={
+            <Guard>
+              <AiFeatures />
+            </Guard>
+          }
+        />
+      ) : null}
       {tab === "billing" ? (
         <>
           <TopUps data={data} onIntent={setIntentId} />
@@ -126,24 +142,65 @@ function CurrentPlan({ data, onIntent }: { data: Connected; onIntent: (id: Id<"b
   const plan = account?.plan ?? null;
   const sub = account?.subscription;
   const name = plan ? data.catalog.plans.find((row) => row.id === plan)! : null;
+  const credits = account?.credits ?? null;
+  const onPlan = plan ? data.catalog.agents.filter((row) => (plan === "expand" ? row.expand : row.operate)) : [];
+  const working = onPlan.filter((row) => row.released);
+  const later = onPlan.filter((row) => !row.released);
   return (
-    <Panel title="Current plan">
-      {!name ? (
-        <p className="text-sm text-strong">No active plan yet. Agents and AI work need the Operate or Expand plan.</p>
-      ) : (
-        <div className="grid gap-1 text-sm">
-          <p className="text-base font-semibold text-strong">
-            {name.name} · {money(name.monthlyCents)} a month
-          </p>
-          <p className="text-muted-foreground">
-            {sub?.pastDue ? "Payment is overdue. Update your payment method on the Billing tab. " : "Active. "}
-            {sub?.endsAt ? `Ends ${day(sub.endsAt)} and will not renew.` : `Renews ${day(sub?.periodEnd)}.`}
-          </p>
-          {sub?.scheduledPlan ? <p className="text-muted-foreground">Changes to {sub.scheduledPlan === "operate" ? "Operate" : "Expand"} on {day(sub.scheduledAt ?? sub.periodEnd)}.</p> : null}
+    <HeroCard>
+      <div className="grid items-center gap-6 md:grid-cols-[1fr_auto]">
+        <div className="grid min-w-0 gap-4">
+          {!name ? (
+            <div>
+              <p className="text-xs font-semibold tracking-[0.14em] text-brand-600 uppercase">Your plan</p>
+              <h2 className="mt-1 font-heading text-2xl tracking-tight text-strong">No active plan yet</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Agents and AI work need the Operate or Expand plan. Compare them below.</p>
+            </div>
+          ) : (
+            <div>
+              <p className="flex items-center gap-2 text-xs font-semibold tracking-[0.14em] text-brand-600 uppercase">
+                <span aria-hidden className={sub?.pastDue ? "size-2 rounded-full bg-destructive" : "live-pulse size-2 rounded-full bg-success"} />
+                {sub?.pastDue ? "Payment overdue" : sub?.endsAt ? "Ending" : "Active plan"}
+              </p>
+              <h2 className="mt-1 font-heading text-3xl tracking-tight text-strong">
+                {name.name} <span className="text-lg font-normal text-muted-foreground">· {money(name.monthlyCents)} a month</span>
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {sub?.pastDue ? "Update your payment method on the Billing tab to keep agents working. " : ""}
+                {sub?.endsAt ? `Ends ${day(sub.endsAt)} and won't renew.` : `Renews ${day(sub?.periodEnd)}.`}
+                {sub?.scheduledPlan ? ` Changes to ${sub.scheduledPlan === "operate" ? "Operate" : "Expand"} on ${day(sub.scheduledAt ?? sub.periodEnd)}.` : ""}
+              </p>
+            </div>
+          )}
+          {working.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <AvatarStack agents={working.map((row) => ({ id: row.agent, label: row.name }))} />
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-strong">{working.map((row) => row.name).join(", ")}</span> working for you
+                {later.length ? `, and ${later.length} more as they're released` : ""}.
+              </p>
+            </div>
+          ) : null}
+          {credits ? (
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <HeroStat label="Credits this cycle" value={n(credits.granted)} />
+              <HeroStat label="Used" value={n(credits.used)} />
+              <HeroStat label="Reserved" value={n(account?.reserved ?? 0)} hint="For work running now" />
+              <HeroStat label="Resets" value={credits.nextResetAt ? day(credits.nextResetAt) : "—"} />
+            </dl>
+          ) : null}
         </div>
-      )}
+        {credits ? (
+          <div className="grid justify-items-center gap-2">
+            <CreditRing left={credits.remaining} total={credits.granted} low={credits.granted > 0 && credits.remaining < credits.granted * 0.1} empty={credits.remaining <= 0} />
+            <Link href="/app/settings/billing?tab=usage" className="text-xs font-medium text-brand-600 underline-offset-2 hover:underline">
+              See where credits went
+            </Link>
+          </div>
+        ) : null}
+      </div>
       {plan ? (
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
           {plan === "operate" ? (
             <Button size="sm" variant="primary" loading={busy} onClick={() => void run(async () => onIntent(await change({ companyId, plan: "expand" })))}>
               Upgrade to Expand
@@ -175,7 +232,7 @@ function CurrentPlan({ data, onIntent }: { data: Connected; onIntent: (id: Id<"b
       ) : null}
       {confirmCancel ? <p className="mt-2 text-xs text-muted-foreground">The plan stays active until {day(sub?.periodEnd)} and does not renew. Records, completed work, signed agreements and cleaner links are kept. After that date, agents and AI work stop until a plan is chosen again; purchased credits cannot be used without a plan.</p> : null}
       <FormError message={error} />
-    </Panel>
+    </HeroCard>
   );
 }
 
@@ -261,24 +318,45 @@ function Comparison({ catalog, current, canBuy }: { catalog: Data["catalog"]; cu
       <p className="mb-3 text-sm text-muted-foreground">Start with four essential agents. Expand into a complete team as your operation grows.</p>
       {intentId ? <IntentDialog intentId={intentId} onClose={() => setIntentId(null)} /> : null}
       <div className="grid gap-4 md:grid-cols-2">
-        {catalog.plans.map((plan) => (
-          <section key={plan.id} className="rounded-2xl border border-border bg-card p-4">
-            <h3 className="font-heading text-lg tracking-tight text-strong">{plan.name}</h3>
-            <p className="text-2xl font-semibold text-strong">
-              {money(plan.monthlyCents)}
-              <span className="text-sm font-normal text-muted-foreground"> a month</span>
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{plan.summary}</p>
-            {canBuy && !current ? (
-              <Button className="mt-3" size="sm" variant="primary" loading={busy} onClick={() => void run(async () => setIntentId(await change({ companyId, plan: plan.id })))}>
-                Choose {plan.name}
-              </Button>
-            ) : current === plan.id ? (
-              <p className="mt-3 text-xs font-medium text-strong">Your plan</p>
-            ) : null}
-          </section>
-        ))}
+        {catalog.plans.map((plan) => {
+          const mine = current === plan.id;
+          const agents = catalog.agents.filter((row) => (plan.id === "expand" ? row.expand : row.operate));
+          return (
+            <section key={plan.id} className={`relative flex flex-col overflow-hidden rounded-2xl border bg-card p-5 ${mine ? "border-brand-500/50" : "border-border"}`}>
+              {mine ? <BorderBeam size={90} duration={8} colorFrom="#6838ef" colorTo="#b39eff" borderWidth={2} /> : null}
+              {plan.id === "expand" ? <div aria-hidden className="pointer-events-none absolute -top-16 -right-12 size-40 rounded-full bg-brand-500/10 blur-3xl" /> : null}
+              <div className="relative flex items-start justify-between gap-2">
+                <h3 className="font-heading text-xl tracking-tight text-strong">{plan.name}</h3>
+                {mine ? <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-600 ring-1 ring-brand-500/25">Your plan</span> : null}
+              </div>
+              <p className="relative mt-1 text-3xl font-semibold tracking-tight text-strong">
+                {money(plan.monthlyCents)}
+                <span className="text-sm font-normal text-muted-foreground"> a month</span>
+              </p>
+              <p className="relative mt-1 text-sm text-muted-foreground">{plan.summary}</p>
+              <div className="relative mt-4">
+                <AvatarStack agents={agents.map((row) => ({ id: row.agent, label: row.name }))} />
+                <ul className="mt-3 grid gap-1 text-sm">
+                  {agents.map((row) => (
+                    <li key={row.agent} className="flex items-center gap-2">
+                      <Check aria-hidden className={`size-4 shrink-0 ${row.released ? "text-success" : "text-muted-foreground"}`} />
+                      <span className={row.released ? "text-strong" : "text-muted-foreground"}>{row.name}</span>
+                      {!row.released ? <span className="text-xs text-muted-foreground">when released</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {canBuy && !current ? (
+                <Button className="relative mt-4 self-start" size="sm" variant="primary" loading={busy} onClick={() => void run(async () => setIntentId(await change({ companyId, plan: plan.id })))}>
+                  Choose {plan.name}
+                </Button>
+              ) : null}
+            </section>
+          );
+        })}
       </div>
+      <details className="group mt-4">
+        <summary className="cursor-pointer text-sm font-medium text-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500">Compare everything in each plan</summary>
       <table className="mt-4 w-full text-sm">
         <thead>
           <tr className="text-left text-xs text-muted-foreground">
@@ -308,6 +386,7 @@ function Comparison({ catalog, current, canBuy }: { catalog: Data["catalog"]; cu
           ))}
         </tbody>
       </table>
+      </details>
       <p className="mt-3 text-xs text-muted-foreground">Both plans include: {catalog.bothInclude.join("; ")}. Expand includes a larger monthly credit allowance. Bespoke implementation, migration and custom development are scoped separately.</p>
       <FormError message={error} />
     </Panel>

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** AI features now sit on Agent controls. Old links land there. */
+/** AI & usage is part of Plan & Usage now: the AI feature switches sit on its Usage tab. Old links land there. */
 export default function Page() {
-  redirect("/app/settings/agents#ai-features");
+  redirect("/app/settings/billing?tab=usage#ai-features");
 }
