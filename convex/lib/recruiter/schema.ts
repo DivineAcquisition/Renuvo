@@ -320,9 +320,38 @@ export const recruiterTables = {
     cursor: v.optional(v.string()),
     lastSyncAt: v.optional(v.number()),
     failures: v.number(),
+    /** The Owner allowed Recruiter to send from this mailbox. Applicant email then goes from the company's own address. */
+    canSend: v.optional(v.boolean()),
     createdBy: v.id("members"),
     createdAt: v.number(),
   }).index("by_company", ["companyId"]),
+
+  /**
+   * A mailbox's refresh token, encrypted (lib/recruiter/secrets.ts) and bound to its connection. No query
+   * a browser can reach reads this table; only the inbox run and the sender do, inside the deployment.
+   */
+  mailboxCredentials: defineTable({
+    companyId: v.id("companies"),
+    connectionId: v.id("mailboxConnections"),
+    sealedRefreshToken: v.string(),
+    scopes: v.array(v.string()),
+    createdAt: v.number(),
+  }).index("by_connection", ["connectionId"]),
+
+  /** One Owner's request to connect a mailbox, waiting for the provider to send them back. Single use, short lived. */
+  oauthStates: defineTable({
+    companyId: v.id("companies"),
+    memberId: v.id("members"),
+    provider: v.literal("gmail"),
+    /** The hash of the state sent to the provider. The state itself is not stored. */
+    stateHash: v.string(),
+    folder: v.optional(v.string()),
+    sources: v.array(sourceValidator),
+    processFrom: v.number(),
+    canSend: v.boolean(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+  }).index("by_stateHash", ["stateHash"]),
 
   /**
    * One message seen in the hiring inbox. For unrelated mail only the provider's id and that verdict are

@@ -65,7 +65,10 @@ export function emailProvider(): EmailProvider | null {
   return {
     name: shared.name,
     async send(input) {
-      const result = await shared.send({ to: input.to, subject: input.subject, text: input.text, html: plainHtml(input.text), idempotencyKey: input.idempotencyKey, fromName: input.fromName, replyTo: input.replyTo });
+      // Until a company connects its own mailbox, applicant email goes from RECRUITER_EMAIL_FROM (for example
+      // noreply@mail.selestial.io) under the company's name, with replies to the company's hiring inbox.
+      const fromAddress = process.env.RECRUITER_EMAIL_FROM?.trim().toLowerCase() || undefined;
+      const result = await shared.send({ to: input.to, subject: input.subject, text: input.text, html: plainHtml(input.text), idempotencyKey: input.idempotencyKey, fromName: input.fromName, replyTo: input.replyTo, fromAddress });
       // The provider took it. Whether it arrived comes later, from the webhook (convex/http.ts).
       return result.ok ? { ok: true, providerMessageId: result.providerMessageId, delivered: false } : result;
     },

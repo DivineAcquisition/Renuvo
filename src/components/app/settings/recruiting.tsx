@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
@@ -20,7 +21,102 @@ export function RecruitingRules() {
   if (!playbook) return <Skeleton className="h-96 rounded-2xl" />;
   const settings = playbook.settings as RecruitingSettings;
   // Re-keyed when the saved record changes, so a save elsewhere is shown unless the form is being edited here.
-  return <RecruitingFormView key={JSON.stringify(settings)} settings={settings} timezone={playbook.timezone} canEdit={role === "owner"} companyId={companyId} />;
+  return (
+    <div className="grid gap-5">
+      <HiringInbox canEdit={role === "owner"} companyId={companyId} />
+      <RecruitingFormView key={JSON.stringify(settings)} settings={settings} timezone={playbook.timezone} canEdit={role === "owner"} companyId={companyId} />
+    </div>
+  );
+}
+
+/** What Google sent the Owner back with, in words. */
+const RETURN_WORDS: Record<string, string> = {
+  connected: "Gmail is connected. Recruiter is reading the hiring inbox now.",
+  failed: "Gmail was not connected. Google did not give Selestial permission to read the inbox. Try again, and allow reading when Google asks.",
+  expired: "That sign-in had already been used or took longer than ten minutes. Start again.",
+};
+
+function HiringInbox({ canEdit, companyId }: { canEdit: boolean; companyId: Id<"companies"> }) {
+  const overview = useQuery(api.recruiter.overview, { companyId });
+  const start = useMutation(api.recruiterMailbox.startGmailConnect);
+  const disconnect = useMutation(api.recruiter.disconnectMailbox);
+  const { busy, error, run } = useRun();
+  const [label, setLabel] = useState("");
+  const [canSend, setCanSend] = useState(true);
+  // Google sends the Owner back here with ?mailbox=<outcome>.
+  const outcome = useSearchParams().get("mailbox");
+  const returned = outcome ? (RETURN_WORDS[outcome] ?? null) : null;
+  if (!overview) return <Skeleton className="h-32 rounded-2xl" />;
+  const inboxes = overview.inbox.filter((row) => row.status !== "disconnected" && row.provider !== "mock");
+  const sender = inboxes.find((row) => row.sendsApplicantEmail);
+  return (
+    <Panel title="Hiring inbox">
+      {returned ? (
+        <p role="status" className="mb-3 rounded-lg border border-border bg-muted px-3 py-2 text-sm text-strong">
+          {returned}
+        </p>
+      ) : null}
+      {inboxes.length > 0 ? (
+        <ul className="mb-3 grid gap-2">
+          {inboxes.map((row) => (
+            <li key={row.connectionId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+              <div className="grid gap-0.5">
+                <span className="text-sm font-medium text-strong">
+                  {row.address} <span className="font-normal text-muted-foreground">· {row.provider === "gmail" ? "Gmail" : "Microsoft 365"}</span>
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {row.status === "connected" ? `Connected${row.lastSyncAt ? `, last read ${new Date(row.lastSyncAt).toLocaleString()}` : ""}.` : (row.problem ?? "Not reading.")}
+                  {row.sendsApplicantEmail ? " Applicant email is sent from this address." : ""}
+                </span>
+              </div>
+              {canEdit ? (
+                <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => disconnect({ companyId, connectionId: row.connectionId }))}>
+                  Disconnect
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="mb-3 text-sm text-muted-foreground">
+        {sender
+          ? `Applicants get email from ${sender.address}, and their replies come back to it.`
+          : "Until a company inbox is connected for sending, applicants get email from noreply@mail.selestial.io under your company's name, and replies go to the reply address below."}
+      </p>
+      {canEdit && overview.gmailAvailable ? (
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="grid gap-2">
+            <Field label="Gmail label to read" hint="Optional. Leave empty to read the whole inbox; Recruiter still opens only mail that looks like hiring.">
+              <TextInput value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Hiring" />
+            </Field>
+            <label className="flex items-center gap-1.5 text-sm text-strong">
+              <input type="checkbox" checked={canSend} onChange={(event) => setCanSend(event.target.checked)} />
+              Also send applicant email from this inbox
+            </label>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="primary"
+            loading={busy}
+            onClick={() =>
+              void run(async () => {
+                const { url } = await start({ companyId, canSend, ...(label.trim() ? { folder: label.trim() } : {}) });
+                window.location.assign(url);
+              })
+            }
+          >
+            {inboxes.some((row) => row.provider === "gmail") ? "Reconnect Gmail" : "Connect Gmail"}
+          </Button>
+        </div>
+      ) : canEdit ? (
+        <p className="text-xs text-muted-foreground">Connecting Gmail is not set up on this deployment yet.</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">Only the Owner connects the hiring inbox.</p>
+      )}
+      <FormError message={error} />
+    </Panel>
+  );
 }
 
 function RecruitingFormView({ settings, timezone, canEdit, companyId }: { settings: RecruitingSettings; timezone: string; canEdit: boolean; companyId: Id<"companies"> }) {

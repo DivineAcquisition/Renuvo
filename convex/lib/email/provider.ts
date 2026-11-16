@@ -15,14 +15,19 @@ export type EmailInput = {
   fromName?: string;
   /** Where replies go, for example a company's own hiring inbox. */
   replyTo?: string;
+  /** Another address on EMAIL_FROM's verified domain to send from, for example a no-reply address. */
+  fromAddress?: string;
 };
 
 /** EMAIL_FROM with another display name on the same address. A name cannot break the header. */
-export function senderWithName(from: string, name: string | undefined): string {
-  if (!name) return from;
-  const address = from.match(/<([^<>\s]+@[^<>\s]+)>/)?.[1] ?? from.trim();
-  const clean = name.replace(/["<>\r\n]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
-  return clean ? `"${clean}" <${address}>` : from;
+export function senderWithName(from: string, name: string | undefined, fromAddress?: string): string {
+  const own = from.match(/<([^<>\s]+@[^<>\s]+)>/)?.[1] ?? from.trim();
+  // Only an address on the same verified domain may replace EMAIL_FROM's.
+  const domain = (value: string) => value.slice(value.lastIndexOf("@") + 1).toLowerCase();
+  const address = fromAddress && /^[^\s@<>"]+@[^\s@<>"]+$/.test(fromAddress) && domain(fromAddress) === domain(own) ? fromAddress : own;
+  const clean = (name ?? "").replace(/["<>\r\n]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (clean) return `"${clean}" <${address}>`;
+  return address === own ? from : address;
 }
 
 export type EmailResult =
@@ -82,7 +87,7 @@ function resendProvider(apiKey: string, from: string): EmailProvider {
         response = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
-          body: JSON.stringify({ from: senderWithName(from, input.fromName), to: [input.to], subject: input.subject, html: input.html, text: input.text, ...(input.replyTo ? { reply_to: input.replyTo } : {}) }),
+          body: JSON.stringify({ from: senderWithName(from, input.fromName, input.fromAddress), to: [input.to], subject: input.subject, html: input.html, text: input.text, ...(input.replyTo ? { reply_to: input.replyTo } : {}) }),
         });
       } catch {
         // The same idempotency key goes with every try, so trying again cannot send the message twice.

@@ -73,6 +73,8 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
+  mailboxCredentials: "A sealed authorization to read and send from the company's mailbox; it opens the mailbox, so a copy must never leave. The connection itself is exported.",
+  oauthStates: "Ten-minute, single-use records of a mailbox sign-in in progress; nothing in them is about the business.",
   sendIntents: "Internal bookkeeping for the sending check: the same facts are in each message and in the event log.",
   conversations: "Chats are private to the member who wrote them until sharing exists; what a chat did to the business is exported as chatActionSteps, and its drafts as chatArtifacts.",
   chatUploads: "Internal file references for chat attachments; the files themselves are private to the member who uploaded them.",

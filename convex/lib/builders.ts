@@ -418,3 +418,16 @@ export function providerWebhook(def: {
     return new Response(null, { status: 200 });
   });
 }
+
+/**
+ * A GET endpoint a provider sends a person's browser back to after they agreed to something (OAuth).
+ * The handler gets only the query parameters and answers with a redirect; it carries no session and must
+ * prove who started the request from the state it was given.
+ */
+export function oauthCallback(def: { handler: (ctx: ActionCtx, params: URLSearchParams) => Promise<string> }): PublicHttpAction {
+  return httpAction(async (ctx, request) => {
+    const params = new URL(request.url).searchParams;
+    const location = await def.handler(ctx, params);
+    return new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  });
+}
