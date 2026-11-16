@@ -64,7 +64,7 @@ export const startGmailConnect = ownerMutation({
       expiresAt: now + STATE_LIFE,
     });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "mailbox.connect_started", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { provider: "gmail" } });
-    return { url: authorizationUrl(app, { redirectUri, state, loginHint: ctx.member.email }) };
+    return { url: authorizationUrl(app, { redirectUri, state, loginHint: ctx.member.email, canSend: args.canSend ?? true }) };
   },
 });
 

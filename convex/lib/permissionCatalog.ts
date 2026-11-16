@@ -54,6 +54,7 @@ export const ACTIONS: readonly ActionDef[] = [
   action("sales.reply_and_quote", "sales", "Reply, collect details and send a quote from the rules", "execute"),
   action("sales.follow_up", "sales", "Send follow-up messages", "execute"),
   action("sales.discount_in_band", "sales", "Discount inside the allowed band", "execute_and_report", { money: true }),
+  action("sales.draft_ad_campaign", "sales", "Draft a Google Ads campaign (costs nothing; the Owner approves and turns it on)", "execute", { outsider: false }),
   action("sales.discount_out_of_band", "sales", "Discount outside the band, custom or commercial price", "propose", { ceiling: "propose", money: true }),
 
   action("retention.request_feedback", "retention", "Request feedback, invite a review, send reminders", "execute"),
@@ -62,6 +63,7 @@ export const ACTIONS: readonly ActionDef[] = [
   action("retention.remedy_within_limit", "retention", "Re-clean or credit inside the limit", "execute_and_report", { money: true }),
   action("retention.refund_above_limit", "retention", "Refund or compensation above the limit", "propose", { ceiling: "propose", money: true }),
   action("retention.cancel_on_request", "retention", "Cancel on the customer's request", "execute"),
+  action("retention.draft_review_reply", "retention", "Draft replies to Google reviews (a person approves before anything is posted)", "execute", { outsider: false }),
 
   action("recruiter.acknowledge_and_collect", "recruiter", "Acknowledge, answer questions, request missing details", "execute"),
   action("recruiter.decline_fixed_requirement", "recruiter", "Decline on a published fixed requirement", "execute_and_report"),

@@ -161,7 +161,7 @@ describe("the overview and navigation", () => {
 
   it("links every section the Owner may open, and each one is a real page", () => {
     const html = renderToStaticMarkup(<OverviewGrid sections={sectionsFor("owner")} />);
-    expect(SETTINGS_SECTIONS).toHaveLength(13);
+    expect(SETTINGS_SECTIONS).toHaveLength(14);
     for (const section of SETTINGS_SECTIONS) {
       expect(html, section.id).toContain(`href="${section.path}"`);
       expect(html, section.id).toContain(section.label.replace("&", "&amp;"));

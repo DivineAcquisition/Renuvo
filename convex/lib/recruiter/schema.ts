@@ -322,6 +322,8 @@ export const recruiterTables = {
     failures: v.number(),
     /** The Owner allowed Recruiter to send from this mailbox. Applicant email then goes from the company's own address. */
     canSend: v.optional(v.boolean()),
+    /** When Gmail's push notifications to Selestial's Pub/Sub topic lapse. Renewed daily. */
+    watchExpiresAt: v.optional(v.number()),
     createdBy: v.id("members"),
     createdAt: v.number(),
   }).index("by_company", ["companyId"]),

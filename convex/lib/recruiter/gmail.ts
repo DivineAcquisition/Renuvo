@@ -67,12 +67,17 @@ export async function exchangeCode(app: GoogleApp, code: string, redirectUri: st
   return { refreshToken: body.refresh_token, accessToken: body.access_token, scope: body.scope ?? "" };
 }
 
-export function authorizationUrl(app: GoogleApp, input: { redirectUri: string; state: string; loginHint?: string }): string {
+/** Reading is always asked for (it is what the hiring inbox is). Sending is a separate permission, asked only when the Owner allows it. */
+export function gmailScopes(canSend: boolean): string[] {
+  return GMAIL_SCOPES.filter((scope) => canSend || scope !== "https://www.googleapis.com/auth/gmail.send");
+}
+
+export function authorizationUrl(app: GoogleApp, input: { redirectUri: string; state: string; loginHint?: string; canSend?: boolean }): string {
   const params = new URLSearchParams({
     client_id: app.clientId,
     redirect_uri: input.redirectUri,
     response_type: "code",
-    scope: GMAIL_SCOPES.join(" "),
+    scope: gmailScopes(input.canSend ?? true).join(" "),
     access_type: "offline",
     // Asked each time, so Google always returns a refresh token and the Owner sees what is being granted.
     prompt: "consent",
@@ -287,4 +292,19 @@ export async function sendFromGmail(input: { token: string; raw: string; fetch?:
   if (response.status === 401 || response.status === 403) return { ok: false, retryable: false, problem: "The company's mailbox no longer lets Selestial send. Reconnect it." };
   if (response.status === 429 || response.status >= 500) return { ok: false, retryable: true, problem: "Gmail is busy or unavailable." };
   return { ok: false, retryable: false, problem: "Gmail would not send this message." };
+}
+
+/**
+ * Asks Gmail to tell Selestial's Pub/Sub topic when the mailbox changes. A notification only says
+ * "look again": the regular read still decides what is new, so a missed one is caught by the timer.
+ */
+export async function watchMailbox(input: { token: string; topic: string; label?: string; fetch?: Fetch }): Promise<{ historyId: string; expiration: number }> {
+  const response = await (input.fetch ?? fetch)("https://gmail.googleapis.com/gmail/v1/users/me/watch", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${input.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ topicName: input.topic, ...(input.label ? { labelIds: [input.label], labelFilterBehavior: "include" } : {}) }),
+  });
+  const body = (await response.json().catch(() => null)) as { historyId?: string; expiration?: string } | null;
+  if (!response.ok || !body?.expiration) throw new Error(`gmail watch failed (${response.status})`);
+  return { historyId: body.historyId ?? "", expiration: Number(body.expiration) };
 }
