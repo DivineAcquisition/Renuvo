@@ -67,7 +67,7 @@ export async function approveAndQueue(ctx: MutationCtx, companyId: Id<"companies
   const review = await ctx.db.get(reviewId);
   if (!review || review.companyId !== companyId) notFound();
   const location = (await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", companyId).eq("kind", "business_location")).take(50)).find((r) => r.externalId === review.location && r.access !== "lost");
-  if (!location) throw userError("This location is no longer authorized for replies. The Owner chooses locations under Settings › Integrations (Your Google account).");
+  if (!location) throw userError("This location is no longer authorized for replies. The Owner chooses locations under Settings › Integrations (Google tools).");
   if (review.state === "publishing") throw userError("This reply is already being published.");
   const approved = text(words, "The reply", 4000);
   await ctx.db.patch(review._id, { draft: approved, approvedText: approved, approvedBy: memberId, state: "publishing", problem: undefined });
@@ -181,7 +181,7 @@ export const storeReviews = internalMutation({
 export const notificationTargets = internalQuery({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {
-    const connection = await activeConnection(ctx, args.companyId);
+    const connection = await activeConnection(ctx, args.companyId, "business_profile");
     const rows = await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", args.companyId).eq("kind", "business_location")).take(20);
     const watches = await ctx.db.query("googleWatches").withIndex("by_company", (q) => q.eq("companyId", args.companyId)).take(20);
     const accounts = [...new Set(rows.filter((r) => r.access !== "lost" && r.detail).map((r) => r.detail!))];
@@ -223,7 +223,7 @@ export const notified = internalMutation({
     let queued = 0;
     for (const row of rows) {
       if (row.kind !== "business_location" || row.externalId.replace(/^.*locations\//, "") !== id) continue;
-      const connection = await activeConnection(ctx, row.companyId);
+      const connection = await activeConnection(ctx, row.companyId, "business_profile");
       if (!connection || connection.status !== "connected") continue;
       await enqueue(ctx, { companyId: row.companyId, connectionId: connection._id, kind: "reviews_sync", key: `reviews_sync:push:${Math.floor(Date.now() / 60_000)}`, payload: {} });
       queued += 1;
@@ -240,7 +240,7 @@ export const sweep = internalMutation({
     const companies = new Set<Id<"companies">>(rows.filter((r) => r.kind === "business_location").map((r) => r.companyId));
     const hour = Math.floor(Date.now() / 3_600_000);
     for (const companyId of companies) {
-      const connection = await activeConnection(ctx, companyId);
+      const connection = await activeConnection(ctx, companyId, "business_profile");
       if (!connection || connection.status !== "connected") continue;
       await enqueue(ctx, { companyId, connectionId: connection._id, kind: "reviews_sync", key: `reviews_sync:auto:${hour}`, payload: {} });
       await enqueue(ctx, { companyId, connectionId: connection._id, kind: "business_watch", key: `business_watch:${Math.floor(hour / 24)}`, payload: {} });

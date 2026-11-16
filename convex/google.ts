@@ -1,19 +1,20 @@
 /**
- * Settings › Integrations › Your Google account: connecting a company's Google account, choosing what Selestial may use,
- * and disconnecting. Only the Owner connects, adds permissions, chooses resources or disconnects; anyone
- * in the company can see what is connected.
+ * Google for a company, one tool at a time. Drive (with Docs and Sheets), Calendar, Business Profile,
+ * Google Ads and Conversions each have their own connection: their own sign-in, Google account, grant,
+ * stored token, chosen resources and disconnect. Only the Owner connects, chooses resources or
+ * disconnects; anyone in the company can see what is connected.
  *
- * Connecting:
+ * Connecting a tool:
  *  1. `startConnect` makes a one-time state (only its hash is kept, for ten minutes) and returns Google's
- *     consent address for just the features asked for. Google adds them to what was granted before.
+ *     consent address for that tool's scopes only.
  *  2. Google returns to /oauth/google/callback (shared with the Gmail inbox). `completeConnect` checks the
- *     state, that the person is still the Owner, and, when adding to an existing connection, that it is
- *     the same Google account. The refresh token is sealed before it is stored.
- *  3. Only features whose scopes Google actually granted are turned on. Partial consent is recorded as
- *     partial.
+ *     state, that the person is still the Owner, and, when reconnecting, that it is the same Google account
+ *     unless the Owner chose a different one. The refresh token is sealed before it is stored.
+ *  3. The tool is on only if Google granted all of its scopes. Partial consent is recorded as partial.
  *
- * Disconnecting stops every Google step at once (each one checks the connection first), cancels queued
- * work, deletes the stored token and asks Google to revoke the grant.
+ * Disconnecting a tool stops that tool's Google steps at once, cancels its queued work, removes what was
+ * chosen for it and deletes its token. Google's grant is revoked only when no other connected tool uses
+ * the same Google account, because Google revokes per account, not per tool.
  */
 import { v } from "convex/values";
 
@@ -43,26 +44,31 @@ export function afterGoogle(outcome: string, origin?: string | null): string {
 export const status = companyQuery({
   args: {},
   handler: async (ctx) => {
-    const connection = await activeConnection(ctx, ctx.companyId);
-    const resources = connection ? await ctx.db.query("googleResources").withIndex("by_connection", (q) => q.eq("connectionId", connection._id)).take(200) : [];
-    const enabled = connection ? enabledFeatures(connection.grantedScopes) : [];
     const jobs = await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "failed")).order("desc").take(5);
     const uncertain = await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "uncertain")).order("desc").take(5);
-    return {
-      canManage: ctx.role === "owner",
-      ready: googleApp() !== null && redirectUri() !== null && (await secretsConfigured()),
-      connection: connection
-        ? { id: connection._id, email: connection.email, status: connection.status, problem: connection.problem ?? null, connectedAt: connection.connectedAt, lastRefreshAt: connection.lastRefreshAt ?? null }
-        : null,
-      features: FEATURES.map((feature) => ({
+    const tools = [];
+    const allResources = [];
+    for (const feature of FEATURES) {
+      const connection = await activeConnection(ctx, ctx.companyId, feature);
+      const resources = connection ? await ctx.db.query("googleResources").withIndex("by_connection", (q) => q.eq("connectionId", connection._id)).take(200) : [];
+      const shaped = resources.map((r) => ({ id: r._id, kind: r.kind, externalId: r.externalId, label: r.label, purpose: r.purpose ?? null, detail: r.detail ?? null, access: r.access, accessNote: r.accessNote ?? null, verifiedAt: r.verifiedAt ?? null }));
+      allResources.push(...shaped);
+      tools.push({
         feature,
         label: FEATURE_INFO[feature].label,
         does: FEATURE_INFO[feature].does,
-        granted: enabled.includes(feature),
-        missing: connection ? missingScopes(feature, connection.grantedScopes) : [...FEATURE_INFO[feature].scopes],
         needsPlatform: FEATURE_INFO[feature].needsPlatform ?? [],
-      })),
-      resources: resources.map((r) => ({ id: r._id, kind: r.kind, externalId: r.externalId, label: r.label, purpose: r.purpose ?? null, detail: r.detail ?? null, access: r.access, accessNote: r.accessNote ?? null, verifiedAt: r.verifiedAt ?? null })),
+        connection: connection ? { id: connection._id, email: connection.email, status: connection.status, problem: connection.problem ?? null, connectedAt: connection.connectedAt, lastRefreshAt: connection.lastRefreshAt ?? null } : null,
+        granted: connection?.status === "connected" && enabledFeatures(connection.grantedScopes).includes(feature),
+        missing: connection ? missingScopes(feature, connection.grantedScopes) : [...FEATURE_INFO[feature].scopes],
+        resources: shaped,
+      });
+    }
+    return {
+      canManage: ctx.role === "owner",
+      ready: googleApp() !== null && redirectUri() !== null && (await secretsConfigured()),
+      tools,
+      resources: allResources,
       // Only the Owner sees which platform settings are missing; it is setup information, not company data.
       platform: ctx.role === "owner" ? platformStatus() : [],
       endpoints: ctx.role === "owner" ? endpoints() : null,
@@ -74,23 +80,19 @@ export const status = companyQuery({
 // ── Connecting ──────────────────────────────────────────────────────────────────────────────────
 
 export const startConnect = ownerMutation({
-  args: { features: v.array(featureValidator), differentAccount: v.optional(v.boolean()), returnTo: v.optional(v.string()) },
+  args: { feature: featureValidator, differentAccount: v.optional(v.boolean()), returnTo: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const app = googleApp();
     const redirect = redirectUri();
     if (!app || !redirect) throw userError("Connecting Google is not set up on this deployment: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and the site address are needed.");
     if (!(await secretsConfigured())) throw userError("Connecting Google is not set up on this deployment: MAILBOX_TOKEN_KEY, the key that protects stored authorizations, is missing.");
-    const features = [...new Set(args.features)];
-    if (features.length === 0) throw userError("Choose at least one thing to connect.");
-    const existing = await activeConnection(ctx, ctx.companyId);
-    const adding = existing && !args.differentAccount ? existing : null;
-    // Ask only for what is not granted yet; Google keeps the rest (include_granted_scopes).
-    const wanted = adding ? features.filter((f) => missingScopes(f, adding.grantedScopes).length > 0) : features;
-    if (adding && wanted.length === 0 && adding.status === "connected") throw userError("Those are already connected.");
+    const existing = await activeConnection(ctx, ctx.companyId, args.feature);
+    // Reconnecting keeps the same Google account; "a different account" replaces it.
+    const same = existing && !args.differentAccount ? existing : null;
     const state = await randomToken();
-    await ctx.db.insert("googleOAuthStates", { companyId: ctx.companyId, memberId: ctx.member._id, stateHash: await hashToken(state), features: adding && wanted.length ? wanted : features, connectionId: adding?._id, returnOrigin: returnOrigin(args.returnTo) ?? undefined, expiresAt: Date.now() + STATE_LIFE });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "google.connect_started", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { features: features.join(","), differentAccount: Boolean(args.differentAccount) } });
-    return { url: consentUrl(app, { redirectUri: redirect, state, scopes: scopesFor(adding && wanted.length ? wanted : features), loginHint: adding?.email, selectAccount: Boolean(args.differentAccount) || !adding }) };
+    await ctx.db.insert("googleOAuthStates", { companyId: ctx.companyId, memberId: ctx.member._id, stateHash: await hashToken(state), features: [args.feature], connectionId: same?._id, returnOrigin: returnOrigin(args.returnTo) ?? undefined, expiresAt: Date.now() + STATE_LIFE });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "google.connect_started", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { feature: args.feature, differentAccount: Boolean(args.differentAccount) } });
+    return { url: consentUrl(app, { redirectUri: redirect, state, scopes: scopesFor([args.feature]), loginHint: same?.email, selectAccount: !same }) };
   },
 });
 
@@ -112,29 +114,30 @@ export const takeState = internalMutation({
 });
 
 /**
- * Records what Google granted. Adding to a connection must be the same Google account; a different
- * account replaces the old connection only when the Owner chose "use a different account" (no
- * connectionId on the state), and the old one's resources and work stop.
+ * Records what Google granted for one tool. Reconnecting must be the same Google account; a different
+ * account replaces the tool's connection only when the Owner chose "use a different account", and the old
+ * connection's resources and work stop. Other tools are not touched.
  */
 export const completeConnect = internalMutation({
-  args: { companyId: v.id("companies"), memberId: v.id("members"), connectionId: v.union(v.id("googleConnections"), v.null()), googleSub: v.string(), email: v.string(), scopes: v.array(v.string()), hasRefreshToken: v.boolean() },
+  args: { companyId: v.id("companies"), memberId: v.id("members"), feature: featureValidator, connectionId: v.union(v.id("googleConnections"), v.null()), googleSub: v.string(), email: v.string(), scopes: v.array(v.string()), hasRefreshToken: v.boolean() },
   handler: async (ctx, args): Promise<{ ok: true; connectionId: Id<"googleConnections">; enabled: Feature[] } | { ok: false; reason: string }> => {
     const now = Date.now();
-    const current = await activeConnection(ctx, args.companyId);
+    const enabled = missingScopes(args.feature, args.scopes).length === 0 ? [args.feature] : [];
+    const current = await activeConnection(ctx, args.companyId, args.feature);
     if (args.connectionId) {
       const target = await ctx.db.get(args.connectionId);
-      if (!target || target.companyId !== args.companyId || target.status === "disconnected") return { ok: false, reason: "expired" };
+      if (!target || target.companyId !== args.companyId || target.status === "disconnected" || target.feature !== args.feature) return { ok: false, reason: "expired" };
       if (target.googleSub !== args.googleSub) return { ok: false, reason: "different_account" };
-      const granted = [...new Set([...target.grantedScopes, ...args.scopes])];
-      await ctx.db.patch(target._id, { grantedScopes: granted, status: "connected", problem: undefined, lastRefreshAt: now });
-      await recordEvent(ctx, { companyId: args.companyId, type: "google.permissions_added", actor: { kind: "member", memberId: args.memberId }, subject: { table: "companies", id: args.companyId }, data: { enabled: enabledFeatures(granted).join(",") } });
-      return { ok: true, connectionId: target._id, enabled: enabledFeatures(granted) };
+      if (!args.hasRefreshToken) return { ok: false, reason: "no_refresh_token" };
+      await ctx.db.patch(target._id, { grantedScopes: args.scopes, status: "connected", problem: undefined, lastRefreshAt: now });
+      await recordEvent(ctx, { companyId: args.companyId, type: "google.reconnected", actor: { kind: "member", memberId: args.memberId }, subject: { table: "companies", id: args.companyId }, data: { feature: args.feature, granted: enabled.length > 0 } });
+      return { ok: true, connectionId: target._id, enabled };
     }
     if (!args.hasRefreshToken) return { ok: false, reason: "no_refresh_token" };
     if (current) await stopConnection(ctx, current, "Replaced by a connection to a different Google account.");
-    const connectionId = await ctx.db.insert("googleConnections", { companyId: args.companyId, googleSub: args.googleSub, email: args.email.toLowerCase(), status: "connected", grantedScopes: args.scopes, connectedBy: args.memberId, connectedAt: now, lastRefreshAt: now });
-    await recordEvent(ctx, { companyId: args.companyId, type: "google.connected", actor: { kind: "member", memberId: args.memberId }, subject: { table: "companies", id: args.companyId }, data: { enabled: enabledFeatures(args.scopes).join(","), partial: enabledFeatures(args.scopes).length === 0 } });
-    return { ok: true, connectionId, enabled: enabledFeatures(args.scopes) };
+    const connectionId = await ctx.db.insert("googleConnections", { companyId: args.companyId, feature: args.feature, googleSub: args.googleSub, email: args.email.toLowerCase(), status: "connected", grantedScopes: args.scopes, connectedBy: args.memberId, connectedAt: now, lastRefreshAt: now });
+    await recordEvent(ctx, { companyId: args.companyId, type: "google.connected", actor: { kind: "member", memberId: args.memberId }, subject: { table: "companies", id: args.companyId }, data: { feature: args.feature, partial: enabled.length === 0 } });
+    return { ok: true, connectionId, enabled };
   },
 });
 
@@ -164,19 +167,21 @@ async function stopConnection(ctx: MutationCtx, connection: Doc<"googleConnectio
 }
 
 export const disconnect = ownerMutation({
-  args: {},
-  handler: async (ctx) => {
-    const connection = await activeConnection(ctx, ctx.companyId);
-    if (!connection) throw userError("Google is not connected.");
+  args: { feature: featureValidator },
+  handler: async (ctx, args) => {
+    const connection = await activeConnection(ctx, ctx.companyId, args.feature);
+    if (!connection) throw userError(`${FEATURE_INFO[args.feature].label} is not connected.`);
     await stopConnection(ctx, connection, "Disconnected by the Owner.");
     const credential = await ctx.db.query("googleCredentials").withIndex("by_connection", (q) => q.eq("connectionId", connection._id)).first();
-    // The sealed token is handed to the revoke step and deleted here, so nothing else can use it.
+    // Google revokes a whole account's grant to Selestial, not one tool's. While another connected tool uses
+    // the same account, only this tool's token is deleted; the last one to go also revokes at Google.
+    const shared = (await ctx.db.query("googleConnections").withIndex("by_sub", (q) => q.eq("googleSub", connection.googleSub)).take(100)).some((row) => row._id !== connection._id && row.status !== "disconnected");
     if (credential) {
-      await ctx.scheduler.runAfter(0, internal.google.revokeGrant, { connectionId: connection._id, sealedRefreshToken: credential.sealedRefreshToken });
+      if (!shared) await ctx.scheduler.runAfter(0, internal.google.revokeGrant, { connectionId: connection._id, sealedRefreshToken: credential.sealedRefreshToken });
       await ctx.db.delete(credential._id);
     }
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "google.disconnected", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId } });
-    return { stopped: true };
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "google.disconnected", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { feature: args.feature, revokedAtGoogle: !shared } });
+    return { stopped: true, revokedAtGoogle: !shared };
   },
 });
 
@@ -259,10 +264,10 @@ const RESOURCE_FEATURE: Record<Doc<"googleResources">["kind"], Feature> = {
 export const addResource = ownerMutation({
   args: { kind: resourceKindValidator, externalId: v.string(), label: v.string(), purpose: v.optional(v.string()), detail: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const connection = await activeConnection(ctx, ctx.companyId);
-    if (!connection || connection.status !== "connected") throw userError("Connect Google first.");
     const feature = RESOURCE_FEATURE[args.kind];
-    if (!enabledFeatures(connection.grantedScopes).includes(feature)) throw userError(`${FEATURE_INFO[feature].label} is not granted yet. Add it first.`);
+    const connection = await activeConnection(ctx, ctx.companyId, feature);
+    if (!connection || connection.status !== "connected") throw userError(`Connect ${FEATURE_INFO[feature].label} first.`);
+    if (!enabledFeatures(connection.grantedScopes).includes(feature)) throw userError(`${FEATURE_INFO[feature].label} is not granted yet. Reconnect it and allow everything Google asks for.`);
     const externalId = args.externalId.trim();
     if (!externalId || externalId.length > 300 || !/^[\w@.:/\-+=#%]+$/.test(externalId)) throw userError("That is not a Google id Selestial can use.");
     if (args.kind === "calendar_sync") {
@@ -316,11 +321,14 @@ export const setResourceAccess = internalMutation({
 const choiceKind = v.union(v.literal("calendars"), v.literal("locations"), v.literal("ads_accounts"), v.literal("folder_contents"));
 
 /** Asks Google, as the company, what can be chosen. The answer lands in `choices`. */
+const CHOICE_FEATURE = { calendars: "calendar", locations: "business_profile", ads_accounts: "ads", folder_contents: "drive" } as const;
+
 export const refreshChoices = ownerMutation({
   args: { kind: choiceKind, scope: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const connection = await activeConnection(ctx, ctx.companyId);
-    if (!connection || connection.status !== "connected") throw userError("Connect Google first.");
+    const feature = CHOICE_FEATURE[args.kind];
+    const connection = await activeConnection(ctx, ctx.companyId, feature);
+    if (!connection || connection.status !== "connected") throw userError(`Connect ${FEATURE_INFO[feature].label} first.`);
     await ctx.scheduler.runAfter(0, internal.googleWork.listChoices, { connectionId: connection._id, kind: args.kind, scope: args.scope });
     return null;
   },
@@ -332,5 +340,28 @@ export const choices = companyQuery({
     if (ctx.role !== "owner") return null;
     const row = await ctx.db.query("googleChoices").withIndex("by_company_kind", (q) => q.eq("companyId", ctx.companyId).eq("kind", args.kind)).first();
     return row ? { items: row.items, problem: row.problem ?? null, fetchedAt: row.fetchedAt, scope: row.scope ?? null } : null;
+  },
+});
+
+/**
+ * One-time move from the single shared connection to one per tool: a row made before then becomes the
+ * connection of the first tool it fully granted (its token and resources stay with it). Other tools are
+ * connected again on their own. Safe to run more than once.
+ */
+export const migrateToPerTool = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let moved = 0;
+    for (const row of await ctx.db.query("googleConnections").take(1000)) {
+      if (row.feature) continue;
+      const feature = enabledFeatures(row.grantedScopes)[0];
+      if (feature && !(await activeConnection(ctx, row.companyId, feature))) await ctx.db.patch(row._id, { feature });
+      else {
+        await stopConnection(ctx, row, "Google is now connected tool by tool. Connect this tool again.");
+        for (const credential of await ctx.db.query("googleCredentials").withIndex("by_connection", (q) => q.eq("connectionId", row._id)).take(5)) await ctx.db.delete(credential._id);
+      }
+      moved += 1;
+    }
+    return moved;
   },
 });

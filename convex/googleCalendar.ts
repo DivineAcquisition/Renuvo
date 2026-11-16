@@ -135,7 +135,7 @@ export const storeBusy = internalMutation({
 export const watchTarget = internalQuery({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {
-    const connection = await activeConnection(ctx, args.companyId);
+    const connection = await activeConnection(ctx, args.companyId, "calendar");
     const target = (await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", args.companyId).eq("kind", "calendar_sync")).take(5)).find((r) => r.access !== "lost");
     const watches = await ctx.db.query("googleWatches").withIndex("by_company", (q) => q.eq("companyId", args.companyId)).take(20);
     return connection && connection.status === "connected" && target ? { connectionId: connection._id, calendarId: target.externalId, current: watches.find((w) => w.kind === "calendar" && w.target === target.externalId) ?? null } : null;
@@ -240,7 +240,7 @@ export const busyTargets = internalQuery({
   args: { companyId: v.id("companies") },
   handler: async (ctx, args) => {
     const company = await ctx.db.get(args.companyId);
-    const connection = await activeConnection(ctx, args.companyId);
+    const connection = await activeConnection(ctx, args.companyId, "calendar");
     const rows = await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", args.companyId).eq("kind", "calendar_busy")).take(20);
     return company && connection?.status === "connected" ? { connectionId: connection._id, timezone: company.timezone, calendars: rows.filter((r) => r.access !== "lost").map((r) => r.externalId) } : null;
   },
@@ -270,7 +270,7 @@ export const sweep = internalMutation({
     for (const r of resources) if (r.kind === "calendar_sync" || r.kind === "calendar_busy") companies.add(r.companyId);
     const bucket = Math.floor(Date.now() / (10 * 60_000));
     for (const companyId of companies) {
-      const connection = await activeConnection(ctx, companyId);
+      const connection = await activeConnection(ctx, companyId, "calendar");
       if (!connection || connection.status !== "connected") continue;
       await enquire(ctx, companyId, connection._id, "calendar_sync", `calendar_sync:auto:${bucket}`, {});
       await ctx.scheduler.runAfter(0, internal.googleCalendar.refreshBusy, { companyId });

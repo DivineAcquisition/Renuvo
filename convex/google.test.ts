@@ -39,8 +39,8 @@ function fakeGoogleApi(routes: Record<string, (init: RequestInit | undefined, ur
   return { calls };
 }
 
-async function connect(t: T, as: ReturnType<T["withIdentity"]>, companyId: Id<"companies">, input: { features: ("drive" | "calendar" | "business_profile" | "ads" | "conversions")[]; grant: string[]; sub?: string; email?: string; refresh?: string | null; differentAccount?: boolean }) {
-  const { url } = await as.mutation(api.google.startConnect, { companyId, features: input.features, differentAccount: input.differentAccount });
+async function connect(t: T, as: ReturnType<T["withIdentity"]>, companyId: Id<"companies">, input: { feature: "drive" | "calendar" | "business_profile" | "ads" | "conversions"; grant: string[]; sub?: string; email?: string; refresh?: string | null; differentAccount?: boolean }) {
+  const { url } = await as.mutation(api.google.startConnect, { companyId, feature: input.feature, differentAccount: input.differentAccount });
   const state = new URL(url).searchParams.get("state")!;
   fakeGoogleApi({
     "oauth2.googleapis.com/token": () => ({ body: { access_token: "access-1", ...(input.refresh === null ? {} : { refresh_token: input.refresh ?? "refresh-secret-1" }), scope: [SCOPE.openid, SCOPE.email, ...input.grant].join(" "), expires_in: 3600, id_token: idToken(input.sub ?? "google-sub-1", input.email ?? "owner@alpha.test") } }),
@@ -65,20 +65,21 @@ describe("connecting Google", () => {
   it("names exactly what is missing when the deployment is not set up, and connects nothing", async () => {
     vi.stubEnv("GOOGLE_CLIENT_ID", "");
     const { as, companyId } = await company(t, "owner", "Alpha");
-    expect(await refusal(as.mutation(api.google.startConnect, { companyId, features: ["drive"] }))).toMatch(/GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET/);
+    expect(await refusal(as.mutation(api.google.startConnect, { companyId, feature: "drive" }))).toMatch(/GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET/);
     vi.stubEnv("GOOGLE_CLIENT_ID", ENV.GOOGLE_CLIENT_ID);
     vi.stubEnv("MAILBOX_TOKEN_KEY", "");
-    expect(await refusal(as.mutation(api.google.startConnect, { companyId, features: ["drive"] }))).toMatch(/MAILBOX_TOKEN_KEY/);
-    expect((await as.query(api.google.status, { companyId })).connection).toBeNull();
+    expect(await refusal(as.mutation(api.google.startConnect, { companyId, feature: "drive" }))).toMatch(/MAILBOX_TOKEN_KEY/);
+    expect((await as.query(api.google.status, { companyId })).tools.every((tool) => tool.connection === null)).toBe(true);
   });
 
-  it("asks only for the features chosen, with offline access and incremental consent", async () => {
+  it("asks only for the one tool being connected, with offline access", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
-    const { url } = await as.mutation(api.google.startConnect, { companyId, features: ["calendar"] });
+    const { url } = await as.mutation(api.google.startConnect, { companyId, feature: "calendar" });
     const params = new URL(url).searchParams;
     expect(params.get("redirect_uri")).toBe("https://deployment.convex.site.test/oauth/google/callback");
     expect(params.get("access_type")).toBe("offline");
-    expect(params.get("include_granted_scopes")).toBe("true");
+    // Each tool's grant stands alone.
+    expect(params.get("include_granted_scopes")).toBe("false");
     expect(params.get("scope")).toContain(SCOPE.calendarEvents);
     expect(params.get("scope")).not.toContain("drive");
     expect(params.get("scope")).not.toContain("adwords");
@@ -87,13 +88,13 @@ describe("connecting Google", () => {
   it("only an Owner connects, chooses resources or disconnects", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
     const manager = await addMember(t, as, companyId, "manager", "manager");
-    expect(await refusal(manager.mutation(api.google.startConnect, { companyId, features: ["drive"] }))).toMatch(/not allowed|owner/i);
-    await connect(t, as, companyId, { features: ["drive"], grant: [SCOPE.driveFile] });
+    expect(await refusal(manager.mutation(api.google.startConnect, { companyId, feature: "drive" }))).toMatch(/not allowed|owner/i);
+    await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile] });
     expect(await refusal(manager.mutation(api.google.addResource, { companyId, kind: "drive_output", externalId: "folder-1", label: "Photos" }))).toMatch(/not allowed|owner/i);
-    expect(await refusal(manager.mutation(api.google.disconnect, { companyId }))).toMatch(/not allowed|owner/i);
+    expect(await refusal(manager.mutation(api.google.disconnect, { companyId, feature: "drive" }))).toMatch(/not allowed|owner/i);
     // Anyone in the company sees what is connected, but not the platform setup.
     const seen = await manager.query(api.google.status, { companyId });
-    expect(seen.connection?.email).toBe("owner@alpha.test");
+    expect(seen.tools.find((tool) => tool.feature === "drive")?.connection?.email).toBe("owner@alpha.test");
     expect(seen.canManage).toBe(false);
     expect(seen.platform).toEqual([]);
   });
@@ -102,7 +103,7 @@ describe("connecting Google", () => {
     vi.stubEnv("APP_ORIGIN", "");
     const { as, companyId } = await company(t, "owner", "Alpha");
     const started = async (returnTo: string) => {
-      const { url } = await as.mutation(api.google.startConnect, { companyId, features: ["drive"], returnTo });
+      const { url } = await as.mutation(api.google.startConnect, { companyId, feature: "drive", returnTo });
       const state = new URL(url).searchParams.get("state")!;
       const response = await t.fetch(`/oauth/google/callback?state=${encodeURIComponent(state)}&error=access_denied`, { method: "GET" });
       return response.headers.get("location");
@@ -113,14 +114,15 @@ describe("connecting Google", () => {
     expect(await started("http://selestial.io")).toBe("/app/settings/integrations?google=1&result=declined#google");
   });
 
-  it("keeps partial consent as granted, seals the token, and uses each state once", async () => {
+  it("keeps partial consent as partial, seals the token, and uses each state once", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
-    const first = await connect(t, as, companyId, { features: ["drive", "calendar"], grant: [SCOPE.driveFile] });
+    // Calendar needs three scopes; Google granted one.
+    const first = await connect(t, as, companyId, { feature: "calendar", grant: [SCOPE.calendarEvents] });
     expect(first.response.status).toBe(302);
     expect(first.location).toBe("https://app.selestial.test/app/settings/integrations?google=1&result=partial%3Acalendar#google");
-    const status = await as.query(api.google.status, { companyId });
-    expect(status.features.find((f) => f.feature === "drive")?.granted).toBe(true);
-    expect(status.features.find((f) => f.feature === "calendar")?.granted).toBe(false);
+    const calendar = (await as.query(api.google.status, { companyId })).tools.find((tool) => tool.feature === "calendar")!;
+    expect(calendar.granted).toBe(false);
+    expect(calendar.missing).toEqual(expect.arrayContaining([SCOPE.calendarList, SCOPE.calendarFreeBusy]));
     const stored = await t.run((ctx) => ctx.db.query("googleCredentials").collect());
     expect(stored).toHaveLength(1);
     expect(stored[0].sealedRefreshToken).not.toContain("refresh-secret-1");
@@ -129,28 +131,47 @@ describe("connecting Google", () => {
     expect(again.headers.get("location")).toContain("result=expired");
   });
 
-  it("adds features to the same account, refuses a different one unless asked, and replaces it when asked", async () => {
+  it("connects each tool on its own, with its own Google account, and changes one tool without touching another", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
-    await connect(t, as, companyId, { features: ["drive"], grant: [SCOPE.driveFile] });
+    await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile] });
     await as.mutation(api.google.addResource, { companyId, kind: "drive_output", externalId: "folder-1", label: "Photos", purpose: "photos" });
-    const added = await connect(t, as, companyId, { features: ["calendar"], grant: [SCOPE.driveFile, SCOPE.calendarList, SCOPE.calendarEvents, SCOPE.calendarFreeBusy] });
-    expect(added.location).toContain("result=connected");
-    expect((await as.query(api.google.status, { companyId })).features.filter((f) => f.granted).map((f) => f.feature)).toEqual(["drive", "calendar"]);
-    const wrong = await connect(t, as, companyId, { features: ["business_profile"], grant: [SCOPE.business], sub: "someone-else", email: "other@alpha.test" });
+    // Calendar on a different Google account than Drive.
+    const calendar = await connect(t, as, companyId, { feature: "calendar", grant: [SCOPE.calendarList, SCOPE.calendarEvents, SCOPE.calendarFreeBusy], sub: "sub-calendar", email: "scheduling@alpha.test" });
+    expect(calendar.location).toContain("result=connected");
+    let tools = (await as.query(api.google.status, { companyId })).tools;
+    expect(tools.filter((tool) => tool.granted).map((tool) => [tool.feature, tool.connection?.email])).toEqual([["drive", "owner@alpha.test"], ["calendar", "scheduling@alpha.test"]]);
+    // Each tool can only use its own grant: a Drive token cannot do Calendar.
+    expect(await t.run((ctx) => ctx.db.query("googleCredentials").collect())).toHaveLength(2);
+    // Reconnecting Drive with another account is refused unless the Owner chose a different account.
+    const wrong = await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile], sub: "someone-else", email: "other@alpha.test" });
     expect(wrong.location).toContain("result=different_account");
-    expect((await as.query(api.google.status, { companyId })).connection?.email).toBe("owner@alpha.test");
-    const replaced = await connect(t, as, companyId, { features: ["drive"], grant: [SCOPE.driveFile], sub: "someone-else", email: "other@alpha.test", differentAccount: true });
+    const replaced = await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile], sub: "someone-else", email: "other@alpha.test", differentAccount: true });
     expect(replaced.location).toContain("result=connected");
-    const now = await as.query(api.google.status, { companyId });
-    expect(now.connection?.email).toBe("other@alpha.test");
-    // What the old account authorized does not carry over.
-    expect(now.resources).toEqual([]);
+    tools = (await as.query(api.google.status, { companyId })).tools;
+    expect(tools.find((tool) => tool.feature === "drive")?.connection?.email).toBe("other@alpha.test");
+    // Drive's old resources do not carry over; Calendar is untouched.
+    expect(tools.find((tool) => tool.feature === "drive")?.resources).toEqual([]);
+    expect(tools.find((tool) => tool.feature === "calendar")?.connection?.email).toBe("scheduling@alpha.test");
+    // Disconnecting Calendar leaves Drive running.
+    await as.mutation(api.google.disconnect, { companyId, feature: "calendar" });
+    tools = (await as.query(api.google.status, { companyId })).tools;
+    expect(tools.find((tool) => tool.feature === "calendar")?.connection).toBeNull();
+    expect(tools.find((tool) => tool.feature === "drive")?.granted).toBe(true);
+  });
+
+  it("revokes at Google only when no other connected tool uses the same Google account", async () => {
+    const { as, companyId } = await company(t, "owner", "Alpha");
+    await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile] });
+    await connect(t, as, companyId, { feature: "business_profile", grant: [SCOPE.business] });
+    expect(await as.mutation(api.google.disconnect, { companyId, feature: "drive" })).toMatchObject({ revokedAtGoogle: false });
+    expect((await as.query(api.google.status, { companyId })).tools.find((tool) => tool.feature === "business_profile")?.granted).toBe(true);
+    expect(await as.mutation(api.google.disconnect, { companyId, feature: "business_profile" })).toMatchObject({ revokedAtGoogle: true });
   });
 
   it("refuses a resource for a feature that was not granted, and checks access with Google before calling it verified", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
-    await connect(t, as, companyId, { features: ["drive"], grant: [SCOPE.driveFile] });
-    expect(await refusal(as.mutation(api.google.addResource, { companyId, kind: "calendar_sync", externalId: "primary", label: "Main" }))).toMatch(/not granted/);
+    await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile] });
+    expect(await refusal(as.mutation(api.google.addResource, { companyId, kind: "calendar_sync", externalId: "primary", label: "Main" }))).toMatch(/Connect Google Calendar first/);
     const resourceId = await as.mutation(api.google.addResource, { companyId, kind: "drive_source", externalId: "folder-9", label: "Price sheets" });
     expect((await as.query(api.google.status, { companyId })).resources[0].access).toBe("unverified");
     fakeGoogleApi({
@@ -167,30 +188,30 @@ describe("connecting Google", () => {
 
   it("an expired grant marks the connection expired, and work for it stops", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
-    await connect(t, as, companyId, { features: ["drive"], grant: [SCOPE.driveFile] });
-    const connectionId = (await as.query(api.google.status, { companyId })).connection!.id;
+    await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile] });
+    const connectionId = (await as.query(api.google.status, { companyId })).tools.find((tool) => tool.feature === "drive")!.connection!.id;
     fakeGoogleApi({ "oauth2.googleapis.com/token": () => ({ status: 400, body: { error: "invalid_grant", error_description: "Token has been expired or revoked." } }) });
     const jobId = await t.run(async (ctx) => (await ctx.db.insert("googleJobs", { companyId, connectionId, kind: "sheet_export", key: "k1", status: "running", payload: "{}", attempts: 1, nextAt: 0, createdAt: 0, updatedAt: Date.now() })));
     await t.action(internal.googleWork.run, { jobId });
     const status = await as.query(api.google.status, { companyId });
-    expect(status.connection?.status).toBe("expired");
+    expect(status.tools.find((tool) => tool.feature === "drive")?.connection?.status).toBe("expired");
     expect(await t.run((ctx) => ctx.db.get(jobId))).toMatchObject({ status: "cancelled" });
   });
 
   it("disconnecting stops everything at once: queued work, resources, the stored authorization", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
-    await connect(t, as, companyId, { features: ["drive"], grant: [SCOPE.driveFile] });
+    await connect(t, as, companyId, { feature: "drive", grant: [SCOPE.driveFile] });
     const folder = await as.mutation(api.google.addResource, { companyId, kind: "drive_output", externalId: "folder-1", label: "Reports", purpose: "reports" });
     // Let the access check (against the fake, which has no such folder) finish, then mark it reachable.
     await new Promise((resolve) => setTimeout(resolve, 50));
     await t.finishInProgressScheduledFunctions();
     await t.run((ctx) => ctx.db.patch(folder, { access: "verified" }));
     const queued = await as.mutation(api.googleDrive.exportSchedule, { companyId });
-    await as.mutation(api.google.disconnect, { companyId });
+    await as.mutation(api.google.disconnect, { companyId, feature: "drive" });
     expect(await t.run((ctx) => ctx.db.get(queued.jobId))).toMatchObject({ status: "cancelled" });
     expect(await t.run((ctx) => ctx.db.query("googleCredentials").collect())).toEqual([]);
     expect(await t.run((ctx) => ctx.db.query("googleResources").collect())).toEqual([]);
-    expect(await refusal(as.mutation(api.googleDrive.exportSchedule, { companyId }))).toMatch(/not connected|Connect Google/i);
+    expect(await refusal(as.mutation(api.googleDrive.exportSchedule, { companyId }))).toMatch(/Drive.*not connected/i);
   });
 });
 
@@ -208,14 +229,15 @@ describe("tenant isolation", () => {
   it("one company cannot see, use or remove another company's Google resources, reviews or drafts", async () => {
     const a = await company(t, "owner-a", "Alpha");
     const b = await company(t, "owner-b", "Bravo");
-    await connect(t, a.as, a.companyId, { features: ["drive", "business_profile"], grant: [SCOPE.driveFile, SCOPE.business] });
+    await connect(t, a.as, a.companyId, { feature: "drive", grant: [SCOPE.driveFile] });
+    await connect(t, a.as, a.companyId, { feature: "business_profile", grant: [SCOPE.business] });
     const resourceId = await a.as.mutation(api.google.addResource, { companyId: a.companyId, kind: "drive_source", externalId: "folder-a", label: "A's prices" });
     const reviewId = await t.run((ctx) => ctx.db.insert("googleReviews", { companyId: a.companyId, location: "locations/1", reviewName: "accounts/1/locations/1/reviews/r1", reviewer: "Pat", stars: 5, createdAt: 0, state: "new", seenAt: 0 }));
-    expect((await b.as.query(api.google.status, { companyId: b.companyId })).connection).toBeNull();
+    expect((await b.as.query(api.google.status, { companyId: b.companyId })).tools.every((tool) => tool.connection === null)).toBe(true);
     expect(await b.as.query(api.googleBusiness.reviews, { companyId: b.companyId })).toEqual([]);
     expect(await refusal(b.as.mutation(api.google.removeResource, { companyId: b.companyId, resourceId }))).toMatch(/not found/i);
     expect(await refusal(b.as.mutation(api.googleDrive.importKnowledge, { companyId: b.companyId, resourceId }))).toMatch(/not connected|Connect Google|not found/i);
-    await connect(t, b.as, b.companyId, { features: ["business_profile"], grant: [SCOPE.business], sub: "sub-b", email: "b@bravo.test" });
+    await connect(t, b.as, b.companyId, { feature: "business_profile", grant: [SCOPE.business], sub: "sub-b", email: "b@bravo.test" });
     expect(await refusal(b.as.mutation(api.googleBusiness.approveReply, { companyId: b.companyId, reviewId, text: "Thanks!" }))).toMatch(/not found/i);
     // And B cannot name A's company at all.
     expect(await refusal(b.as.query(api.google.status, { companyId: a.companyId }))).toBeTruthy();
@@ -288,7 +310,7 @@ describe("approvals before anything public or paid", () => {
   it("a campaign draft spends nothing, only the Owner approves it with the exact budget, and turning it on is separate", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
     const manager = await addMember(t, as, companyId, "manager", "manager");
-    await connect(t, as, companyId, { features: ["ads"], grant: [SCOPE.ads] });
+    await connect(t, as, companyId, { feature: "ads", grant: [SCOPE.ads] });
     await as.mutation(api.google.addResource, { companyId, kind: "ads_account", externalId: "1234567890", label: "Alpha Ads" });
     const { draftId, spends } = await manager.mutation(api.googleAds.draftCampaign, { companyId, accountId: "123-456-7890", name: "Spring", dailyBudgetCents: 2500, keywords: ["house cleaning"], postalCodes: ["78701"], headline: "Spotless homes", description: "Trusted cleaners near you.", finalUrl: "https://alpha.test" });
     expect(spends).toBe(false);
@@ -302,7 +324,7 @@ describe("approvals before anything public or paid", () => {
 
   it("a review reply is published only as approved, and an uncertain earlier attempt is reconciled instead of posted twice", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
-    await connect(t, as, companyId, { features: ["business_profile"], grant: [SCOPE.business] });
+    await connect(t, as, companyId, { feature: "business_profile", grant: [SCOPE.business] });
     await as.mutation(api.google.addResource, { companyId, kind: "business_location", externalId: "locations/22", label: "Alpha Austin", detail: "accounts/11" });
     const name = "accounts/11/locations/22/reviews/r1";
     const reviewId = await t.run((ctx) => ctx.db.insert("googleReviews", { companyId, location: "locations/22", reviewName: name, reviewer: "Pat", stars: 5, createdAt: 0, state: "new", seenAt: 0 }));

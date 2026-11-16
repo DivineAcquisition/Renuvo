@@ -142,7 +142,7 @@ http.route({
         }
         const who = identityFrom(tokens.idToken);
         if (!who?.email) return afterGoogle("failed", google.returnOrigin);
-        const done = await ctx.runMutation(internal.google.completeConnect, { companyId: google.companyId, memberId: google.memberId, connectionId: google.connectionId, googleSub: who.sub, email: who.email, scopes: tokens.scopes, hasRefreshToken: Boolean(tokens.refreshToken) });
+        const done = await ctx.runMutation(internal.google.completeConnect, { companyId: google.companyId, memberId: google.memberId, feature: google.features[0], connectionId: google.connectionId, googleSub: who.sub, email: who.email, scopes: tokens.scopes, hasRefreshToken: Boolean(tokens.refreshToken) });
         if (!done.ok) return afterGoogle(done.reason, google.returnOrigin);
         if (tokens.refreshToken) {
           const sealed = await seal(tokens.refreshToken, done.connectionId);

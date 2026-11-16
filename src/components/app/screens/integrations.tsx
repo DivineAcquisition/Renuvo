@@ -226,24 +226,26 @@ function AgentTools({ agent, selected, onSelect }: { agent: AgentId; selected: b
 }
 
 /**
- * The company's one Google connection, on this page rather than a Settings tab of its own: a row saying
- * where it stands, opening into the full setup (which files, calendars, locations and ad accounts).
+ * The company's Google tools, on this page rather than a Settings tab of its own: a row saying which are
+ * connected, opening into each tool's own connection and setup (files, calendars, locations, ad accounts).
  */
 function GoogleAccount({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { companyId } = useCompany();
   const status = useQuery(api.google.status, { companyId });
-  const connection = status?.connection ?? null;
-  const words = !status ? "Loading…" : connection?.status === "connected" ? `Connected as ${connection.email}` : connection?.status === "expired" ? "Reconnect needed" : "Not connected";
+  const on = status?.tools.filter((tool) => tool.granted) ?? [];
+  const expired = status?.tools.some((tool) => tool.connection?.status === "expired") ?? false;
+  const words = !status ? "Loading…" : on.length ? `${on.length} of ${status.tools.length} connected${expired ? "; one needs reconnecting" : ""}` : expired ? "Reconnect needed" : "None connected yet";
+  const anyOn = on.length > 0;
   return (
     <section id="google" className="mb-5 scroll-mt-20 rounded-2xl border border-border bg-card">
       <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3.5 text-left sm:px-5">
         <IntegrationMark id="google-local-services-ads" size="lg" />
         <span className="min-w-0 flex-1">
-          <span className="block font-medium text-strong">Your Google account</span>
-          <span className="block truncate text-xs text-muted-foreground">One connection for Drive, Calendar, Business Profile and Ads. {words}.</span>
+          <span className="block font-medium text-strong">Google tools</span>
+          <span className="block truncate text-xs text-muted-foreground">Drive, Calendar, Business Profile, Ads and conversions, each connected on its own. {words}.</span>
         </span>
-        <span className={cn(open ? secondary : connection?.status === "connected" ? secondary : primary, "shrink-0")}>
-          {open ? "Close" : connection?.status === "connected" ? "Manage" : "Set up"}
+        <span className={cn(open ? secondary : anyOn ? secondary : primary, "shrink-0")}>
+          {open ? "Close" : anyOn ? "Manage" : "Set up"}
           <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
         </span>
       </button>

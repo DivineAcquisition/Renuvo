@@ -352,7 +352,7 @@ export const sweepConversions = internalMutation({
     for (const settings of settingsRows) {
       if (!settings.conversionConsent) continue;
       const companyId = settings.companyId;
-      const connection = await activeConnection(ctx, companyId);
+      const connection = await activeConnection(ctx, companyId, "conversions");
       if (!connection || connection.status !== "connected") continue;
       const leads = await ctx.db.query("googleLeads").withIndex("by_company_received", (q) => q.eq("companyId", companyId).gt("receivedAt", Date.now() - 90 * DAY)).take(500);
       for (const lead of leads) {
@@ -380,7 +380,7 @@ export const sweepLocalServices = internalMutation({
     let queued = 0;
     for (const row of rows) {
       if (row.kind !== "ads_account" || row.access === "lost") continue;
-      const connection = await activeConnection(ctx, row.companyId);
+      const connection = await activeConnection(ctx, row.companyId, "ads");
       if (!connection || connection.status !== "connected" || !connection.grantedScopes.includes("https://www.googleapis.com/auth/adwords")) continue;
       await enqueue(ctx, { companyId: row.companyId, connectionId: connection._id, kind: "lsa_poll", key: `lsa_poll:${row.externalId}:${bucket}`, payload: { accountId: row.externalId, loginCustomerId: row.detail } });
       queued += 1;

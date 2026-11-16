@@ -19,8 +19,11 @@ export const JOB_KINDS = ["drive_upload", "doc_export", "sheet_export", "calenda
 export const jobKindValidator = literals(JOB_KINDS);
 
 export const googleTables = {
+  /** One connection per tool (Drive, Calendar, Business Profile, Ads, Conversions), each with its own Google account and grant. */
   googleConnections: defineTable({
     companyId: v.id("companies"),
+    /** The tool this connection is for. Absent only on rows made before connections were per tool (see google.migrateToPerTool). */
+    feature: v.optional(featureValidator),
     /** Google's stable id for the account, and its address. One company may have one active connection. */
     googleSub: v.string(),
     email: v.string(),
@@ -31,7 +34,10 @@ export const googleTables = {
     connectedAt: v.number(),
     lastRefreshAt: v.optional(v.number()),
     disconnectedAt: v.optional(v.number()),
-  }).index("by_company", ["companyId"]),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_company_feature", ["companyId", "feature"])
+    .index("by_sub", ["googleSub"]),
 
   googleCredentials: defineTable({
     companyId: v.id("companies"),

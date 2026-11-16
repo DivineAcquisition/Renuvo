@@ -41,7 +41,7 @@ export type Integration = {
 export const CATEGORIES: readonly { id: IntegrationCategory; label: string; lead: string }[] = [
   { id: "payments", label: "Payments", lead: "Get paid by your customers. Selestial never holds your money: it goes to the account you connect." },
   { id: "leads", label: "Lead sources", lead: "Where new customers find you. Each new lead reaches Sales the moment it arrives, so nobody waits for a reply." },
-  { id: "google", label: "Google", lead: "One Google connection covers Drive, Docs and Sheets, Calendar and your Business Profile, and you choose exactly which files, calendars and locations. Gmail is connected for the hiring inbox. Address search and travel times are built in." },
+  { id: "google", label: "Google", lead: "Connect each Google tool on its own (Drive, Docs and Sheets, Calendar, Business Profile, Ads), with the Google account you choose for it, and choose exactly which files, calendars and locations it may use. Gmail is connected for the hiring inbox. Address search and travel times are built in." },
   { id: "microsoft", label: "Microsoft 365", lead: "For companies on Microsoft instead of Google: the same jobs with Outlook and OneDrive." },
   { id: "reviews", label: "Reviews", lead: "Retention asks happy customers for a review where it helps you most, and drafts replies for your approval." },
   { id: "communication", label: "Texting", lead: "Texts to customers, cleaners and applicants go through one sending policy: consent, quiet hours and limits." },

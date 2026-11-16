@@ -10,17 +10,25 @@ import { enabledFeatures, FEATURE_INFO, type Feature } from "./features";
 
 type Ctx = QueryCtx | MutationCtx;
 
-export async function activeConnection(ctx: Ctx, companyId: Id<"companies">): Promise<Doc<"googleConnections"> | null> {
-  const rows = await ctx.db.query("googleConnections").withIndex("by_company", (q) => q.eq("companyId", companyId)).take(10);
+/** This tool's connection (connected or expired), if the Owner set one up. Each tool has its own. */
+export async function activeConnection(ctx: Ctx, companyId: Id<"companies">, feature: Feature): Promise<Doc<"googleConnections"> | null> {
+  const rows = await ctx.db.query("googleConnections").withIndex("by_company_feature", (q) => q.eq("companyId", companyId).eq("feature", feature)).take(10);
   return rows.find((row) => row.status !== "disconnected") ?? null;
 }
 
-/** The connection, ready for this feature, or a plain reason it is not. */
+/** Every tool's connection that is not disconnected. */
+export async function activeConnections(ctx: Ctx, companyId: Id<"companies">): Promise<Doc<"googleConnections">[]> {
+  const rows = await ctx.db.query("googleConnections").withIndex("by_company", (q) => q.eq("companyId", companyId)).take(50);
+  return rows.filter((row) => row.status !== "disconnected" && row.feature);
+}
+
+/** The tool's connection, ready to use, or a plain reason it is not. */
 export async function requireFeature(ctx: Ctx, companyId: Id<"companies">, feature: Feature): Promise<Doc<"googleConnections">> {
-  const connection = await activeConnection(ctx, companyId);
-  if (!connection) throw userError("Google is not connected for this company. The Owner connects it under Integrations › Google.");
-  if (connection.status === "expired") throw userError(`Google's authorization for ${connection.email} has ended. The Owner needs to reconnect.`);
-  if (!enabledFeatures(connection.grantedScopes).includes(feature)) throw userError(`${FEATURE_INFO[feature].label} was not granted when Google was connected. The Owner can add it under Integrations › Google.`);
+  const label = FEATURE_INFO[feature].label;
+  const connection = await activeConnection(ctx, companyId, feature);
+  if (!connection) throw userError(`${label} is not connected for this company. The Owner connects it under Settings › Integrations.`);
+  if (connection.status === "expired") throw userError(`${label}'s Google authorization for ${connection.email} has ended. The Owner needs to reconnect it.`);
+  if (!enabledFeatures(connection.grantedScopes).includes(feature)) throw userError(`Google did not grant everything ${label} needs. The Owner can reconnect it under Settings › Integrations.`);
   return connection;
 }
 

@@ -1,5 +1,5 @@
 /**
- * Chat's tools for Google. Each is thin: it calls the same functions Settings › Integrations (Your Google account) uses, as the
+ * Chat's tools for Google. Each is thin: it calls the same functions Settings › Integrations (Google tools) uses, as the
  * member chatting, with their role and the agent's permission as they are right now. Reads return the
  * records Selestial holds (as last read from Google, with when). Writes return the job that will carry
  * them out: a queued export, draft or reply is reported as queued or drafted, never as done.
@@ -9,7 +9,7 @@ import { approveAndQueue } from "../../googleBusiness";
 import { createDraft } from "../../googleAds";
 import { queueAgreementExport } from "../../googleDrive";
 import { authorityFor } from "../authority";
-import { activeConnection, requireFeature } from "../google/connection";
+import { activeConnections, requireFeature } from "../google/connection";
 import { enabledFeatures, FEATURE_INFO, FEATURES } from "../google/features";
 import { enqueue } from "../google/jobs";
 import { allow } from "../rateLimit";
@@ -43,21 +43,19 @@ export const GOOGLE_TOOLS: ChatTool[] = [
     minimumRole: "office",
     input: { type: "object", properties: {} },
     run: async (ctx) => {
-      const connection = await activeConnection(ctx, ctx.company._id);
-      if (!connection) return { status: "done", summary: "Google is not connected", data: { connected: false, note: "The Owner connects Google under Settings › Integrations (Your Google account)." }, link: SETTINGS };
-      const granted = enabledFeatures(connection.grantedScopes);
-      const resources = await ctx.db.query("googleResources").withIndex("by_connection", (q) => q.eq("connectionId", connection._id)).take(100);
+      const connections = await activeConnections(ctx, ctx.company._id);
       const problems = [...(await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.company._id).eq("status", "failed")).order("desc").take(5)), ...(await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.company._id).eq("status", "uncertain")).order("desc").take(5))];
+      const tools = [];
+      for (const feature of FEATURES) {
+        const connection = connections.find((c) => c.feature === feature);
+        const resources = connection ? await ctx.db.query("googleResources").withIndex("by_connection", (q) => q.eq("connectionId", connection._id)).take(100) : [];
+        tools.push({ tool: FEATURE_INFO[feature].label, status: connection ? connection.status : "not connected", account: connection?.email ?? null, granted: Boolean(connection && enabledFeatures(connection.grantedScopes).includes(feature)), authorized: resources.map((r) => ({ kind: r.kind, label: r.label, purpose: r.purpose ?? null, access: r.access, note: r.accessNote ?? null })) });
+      }
+      const on = tools.filter((t) => t.status === "connected");
       return {
         status: "done",
-        summary: `Google ${connection.status} as ${connection.email}`,
-        data: {
-          status: connection.status,
-          account: connection.email,
-          features: FEATURES.map((f) => ({ feature: FEATURE_INFO[f].label, granted: granted.includes(f) })),
-          authorized: resources.map((r) => ({ kind: r.kind, label: r.label, purpose: r.purpose ?? null, access: r.access, note: r.accessNote ?? null })),
-          problems: problems.map((j) => ({ kind: j.kind, status: j.status, error: j.lastError ?? null, at: when(j.updatedAt, ctx.company.timezone) })),
-        },
+        summary: on.length ? `Google tools connected: ${on.map((t) => t.tool).join(", ")}` : "No Google tool is connected",
+        data: { connected: on.length > 0, tools, note: "Each Google tool is connected on its own by the Owner under Settings › Integrations.", problems: problems.map((j) => ({ kind: j.kind, status: j.status, error: j.lastError ?? null, at: when(j.updatedAt, ctx.company.timezone) })) },
         link: SETTINGS,
       };
     },
@@ -73,7 +71,7 @@ export const GOOGLE_TOOLS: ChatTool[] = [
       const texts = await ctx.db.query("googleDriveTexts").withIndex("by_company_resource", (q) => q.eq("companyId", ctx.company._id)).take(60);
       const filter = typeof args.contains === "string" ? args.contains.toLowerCase() : "";
       const rows = texts.filter((t) => !filter || t.name.toLowerCase().includes(filter)).slice(0, 8);
-      if (rows.length === 0) return { status: "done", summary: "No Drive documents have been read", data: { files: [], note: "The Owner chooses knowledge sources under Settings › Integrations (Your Google account)." }, link: SETTINGS };
+      if (rows.length === 0) return { status: "done", summary: "No Drive documents have been read", data: { files: [], note: "The Owner chooses knowledge sources under Settings › Integrations (Google tools)." }, link: SETTINGS };
       return { status: "done", summary: `${rows.length} Drive document${rows.length === 1 ? "" : "s"}`, data: { files: rows.map((t) => ({ name: t.name, readAt: when(t.fetchedAt, ctx.company.timezone), text: t.text.slice(0, 6000) })) } };
     },
   },
@@ -106,7 +104,7 @@ export const GOOGLE_TOOLS: ChatTool[] = [
       try {
         const connection = await requireFeature(ctx, ctx.company._id, "drive");
         const folder = (await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", ctx.company._id).eq("kind", "drive_output")).take(50)).find((r) => r.purpose === "reports" && r.access !== "lost");
-        if (!folder) return refused("No Drive folder is chosen for reports. The Owner chooses one under Settings › Integrations (Your Google account).");
+        if (!folder) return refused("No Drive folder is chosen for reports. The Owner chooses one under Settings › Integrations (Google tools).");
         const now = Date.now();
         const jobs = await ctx.db.query("jobs").withIndex("by_company_start", (q) => q.eq("companyId", ctx.company._id).gte("startsAt", now).lt("startsAt", now + 14 * 86_400_000)).take(500);
         const tz = ctx.company.timezone;

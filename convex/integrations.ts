@@ -14,7 +14,7 @@ import { byMember, recordEvent } from "./lib/events";
 import { BUILT, isIntegrationId } from "./lib/integrations";
 import { googleApp } from "./lib/recruiter/gmail";
 import { enabledFeatures, type Feature } from "./lib/google/features";
-import { activeConnection } from "./lib/google/connection";
+import { activeConnections } from "./lib/google/connection";
 import { mapsServerKey } from "./lib/google/platform";
 import type { Doc } from "./_generated/dataModel";
 import { secretsConfigured } from "./lib/recruiter/secrets";
@@ -41,14 +41,19 @@ export const overview = companyQuery({
     const textingState: LiveState = !texting || ["failed", "rejected", "cancelled"].includes(texting.status) ? "ready" : texting.status === "active" ? "connected" : "in_progress";
 
     // A Google card is connected only when its permission was granted and something it needs was checked with Google.
-    const google = await activeConnection(ctx, ctx.companyId);
-    const resources: Doc<"googleResources">[] = google ? await ctx.db.query("googleResources").withIndex("by_connection", (q) => q.eq("connectionId", google._id)).take(200) : [];
-    const granted = google?.status === "connected" ? enabledFeatures(google.grantedScopes) : [];
+    // Each Google tool has its own connection. A card is connected only when that tool's permission was
+    // granted and something it needs was checked with Google.
     const googleReady = googleApp() !== null && (await secretsConfigured());
+    const tools = new Map<Feature, { connection: Doc<"googleConnections">; resources: Doc<"googleResources">[] }>();
+    for (const connection of await activeConnections(ctx, ctx.companyId)) {
+      tools.set(connection.feature!, { connection, resources: await ctx.db.query("googleResources").withIndex("by_connection", (q) => q.eq("connectionId", connection._id)).take(200) });
+    }
     const googleCard = (feature: Feature, kinds: Doc<"googleResources">["kind"][]): { state: LiveState; detail: string | null } => {
-      if (!granted.includes(feature)) return { state: google?.status === "expired" ? "in_progress" : googleReady ? "ready" : "not_set_up", detail: google?.status === "expired" ? "Reconnect needed" : null };
-      const verified = resources.filter((r) => kinds.includes(r.kind) && r.access === "verified");
-      return verified.length ? { state: "connected", detail: verified.map((r) => r.label).slice(0, 2).join(", ") } : { state: "in_progress", detail: "Choose what Selestial may use" };
+      const tool = tools.get(feature);
+      if (tool?.connection.status === "expired") return { state: "in_progress", detail: "Reconnect needed" };
+      if (!tool || !enabledFeatures(tool.connection.grantedScopes).includes(feature)) return { state: googleReady ? "ready" : "not_set_up", detail: null };
+      const verified = tool.resources.filter((r) => kinds.includes(r.kind) && r.access === "verified");
+      return verified.length ? { state: "connected", detail: verified.map((r) => r.label).slice(0, 2).join(", ") } : { state: "in_progress", detail: `${tool.connection.email} · choose what Selestial may use` };
     };
 
     const requests = await ctx.db
