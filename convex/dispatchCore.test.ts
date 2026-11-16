@@ -406,3 +406,52 @@ describe("Dispatch: a busy range is paged, and its total is counted, never guess
     expect(live.total).toEqual({ total: 250, atLeast: false });
   });
 });
+
+describe("Dispatch: a photo's address stops working", () => {
+  let undo = () => {};
+  beforeEach(() => {
+    undo = dispatchTestEnv();
+    process.env.CONVEX_SITE_URL = "https://example-123.convex.site";
+  });
+  afterEach(() => {
+    delete process.env.CONVEX_SITE_URL;
+    undo();
+  });
+
+  it("serves a photo only at a signed address, until it expires", async () => {
+    const s = await setup();
+    const a = await accepted(s);
+    vi.setSystemTime(JOB_START);
+    await s.t.mutation(api.links.checkInJob, { token: a.jobToken });
+    const storageId = await s.t.run(async (ctx) => ctx.storage.store(new Blob(["jpeg-bytes"], { type: "image/jpeg" })));
+    await s.t.mutation(api.links.attachPhoto, { token: a.jobToken, storageId, kind: "before", clientKey: "before-photo-0001" });
+
+    const [photo] = await s.as.query(api.dispatchViews.jobPhotos, { companyId: s.companyId, jobId: a.jobId, asOf: JOB_START });
+    expect(photo.expiring).toBe(true);
+    const url = new URL(photo.url!);
+    expect(url.origin).toBe("https://example-123.convex.site");
+    expect(url.pathname).toBe(`/photos/${photo.evidenceId}`);
+    const path = `${url.pathname}${url.search}`;
+
+    const ok = await s.t.fetch(path, { method: "GET" });
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get("content-type")).toBe("image/jpeg");
+    expect(ok.headers.get("cache-control")).toMatch(/^private, max-age=\d+$/);
+    expect(await ok.text()).toBe("jpeg-bytes");
+
+    // A changed signature, a changed expiry, or another id: all a plain 404.
+    expect((await s.t.fetch(path.replace(/sig=./, "sig=x"), { method: "GET" })).status).toBe(404);
+    expect((await s.t.fetch(path.replace(/exp=\d+/, `exp=${Number(url.searchParams.get("exp")) + 60_000}`), { method: "GET" })).status).toBe(404);
+    expect((await s.t.fetch(`/photos/${a.jobId}${url.search}`, { method: "GET" })).status).toBe(404);
+    // A screen asking far in the future is signed for the server's own time instead.
+    const [future] = await s.as.query(api.dispatchViews.jobPhotos, { companyId: s.companyId, jobId: a.jobId, asOf: JOB_START + 30 * 24 * HOUR });
+    expect(new URL(future.url!).searchParams.get("exp")).toBe(url.searchParams.get("exp"));
+    // The cleaner's own page gets a signed address too.
+    const page = await s.t.query(api.links.job, { token: a.jobToken, asOf: JOB_START });
+    expect(page.detail!.photos.before[0].url).toMatch(/^https:\/\/example-123\.convex\.site\/photos\//);
+
+    // Forty minutes on, the same address no longer works.
+    vi.setSystemTime(JOB_START + 41 * 60_000);
+    expect((await s.t.fetch(path, { method: "GET" })).status).toBe(404);
+  });
+});

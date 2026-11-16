@@ -8,7 +8,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import { internalQuery, type QueryCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyQuery, type MemberAccess } from "./lib/builders";
 import { jobCoverageRequests } from "./lib/dispatch/coverage";
@@ -17,6 +17,7 @@ import { jobAssignments } from "./lib/dispatch/facts";
 import { linkState } from "./lib/dispatch/links";
 import { affectedLaterJobs, arrivalEndsAt, jobChecklist, jobEvidence, noShowConditions } from "./lib/dispatch/live";
 import { isManager } from "./lib/roles";
+import { photoLinksReady, signedPhotoUrl, signingTime } from "./lib/dispatch/photoLinks";
 import { dispatchPolicy } from "./lib/dispatch/policy";
 import { dispatchSettings } from "./lib/dispatch/settings";
 import { coverKey, jobApprovals } from "./lib/dispatch/workflow";
@@ -433,13 +434,15 @@ export const jobRecord = companyQuery({
 
 /**
  * The photos the crew added to one visit, for a person in the company to review. Read only through the
- * company's own access check; a cleaner's link is never used for this. Each address is the stored
- * file's, served to whoever holds it, so it is fetched here per view and never stored or logged.
+ * company's own access check; a cleaner's link is never used for this. Each address is signed and stops
+ * working within 40 minutes (convex/lib/dispatch/photoLinks.ts). It is never stored or logged.
  */
 export const jobPhotos = companyQuery({
-  args: { jobId: v.id("jobs") },
+  /** The screen's current minute. The addresses are signed for it, so they refresh as time passes. */
+  args: { jobId: v.id("jobs"), asOf: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const job = await owned(ctx, args.jobId);
+    const at = signingTime(args.asOf);
     const rows = await jobEvidence(ctx, job);
     const items = await jobChecklist(ctx, job);
     const names = new Map<string, string>();
@@ -449,12 +452,24 @@ export const jobPhotos = companyQuery({
       out.push({
         evidenceId: row._id,
         kind: row.kind,
-        url: await ctx.storage.getUrl(row.storageId),
+        url: (await signedPhotoUrl(row._id, at)) ?? (await ctx.storage.getUrl(row.storageId)),
+        /** False when this deployment cannot sign addresses, so this one does not expire. */
+        expiring: photoLinksReady(),
         by: names.get(row.cleanerId)!,
         uploadedAt: row.uploadedAt,
         item: row.checklistItemId ? (items.find((item) => item._id === row.checklistItemId)?.label ?? null) : null,
       });
     }
     return out;
+  },
+});
+
+/** The stored file behind a photo whose address was already checked. Internal: only /photos calls it. */
+export const photoFile = internalQuery({
+  args: { evidenceId: v.string() },
+  handler: async (ctx, args) => {
+    const id = ctx.db.normalizeId("evidence", args.evidenceId);
+    const row = id ? await ctx.db.get(id) : null;
+    return row ? row.storageId : null;
   },
 });

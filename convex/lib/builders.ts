@@ -418,3 +418,16 @@ export function providerWebhook(def: {
     return new Response(null, { status: 200 });
   });
 }
+
+/**
+ * A GET for a stored file, served only for a request whose address the deployment signed and that has
+ * not expired. `verify` decides; anything it refuses is a plain 404, so a wrong id, a wrong signature
+ * and an expired address cannot be told apart.
+ */
+export function signedFileRoute(def: { verify: (request: Request, now: number) => Promise<boolean>; handler: (ctx: ActionCtx, request: Request, now: number) => Promise<Response | null> }): PublicHttpAction {
+  return httpAction(async (ctx, request) => {
+    const now = Date.now();
+    if (!(await def.verify(request, now))) return new Response("Not found.", { status: 404 });
+    return (await def.handler(ctx, request, now)) ?? new Response("Not found.", { status: 404 });
+  });
+}

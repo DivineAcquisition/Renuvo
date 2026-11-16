@@ -7,6 +7,7 @@ import { canManage, useCompany } from "@/components/app/company";
 import { DispatchView } from "@/components/app/dispatch-view";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { HoldButton } from "@/components/app/hold-button";
+import { useNow } from "@/components/app/use-now";
 import { Modal } from "@/components/app/modal";
 import { EditVisitForm, MoveVisitForm } from "@/components/app/screens/visit-forms";
 import { Button } from "@/components/ui/button";
@@ -117,7 +118,9 @@ const PHOTO_KIND: Record<string, string> = { before: "Before", after: "After", i
 /** The crew's photos, grouped as they were taken. Each opens full size in a new tab. */
 function Photos({ jobId }: { jobId: Id<"jobs"> }) {
   const { companyId, timezone } = useCompany();
-  const photos = useQuery(api.dispatchViews.jobPhotos, { companyId, jobId });
+  const now = useNow();
+  // The current minute goes with the request, so the signed addresses refresh before they stop working.
+  const photos = useQuery(api.dispatchViews.jobPhotos, now ? { companyId, jobId, asOf: now } : "skip");
   if (photos === undefined) return <div className="h-16 animate-pulse rounded-lg bg-card" />;
   if (photos.length === 0) return <p className="text-xs text-muted-foreground">No photos were added to this visit.</p>;
   return (

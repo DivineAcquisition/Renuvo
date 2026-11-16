@@ -8,8 +8,9 @@
 import { httpRouter } from "convex/server";
 
 import { internal } from "./_generated/api";
-import { providerWebhook } from "./lib/builders";
+import { providerWebhook, signedFileRoute } from "./lib/builders";
 import { verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
+import { photoRequestValid } from "./lib/dispatch/photoLinks";
 import { telnyxEvent, verifyTelnyx } from "./lib/messaging/telnyx";
 
 const http = httpRouter();
@@ -48,6 +49,30 @@ http.route({
       } else if (event.kind === "inbound") {
         await ctx.runMutation(internal.inbound.telnyx, { eventId: event.eventId, to: event.to, from: event.from, body: event.text, receivedAt: event.receivedAt });
       }
+    },
+  }),
+});
+
+/**
+ * GET /photos/<evidence id>?exp=…&sig=…  one crew photo, for an address signed by the deployment that
+ * has not expired. Anything else is a plain 404, whatever was wrong with it.
+ */
+http.route({
+  pathPrefix: "/photos/",
+  method: "GET",
+  handler: signedFileRoute({
+    verify: async (request, now) => {
+      const url = new URL(request.url);
+      const evidenceId = url.pathname.slice("/photos/".length);
+      return /^[a-z0-9]{10,64}$/i.test(evidenceId) && photoRequestValid(evidenceId, url.searchParams.get("exp"), url.searchParams.get("sig"), now);
+    },
+    handler: async (ctx, request, now) => {
+      const url = new URL(request.url);
+      const storageId = await ctx.runQuery(internal.dispatchViews.photoFile, { evidenceId: url.pathname.slice("/photos/".length) });
+      const file = storageId ? await ctx.storage.get(storageId) : null;
+      if (!file) return null;
+      const seconds = Math.max(0, Math.floor((Number(url.searchParams.get("exp")) - now) / 1000));
+      return new Response(file, { status: 200, headers: { "content-type": file.type || "application/octet-stream", "cache-control": `private, max-age=${seconds}`, "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
     },
   }),
 });

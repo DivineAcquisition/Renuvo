@@ -89,7 +89,7 @@ opened". A text's `delivered` means the provider confirmed the handset got it, a
   quarter hour. `dispatchOps.recordCannotAttend` records a drop-out a person was told about; it opens
   the place and cover exactly as the cleaner's own link would.
 - **Photos** in the review are read through `dispatchViews.jobPhotos` (the company's own access check).
-  The addresses are the stored files' own and do not expire; expiring addresses are still to do.
+  Each address is signed and works for 30 to 40 minutes (`convex/lib/dispatch/photoLinks.ts`, served at `/photos/<id>`); screens pass their current minute so it refreshes. A deployment without `ACTION_LINK_SECRET` or `CONVEX_SITE_URL` falls back to the stored file's own address and marks it `expiring: false`.
 
 ## Texting through Telnyx
 
