@@ -351,6 +351,8 @@ export const recruiterTables = {
     sources: v.array(sourceValidator),
     processFrom: v.number(),
     canSend: v.boolean(),
+    /** The app address the Owner started from, already checked (returnOrigin). */
+    returnOrigin: v.optional(v.string()),
     expiresAt: v.number(),
     usedAt: v.optional(v.number()),
   }).index("by_stateHash", ["stateHash"]),

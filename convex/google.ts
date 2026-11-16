@@ -29,13 +29,13 @@ import { GoogleError } from "./lib/google/http";
 import { consentUrl, googleApp, redirectUri, refresh, revoke } from "./lib/google/oauth";
 import { endpoints, platformStatus } from "./lib/google/platform";
 import { featureValidator, resourceKindValidator } from "./lib/google/schema";
-import { appOrigin } from "./lib/invitations";
+import { appOrigin, returnOrigin } from "./lib/invitations";
 import { hashToken, randomToken, secretsConfigured, unseal } from "./lib/recruiter/secrets";
 
 const STATE_LIFE = 10 * 60 * 1000;
 
-export function afterGoogle(outcome: string): string {
-  return `${appOrigin() ?? ""}/app/settings/google?result=${encodeURIComponent(outcome)}`;
+export function afterGoogle(outcome: string, origin?: string | null): string {
+  return `${returnOrigin(origin) ?? appOrigin() ?? ""}/app/settings/google?result=${encodeURIComponent(outcome)}`;
 }
 
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ export const status = companyQuery({
 // ── Connecting ──────────────────────────────────────────────────────────────────────────────────
 
 export const startConnect = ownerMutation({
-  args: { features: v.array(featureValidator), differentAccount: v.optional(v.boolean()) },
+  args: { features: v.array(featureValidator), differentAccount: v.optional(v.boolean()), returnTo: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const app = googleApp();
     const redirect = redirectUri();
@@ -88,7 +88,7 @@ export const startConnect = ownerMutation({
     const wanted = adding ? features.filter((f) => missingScopes(f, adding.grantedScopes).length > 0) : features;
     if (adding && wanted.length === 0 && adding.status === "connected") throw userError("Those are already connected.");
     const state = await randomToken();
-    await ctx.db.insert("googleOAuthStates", { companyId: ctx.companyId, memberId: ctx.member._id, stateHash: await hashToken(state), features: adding && wanted.length ? wanted : features, connectionId: adding?._id, expiresAt: Date.now() + STATE_LIFE });
+    await ctx.db.insert("googleOAuthStates", { companyId: ctx.companyId, memberId: ctx.member._id, stateHash: await hashToken(state), features: adding && wanted.length ? wanted : features, connectionId: adding?._id, returnOrigin: returnOrigin(args.returnTo) ?? undefined, expiresAt: Date.now() + STATE_LIFE });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "google.connect_started", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { features: features.join(","), differentAccount: Boolean(args.differentAccount) } });
     return { url: consentUrl(app, { redirectUri: redirect, state, scopes: scopesFor(adding && wanted.length ? wanted : features), loginHint: adding?.email, selectAccount: Boolean(args.differentAccount) || !adding }) };
   },
@@ -102,12 +102,12 @@ export const takeState = internalMutation({
     if (!row) return { kind: "unknown" as const };
     if (row.usedAt !== undefined || row.expiresAt <= Date.now()) {
       await ctx.db.patch(row._id, { usedAt: row.usedAt ?? Date.now() });
-      return { kind: "expired" as const };
+      return { kind: "expired" as const, returnOrigin: row.returnOrigin ?? null };
     }
     await ctx.db.patch(row._id, { usedAt: Date.now() });
     const member = await ctx.db.get(row.memberId);
-    if (!member || member.companyId !== row.companyId || member.status !== "active" || member.role !== "owner") return { kind: "expired" as const };
-    return { kind: "ok" as const, companyId: row.companyId, memberId: row.memberId, features: row.features, connectionId: row.connectionId ?? null };
+    if (!member || member.companyId !== row.companyId || member.status !== "active" || member.role !== "owner") return { kind: "expired" as const, returnOrigin: row.returnOrigin ?? null };
+    return { kind: "ok" as const, companyId: row.companyId, memberId: row.memberId, features: row.features, connectionId: row.connectionId ?? null, returnOrigin: row.returnOrigin ?? null };
   },
 });
 

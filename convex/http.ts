@@ -102,49 +102,49 @@ http.route({
       const stateHash = await hashToken(state);
       // The company's Google connection first; a state it does not know belongs to the Gmail inbox flow.
       const google = await ctx.runMutation(internal.google.takeState, { stateHash });
-      if (google.kind === "expired") return afterGoogle("expired");
+      if (google.kind === "expired") return afterGoogle("expired", google.returnOrigin);
       if (google.kind === "ok") {
         const app = googleConnectApp();
         const redirect = googleConnectRedirect();
-        if (!code || params.get("error") || !app || !redirect) return afterGoogle(params.get("error") === "access_denied" ? "declined" : "failed");
+        if (!code || params.get("error") || !app || !redirect) return afterGoogle(params.get("error") === "access_denied" ? "declined" : "failed", google.returnOrigin);
         let tokens;
         try {
           tokens = await googleExchange(app, code, redirect);
         } catch {
-          return afterGoogle("failed");
+          return afterGoogle("failed", google.returnOrigin);
         }
         const who = identityFrom(tokens.idToken);
-        if (!who?.email) return afterGoogle("failed");
+        if (!who?.email) return afterGoogle("failed", google.returnOrigin);
         const done = await ctx.runMutation(internal.google.completeConnect, { companyId: google.companyId, memberId: google.memberId, connectionId: google.connectionId, googleSub: who.sub, email: who.email, scopes: tokens.scopes, hasRefreshToken: Boolean(tokens.refreshToken) });
-        if (!done.ok) return afterGoogle(done.reason);
+        if (!done.ok) return afterGoogle(done.reason, google.returnOrigin);
         if (tokens.refreshToken) {
           const sealed = await seal(tokens.refreshToken, done.connectionId);
-          if (!sealed) return afterGoogle("failed");
+          if (!sealed) return afterGoogle("failed", google.returnOrigin);
           await ctx.runMutation(internal.google.storeCredential, { connectionId: done.connectionId, sealedRefreshToken: sealed });
         }
         // Partial consent is kept as it is: only what Google actually granted is switched on.
         const missing = google.features.filter((f) => !done.enabled.includes(f));
-        return afterGoogle(missing.length ? `partial:${missing.join(",")}` : "connected");
+        return afterGoogle(missing.length ? `partial:${missing.join(",")}` : "connected", google.returnOrigin);
       }
       const taken = await ctx.runMutation(internal.recruiterMailbox.takeState, { stateHash });
       if (!taken) return afterConnect("expired");
       const app = googleApp();
       const redirectUri = googleRedirectUri();
-      if (!code || params.get("error") || !app || !redirectUri) return afterConnect("failed");
+      if (!code || params.get("error") || !app || !redirectUri) return afterConnect("failed", taken.returnOrigin);
       const tokens = await exchangeCode(app, code, redirectUri);
-      if (!tokens) return afterConnect("failed");
+      if (!tokens) return afterConnect("failed", taken.returnOrigin);
       const scopes = tokens.scope.split(" ").filter(Boolean);
-      if (!scopes.includes("https://www.googleapis.com/auth/gmail.readonly")) return afterConnect("failed");
+      if (!scopes.includes("https://www.googleapis.com/auth/gmail.readonly")) return afterConnect("failed", taken.returnOrigin);
       // The mailbox is whichever address the Owner signed in with at Google, read from Gmail itself.
       const profile = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: { Authorization: `Bearer ${tokens.accessToken}` } })
         .then((response) => (response.ok ? (response.json() as Promise<{ emailAddress?: string }>) : null))
         .catch(() => null);
-      if (!profile?.emailAddress) return afterConnect("failed");
+      if (!profile?.emailAddress) return afterConnect("failed", taken.returnOrigin);
       const connectionId = await ctx.runMutation(internal.recruiterMailbox.completeConnect, { companyId: taken.companyId, memberId: taken.memberId, address: profile.emailAddress, folder: taken.folder, sources: taken.sources, processFrom: taken.processFrom, canSend: taken.canSend, scopes });
       const sealed = await seal(tokens.refreshToken, connectionId);
-      if (!sealed) return afterConnect("failed");
+      if (!sealed) return afterConnect("failed", taken.returnOrigin);
       await ctx.runMutation(internal.recruiterMailbox.storeCredential, { companyId: taken.companyId, connectionId, sealedRefreshToken: sealed, scopes });
-      return afterConnect("connected");
+      return afterConnect("connected", taken.returnOrigin);
     },
   }),
 });

@@ -48,6 +48,8 @@ export const googleTables = {
     features: v.array(featureValidator),
     /** Set when adding features to an existing connection; the account must be the same one. */
     connectionId: v.optional(v.id("googleConnections")),
+    /** The app address the Owner started from, already checked (returnOrigin). */
+    returnOrigin: v.optional(v.string()),
     expiresAt: v.number(),
     usedAt: v.optional(v.number()),
   }).index("by_stateHash", ["stateHash"]),

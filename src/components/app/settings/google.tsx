@@ -70,7 +70,7 @@ function Connection({ status, owner, companyId }: { status: Status; owner: boole
   const [confirming, setConfirming] = useState(false);
   const go = (features: Feature[], differentAccount = false) =>
     void run(async () => {
-      const { url } = await start({ companyId, features, differentAccount });
+      const { url } = await start({ companyId, features, differentAccount, returnTo: window.location.origin });
       window.location.assign(url);
     });
   const connection = status.connection;

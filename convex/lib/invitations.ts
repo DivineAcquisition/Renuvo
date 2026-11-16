@@ -118,6 +118,27 @@ export function appOrigin(): string | null {
   return null;
 }
 
+/**
+ * Where to send a person back to after a provider sign-in: the app address they started from, if it is one
+ * of Selestial's own (the configured origin, selestial.io, this project's Vercel previews, localhost, or
+ * ALLOWED_APP_ORIGINS). Anything else is ignored, so the return address cannot send anyone elsewhere.
+ */
+export function returnOrigin(candidate?: string | null): string | null {
+  if (!candidate) return null;
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  const local = host === "localhost" || host === "127.0.0.1";
+  if (url.protocol !== "https:" && !(local && url.protocol === "http:")) return null;
+  const configured = [process.env.APP_ORIGIN, process.env.SITE_ORIGIN, ...(process.env.ALLOWED_APP_ORIGINS ?? "").split(",")].map((v) => v?.trim().replace(/\/+$/, "")).filter(Boolean);
+  const ok = configured.includes(url.origin) || local || host === "selestial.io" || host.endsWith(".selestial.io") || (host.endsWith(".vercel.app") && host.startsWith("selestial-ai"));
+  return ok ? url.origin : null;
+}
+
 export function invitePath(token: string): string {
   return `/invite/${token}`;
 }
