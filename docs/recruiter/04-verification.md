@@ -5,7 +5,7 @@ read, nothing was purchased, no real offer was made, and nothing was deployed.
 
 ## Automated tests (`npm test`)
 
-52 Recruiter tests in three files, alongside the 145 that were already there (197 pass).
+60 Recruiter tests in four files, alongside the 145 that were already there (205 pass). `recruiterProviders.test.ts` runs the Resend and Claude adapters against a fake `fetch`: the request each sends, plain-words failures, signed and unsigned webhooks, a bounce arriving by webhook, Claude's answer passing through the same checks as the rules reader, and the fallback to rules on a refusal, an error or a malformed answer.
 
 | Scenario from the brief | Test |
 |---|---|
@@ -71,7 +71,7 @@ It is not part of `npm test`: it needs a running backend and a browser.
 
 ## Not verified
 
-- Any real mailbox, email service, text service, calendar, signing service or model.
+- Any real mailbox, email service, text service, calendar, signing service or model. The Resend and Claude adapters are built but have only met stand-ins.
 - The Indeed and ZipRecruiter formats against real notifications (`05-assumptions.md`).
 - The inbox run and the scheduled sweeps left running on a schedule; they were called directly.
 - Accessibility beyond labels and button semantics; other languages; very slow connections.

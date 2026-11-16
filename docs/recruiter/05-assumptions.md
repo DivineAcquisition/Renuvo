@@ -1,5 +1,13 @@
 # Recruiter: unverified assumptions, legal review, and remaining setup
 
+## Unverified provider shapes
+
+| Assumption | Basis | If wrong |
+|---|---|---|
+| Resend accepts `POST /emails` with `from`, `to`, `reply_to`, `subject`, `text` and an `Idempotency-Key` header, and answers `{ id }` | Resend's public documentation as remembered; not checked against the live API | The send fails with a plain-words problem and the application goes to a person; nothing is sent twice |
+| Resend signs webhooks with Svix (`svix-id`, `svix-timestamp`, `svix-signature`; HMAC-SHA256 over `id.timestamp.body` with the `whsec_` secret) and events carry `type` and `data.email_id` | The same | Every webhook is refused with 401: bounces are not recorded, and nothing else changes |
+| Claude structured output with `fallbacks: "default"` on the beta endpoint | The SDK's types and the API reference in this session | The model gives no answer and the rules reader answers instead |
+
 ## Unverified job-board formats
 
 **No real Indeed or ZipRecruiter notification was available for this build.** The owner has said
@@ -41,12 +49,21 @@ application, applicant message, suggested candidate, promotion) with full header
 | Needed | Why | Status |
 |---|---|---|
 | Google OAuth app (Gmail read-only) and Microsoft Entra app (Mail.Read), plus a secure store for each company's refresh token | Reading a real hiring inbox. The owner said companies use both. | **Connectors not built.** Only the mock exists behind `MailboxConnector`. Choosing a label, folder or sender filter per company is supported in the record. |
-| An email provider for `mail.selestial.io` (domain verified, API key, delivery and bounce webhook) | Sending. The owner chose a Selestial sending domain with replies to the company's hiring inbox. | **Adapter not built.** `EMAIL_PROVIDER=resend` answers "not built". A webhook has to call `internal.messaging.receipt`. |
-| A model provider key | The owner asked for a model to identify hiring mail in mixed inboxes | **Adapter not built.** A rules reader does both jobs. Until a model is connected, mail from unknown senders is recognised only by subject keywords. |
+| Resend for `mail.selestial.io`: verify the domain, create an API key, add a webhook to `https://<deployment>.convex.site/webhooks/resend` for delivered, bounced, complained and failed | Sending, and knowing about bounces. The owner chose Resend on November 16. | **Adapter and signed webhook built** (`convex/lib/messaging/resend.ts`, `convex/http.ts`), tested against a stand-in. Set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM_ADDRESS`, `RESEND_WEBHOOK_SECRET`. Not yet run against Resend itself. |
+| An Anthropic API key | The owner chose Claude on November 16 to recognise and read hiring mail | **Adapter built** (`convex/lib/recruiter/claude.ts`), Claude Opus 5.5 at low effort with structured output and server-side fallback on a refusal, tested against a stand-in. Set `RECRUITER_MODEL=claude` and `ANTHROPIC_API_KEY`. Not yet run against the API. Any failure falls back to the rules reader. |
 | Google Calendar (and Microsoft) OAuth per interviewer | The owner asked for calendar integration alongside owner-entered slots | **Adapter not built.** Owner-entered slots and applicant self-scheduling work now; `CalendarProvider` is ready. |
 | An e-signature provider | The owner asked to plan for one | Interface and records only. A person records completion. |
 | Text provider (Telnyx is planned) | Reminders by text | Not connected (Dispatch's finding). Applicant texts go through the same outbox and the mock. |
 | Convex settings: `ACTION_LINK_SECRET`, `LINK_ORIGIN` (already used by Dispatch), `EMAIL_PROVIDER`; later `RECRUITER_MODEL`, `CALENDAR_PROVIDER`, `SIGNATURE_PROVIDER` | Turning each piece on | Not set by this work. No credential was guessed or added. |
+
+## Coordination with the trust/compliance work
+
+The trust session's branch (`claude/selestial-trust`) adds one sending policy for every agent: consent
+records per recipient and channel, quiet hours, weekly limits and inbound STOP handling. The owner
+decided on November 16 that Recruiter moves onto it **after that branch merges** into the working
+branch: applicant email and texts then go through its `queueMessage`, text permission becomes its
+consent record, applicants are added to its recipient lookup, and the trust register's
+`applicant-inbox` entry is updated. Until then Recruiter's own send gate (`outbox.ts`) applies.
 
 ## Known limits
 

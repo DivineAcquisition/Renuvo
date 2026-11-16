@@ -1,10 +1,11 @@
 /**
  * The one door every outbound email goes through. Applicant email is sent from a Selestial sending
- * domain with the company's name on it and the company's hiring inbox as Reply-To. No real provider is
- * connected: nothing here can reach a real inbox. The mock answers from the address alone, so a test can
+ * domain with the company's name on it and the company's hiring inbox as Reply-To. Resend is the real
+ * provider (resend.ts); it runs only when its key and sending address are set. The mock answers from the address alone, so a test can
  * ask for a delivered message, a bounce, a provider that fails and recovers, or a send that dies half way.
  */
 import type { SendResult } from "./provider";
+import { resendProvider } from "./resend";
 
 export type EmailInput = { to: string; fromName: string; replyTo: string; subject: string; text: string; idempotencyKey: string; attempt: number };
 
@@ -44,17 +45,17 @@ export const mockEmailProvider: EmailProvider = {
   },
 };
 
-const notBuilt = (name: string): EmailProvider => ({
-  name,
-  async send() {
-    return { ok: false, retryable: false, problem: "The email connection is not built yet." };
-  },
-});
-
-/** The provider this deployment uses, from EMAIL_PROVIDER. Null means email is not connected. */
+/**
+ * The provider this deployment uses, from EMAIL_PROVIDER. Null means email is not connected, including
+ * "resend" chosen without its key or its sending address: nothing is sent half set up.
+ */
 export function emailProvider(): EmailProvider | null {
   const name = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
   if (name === "mock") return mockEmailProvider;
-  if (name === "resend") return notBuilt("resend");
+  if (name === "resend") {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    const fromAddress = process.env.EMAIL_FROM_ADDRESS?.trim().toLowerCase();
+    return apiKey && fromAddress && /^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/.test(fromAddress) ? resendProvider({ apiKey, fromAddress }) : null;
+  }
   return null;
 }

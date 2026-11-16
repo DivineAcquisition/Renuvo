@@ -1,8 +1,8 @@
 # Recruiter: architecture and responsibility
 
-**Status: built November 15, 2026, on `claude/selestial-recruiter`.** Backend, applicant pages and
+**Status: built November 15, 2026, with the Resend and Claude adapters added November 16, on `claude/selestial-recruiter`.** Backend, applicant pages and
 tests are in place. The owner-facing screens are not built; their data contracts are in
-`03-screens.md`. Nothing here has run against a real mailbox, email service, calendar or model.
+`03-screens.md`. Nothing here has run against a real mailbox, email service, calendar or model: the Resend and Claude adapters are built and tested against stand-ins only.
 `05-assumptions.md` lists what is unverified and what setup remains.
 
 ## What Recruiter owns
@@ -112,9 +112,11 @@ applicant". Unrelated mail is never opened, and only its provider id and that ve
 Everything else is code: permissions, the send gate, deduplication, stage changes, scheduling, tenant
 boundaries, every sentence sent to an applicant, and every number.
 
-**No model is connected in this build.** `RECRUITER_MODEL` is unset and a rules reader does both jobs.
-The owner asked for a model to identify hiring mail; the interface is ready and the adapter is listed
-as remaining work in `05-assumptions.md`.
+**The model is Claude** (`convex/lib/recruiter/claude.ts`), switched on with `RECRUITER_MODEL=claude`
+and `ANTHROPIC_API_KEY`. It runs Claude Opus 5.5 at low effort with a JSON schema for its answer and
+server-side fallback on a refusal. Email content goes inside `<email>` tags and the system prompt says
+it is data. Any failure, refusal or unreadable answer falls back to the rules reader, so an outage never
+drops an application. It has not been run against the live API: no key was available.
 
 ## Security and privacy
 

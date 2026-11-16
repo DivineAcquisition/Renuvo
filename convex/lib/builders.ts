@@ -6,11 +6,11 @@
  * of caller-supplied validators. Each builder states its exact registered type instead, so the generated
  * `api` keeps every argument and return type. The validators still run.
  */
-import type { RegisteredMutation, RegisteredQuery, UserIdentity } from "convex/server";
+import type { PublicHttpAction, RegisteredMutation, RegisteredQuery, UserIdentity } from "convex/server";
 import { v, type ObjectType, type PropertyValidators } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { httpAction, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireIdentity, requireMember } from "./access";
 import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkState } from "./dispatch/links";
 import { notAllowed, notFound, userError } from "./errors";
@@ -279,4 +279,23 @@ export function applicantMutation<V extends AnyValidators, R>(def: {
       return result;
     },
   } as any);
+}
+
+// ── Provider webhooks: a delivery service telling us what happened to a message ──────────────────
+
+/**
+ * An HTTP endpoint for one provider's webhook. The handler receives the raw body only after `verify`
+ * has accepted it; anything else gets a bare 401 and nothing is read. A webhook can never reach a
+ * company's records except through the internal function the handler calls.
+ */
+export function providerWebhook(def: {
+  verify: (request: Request, body: string) => Promise<boolean>;
+  handler: (ctx: ActionCtx, body: string, request: Request) => Promise<void>;
+}): PublicHttpAction {
+  return httpAction(async (ctx, request) => {
+    const body = await request.text();
+    if (body.length > 256 * 1024 || !(await def.verify(request, body))) return new Response(null, { status: 401 });
+    await def.handler(ctx, body, request);
+    return new Response(null, { status: 200 });
+  });
 }

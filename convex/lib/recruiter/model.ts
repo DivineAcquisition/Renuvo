@@ -3,10 +3,11 @@
  * looks like hiring mail, and reading the body of mail that does. It never sees the body of anything
  * else, it has no tools, and its answer is data that interpret.ts checks before anything is stored.
  *
- * No model is connected in this build. RECRUITER_MODEL is unset, so the rules reader does both jobs.
- * The interface is what a model adapter will implement; the mock lets tests stand in for one, including
- * one that has been talked into misbehaving.
+ * RECRUITER_MODEL picks the reader: "claude" (claude.ts, needs ANTHROPIC_API_KEY), "mock" for tests,
+ * anything else the rules reader. The mock lets tests stand in for a model, including one that has been
+ * talked into misbehaving.
  */
+import { claudeModel } from "./claude";
 import { interpretByRule, type Interpretation } from "./interpret";
 import type { MessageBody } from "./mail";
 import type { Classification, Source } from "./schema";
@@ -21,12 +22,14 @@ export interface HiringModel {
 
 const HIRING_SUBJECT = /\b(appl(y|ying|ication|icant)|resume|cv|candidate|job (posting|opening|inquiry)|position|hiring|interview|cleaner (job|position|role))\b/i;
 
+export async function rulesLooksLikeHiring({ subject }: { from: string; subject: string }): Promise<{ hiring: boolean; reason: string }> {
+  const hiring = HIRING_SUBJECT.test(subject);
+  return { hiring, reason: hiring ? "The subject is about applying for work." : "The subject is not about applying for work." };
+}
+
 export const rulesModel: HiringModel = {
   name: "rules",
-  async looksLikeHiring({ subject }) {
-    const hiring = HIRING_SUBJECT.test(subject);
-    return { hiring, reason: hiring ? "The subject is about applying for work." : "The subject is not about applying for work." };
-  },
+  looksLikeHiring: rulesLooksLikeHiring,
   async interpret(message, header) {
     return interpretByRule(message, header);
   },
@@ -51,5 +54,9 @@ const mock: HiringModel = {
 };
 
 export function hiringModel(): HiringModel {
-  return process.env.RECRUITER_MODEL?.trim().toLowerCase() === "mock" ? mock : rulesModel;
+  const choice = process.env.RECRUITER_MODEL?.trim().toLowerCase();
+  if (choice === "mock") return mock;
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  if (choice === "claude" && key) return claudeModel(key);
+  return rulesModel;
 }
