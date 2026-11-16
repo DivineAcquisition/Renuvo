@@ -580,7 +580,8 @@ describe("the invitation email", () => {
     expect(rows.find((row) => row.id === refused.invitationId)!.delivery).toMatchObject({ state: "failed", problem: "The email service says this address cannot receive email." });
     expect(rows.find((row) => row.id === died.invitationId)!.delivery).toMatchObject({ state: "failed", problem: "The email service did not answer, so it is not known whether the email went." });
     expect(JSON.stringify(rows)).not.toContain("mock:");
-    expect(mockEmailOutbox.map((row) => row.result)).toEqual(["failed", "threw"]);
+    // The two sends are scheduled together, so either may run first.
+    expect(mockEmailOutbox.map((row) => row.result).sort()).toEqual(["failed", "threw"]);
     expect(await s.events("invitation.email_failed")).toHaveLength(2);
     // The invitation itself stands: the Owner can still copy the link.
     expect(await s.t.query(api.invitations.preview, { token: refused.token })).toMatchObject({ state: "pending" });
