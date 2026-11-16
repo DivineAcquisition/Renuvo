@@ -18,6 +18,7 @@ import type * as compliance from "../compliance.js";
 import type * as consent from "../consent.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
+import type * as dataRights from "../dataRights.js";
 import type * as details from "../details.js";
 import type * as dispatch from "../dispatch.js";
 import type * as dispatchOps from "../dispatchOps.js";
@@ -61,6 +62,7 @@ import type * as lib_dispatch_workflow from "../lib/dispatch/workflow.js";
 import type * as lib_email_invitation from "../lib/email/invitation.js";
 import type * as lib_email_layout from "../lib/email/layout.js";
 import type * as lib_email_provider from "../lib/email/provider.js";
+import type * as lib_email_trustRequest from "../lib/email/trustRequest.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_eventWords from "../lib/eventWords.js";
 import type * as lib_events from "../lib/events.js";
@@ -77,7 +79,13 @@ import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_taskState from "../lib/taskState.js";
 import type * as lib_text from "../lib/text.js";
 import type * as lib_time from "../lib/time.js";
+import type * as lib_trust_changes from "../lib/trust/changes.js";
+import type * as lib_trust_checks from "../lib/trust/checks.js";
 import type * as lib_trust_documents from "../lib/trust/documents.js";
+import type * as lib_trust_erase from "../lib/trust/erase.js";
+import type * as lib_trust_exportTables from "../lib/trust/exportTables.js";
+import type * as lib_trust_requests from "../lib/trust/requests.js";
+import type * as lib_trust_seed from "../lib/trust/seed.js";
 import type * as lib_trust_staffSchema from "../lib/trust/staffSchema.js";
 import type * as links from "../links.js";
 import type * as members from "../members.js";
@@ -85,8 +93,10 @@ import type * as messaging from "../messaging.js";
 import type * as overview from "../overview.js";
 import type * as permissions from "../permissions.js";
 import type * as properties from "../properties.js";
+import type * as requests from "../requests.js";
 import type * as staff from "../staff.js";
 import type * as tasks from "../tasks.js";
+import type * as trust from "../trust.js";
 
 import type {
   ApiFromModules,
@@ -105,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   consent: typeof consent;
   crons: typeof crons;
   customers: typeof customers;
+  dataRights: typeof dataRights;
   details: typeof details;
   dispatch: typeof dispatch;
   dispatchOps: typeof dispatchOps;
@@ -148,6 +159,7 @@ declare const fullApi: ApiFromModules<{
   "lib/email/invitation": typeof lib_email_invitation;
   "lib/email/layout": typeof lib_email_layout;
   "lib/email/provider": typeof lib_email_provider;
+  "lib/email/trustRequest": typeof lib_email_trustRequest;
   "lib/errors": typeof lib_errors;
   "lib/eventWords": typeof lib_eventWords;
   "lib/events": typeof lib_events;
@@ -164,7 +176,13 @@ declare const fullApi: ApiFromModules<{
   "lib/taskState": typeof lib_taskState;
   "lib/text": typeof lib_text;
   "lib/time": typeof lib_time;
+  "lib/trust/changes": typeof lib_trust_changes;
+  "lib/trust/checks": typeof lib_trust_checks;
   "lib/trust/documents": typeof lib_trust_documents;
+  "lib/trust/erase": typeof lib_trust_erase;
+  "lib/trust/exportTables": typeof lib_trust_exportTables;
+  "lib/trust/requests": typeof lib_trust_requests;
+  "lib/trust/seed": typeof lib_trust_seed;
   "lib/trust/staffSchema": typeof lib_trust_staffSchema;
   links: typeof links;
   members: typeof members;
@@ -172,8 +190,10 @@ declare const fullApi: ApiFromModules<{
   overview: typeof overview;
   permissions: typeof permissions;
   properties: typeof properties;
+  requests: typeof requests;
   staff: typeof staff;
   tasks: typeof tasks;
+  trust: typeof trust;
 }>;
 
 /**

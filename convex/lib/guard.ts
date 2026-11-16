@@ -30,6 +30,37 @@ export function guardViolations(files: GuardFile[]): string[] {
   return violations;
 }
 
+/**
+ * The files that may register a `publicQuery`: a read with no sign-in at all. Each one is reviewed to
+ * return only public-suitable fields. A new file needs a reason to be added here.
+ */
+export const PUBLIC_QUERY_FILES = ["convex/trust.ts"] as const;
+
+/** A `publicQuery` anywhere except the reviewed files is a violation. */
+export function publicQueryViolations(files: GuardFile[]): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    if (file.path.endsWith(".test.ts") || file.path.includes("/_generated/")) continue;
+    if (file.path.endsWith("lib/builders.ts") || file.path.endsWith("lib/guard.ts")) continue;
+    if (!/\bpublicQuery\s*\(/.test(file.source)) continue;
+    const normalized = file.path.replace(/\\/g, "/");
+    if (!PUBLIC_QUERY_FILES.some((allowed) => normalized.endsWith(allowed))) violations.push(`${file.path} registers a publicQuery but is not in PUBLIC_QUERY_FILES`);
+  }
+  return violations;
+}
+
+/** The trust change log is append-only too: convex/lib/trust/changes.ts inserts, nothing changes a row. */
+export function trustChangeLogViolations(files: GuardFile[]): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    if (file.path.endsWith(".test.ts") || file.path.includes("/_generated/")) continue;
+    const writer = file.path.replace(/\\/g, "/").endsWith("lib/trust/changes.ts");
+    if (!writer && /insert\(\s*["']trustChanges["']/.test(file.source)) violations.push(`${file.path} writes to the trust change log directly; use logTrustChange`);
+    if (writer && /\.(patch|replace|delete)\(/.test(file.source)) violations.push(`${file.path} changes or removes a trust change`);
+  }
+  return violations;
+}
+
 /** The event log is append-only: one place inserts, nothing changes or removes a row. */
 export function eventLogViolations(files: GuardFile[]): string[] {
   const violations: string[] = [];

@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { eventLogViolations, guardViolations, type GuardFile } from "./lib/guard";
+import { eventLogViolations, guardViolations, publicQueryViolations, trustChangeLogViolations, type GuardFile } from "./lib/guard";
 
 function filesUnder(dir: string): GuardFile[] {
   const out: GuardFile[] = [];
@@ -54,5 +54,10 @@ describe("event log guard", () => {
 
   it("finds one writer and no changes in convex/", () => {
     expect(eventLogViolations(tree)).toEqual([]);
+    expect(trustChangeLogViolations(tree)).toEqual([]);
+  });
+
+  it("finds a public read with no sign-in only in the reviewed files", () => {
+    expect(publicQueryViolations(tree)).toEqual([]);
   });
 });

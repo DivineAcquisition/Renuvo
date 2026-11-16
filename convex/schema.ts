@@ -5,6 +5,7 @@
 import { defineSchema, defineTable } from "convex/server";
 
 import { complianceTables } from "./lib/compliance/schema";
+import { trustTables } from "./lib/trust/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
 
@@ -122,6 +123,7 @@ export default defineSchema({
   ...staffTables,
   // ── Messaging consent, the compliance profile, agreements (convex/lib/compliance/schema.ts) ──────
   ...complianceTables,
+  ...trustTables,
 
   // ── Public site ────────────────────────────────────────────────────────────────────────────────
   earlyAccessRequests: defineTable({

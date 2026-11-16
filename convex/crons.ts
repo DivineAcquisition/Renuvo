@@ -17,4 +17,7 @@ crons.interval("dispatch watches the day of service", { minutes: 5 }, internal.d
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});
 
+// A company's data export can be downloaded for a day; then its file is deleted.
+crons.interval("expire company data exports", { minutes: 15 }, internal.dataRights.expireExports, {});
+
 export default crons;

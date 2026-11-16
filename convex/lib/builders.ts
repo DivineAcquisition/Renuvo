@@ -201,6 +201,21 @@ export function staffMutation<V extends AnyValidators, R>(def: { args: V; adminO
   } as any);
 }
 
+// ── Public reads: anyone, signed in or not ─────────────────────────────────────────────────────────
+
+/**
+ * A read anyone may make, with no sign-in, no token and no secret. The handler is given no identity, so
+ * it cannot answer differently for different callers. It must return only what is already meant for
+ * the public (for example the trust snapshot, built by `publicView`), never a company record, a request,
+ * a note or a staff name. convex/lib/guard.ts allows it only in the files listed in PUBLIC_QUERY_FILES.
+ */
+export function publicQuery<V extends AnyValidators, R>(def: { args: V; handler: (ctx: QueryCtx, args: ObjectType<V>) => R }): RegisteredQuery<"public", ObjectType<V>, R> {
+  return query({
+    args: def.args,
+    handler: async (ctx: QueryCtx, args: ObjectType<V>) => def.handler(ctx, args),
+  } as any);
+}
+
 function sameSecret(given: string, expected: string): boolean {
   if (given.length !== expected.length) return false;
   let diff = 0;

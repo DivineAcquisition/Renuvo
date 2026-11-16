@@ -39,6 +39,8 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("contactPermissions"), id: v.id("contactPermissions") }),
   v.object({ table: v.literal("suppressions"), id: v.id("suppressions") }),
   v.object({ table: v.literal("agreementAcceptances"), id: v.id("agreementAcceptances") }),
+  v.object({ table: v.literal("dataExports"), id: v.id("dataExports") }),
+  v.object({ table: v.literal("deletionRecords"), id: v.id("deletionRecords") }),
 );
 export type Subject = typeof subjectValidator.type;
 
