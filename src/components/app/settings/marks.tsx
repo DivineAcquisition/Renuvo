@@ -1,5 +1,5 @@
 import { AgentAvatar } from "@/components/app/agent";
-import { BotIcon, Building2, HistoryIcon, KeyIcon, PackageOpen, Plug, ScrollTextIcon, ShieldCheck, Users, Wallet, type LucideIcon } from "@/components/icons";
+import { BotIcon, Building2, Sparkles, HistoryIcon, KeyIcon, PackageOpen, Plug, ScrollTextIcon, ShieldCheck, Users, Wallet, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 /** Sections that belong to one agent wear that agent's face. The rest wear an icon. */
@@ -12,6 +12,7 @@ const ICON: Record<string, LucideIcon> = {
   agents: BotIcon,
   connections: Plug,
   billing: Wallet,
+  ai: Sparkles,
   security: KeyIcon,
   compliance: ShieldCheck,
   agreements: ScrollTextIcon,

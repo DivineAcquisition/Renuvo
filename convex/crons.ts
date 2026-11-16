@@ -32,4 +32,7 @@ crons.interval("recruiter removes applicant details past retention", { hours: 24
 // Company Chat: a response whose worker stopped reporting is closed honestly instead of spinning forever.
 crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.chatRuns.sweep, {});
 
+// Creative Studio: a generation whose worker went quiet is followed again (video) or reported (image), never resent.
+crons.interval("creative studio follows up quiet generations", { minutes: 5 }, internal.media.sweep, {});
+
 export default crons;

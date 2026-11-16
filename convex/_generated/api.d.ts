@@ -9,6 +9,8 @@
  */
 
 import type * as agreements from "../agreements.js";
+import type * as ai from "../ai.js";
+import type * as aiAdmin from "../aiAdmin.js";
 import type * as applicantPages from "../applicantPages.js";
 import type * as applications from "../applications.js";
 import type * as approvals from "../approvals.js";
@@ -21,6 +23,7 @@ import type * as cleaners from "../cleaners.js";
 import type * as companies from "../companies.js";
 import type * as compliance from "../compliance.js";
 import type * as consent from "../consent.js";
+import type * as creative from "../creative.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as dataRights from "../dataRights.js";
@@ -38,7 +41,20 @@ import type * as inbound from "../inbound.js";
 import type * as interviews from "../interviews.js";
 import type * as invitations from "../invitations.js";
 import type * as jobs from "../jobs.js";
+import type * as knowledge from "../knowledge.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_ai_anthropic from "../lib/ai/anthropic.js";
+import type * as lib_ai_chatModels from "../lib/ai/chatModels.js";
+import type * as lib_ai_errors from "../lib/ai/errors.js";
+import type * as lib_ai_eval_cases from "../lib/ai/eval/cases.js";
+import type * as lib_ai_google from "../lib/ai/google.js";
+import type * as lib_ai_http from "../lib/ai/http.js";
+import type * as lib_ai_knowledge from "../lib/ai/knowledge.js";
+import type * as lib_ai_media from "../lib/ai/media.js";
+import type * as lib_ai_openai from "../lib/ai/openai.js";
+import type * as lib_ai_openrouter from "../lib/ai/openrouter.js";
+import type * as lib_ai_registry from "../lib/ai/registry.js";
+import type * as lib_ai_usage from "../lib/ai/usage.js";
 import type * as lib_approvalQueue from "../lib/approvalQueue.js";
 import type * as lib_assessment from "../lib/assessment.js";
 import type * as lib_authority from "../lib/authority.js";
@@ -56,6 +72,7 @@ import type * as lib_chat_state from "../lib/chat/state.js";
 import type * as lib_chat_steps from "../lib/chat/steps.js";
 import type * as lib_chat_titles from "../lib/chat/titles.js";
 import type * as lib_chat_tools from "../lib/chat/tools.js";
+import type * as lib_chat_work from "../lib/chat/work.js";
 import type * as lib_compliance_agreements from "../lib/compliance/agreements.js";
 import type * as lib_compliance_ledger from "../lib/compliance/ledger.js";
 import type * as lib_compliance_permissions from "../lib/compliance/permissions.js";
@@ -147,6 +164,7 @@ import type * as lib_trust_schema from "../lib/trust/schema.js";
 import type * as lib_trust_seed from "../lib/trust/seed.js";
 import type * as lib_trust_staffSchema from "../lib/trust/staffSchema.js";
 import type * as links from "../links.js";
+import type * as media from "../media.js";
 import type * as members from "../members.js";
 import type * as messaging from "../messaging.js";
 import type * as onboarding from "../onboarding.js";
@@ -172,6 +190,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agreements: typeof agreements;
+  ai: typeof ai;
+  aiAdmin: typeof aiAdmin;
   applicantPages: typeof applicantPages;
   applications: typeof applications;
   approvals: typeof approvals;
@@ -184,6 +204,7 @@ declare const fullApi: ApiFromModules<{
   companies: typeof companies;
   compliance: typeof compliance;
   consent: typeof consent;
+  creative: typeof creative;
   crons: typeof crons;
   customers: typeof customers;
   dataRights: typeof dataRights;
@@ -201,7 +222,20 @@ declare const fullApi: ApiFromModules<{
   interviews: typeof interviews;
   invitations: typeof invitations;
   jobs: typeof jobs;
+  knowledge: typeof knowledge;
   "lib/access": typeof lib_access;
+  "lib/ai/anthropic": typeof lib_ai_anthropic;
+  "lib/ai/chatModels": typeof lib_ai_chatModels;
+  "lib/ai/errors": typeof lib_ai_errors;
+  "lib/ai/eval/cases": typeof lib_ai_eval_cases;
+  "lib/ai/google": typeof lib_ai_google;
+  "lib/ai/http": typeof lib_ai_http;
+  "lib/ai/knowledge": typeof lib_ai_knowledge;
+  "lib/ai/media": typeof lib_ai_media;
+  "lib/ai/openai": typeof lib_ai_openai;
+  "lib/ai/openrouter": typeof lib_ai_openrouter;
+  "lib/ai/registry": typeof lib_ai_registry;
+  "lib/ai/usage": typeof lib_ai_usage;
   "lib/approvalQueue": typeof lib_approvalQueue;
   "lib/assessment": typeof lib_assessment;
   "lib/authority": typeof lib_authority;
@@ -219,6 +253,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/steps": typeof lib_chat_steps;
   "lib/chat/titles": typeof lib_chat_titles;
   "lib/chat/tools": typeof lib_chat_tools;
+  "lib/chat/work": typeof lib_chat_work;
   "lib/compliance/agreements": typeof lib_compliance_agreements;
   "lib/compliance/ledger": typeof lib_compliance_ledger;
   "lib/compliance/permissions": typeof lib_compliance_permissions;
@@ -310,6 +345,7 @@ declare const fullApi: ApiFromModules<{
   "lib/trust/seed": typeof lib_trust_seed;
   "lib/trust/staffSchema": typeof lib_trust_staffSchema;
   links: typeof links;
+  media: typeof media;
   members: typeof members;
   messaging: typeof messaging;
   onboarding: typeof onboarding;

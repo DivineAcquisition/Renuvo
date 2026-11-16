@@ -67,6 +67,11 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "chatArtifactVersions", index: "by_company_artifact_version" },
   { table: "companyKnowledge", index: "by_company_status" },
   { table: "chatUsage", index: "by_company_month" },
+  // The AI layer (convex/lib/ai/schema.ts).
+  { table: "aiUsage", index: "by_company_at", omit: ["raw"], why: "The provider's raw usage object is kept for reconciliation only." },
+  { table: "mediaAssets", index: "by_company_created", omit: ["storageId"], why: "Internal file references. The files themselves are not in the file." },
+  { table: "mediaJobs", index: "by_company_created" },
+  { table: "mediaAllowances", index: "by_company_month" },
 ];
 
 /** Company tables kept out of the export, and why. */
@@ -77,6 +82,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   oauthStates: "Ten-minute, single-use records of a mailbox sign-in in progress; nothing in them is about the business.",
   sendIntents: "Internal bookkeeping for the sending check: the same facts are in each message and in the event log.",
   conversations: "Chats are private to the member who wrote them until sharing exists; what a chat did to the business is exported as chatActionSteps, and its drafts as chatArtifacts.",
+  knowledgeChunks: "A search index rebuilt from company knowledge and drafts, which are exported themselves.",
   chatUploads: "Internal file references for chat attachments; the files themselves are private to the member who uploaded them.",
   chatMessages: "The words of private chats, for the same reason as conversations.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",

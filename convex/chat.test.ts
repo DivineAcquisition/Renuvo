@@ -219,7 +219,7 @@ describe("Company Chat", () => {
     mockChat.script = [{ text: "Here is a spring promotion plan…" }, { toolCalls: [{ name: "launch_campaign", input: { name: "Spring" } }] }, { text: "Launching isn't available yet." }];
     const conversationId = await ask(t, as, companyId, "Plan a spring promotion.");
     expect(replyText(await thread(as, companyId, conversationId))).toContain("spring promotion plan");
-    expect(mockChat.seen[0].system).toMatch(/Not built yet: Marketing/);
+    expect(mockChat.seen[0].system).toMatch(/Not built yet as working agents: Marketing/);
     await ask(t, as, companyId, "Launch it.", { conversationId });
     expect(steps(await thread(as, companyId, conversationId)).at(-1)).toMatchObject({ tool: "launch_campaign", status: "unavailable" });
   });

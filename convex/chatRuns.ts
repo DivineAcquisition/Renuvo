@@ -14,11 +14,17 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { settingFor } from "./lib/ai/media";
+import { chatEntryFor, chatModelOption, chatModelState, DEFAULT_CHAT_MODEL } from "./lib/ai/chatModels";
+import { REGISTRY, type Override } from "./lib/ai/registry";
+import { bytesToBase64 } from "./lib/ai/http";
+import { recordUsage } from "./lib/ai/usage";
 import { chatModel, ModelError, type ModelMessage, type ToolSpec } from "./lib/chat/model";
 import { systemPrompt, userTurn } from "./lib/chat/prompt";
 import { runStatusValidator, type RunStatus } from "./lib/chat/schema";
 import { addPart, currentMember, monthOf, setState, stateAfter, usageRow } from "./lib/chat/state";
-import { stepFromModel } from "./lib/chat/steps";
+import { finishDeferred, stepFromModel } from "./lib/chat/steps";
+import { performWork } from "./lib/chat/work";
 import { describeRecord, toolSpecs, type RecordTable } from "./lib/chat/tools";
 
 const TEXT_LIMIT = 120_000;
@@ -66,7 +72,7 @@ type HistoryEntry = {
   attachments: { storageId: Id<"_storage">; name: string; state: "pending" | "read" | "unreadable"; note: string | undefined; contentType: string }[];
   messageId: Id<"chatMessages">;
 };
-type Loaded = { system: string; tools: ToolSpec[]; history: HistoryEntry[]; currentMessageId: Id<"chatMessages"> };
+type Loaded = { system: string; tools: ToolSpec[]; history: HistoryEntry[]; currentMessageId: Id<"chatMessages">; companyId: Id<"companies">; memberId: Id<"members">; chatSetting: Override | null; modelKey: string; modelUnavailable: string | null };
 
 /** Everything the model is given for this run, read fresh, for the member as they are now. */
 export const load = internalQuery({
@@ -120,11 +126,22 @@ export const load = internalQuery({
         if (text) history.push({ role: "assistant" as const, text, page: undefined, records: [], attachments: [], messageId: message._id });
       }
     }
+    const chatSetting = await settingFor(ctx, "chat");
+    const option = chatModelOption(run.modelKey) ?? chatModelOption(DEFAULT_CHAT_MODEL)!;
+    const staffOff = new Set((await ctx.db.query("chatModelSettings").take(100)).filter((row) => !row.enabled).map((row) => row.key));
     return {
       system: systemPrompt({ company, member: now.member, role: now.role, knowledge: knowledge.map((row) => row.text), now: Date.now() }),
       tools: toolSpecs(now.role),
       history,
       currentMessageId: userMessage._id,
+      companyId: company._id,
+      memberId: now.member._id,
+      chatSetting,
+      modelKey: option.key,
+      modelUnavailable: option.key === DEFAULT_CHAT_MODEL ? null : (() => {
+        const state = chatModelState(option, company, staffOff, chatSetting);
+        return state.available ? null : `${state.why} Choose another model and retry.`;
+      })(),
     };
   },
 });
@@ -204,14 +221,40 @@ export const addChoices = internalMutation({
 });
 
 export const addUsage = internalMutation({
-  args: { runId: v.id("chatRuns"), inputTokens: v.number(), outputTokens: v.number(), model: v.string() },
+  args: { runId: v.id("chatRuns"), inputTokens: v.number(), outputTokens: v.number(), model: v.string(), provider: v.string(), providerModel: v.string() },
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run) return null;
+    const rates = chatEntryFor(args.provider, args.providerModel)?.rates ?? { inputPerMTok: null, outputPerMTok: null };
+    await recordUsage(ctx, { companyId: run.companyId, memberId: run.initiatedBy, feature: "chat", capability: "chat", model: { provider: args.provider as never, model: args.providerModel, rates }, runId: run._id, units: { inputTokens: args.inputTokens, outputTokens: args.outputTokens }, outcome: "ok" });
     await ctx.db.patch(run._id, { model: args.model, usage: { inputTokens: run.usage.inputTokens + args.inputTokens, outputTokens: run.usage.outputTokens + args.outputTokens }, heartbeatAt: Date.now() });
     const month = monthOf(run.startedAt);
     const row = await usageRow(ctx, run.companyId, month);
     if (row) await ctx.db.patch(row._id, { inputTokens: row.inputTokens + args.inputTokens, outputTokens: row.outputTokens + args.outputTokens });
+    return null;
+  },
+});
+
+/** The result of tool work performed outside the database (lib/chat/work.ts), recorded on its step. */
+export const completeStep = internalMutation({
+  args: { runId: v.id("chatRuns"), stepId: v.id("chatActionSteps"), result: v.string() },
+  handler: async (ctx, args) => {
+    const step = await ctx.db.get(args.stepId);
+    if (!step || step.runId !== args.runId || step.status !== "running") return { content: "This step was already closed." };
+    const result = JSON.parse(args.result) as { ok: true; summary: string; data: Record<string, unknown>; usage?: { feature: "photo_review" | "video_review" | "document_search"; capability: "image_understanding" | "video_understanding" | "embed"; provider: string; model: string; inputTokens?: number; outputTokens?: number } } | { ok: false; why: string; kind: string };
+    if (result.ok && result.usage) {
+      const entry = REGISTRY[result.usage.capability].primary;
+      await recordUsage(ctx, { companyId: step.companyId, memberId: step.initiatedBy, feature: result.usage.feature, capability: result.usage.capability, model: { provider: entry.provider, model: result.usage.model, rates: entry.rates }, runId: args.runId, units: { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens }, outcome: "ok" });
+    }
+    return { content: await finishDeferred(ctx, step, result) };
+  },
+});
+
+export const addNotice = internalMutation({
+  args: { runId: v.id("chatRuns"), text: v.string() },
+  handler: async (ctx, args) => {
+    const run = await liveRun(ctx, args.runId);
+    if (run) await addPart(ctx, run.assistantMessageId, { kind: "notice", tone: "info", text: args.text });
     return null;
   },
 });
@@ -327,18 +370,28 @@ export const execute = internalAction({
       return null;
     };
 
-    const choice = chatModel();
-    if (!choice.model) return finish("failed", choice.why);
-    const model = choice.model;
     const loaded: Loaded | null = await ctx.runQuery(internal.chatRuns.load, { runId: args.runId });
     if (!loaded) return finish("failed", "This chat or your membership is no longer available, so nothing was answered.");
+    if (loaded.modelUnavailable) return finish("failed", loaded.modelUnavailable);
+    const choice = chatModel(loaded.chatSetting, loaded.modelKey);
+    if (!choice.model) return finish("failed", choice.why);
+    let model = choice.model;
+    let label = choice.label;
+    let switched = false;
 
     // Attached files are read here, as data. A file that cannot be read is said so, visibly.
-    const files = new Map<string, { text: string | null; note?: string }>();
+    const files = new Map<string, { text: string | null; note?: string; pdf?: string }>();
     for (const message of loaded.history) {
       for (const file of message.attachments) {
         if (file.state === "unreadable") files.set(file.storageId, { text: null, note: file.note });
-        else files.set(file.storageId, await readAttachment(ctx, file.storageId));
+        else if (file.contentType === "application/pdf") {
+          // A PDF goes to the model as a document with the latest message; earlier ones are named only.
+          if (message.messageId !== loaded.currentMessageId) files.set(file.storageId, { text: "(A PDF attached earlier in this chat. Ask for it again to read it.)" });
+          else {
+            const blob = await ctx.storage.get(file.storageId);
+            files.set(file.storageId, blob ? { text: "(Sent as a document.)", pdf: bytesToBase64(new Uint8Array(await blob.arrayBuffer())) } : { text: null, note: "The file is no longer stored." });
+          }
+        } else files.set(file.storageId, await readAttachment(ctx, file.storageId));
       }
     }
     const current = loaded.history.find((message) => message.messageId === loaded.currentMessageId);
@@ -352,11 +405,14 @@ export const execute = internalAction({
       });
     }
 
-    const messages: ModelMessage[] = loaded.history.map((message) =>
-      message.role === "user"
-        ? { role: "user", content: userTurn({ text: message.text, page: message.page, records: message.records, attachments: message.attachments.map((file) => ({ name: file.name, text: files.get(file.storageId)?.text ?? null, note: files.get(file.storageId)?.note })) }) }
-        : { role: "assistant", content: message.text },
-    );
+    const messages: ModelMessage[] = loaded.history.map((message) => {
+      if (message.role !== "user") return { role: "assistant", content: message.text };
+      const words = userTurn({ text: message.text, page: message.page, records: message.records, attachments: message.attachments.map((file) => ({ name: file.name, text: files.get(file.storageId)?.text ?? null, note: files.get(file.storageId)?.note })) });
+      const pdfs = message.attachments.map((file) => ({ name: file.name, data: files.get(file.storageId)?.pdf })).filter((file): file is { name: string; data: string } => Boolean(file.data));
+      if (pdfs.length === 0) return { role: "user", content: words };
+      // Documents first, then the words that refer to them. The document is data, as the system prompt says.
+      return { role: "user", content: [...pdfs.map((file) => ({ type: "document", title: file.name.slice(0, 200), source: { type: "base64", media_type: "application/pdf", data: file.data } })), { type: "text", text: words }] };
+    });
     const deadline = started.startedAt + started.limits.maxMs;
     let status: RunStatus = "completed";
     let error: string | undefined;
@@ -412,11 +468,22 @@ export const execute = internalAction({
             status = "stopped";
             break;
           }
+          // An outage or a rate limit, after the provider's own retries: the stand-in continues from the
+          // same conversation, with the tool results already carried out, and repeats none of them.
+          // A refusal or a bad request never switches providers.
+          if (failure instanceof ModelError && failure.fallbackEligible && choice.fallback && !switched) {
+            switched = true;
+            model = choice.fallback.model;
+            label = choice.fallback.label;
+            await ctx.runMutation(internal.chatRuns.addNotice, { runId: args.runId, text: `The chosen model was unavailable, so a backup model (${label}) continued this answer. Nothing already done was repeated.` });
+            step -= 1;
+            continue;
+          }
           throw failure;
         }
         await chain;
         await flush();
-        await ctx.runMutation(internal.chatRuns.addUsage, { runId: args.runId, inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens, model: `${model.name}:${reply.model}` });
+        await ctx.runMutation(internal.chatRuns.addUsage, { runId: args.runId, inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens, model: `${model.name}:${reply.model}`, provider: label.split(":")[0], providerModel: label.startsWith("openrouter:") ? label.slice("openrouter:".length) : reply.model });
         if (stopped) {
           status = "stopped";
           break;
@@ -458,7 +525,12 @@ export const execute = internalAction({
           const answer = await ctx.runMutation(internal.chatRuns.runStep, { runId: args.runId, toolUseId: call.id, name: call.name, input: JSON.stringify(call.input ?? null) });
           if (answer.halt) halted = true;
           waiting ||= answer.waiting;
-          results.push({ id: call.id, content: answer.content, isError: answer.isError });
+          let content = answer.content;
+          if (answer.deferred) {
+            const result = await performWork(ctx, { companyId: loaded.companyId, memberId: loaded.memberId, work: answer.deferred.work });
+            content = (await ctx.runMutation(internal.chatRuns.completeStep, { runId: args.runId, stepId: answer.deferred.stepId, result: JSON.stringify(result) })).content;
+          }
+          results.push({ id: call.id, content, isError: answer.isError });
         }
         messages.push(model.toolResults(results));
         if (halted) {

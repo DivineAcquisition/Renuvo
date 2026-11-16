@@ -275,7 +275,7 @@ export const AGENTS: readonly AgentNav[] = [
     backendAgent: null,
     tabs: [
       ["campaigns", "Campaigns"],
-      ["content-creative", "Content & Creative"],
+      ["content-creative", "Content & Creative", LIVE],
       ["promotions", "Promotions"],
       ["lead-sources", "Lead Sources"],
       ["performance", "Performance"],

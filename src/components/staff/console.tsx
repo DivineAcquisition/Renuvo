@@ -59,6 +59,7 @@ const NAV = [
   { href: "/staff/trust", label: "Trust records" },
   { href: "/staff/companies", label: "Companies" },
   { href: "/staff/people", label: "Staff" },
+  { href: "/staff/ai", label: "AI models" },
 ];
 
 function StaffShell({ role, children }: { role: "admin" | "reviewer"; children: React.ReactNode }) {

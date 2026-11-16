@@ -6,7 +6,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useChat, type OfferedRecord } from "@/components/app/chat/chat-context";
 import { useCompany } from "@/components/app/company";
 import { messageOf } from "@/components/app/form";
-import { ArrowUp, BroomIcon, FileText, HouseIcon, MapPin, Paperclip, Plus, Search, Square, X } from "@/components/icons";
+import { ArrowUp, Brain, BroomIcon, Check, ChevronDown, FileText, HouseIcon, MapPin, Paperclip, Plus, Search, Square, X } from "@/components/icons";
 import { Spinner } from "@/components/ui/spinner";
 import { newClientKey } from "@/lib/app/chat/session";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ export type Outgoing = { text: string; clientKey: string; includePage: boolean; 
 
 type Upload = { id: string; name: string; storageId: string | null; error: string | null };
 
-const ACCEPT = ".txt,.md,.markdown,.csv,.json,text/plain,text/markdown,text/csv,application/json";
+const ACCEPT = ".pdf,.txt,.md,.markdown,.csv,.json,application/pdf,text/plain,text/markdown,text/csv,application/json";
 const chip = "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500";
 
 /** Search the company's customers, cleaners and drafts, and attach one as context. */
@@ -71,6 +71,64 @@ function RecordPicker({ onPick, onClose }: { onPick: (record: OfferedRecord & { 
   );
 }
 
+/** Which model answers next. Only models Selestial offers here are listed; the server checks the pick again. */
+function ModelPicker({ value, disabled, onPick }: { value: string | null; disabled: boolean; onPick: (key: string) => void }) {
+  const { companyId } = useCompany();
+  const models = useQuery(api.chat.models, { companyId });
+  const [open, setOpen] = useState(false);
+  if (!models) return null;
+  const current = models.options.find((row) => row.key === (value ?? models.defaultKey)) ?? models.options[0];
+  const groups = [
+    { label: "Claude, direct", rows: models.options.filter((row) => row.via === "Anthropic") },
+    { label: "Other providers, through OpenRouter", rows: models.options.filter((row) => row.via !== "Anthropic") },
+  ];
+  return (
+    <div className="relative">
+      <button type="button" disabled={disabled} onClick={() => setOpen((before) => !before)} aria-haspopup="listbox" aria-expanded={open} aria-label={`Model: ${current.label}. Change model`} className={cn(chip, "max-w-44 border-border text-muted-foreground hover:text-strong disabled:opacity-50", open && "border-brand-500/30 bg-brand-500/10 text-brand-300")}>
+        <Brain className="size-3.5 shrink-0" aria-hidden />
+        <span className="truncate">{current.label}</span>
+        <ChevronDown className="size-3 shrink-0" aria-hidden />
+      </button>
+      {open ? (
+        <div role="listbox" aria-label="Choose a model" tabIndex={-1} onKeyDown={(event) => event.key === "Escape" && setOpen(false)} className="live-enter absolute bottom-full left-0 z-30 mb-2 max-h-[min(26rem,60vh)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl">
+          {groups.map((group) =>
+            group.rows.length ? (
+              <div key={group.label} className="py-0.5">
+                <p className="px-2.5 pt-1.5 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">{group.label}</p>
+                {group.rows.map((row) => (
+                  <button
+                    key={row.key}
+                    type="button"
+                    role="option"
+                    aria-selected={row.key === current.key}
+                    aria-disabled={!row.available}
+                    title={row.why ?? undefined}
+                    onClick={() => {
+                      if (!row.available) return;
+                      setOpen(false);
+                      if (row.key !== current.key) onPick(row.key);
+                    }}
+                    className={cn("flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left", row.available ? "hover:bg-muted" : "cursor-not-allowed opacity-50")}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-sm text-strong">
+                        {row.label}
+                        <span className="text-[11px] text-muted-foreground">{row.maker}</span>
+                      </span>
+                      <span className="block text-[11px] leading-snug text-muted-foreground">{row.available ? `${row.blurb}${row.readsFiles ? "" : " Does not read PDFs."}` : row.why}</span>
+                    </span>
+                    {row.key === current.key ? <Check className="mt-0.5 size-4 text-brand-300" aria-hidden /> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null,
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Composer({
   compact,
   working,
@@ -80,6 +138,8 @@ export function Composer({
   autoFocus,
   onSend,
   onStop,
+  model,
+  onModel,
 }: {
   compact?: boolean;
   working: boolean;
@@ -89,6 +149,9 @@ export function Composer({
   autoFocus?: boolean;
   onSend: (outgoing: Outgoing) => Promise<void>;
   onStop: () => Promise<void>;
+  /** The chosen model's key; null until known (the default is shown). */
+  model?: string | null;
+  onModel?: (key: string) => Promise<void>;
 }) {
   const { companyId } = useCompany();
   const { page, offered } = useChat();
@@ -138,8 +201,9 @@ export function Composer({
       const id = newClientKey();
       setUploads((before) => [...before, { id, name: one.name, storageId: null, error: null }]);
       try {
-        if (one.size > 512 * 1024) throw new Error("Larger than 512 KB.");
-        if (!/\.(txt|md|markdown|csv|json)$/i.test(one.name)) throw new Error("Only text files (.txt, .md, .csv, .json) can be read.");
+        const pdf = /\.pdf$/i.test(one.name);
+        if (!pdf && !/\.(txt|md|markdown|csv|json)$/i.test(one.name)) throw new Error("Only PDFs and text files (.pdf, .txt, .md, .csv, .json) can be read.");
+        if (one.size > (pdf ? 10 * 1024 * 1024 : 512 * 1024)) throw new Error(pdf ? "Larger than 10 MB." : "Larger than 512 KB.");
         const url = await uploadUrl({ companyId });
         const response = await fetch(url, { method: "POST", headers: { "Content-Type": one.type || "text/plain" }, body: one });
         if (!response.ok) throw new Error("The upload did not finish.");
@@ -260,8 +324,8 @@ export function Composer({
                     className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted"
                   >
                     <Paperclip className="size-4 text-muted-foreground" aria-hidden />
-                    <span className="flex-1">Attach a text file</span>
-                    <span className="text-[11px] text-muted-foreground">.txt .md .csv</span>
+                    <span className="flex-1">Attach a file</span>
+                    <span className="text-[11px] text-muted-foreground">.pdf .txt .md .csv</span>
                   </button>
                 </li>
                 <li role="none">
@@ -285,6 +349,7 @@ export function Composer({
             ) : null}
             <input ref={file} type="file" accept={ACCEPT} multiple className="sr-only" tabIndex={-1} aria-hidden onChange={(event) => void attach(event.target.files)} />
           </div>
+          {onModel ? <ModelPicker value={model ?? null} disabled={working} onPick={(key) => onModel(key).catch((caught: unknown) => setError(messageOf(caught)))} /> : null}
           {page && !includePage ? (
             <button type="button" onClick={() => setIncludePage(true)} className={cn(chip, "border-border text-muted-foreground hover:text-strong")}>
               <MapPin className="size-3.5" aria-hidden /> Include this page
