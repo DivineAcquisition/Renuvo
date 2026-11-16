@@ -2619,37 +2619,38 @@ html[data-calm="true"] .work-hero-halo-on {
   }
 }
 
-/* ---------- The icon's paint, for filled buttons ----------
-   Exactly what the app icon's tile is painted with (src/components/brand/logo.tsx): Selestial Violet at
-   the top-left running to Deep Violet at the bottom-right, under a soft highlight from the top-left.
-   White text is at least 5:1 anywhere a label sits. Literal colours: the icon does not change with the theme. */
+/* ---------- The paint for filled buttons ----------
+   The owner chose the same filled-button design as the shared Button (src/components/ui/button-variants.ts):
+   lavender at the top through Selestial Violet to Deep Violet at the bottom, brighter on hover. Buttons
+   that are not the shared Button use this class so every filled button matches. Literal colours. */
 .icon-gradient {
   background-color: #6838ef;
-  background-image:
-    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
-    linear-gradient(135deg, #6838ef 0%, #5126c7 100%);
+  background-image: linear-gradient(180deg, #8e6df6 0%, #6838ef 50%, #5126c7 100%);
   color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.icon-gradient:hover:not(:disabled):not([data-disabled]),
-.icon-gradient[data-pressed]:not(:disabled) {
-  background-image:
-    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%),
-    linear-gradient(135deg, #5c2fdb 0%, #431fa6 100%);
+.icon-gradient:hover:not(:disabled):not([data-disabled]) {
+  background-image: linear-gradient(180deg, #a08af8 0%, #7a4ff2 50%, #5c2fdb 100%);
+}
+
+.icon-gradient[data-pressed]:not(:disabled),
+.icon-gradient:active:not(:disabled) {
+  background-image: linear-gradient(180deg, #6838ef 0%, #5126c7 50%, #3f1d9e 100%);
+  box-shadow: none;
 }
 
 .icon-gradient:disabled,
 .icon-gradient[data-disabled] {
-  background-image:
-    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
-    linear-gradient(135deg, #a58cf6 0%, #8f76e0 100%);
+  background-image: linear-gradient(180deg, #bba8fa 0%, #a58cf6 50%, #8f76e0 100%);
+  box-shadow: none;
 }
 
 /* While a button's request runs, a band of light crosses it: the work is under way. */
 .icon-gradient[aria-busy="true"] {
   background-image:
     linear-gradient(105deg, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0.28) 50%, rgba(255, 255, 255, 0) 60%),
-    linear-gradient(135deg, #6838ef 0%, #5126c7 100%);
+    linear-gradient(180deg, #8e6df6 0%, #6838ef 50%, #5126c7 100%);
   background-size:
     220% 100%,
     100% 100%;

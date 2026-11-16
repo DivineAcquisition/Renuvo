@@ -28,14 +28,13 @@ export function checkedAnswers(input: Record<AssessmentQuestion, string>): Asses
   return input as AssessmentAnswers;
 }
 
-/** An optional phone number: empty, or something with 7 to 15 digits. */
+/** A phone number: 7 to 15 digits, with the usual punctuation. Required. */
 export function phoneOk(value: string): boolean {
-  if (!value) return true;
   const digits = value.replace(/\D/g, "").length;
   return value.length <= 40 && digits >= 7 && digits <= 15 && /^[\d\s()+.\-x]+$/i.test(value);
 }
 
-/** An optional website or business page: empty, or one address with a dot in it and no spaces. */
+/** A website or business page: one address with a dot in it and no spaces. Required. */
 export function websiteOk(value: string): boolean {
-  return !value || (value.length <= 200 && !/\s/.test(value) && /^(https?:\/\/)?[^/.\s]+\.[^\s]{2,}$/i.test(value));
+  return Boolean(value) && (value.length <= 200 && !/\s/.test(value) && /^(https?:\/\/)?[^/.\s]+\.[^\s]{2,}$/i.test(value));
 }

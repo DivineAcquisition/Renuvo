@@ -33,8 +33,8 @@ export const request = serverMutation({
     bookingTool: v.string(),
     help: v.string(),
     openTo: v.string(),
-    phone: v.optional(v.string()),
-    website: v.optional(v.string()),
+    phone: v.string(),
+    website: v.string(),
     /** The separate, optional box: "you may text me at this number". */
     smsConsent: v.optional(v.boolean()),
     visitorKey: v.string(),
@@ -43,8 +43,8 @@ export const request = serverMutation({
     const name = args.name.trim();
     const email = args.email.trim().toLowerCase();
     const company = args.company.trim();
-    const phone = args.phone?.trim() ?? "";
-    const website = args.website?.trim() ?? "";
+    const phone = args.phone.trim();
+    const website = args.website.trim();
     const answers = checkedAnswers({ role: args.role, businessType: args.businessType, cleaners: args.cleaners, monthlyCleans: args.monthlyCleans, bookingTool: args.bookingTool, help: args.help, openTo: args.openTo });
     if (!name || name.length > 120 || !company || company.length > 160 || !isEmail(email) || !answers || !phoneOk(phone) || !websiteOk(website)) return { status: "invalid" };
     const focus = HELP_FOCUS[answers.help];
@@ -54,8 +54,8 @@ export const request = serverMutation({
     if (!(await allow(ctx, "early-access:all", TOTAL_PER_HOUR, HOUR))) return { status: "limited" };
 
     const now = Date.now();
-    // Consent to texts is recorded only with a number to text, and is dropped again if a later request withdraws either.
-    const details = { ...answers, focus, phone: phone || undefined, website: website || undefined, smsConsentAt: args.smsConsent === true && phone ? now : undefined };
+    // Consent to texts is recorded only when the box was ticked, and is dropped again if a later request leaves it unticked.
+    const details = { ...answers, focus, phone, website, smsConsentAt: args.smsConsent === true ? now : undefined };
     const existing = await ctx.db
       .query("earlyAccessRequests")
       .withIndex("by_email", (q) => q.eq("email", email))

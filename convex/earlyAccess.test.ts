@@ -10,7 +10,7 @@ import { NOT_FOUND } from "./lib/errors";
 
 const secret = "test-secret-value";
 const answers = { role: "owner", businessType: "residential", cleaners: "5_14", monthlyCleans: "50_149", bookingTool: "jobber", help: "dispatch", openTo: "test_one_workflow" };
-const entry = { secret, name: "Dana Whitfield", email: "Dana@SparkleCo.com", company: "Sparkle Co", ...answers, visitorKey: "visitor-1" };
+const entry = { secret, name: "Dana Whitfield", email: "Dana@SparkleCo.com", company: "Sparkle Co", phone: "(512) 555-0142", website: "sparkleco.com", ...answers, visitorKey: "visitor-1" };
 
 const rows = (t: T) => t.query(internal.earlyAccess.list, {});
 
@@ -39,7 +39,7 @@ describe("early-access requests", () => {
     expect(saved).toHaveLength(1);
     // Every answer is kept, and "needs the most help" names the agent it points at.
     expect(saved[0]).toMatchObject({ name: "Dana Whitfield", email: "dana@sparkleco.com", company: "Sparkle Co", ...answers, focus: "Dispatch", requests: 1 });
-    expect(saved[0].phone).toBeUndefined();
+    expect(saved[0]).toMatchObject({ phone: "(512) 555-0142", website: "sparkleco.com" });
     expect(saved[0].smsConsentAt).toBeUndefined();
   });
 
@@ -62,28 +62,26 @@ describe("early-access requests", () => {
       { ...entry, role: "" },
       { ...entry, bookingTool: "Jobber" },
       { ...entry, phone: "call me" },
+      { ...entry, phone: "" },
       { ...entry, website: "not a site" },
+      { ...entry, website: " " },
       { ...entry, name: "x".repeat(121) },
     ];
     for (const args of bad) expect(await t.mutation(api.earlyAccess.request, args)).toEqual({ status: "invalid" });
     expect(await rows(t)).toEqual([]);
   });
 
-  it("keeps the optional phone and website, and records consent to texts only when it was given with a number", async () => {
+  it("requires phone and website, and records consent to texts only when the box was ticked", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.UTC(2027, 0, 5, 12));
     const t = start();
-    await t.mutation(api.earlyAccess.request, { ...entry, phone: " (512) 555-0142 ", website: "sparkleco.com", smsConsent: true });
+    await t.mutation(api.earlyAccess.request, { ...entry, phone: " (512) 555-0142 ", smsConsent: true });
     expect((await rows(t))[0]).toMatchObject({ phone: "(512) 555-0142", website: "sparkleco.com", smsConsentAt: Date.UTC(2027, 0, 5, 12) });
-    // A number alone is not consent, and a ticked box with no number is not consent either.
-    await t.mutation(api.earlyAccess.request, { ...entry, email: "b@example.com", phone: "5125550142" });
-    await t.mutation(api.earlyAccess.request, { ...entry, email: "c@example.com", smsConsent: true });
-    const saved = await rows(t);
-    expect(saved.find((row) => row.email === "b@example.com")).toMatchObject({ phone: "5125550142" });
-    expect(saved.find((row) => row.email === "b@example.com")?.smsConsentAt).toBeUndefined();
-    expect(saved.find((row) => row.email === "c@example.com")?.smsConsentAt).toBeUndefined();
+    // A number alone is not consent.
+    await t.mutation(api.earlyAccess.request, { ...entry, email: "b@example.com" });
+    expect((await rows(t)).find((row) => row.email === "b@example.com")?.smsConsentAt).toBeUndefined();
     // Asking again without the box withdraws it.
-    await t.mutation(api.earlyAccess.request, { ...entry, phone: "(512) 555-0142" });
+    await t.mutation(api.earlyAccess.request, entry);
     expect((await rows(t)).find((row) => row.email === "dana@sparkleco.com")?.smsConsentAt).toBeUndefined();
   });
 

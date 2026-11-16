@@ -8,7 +8,7 @@ import { ASSESSMENT_QUESTIONS, checkedAnswers, phoneOk, websiteOk, type Assessme
 
 export type EarlyAccessState = { status: "idle" } | { status: "done" } | { status: "error"; message: string };
 
-export type EarlyAccessEntry = AssessmentAnswers & { name: string; email: string; company: string; phone?: string; website?: string; smsConsent: boolean };
+export type EarlyAccessEntry = AssessmentAnswers & { name: string; email: string; company: string; phone: string; website: string; smsConsent: boolean };
 export type SaveResult = { status: "saved" } | { status: "invalid" } | { status: "limited" };
 /** Saves one request. Null when saving is not set up in this environment. Throws when the save fails. */
 export type Save = ((entry: EarlyAccessEntry & { visitorKey: string }) => Promise<SaveResult>) | null;
@@ -46,10 +46,10 @@ export async function submitEarlyAccess(form: FormData, visitorKey: string, save
       name,
       email,
       company,
-      ...(phone ? { phone } : {}),
-      ...(website ? { website } : {}),
-      // Consent to texts counts only when the box was ticked and there is a number to text.
-      smsConsent: form.get("smsConsent") === "yes" && phone !== "",
+      phone,
+      website,
+      // Consent to texts counts only when the box was ticked. It is never needed to submit.
+      smsConsent: form.get("smsConsent") === "yes",
       visitorKey,
     });
     if (result.status === "saved") return { status: "done" };

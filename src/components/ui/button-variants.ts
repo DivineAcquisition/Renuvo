@@ -26,11 +26,11 @@ export const buttonVariants = cva(
       },
       variant: {
         default:
-          "icon-gradient border-[#5126c7]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
+          "border-[#5126c7]/40 bg-[#6838ef] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-[#5126c7] data-pressed:bg-[#5126c7] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         primary:
-          "icon-gradient border-[#5126c7]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
+          "border-[#3f1d9e]/40 bg-gradient-to-b from-[#8e6df6] via-[#6838ef] to-[#5126c7] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:from-[#a08af8] hover:via-[#7a4ff2] hover:to-[#5c2fdb] data-pressed:from-[#6838ef] data-pressed:via-[#5126c7] data-pressed:to-[#3f1d9e] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         gradient:
-          "icon-gradient border-[#5126c7]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_10px_28px_-12px_rgba(104,56,239,0.8)] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
+          "border-[#3f1d9e]/45 bg-gradient-to-b from-[#8e6df6] via-[#6838ef] to-[#5126c7] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_10px_28px_-12px_rgba(104,56,239,0.88)] hover:from-[#a08af8] hover:via-[#7a4ff2] hover:to-[#5c2fdb] data-pressed:from-[#6838ef] data-pressed:via-[#5126c7] data-pressed:to-[#3f1d9e] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         destructive:
           "border-[#991b1b]/30 bg-destructive bg-gradient-to-b from-[#fca5a5] to-[#dc2626] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] hover:from-[#fecaca] hover:to-[#ef4444] data-pressed:from-[#f87171] data-pressed:to-[#b91c1c] *:data-[slot=button-loading-indicator]:text-white [:disabled,:active,[data-pressed]]:shadow-none",
         "destructive-outline":
