@@ -72,6 +72,10 @@ export const TOOL_WORDS: Record<string, { working: string; done: string }> = {
   launch_campaign: { working: "Checking campaign sending", done: "Campaign launch" },
   send_for_signature: { working: "Checking e-signature", done: "E-signature" },
   issue_refund_or_credit: { working: "Checking refunds", done: "Refund or credit" },
+  review_visit_photos: { working: "Quality is reviewing the photos", done: "Photo review" },
+  review_video: { working: "Reviewing the video", done: "Video review" },
+  search_company_documents: { working: "Searching company knowledge", done: "Searched company knowledge" },
+  request_creative: { working: "Preparing a creative", done: "Creative requested" },
 };
 
 export const SPECIALIST_NAMES: Record<string, string> = {

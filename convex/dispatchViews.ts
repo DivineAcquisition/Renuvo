@@ -4,18 +4,22 @@
  * status, its crew's assignments, its offers and its review are separate facts, shown side by side.
  * Anything not known is returned as null, never as a guess.
  */
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import { internalQuery, type QueryCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyQuery, type MemberAccess } from "./lib/builders";
 import { jobCoverageRequests } from "./lib/dispatch/coverage";
 import { staffing } from "./lib/dispatch/crew";
 import { jobAssignments } from "./lib/dispatch/facts";
 import { linkState } from "./lib/dispatch/links";
-import { affectedLaterJobs, arrivalEndsAt, jobChecklist, jobEvidence } from "./lib/dispatch/live";
+import { affectedLaterJobs, arrivalEndsAt, jobChecklist, jobEvidence, noShowConditions } from "./lib/dispatch/live";
+import { isManager } from "./lib/roles";
+import { photoLinksReady, signedPhotoUrl, signingTime } from "./lib/dispatch/photoLinks";
 import { dispatchPolicy } from "./lib/dispatch/policy";
+import { dispatchSettings } from "./lib/dispatch/settings";
 import { coverKey, jobApprovals } from "./lib/dispatch/workflow";
 import { liveTaskByKey } from "./lib/taskState";
 
@@ -55,6 +59,21 @@ async function jobRow(ctx: Ctx, job: Doc<"jobs">) {
   const names = new Map<string, string>();
   for (const row of assignments) if (!names.has(row.cleanerId)) names.set(row.cleanerId, (await ctx.db.get(row.cleanerId))?.name ?? "A cleaner");
   const crew = assignments.filter((row) => row.status === "accepted");
+  // The last thing the provider reported for each open offer's text, read once for the job. An offer whose
+  // text did not go is a contact problem to fix, never the cleaner's silence.
+  const texts = assignments.some((row) => row.status === "offered")
+    ? await ctx.db
+        .query("messages")
+        .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
+        .take(200)
+    : [];
+  const lastText = (assignmentId: Id<"assignments">) => {
+    const mine = texts.filter((row) => row.assignmentId === assignmentId && (row.purpose === "offer" || row.purpose === "backup_offer"));
+    const last = mine[mine.length - 1];
+    return last ? { status: last.status, problem: last.problem ?? null } : null;
+  };
+  // What a cleaner is paid is the Owner's to see, here as everywhere else.
+  const pay = (row: Doc<"assignments">) => (ctx.role === "owner" ? row.payCents : null);
   return {
     jobId: job._id,
     customer: customer?.name ?? null,
@@ -84,6 +103,7 @@ async function jobRow(ctx: Ctx, job: Doc<"jobs">) {
       cleanerId: row.cleanerId,
       name: names.get(row.cleanerId)!,
       role: row.role ?? null,
+      payCents: pay(row),
       checkedInAt: row.checkIn?.at ?? null,
       /** Whether the phone gave a position at check-in. False means not given, not "elsewhere". */
       checkInHasPosition: row.checkIn ? row.checkIn.lat !== undefined : null,
@@ -91,10 +111,10 @@ async function jobRow(ctx: Ctx, job: Doc<"jobs">) {
       contactStage: row.contact?.stage ?? null,
       completion: row.completion ?? null,
     })),
-    offers: assignments.filter((row) => row.status === "offered").map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, role: row.role ?? null, kind: row.offerKind ?? "initial", offeredAt: row.offeredAt, respondBy: row.respondBy })),
+    offers: assignments.filter((row) => row.status === "offered").map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, role: row.role ?? null, kind: row.offerKind ?? "initial", offeredAt: row.offeredAt, respondBy: row.respondBy, payCents: pay(row), /** Null when no text was ever planned for this offer. */ text: lastText(row._id) })),
     ended: assignments
       .filter((row) => row.status !== "offered" && row.status !== "accepted")
-      .map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, status: row.status, cause: row.endCause ?? null, reason: row.endReason ?? null })),
+      .map((row) => ({ assignmentId: row._id, cleanerId: row.cleanerId, name: names.get(row.cleanerId)!, status: row.status, cause: row.endCause ?? null, reason: row.endReason ?? null, offeredAt: row.offeredAt, respondedAt: row.respondedAt ?? null, wasAccepted: row.status === "cancelled" && row.respondedAt !== undefined })),
   };
 }
 
@@ -109,13 +129,58 @@ async function jobsBetween(ctx: Ctx, from: number, to: number) {
 
 const range = { from: v.number(), to: v.number() };
 
+/** Counting stops here: a range with more visits than this is reported as "more than" this. */
+export const COUNT_LIMIT = 4000;
+
+/**
+ * How many visits fall in the range, read from the index alone so it stays cheap. Screens that show a
+ * page of visits say "N of total", never a count of the page as if it were the whole.
+ */
+async function countBetween(ctx: Ctx, from: number, to: number): Promise<{ total: number; atLeast: boolean }> {
+  let total = 0;
+  let cursor: string | null = null;
+  for (;;) {
+    const page: { page: unknown[]; isDone: boolean; continueCursor: string } = await ctx.db
+      .query("jobs")
+      .withIndex("by_company_start", (q) => q.eq("companyId", ctx.companyId).gte("startsAt", from).lt("startsAt", to))
+      .paginate({ numItems: 500, cursor });
+    total += page.page.length;
+    if (page.isDone) return { total, atLeast: false };
+    if (total >= COUNT_LIMIT) return { total, atLeast: true };
+    cursor = page.continueCursor;
+  }
+}
+
+/** The number of visits in a range, for screens that show a page of them. */
+export const rangeTotal = companyQuery({
+  args: range,
+  handler: async (ctx, args) => countBetween(ctx, args.from, args.to),
+});
+
+/**
+ * Dispatch Board, one page at a time, earliest first. The board loads further pages as a person asks
+ * for them, so a company with thousands of visits in a range sees all of them, not the first 200.
+ */
+export const boardPage = companyQuery({
+  args: { ...range, paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("jobs")
+      .withIndex("by_company_start", (q) => q.eq("companyId", ctx.companyId).gte("startsAt", args.from).lt("startsAt", args.to))
+      .paginate({ ...args.paginationOpts, numItems: Math.min(Math.max(args.paginationOpts.numItems, 1), 100) });
+    const rows: JobRow[] = [];
+    for (const job of page.page) rows.push(await jobRow(ctx, job));
+    return { ...page, page: rows };
+  },
+});
+
 /** Dispatch Board: every job in the range in its column, with the records the column was worked out from. */
 export const board = companyQuery({
   args: range,
   handler: async (ctx, args) => {
     const rows: JobRow[] = [];
     for (const job of await jobsBetween(ctx, args.from, args.to)) rows.push(await jobRow(ctx, job));
-    return { groups: BOARD_GROUPS, jobs: rows, truncated: rows.length === 200 };
+    return { groups: BOARD_GROUPS, jobs: rows, truncated: rows.length === 200, total: rows.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: rows.length, atLeast: false } };
   },
 });
 
@@ -148,6 +213,7 @@ export const overview = companyQuery({
       /** The agent's own work: what it is doing next and by when, and what it has handed to a person or another queue. */
       tasks: tasks.map((task) => ({ taskId: task._id, title: task.title, status: task.status, nextAction: task.nextAction ?? null, openQuestion: task.openQuestion ?? null, dueAt: task.dueAt, about: task.about ?? null, handoffTo: task.handoffTo ?? null, withPerson: task.withPersonSince !== undefined, trigger: task.trigger ?? null, escalation: task.escalation ?? null, completionCondition: task.completionCondition })),
       truncated: rows.length === 200,
+      total: rows.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: rows.length, atLeast: false },
     };
   },
 });
@@ -184,8 +250,8 @@ export const schedule = companyQuery({
         ]),
       });
     }
-    const settings = ctx.company.dispatch;
-    return { timezone: ctx.company.timezone, travelBufferMinutes: settings?.travelBufferMinutes ?? 30, jobs, cleaners: out };
+    // 200 is the most this reads. A screen that gets exactly that many says the list may be incomplete.
+    return { timezone: ctx.company.timezone, travelBufferMinutes: dispatchSettings(ctx.company).travelBufferMinutes, jobs, cleaners: out, truncated: jobs.length === 200, cleanersTruncated: cleaners.length === 200, total: jobs.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: jobs.length, atLeast: false } };
   },
 });
 
@@ -195,7 +261,8 @@ export const offersAndCoverage = companyQuery({
   handler: async (ctx, args) => {
     const offers = [];
     const coverage = [];
-    for (const job of await jobsBetween(ctx, args.from, args.to)) {
+    const jobs = await jobsBetween(ctx, args.from, args.to);
+    for (const job of jobs) {
       const row = await jobRow(ctx, job);
       for (const offer of row.offers) offers.push({ jobId: row.jobId, customer: row.customer, startsAt: row.startsAt, ...offer, messages: await delivery(ctx, offer.assignmentId) });
       for (const request of await jobCoverageRequests(ctx, job)) {
@@ -209,7 +276,7 @@ export const offersAndCoverage = companyQuery({
         .take(100)
     ).filter((task) => task.handoffTo === "recruiter" || task.key?.startsWith("recruiter."));
     const policy = dispatchPolicy(ctx.company);
-    return { broadcastEnabled: policy.broadcastEnabled, offers, coverage, recruiterHandoffs: urgent.map((task) => ({ taskId: task._id, title: task.title, dueAt: task.dueAt, about: task.about ?? null })) };
+    return { truncated: jobs.length === 200, total: jobs.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: jobs.length, atLeast: false }, broadcastEnabled: policy.broadcastEnabled, offers, coverage, recruiterHandoffs: urgent.map((task) => ({ taskId: task._id, title: task.title, dueAt: task.dueAt, about: task.about ?? null })) };
   },
 });
 
@@ -220,7 +287,8 @@ export const liveJobs = companyQuery({
     const now = Date.now();
     const policy = dispatchPolicy(ctx.company);
     const out = [];
-    for (const job of await jobsBetween(ctx, args.from, args.to)) {
+    const all = await jobsBetween(ctx, args.from, args.to);
+    for (const job of all) {
       if (job.status === "cancelled") continue;
       const row = await jobRow(ctx, job);
       const items = await jobChecklist(ctx, job);
@@ -236,7 +304,19 @@ export const liveJobs = companyQuery({
         else if (now < job.startsAt) arrival = "not_due";
         else arrival = now <= row.arrivalEndsAt ? "due" : "not_checked_in";
         const affected = member.late && member.checkedInAt === null ? await affectedLaterJobs(ctx, { assignment, job, company: ctx.company }, member.late.etaAt + (job.endsAt - job.startsAt)) : [];
-        crew.push({ ...member, arrival, affectedLaterJobs: affected, messages: await delivery(ctx, member.assignmentId) });
+        const cleaner = await ctx.db.get(member.cleanerId);
+        // What still stands between this cleaner and a no-show, so a person confirms one knowing it.
+        const notYet = arrival === "checked_in" || now < job.startsAt ? null : noShowConditions(assignment, job, policy, now, null).missing.filter((row) => !row.startsWith("the cleaner checked in"));
+        crew.push({
+          ...member,
+          arrival,
+          affectedLaterJobs: affected,
+          messages: await delivery(ctx, member.assignmentId),
+          /** A phone number is shown to Owners and Managers, who are the ones who call. */
+          phone: isManager(ctx.role) ? (cleaner?.phone ?? null) : null,
+          hasPhone: Boolean(cleaner?.phone),
+          noShowNotYet: notYet,
+        });
       }
       out.push({
         ...row,
@@ -253,7 +333,7 @@ export const liveJobs = companyQuery({
         ).map((report) => ({ reportId: report._id, kind: report.kind, text: report.text, status: report.status, assignmentId: report.assignmentId })),
       });
     }
-    return { asOf: now, jobs: out };
+    return { asOf: now, jobs: out, truncated: all.length === 200, total: all.length === 200 ? await countBetween(ctx, args.from, args.to) : { total: all.length, atLeast: false } };
   },
 });
 
@@ -294,6 +374,8 @@ async function linkRows(ctx: Ctx, links: Doc<"actionLinks">[]) {
       jobId: link.jobId,
       assignmentId: link.assignmentId,
       jobStartsAt: job?.startsAt ?? null,
+      customer: job ? ((await ctx.db.get(job.customerId))?.name ?? null) : null,
+      serviceType: job?.serviceType ?? null,
       allowed: link.allowed,
       status: state,
       issuedAt: link.issuedAt,
@@ -347,5 +429,47 @@ export const jobRecord = companyQuery({
       /** Every text about this job, including ones with no link. The body is shown with the link left out. */
       messages: messages.map((row) => ({ messageId: row._id, purpose: row.purpose, cleanerId: row.cleanerId ?? null, assignmentId: row.assignmentId ?? null, body: row.body, status: row.status, problem: row.problem ?? null, queuedAt: row.queuedAt, sentAt: row.sentAt ?? null, deliveredAt: row.deliveredAt ?? null })),
     };
+  },
+});
+
+/**
+ * The photos the crew added to one visit, for a person in the company to review. Read only through the
+ * company's own access check; a cleaner's link is never used for this. Each address is signed and stops
+ * working within 40 minutes (convex/lib/dispatch/photoLinks.ts). It is never stored or logged.
+ */
+export const jobPhotos = companyQuery({
+  /** The screen's current minute. The addresses are signed for it, so they refresh as time passes. */
+  args: { jobId: v.id("jobs"), asOf: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const job = await owned(ctx, args.jobId);
+    const at = signingTime(args.asOf);
+    const rows = await jobEvidence(ctx, job);
+    const items = await jobChecklist(ctx, job);
+    const names = new Map<string, string>();
+    const out = [];
+    for (const row of [...rows].sort((a, b) => a.uploadedAt - b.uploadedAt)) {
+      if (!names.has(row.cleanerId)) names.set(row.cleanerId, (await ctx.db.get(row.cleanerId))?.name ?? "A cleaner");
+      out.push({
+        evidenceId: row._id,
+        kind: row.kind,
+        url: (await signedPhotoUrl(row._id, at)) ?? (await ctx.storage.getUrl(row.storageId)),
+        /** False when this deployment cannot sign addresses, so this one does not expire. */
+        expiring: photoLinksReady(),
+        by: names.get(row.cleanerId)!,
+        uploadedAt: row.uploadedAt,
+        item: row.checklistItemId ? (items.find((item) => item._id === row.checklistItemId)?.label ?? null) : null,
+      });
+    }
+    return out;
+  },
+});
+
+/** The stored file behind a photo whose address was already checked. Internal: only /photos calls it. */
+export const photoFile = internalQuery({
+  args: { evidenceId: v.string() },
+  handler: async (ctx, args) => {
+    const id = ctx.db.normalizeId("evidence", args.evidenceId);
+    const row = id ? await ctx.db.get(id) : null;
+    return row ? row.storageId : null;
   },
 });

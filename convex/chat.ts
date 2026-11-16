@@ -12,6 +12,8 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { companyMutation, companyQuery, ownerMutation, staffMutation, type MemberAccess } from "./lib/builders";
 import { mayRead } from "./lib/agreements/access";
 import { DOC_TYPE_BY_KEY } from "./lib/agreements/catalog";
+import { CHAT_MODELS, chatModelOption, MAKER_NAMES, chatModelState, DEFAULT_CHAT_MODEL, type ChatModelOption } from "./lib/ai/chatModels";
+import { settingFor } from "./lib/ai/media";
 import { readableArtifact } from "./lib/chat/artifacts";
 import type { ContextRef } from "./lib/chat/schema";
 import { isLive, lastSeq, latestRun, monthlyRunAllowance, monthOf, ownConversation, planOf, usageRow } from "./lib/chat/state";
@@ -31,6 +33,10 @@ const MESSAGE_MAX = 20_000;
 const SENDS_PER_WINDOW = 20;
 const SEND_WINDOW_MS = 10 * 60 * 1000;
 const UPLOAD_MAX_BYTES = 512 * 1024;
+const PDF_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES: Record<string, string> = { "image/png": "image/png", "image/jpeg": "image/jpeg", "image/jpg": "image/jpeg", "image/webp": "image/webp", "image/gif": "image/gif" };
+const IMAGE_EXTENSIONS: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
 const TEXT_TYPES = ["text/plain", "text/markdown", "text/csv", "application/json", "text/x-markdown"];
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|json)$/i;
 const THREAD_MESSAGES = 300;
@@ -88,6 +94,20 @@ async function checkAllowance(ctx: MutationCtx & MemberAccess) {
   else await ctx.db.insert("chatUsage", { companyId: ctx.companyId, month, runs: 1, inputTokens: 0, outputTokens: 0 });
 }
 
+async function staffOffModels(ctx: QueryCtx | MutationCtx): Promise<Set<string>> {
+  return new Set((await ctx.db.query("chatModelSettings").take(100)).filter((row) => !row.enabled).map((row) => row.key));
+}
+
+/** The model a person chose, checked: only keys from the catalog, and only while it may be used here. */
+async function checkedModel(ctx: Ctx, key: string): Promise<ChatModelOption> {
+  const option = chatModelOption(key);
+  if (!option) throw userError("That model is not offered in Selestial.");
+  if (option.key === DEFAULT_CHAT_MODEL) return option;
+  const state = chatModelState(option, ctx.company, await staffOffModels(ctx), await settingFor(ctx, "chat"));
+  if (!state.available) throw userError(state.why);
+  return option;
+}
+
 async function startRun(ctx: MutationCtx & MemberAccess, conversation: Doc<"conversations">, userMessageId: Id<"chatMessages">, retryOf?: Id<"chatRuns">) {
   const now = Date.now();
   const seq = (await lastSeq(ctx, conversation)) + 1;
@@ -99,6 +119,7 @@ async function startRun(ctx: MutationCtx & MemberAccess, conversation: Doc<"conv
     userMessageId,
     assistantMessageId,
     status: "queued",
+    modelKey: conversation.modelKey,
     steps: 0,
     limits: LIMITS,
     usage: { inputTokens: 0, outputTokens: 0 },
@@ -125,9 +146,12 @@ async function checkedAttachments(ctx: MutationCtx & MemberAccess, files: { stor
     if (!meta) notFound();
     const name = requiredText(file.name, "The file name", 200);
     const type = (meta.contentType ?? "").split(";")[0].trim().toLowerCase();
-    if (!TEXT_TYPES.includes(type) && !TEXT_EXTENSIONS.test(name)) throw userError(`"${name}" cannot be read yet. Chat reads text files (.txt, .md, .csv, .json); paste the text of other documents instead.`);
-    if (meta.size > UPLOAD_MAX_BYTES) throw userError(`"${name}" is larger than 512 KB.`);
-    out.push({ storageId: file.storageId, name, contentType: type || "text/plain", size: meta.size, state: "pending" as const });
+    const pdf = type === "application/pdf" || /\.pdf$/i.test(name);
+    const image = IMAGE_TYPES[type] ?? IMAGE_EXTENSIONS[name.split(".").pop()?.toLowerCase() ?? ""];
+    if (!pdf && !image && !TEXT_TYPES.includes(type) && !TEXT_EXTENSIONS.test(name)) throw userError(`"${name}" cannot be read yet. Chat reads PDFs, images and text files (.pdf, .png, .jpg, .webp, .gif, .txt, .md, .csv, .json); paste the text of other documents instead.`);
+    const limit = pdf ? PDF_MAX_BYTES : image ? IMAGE_MAX_BYTES : UPLOAD_MAX_BYTES;
+    if (meta.size > limit) throw userError(`"${name}" is larger than ${pdf ? "10 MB" : image ? "5 MB" : "512 KB"}.`);
+    out.push({ storageId: file.storageId, name, contentType: pdf ? "application/pdf" : image ? image : type || "text/plain", size: meta.size, state: "pending" as const });
   }
   return out;
 }
@@ -144,6 +168,8 @@ export const send = companyMutation({
     page: v.optional(v.string()),
     context: v.optional(v.array(contextInput)),
     attachments: v.optional(v.array(v.object({ storageId: v.id("_storage"), name: v.string() }))),
+    /** A key from lib/ai/chatModels.ts. Unset: keep this chat's model. */
+    model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const words = requiredText(args.text, "Your message", MESSAGE_MAX);
@@ -169,16 +195,18 @@ export const send = companyMutation({
     if (conversation && isLive(await latestRun(ctx, conversation))) throw userError("A response is still being written in this chat. Stop it or wait for it to finish.");
     const context = await checkedContext(ctx, args.context ?? []);
     const attachments = await checkedAttachments(ctx, args.attachments ?? []);
+    const model = await checkedModel(ctx, args.model ?? conversation?.modelKey ?? DEFAULT_CHAT_MODEL);
     await checkAllowance(ctx);
+    const modelKey = model.key === DEFAULT_CHAT_MODEL ? undefined : model.key;
 
     const now = Date.now();
     if (!conversation) {
       const title = titleFrom(words);
-      const id = await ctx.db.insert("conversations", { companyId: ctx.companyId, createdBy: ctx.member._id, title, titleSource: "generated", visibility: "private", state: "idle", searchText: searchTextFor(title, [words]), shelf: "active", messageCount: 0, createdAt: now, updatedAt: now });
+      const id = await ctx.db.insert("conversations", { companyId: ctx.companyId, createdBy: ctx.member._id, title, titleSource: "generated", visibility: "private", state: "idle", searchText: searchTextFor(title, [words]), shelf: "active", messageCount: 0, modelKey, createdAt: now, updatedAt: now });
       conversation = (await ctx.db.get(id))!;
     } else {
       const asked = conversation.searchText.length < 3500 ? `${conversation.searchText} \n${words}`.slice(0, 4000) : conversation.searchText;
-      await ctx.db.patch(conversation._id, { searchText: asked, shelf: "active", archivedAt: undefined });
+      await ctx.db.patch(conversation._id, { searchText: asked, shelf: "active", archivedAt: undefined, modelKey });
       conversation = (await ctx.db.get(conversation._id))!;
     }
 
@@ -223,6 +251,7 @@ export const retry = companyMutation({
     if (!run) throw userError("There is nothing to retry yet.");
     if (isLive(run)) throw userError("A response is still being written.");
     if (run.status !== "failed" && run.status !== "stopped") throw userError("The last response finished. Send a new message instead.");
+    await checkedModel(ctx, conversation.modelKey ?? DEFAULT_CHAT_MODEL);
     await checkAllowance(ctx);
     await startRun(ctx, conversation, run.userMessageId, run._id);
     return null;
@@ -332,10 +361,17 @@ export const thread = companyQuery({
       if (agreement && agreement.companyId === ctx.companyId && mayRead(ctx.role, agreement.access)) agreements[agreementId] = { agreementId, title: agreement.title, workflow: agreement.workflow, currentVersion: agreement.currentVersion, typeLabel: DOC_TYPE_BY_KEY.get(agreement.docType)?.label ?? agreement.docType };
     }
     const run = await latestRun(ctx, conversation);
+    const answeredBy: Record<string, string> = {};
+    for (const message of messages) {
+      if (message.role !== "assistant" || !message.runId) continue;
+      const answered = await ctx.db.get(message.runId);
+      if (answered) answeredBy[message._id] = (chatModelOption(answered.modelKey) ?? chatModelOption(DEFAULT_CHAT_MODEL)!).label;
+    }
     return {
       conversation: sessionRow(conversation),
+      modelKey: conversation.modelKey ?? DEFAULT_CHAT_MODEL,
       run: run ? { status: run.status, stopping: Boolean(run.stopRequestedAt) && isLive(run), error: run.error ?? null, canRetry: run.status === "failed" || run.status === "stopped" } : null,
-      messages: messages.map((message) => ({ messageId: message._id, role: message.role, status: message.status, text: message.text ?? null, parts: message.parts ?? [], contextRefs: message.contextRefs ?? [], attachments: (message.attachments ?? []).map((file) => ({ name: file.name, size: file.size, state: file.state, note: file.note ?? null })), createdAt: message.createdAt })),
+      messages: messages.map((message) => ({ messageId: message._id, role: message.role, status: message.status, answeredBy: answeredBy[message._id] ?? null, text: message.text ?? null, parts: message.parts ?? [], contextRefs: message.contextRefs ?? [], attachments: (message.attachments ?? []).map((file) => ({ name: file.name, size: file.size, state: file.state, note: file.note ?? null })), createdAt: message.createdAt })),
       steps,
       artifacts,
       agreements,
@@ -418,9 +454,9 @@ export const registerUpload = companyMutation({
     }
     const meta = await ctx.db.system.get(args.storageId);
     if (!meta) notFound();
-    if (meta.size > UPLOAD_MAX_BYTES) {
+    if (meta.size > PDF_MAX_BYTES) {
       await ctx.storage.delete(args.storageId);
-      throw userError("The file is larger than 512 KB.");
+      throw userError("The file is larger than 10 MB.");
     }
     await ctx.db.insert("chatUploads", { companyId: ctx.companyId, memberId: ctx.member._id, storageId: args.storageId, createdAt: Date.now() });
     return null;
@@ -428,6 +464,35 @@ export const registerUpload = companyMutation({
 });
 
 // ── Usage ────────────────────────────────────────────────────────────────────────────────────────
+
+// ── Models ───────────────────────────────────────────────────────────────────────────────────────
+
+/** The models this person may choose, and why any is not available. Never a key, a provider's raw ID or a price. */
+export const models = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const off = await staffOffModels(ctx);
+    const chat = await settingFor(ctx, "chat");
+    return {
+      defaultKey: DEFAULT_CHAT_MODEL,
+      options: CHAT_MODELS.map((option) => {
+        const state = chatModelState(option, ctx.company, off, chat);
+        return { key: option.key, label: option.label, maker: option.maker, makerName: MAKER_NAMES[option.maker], cost: option.cost, bestFor: option.bestFor, available: state.available, why: state.available ? null : state.why };
+      }),
+    };
+  },
+});
+
+/** Change the model for the rest of this chat. The next answer uses it; earlier answers are unchanged. */
+export const setModel = companyMutation({
+  args: { conversationId: v.string(), model: v.string() },
+  handler: async (ctx, args) => {
+    const conversation = await ownConversation(ctx, ctx.companyId, ctx.member._id, args.conversationId);
+    const model = await checkedModel(ctx, args.model);
+    await ctx.db.patch(conversation._id, { modelKey: model.key === DEFAULT_CHAT_MODEL ? undefined : model.key });
+    return null;
+  },
+});
 
 export const usage = companyQuery({
   args: {},
@@ -469,6 +534,9 @@ export const decideKnowledge = ownerMutation({
     const entry = await ctx.db.get(args.knowledgeId);
     if (!entry || entry.companyId !== ctx.companyId) notFound();
     await ctx.db.patch(entry._id, { status: args.status, text: args.text === undefined ? entry.text : requiredText(args.text, "The knowledge", 500), decidedBy: ctx.member._id, decidedAt: Date.now() });
+    // The search index follows: confirmed knowledge becomes findable, anything else stops being.
+    if (args.status === "confirmed") await ctx.scheduler.runAfter(0, internal.knowledge.index, { kind: "knowledge", id: entry._id });
+    else await ctx.scheduler.runAfter(0, internal.knowledge.remove, { companyId: ctx.companyId, sourceKey: `knowledge:${entry._id}` });
     await recordEvent(ctx, { companyId: ctx.companyId, type: `company_knowledge.${args.status}`, actor: { kind: "member", memberId: ctx.member._id }, subject: { table: "companyKnowledge", id: entry._id } });
     return null;
   },

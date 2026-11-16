@@ -46,7 +46,7 @@ describe("jobs and assignments", () => {
     expect(covered.job.status).toBe("scheduled");
 
     await s.as.mutation(api.jobs.start, { companyId: s.companyId, jobId: s.jobId });
-    await s.as.mutation(api.jobs.complete, { companyId: s.companyId, jobId: s.jobId });
+    await s.as.mutation(api.jobs.closeWithoutReview, { companyId: s.companyId, jobId: s.jobId, reason: "Done without the cleaner link; the owner checked in person." });
     const done = await s.job();
     expect(done.job.status).toBe("completed");
     // Completing the service does not rewrite the assignment, and a finished job cannot be reopened.
@@ -167,7 +167,9 @@ describe("jobs and assignments", () => {
     const s = await setup();
     const assignmentId = await s.offer();
     const move = () => s.as.mutation(api.jobs.reschedule, { companyId: s.companyId, jobId: s.jobId, startsAt: JOB_START + HOUR, endsAt: JOB_END + HOUR });
-    expect(await refusal(move())).toContain("Release that assignment");
+    // The move is refused until a person has seen what it does to the cleaner who holds an offer.
+    expect(await refusal(move())).toContain("Review what the move does to them");
+    expect((await s.job()).job.startsAt).toBe(JOB_START);
     await s.as.mutation(api.assignments.release, { companyId: s.companyId, assignmentId, reason: "Customer moved the time" });
     await move();
     expect((await s.job()).job.startsAt).toBe(JOB_START + HOUR);

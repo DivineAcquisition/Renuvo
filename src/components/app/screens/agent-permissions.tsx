@@ -23,10 +23,10 @@ const LEVELS = [
 type Level = (typeof LEVELS)[number]["id"];
 const rank = (level: string) => LEVELS.findIndex((row) => row.id === level);
 
-type Action = { key: string; label: string; level: Level; ceiling: Level; standard: Level; money: boolean; perActionCents: number | null; perDayCents: number | null; changed: boolean };
+export type Action = { key: string; label: string; level: Level; ceiling: Level; standard: Level; money: boolean; perActionCents: number | null; perDayCents: number | null; changed: boolean };
 
 /** One action's permission. Only the Owner changes it, never past its ceiling, and money needs limits first. */
-function PermissionRow({ action, canEdit }: { action: Action; canEdit: boolean }) {
+export function PermissionRow({ action, canEdit }: { action: Action; canEdit: boolean }) {
   const { companyId } = useCompany();
   const set = useMutation(api.permissions.set);
   const { busy, error, run, setError } = useRun();

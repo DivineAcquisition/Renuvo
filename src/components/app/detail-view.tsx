@@ -11,6 +11,8 @@ import type { EventRef } from "../../../convex/lib/eventWords";
 const TONE: Record<Detail["status"]["tone"], NonNullable<BadgeProps["variant"]>> = { good: "success", pending: "info", attention: "warning", neutral: "outline" };
 
 const ASSIGNMENT_WORDS: Record<string, string> = { offered: "Offered · not accepted", accepted: "Accepted", declined: "Declined", expired: "No answer in time", cancelled: "Released" };
+/** A cancelled assignment says why it ended. Only a person's release reads as "Released". */
+const ENDED_WORDS: Record<string, string> = { job_covered: "Offer withdrawn · place filled", job_cancelled: "Visit cancelled", job_moved: "Ended · visit moved", dropped: "Could not attend", no_show: "No-show", undelivered: "Text not delivered" };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -48,12 +50,23 @@ export function DetailView({ detail, now, timezone, onOpen, actions }: { detail:
             <p key={index}>{line}</p>
           ))}
         </div>
+        {detail.job && detail.job.staffing.required > 1 && detail.job.status !== "cancelled" ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Crew: <span className="font-medium text-strong tabular-nums">{detail.job.staffing.accepted} of {detail.job.staffing.required}</span> accepted
+            {detail.job.staffing.offersOut > 0 ? ` · ${detail.job.staffing.offersOut} ${detail.job.staffing.offersOut === 1 ? "offer" : "offers"} out` : ""}
+          </p>
+        ) : null}
         {detail.job && detail.job.assignments.length > 0 ? (
           <ul className="mt-3 grid gap-1.5">
             {detail.job.assignments.map((row) => (
               <li key={row.id} className={cn("flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-sm", row.status === "accepted" ? "border-success/40 bg-success/5" : row.status === "offered" ? "border-dashed border-warning/60" : "border-border opacity-70")}>
                 <span>
-                  <span className="font-medium text-strong">{row.cleaner}</span> <span className="text-muted-foreground">· {ASSIGNMENT_WORDS[row.status]}</span>
+                  <span className="font-medium text-strong">{row.cleaner}</span>{" "}
+                  <span className="text-muted-foreground">
+                    · {row.status === "cancelled" && row.endCause ? (ENDED_WORDS[row.endCause] ?? ASSIGNMENT_WORDS.cancelled) : ASSIGNMENT_WORDS[row.status]}
+                    {row.role && detail.job!.staffing.required > 1 && (row.status === "accepted" || row.status === "offered") ? ` · ${row.role}` : ""}
+                    {row.status === "accepted" && row.checkedInAt ? " · checked in" : ""}
+                  </span>
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {money(row.payCents)} pay{row.status === "offered" ? ` · answer due ${whenLabel(row.respondBy, now, timezone)}` : ""}

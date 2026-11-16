@@ -37,11 +37,11 @@ export function areaWords(property: Pick<Doc<"properties">, "address"> | null): 
 
 const deadline = (at: number, timezone: string) => `${clock(at, timezone)} ${dayName(at, timezone)}`;
 
-export function offerSms(input: { company: Company; job: Job; property: Pick<Doc<"properties">, "address"> | null; assignment: Pick<Doc<"assignments">, "payCents" | "respondBy" | "role">; backup: boolean }): string {
+export function offerSms(input: { company: Company; job: Job; property: Pick<Doc<"properties">, "address"> | null; assignment: Pick<Doc<"assignments">, "payCents" | "respondBy" | "role">; backup: boolean; moved?: boolean }): string {
   const { company, job, assignment } = input;
   const crew = Math.max(1, job.requiredCrew ?? 1);
   return [
-    `${company.name}: ${input.backup ? "cover needed" : "job offer"}.`,
+    `${company.name}: ${input.moved ? "the job you accepted has moved. Please confirm the new time" : input.backup ? "cover needed" : "job offer"}.`,
     `${job.serviceType}, ${arrivalWords(job, company.timezone)}, ${durationWords(job)}.`,
     `${areaWords(input.property)}. ${roleWords(assignment.role, crew)}.`,
     `Est. pay ${money(assignment.payCents)}.`,

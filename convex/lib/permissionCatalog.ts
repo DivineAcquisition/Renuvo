@@ -45,6 +45,7 @@ export const ACTIONS: readonly ActionDef[] = [
   action("dispatch.declare_no_show", "dispatch", "Declare a no-show once the contact steps have run", "propose", { outsider: false }),
   action("dispatch.request_urgent_hire", "dispatch", "Ask Recruiter for an urgent hire", "execute", { outsider: false }),
   action("dispatch.send_reminder", "dispatch", "Send reminders and confirmations", "execute"),
+  action("dispatch.act_on_cleaner_reply", "dispatch", "Act on a cleaner's text: running late, can't come, or declining an offer", "execute_and_report", { ceiling: "execute_and_report" }),
   action("dispatch.notify_running_late", "dispatch", "Tell a customer a visit is running late", "execute_and_report"),
   action("dispatch.close_visit", "dispatch", "Close a visit on clean evidence", "execute_and_report", { outsider: false }),
   action("dispatch.reassign_confirmed_visit", "dispatch", "Reassign a confirmed visit", "propose"),

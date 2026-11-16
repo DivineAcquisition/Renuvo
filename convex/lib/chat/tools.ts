@@ -35,6 +35,11 @@ import { check, jsonSchema, stableHash, type Field } from "./fields";
 import { compareScenarios, PricingError, type PricingInput } from "./pricing";
 import { AGREEMENT_TOOLS } from "./agreementTools";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
+import type { Work } from "./work";
+import { featureOn, ownedAsset, queueGeneration, settingFor, capabilityFor, checkedParams } from "../ai/media";
+import { resolve as resolveCapability } from "../ai/registry";
+import { allowanceRow, mediaAllowance, monthKey } from "../ai/usage";
+import { businessSettingsOf } from "../settings/business";
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -53,7 +58,9 @@ export type Preview = { summary: string; lines: string[]; bindsTo: string };
 export type Outcome =
   | { status: "done" | "proposed"; summary: string; data: Record<string, unknown>; link?: Link; record?: RecordRef; artifact?: { artifactId: Id<"chatArtifacts">; version: number }; agreement?: { agreementId: Id<"agreements">; version: number } }
   | { status: "refused" | "unavailable"; why: string; data?: Record<string, unknown> }
-  | { status: "needs_approval"; preview: Preview };
+  | { status: "needs_approval"; preview: Preview }
+  /** Needs a model or the search index: prepared here, performed by the run engine (work.ts). */
+  | { status: "deferred"; work: Work; record?: RecordRef };
 
 export type ToolKind = "read" | "draft" | "write" | "unavailable";
 
@@ -266,7 +273,10 @@ const TOOLS: ChatTool[] = [
           activeCustomers: customers.length,
           readyCleaners: cleaners.length,
           openHiringNeeds: needs.map((row) => ({ needId: row._id, title: row.title, openings: row.openings, payApproved: Boolean(row.compensation) })),
-          priceBook: "Selestial has no price book or service catalog yet. Job prices are stored per visit only.",
+          services: businessSettingsOf(ctx.company)
+            .services?.filter((service) => service.status === "active")
+            .map((service) => ({ name: service.name, scope: service.scope, durationMinutes: service.durationMinutes, defaultCrew: service.defaultCrew, startingPrice: service.startingPriceCents === undefined ? "not set" : money(service.startingPriceCents) })) ?? [],
+          priceNote: "Starting prices are the Owner's, set in Settings › Services & pricing. They are defaults for new visits, not quotes.",
         },
       };
     },
@@ -591,6 +601,117 @@ const TOOLS: ChatTool[] = [
     },
   },
 
+  // ── Quality ──
+  {
+    name: "review_visit_photos",
+    label: "Quality is reviewing the photos",
+    description:
+      "Look at the photos a cleaner uploaded for one visit, against its checklist: what is visible, which checklist items the photos show done or not done, and what the photos cannot show. It describes; it does not judge the worker, infer sanitation, safety or hidden damage, or decide anything. Propose a review task with create_task when something needs a person.",
+    kind: "read",
+    minimumRole: "office",
+    specialist: "quality",
+    input: { type: "object", properties: { jobId: ID("The visit's id (jobs).") } },
+    run: async (ctx, args) => {
+      if (!featureOn(ctx.company, "photoReview")) return refused("The Owner has switched photo review off for this company.");
+      const job = await ownedRow(ctx, "jobs", args.jobId);
+      if (!job) return refused("No such visit in this company.");
+      const evidence = await ctx.db.query("evidence").withIndex("by_company_job", (q) => q.eq("companyId", ctx.company._id).eq("jobId", job._id)).take(40);
+      if (evidence.length === 0) return refused("No photos were uploaded for this visit, so there is nothing to review.");
+      const items = await ctx.db.query("checklistItems").withIndex("by_company_job", (q) => q.eq("companyId", ctx.company._id).eq("jobId", job._id)).take(60);
+      const photos = [];
+      for (const photo of evidence.slice(0, 8)) {
+        const meta = await ctx.db.system.get(photo.storageId);
+        if (meta) photos.push({ storageId: photo.storageId, label: `${photo.kind}${photo.checklistItemId ? ` (${items.find((item) => item._id === photo.checklistItemId)?.label ?? "checklist item"})` : ""} ${photos.length + 1}`, contentType: meta.contentType ?? "image/jpeg" });
+      }
+      return { status: "deferred", work: { kind: "photo_review", jobId: job._id, scope: job.scope, checklist: items.map((item) => item.label), photos }, record: { kind: "job", id: job._id } };
+    },
+  },
+  {
+    name: "review_video",
+    label: "Reviewing the video",
+    description: "Describe what is visible in a video from Creative Studio, with MM:SS timestamps, answering a question about it. Describes only; no judgments about workers.",
+    kind: "read",
+    minimumRole: "office",
+    specialist: "quality",
+    input: { type: "object", properties: { assetId: ID("The Creative Studio video's id."), question: { type: "string", max: 500 } } },
+    run: async (ctx, args) => {
+      const asset = await ownedAsset(ctx, ctx.company._id, args.assetId as string).catch(() => null);
+      if (!asset || asset.kind !== "video") return refused("No such video in Creative Studio.");
+      return { status: "deferred", work: { kind: "video_review", assetId: asset._id, storageId: asset.storageId, contentType: asset.contentType, question: args.question as string } };
+    },
+  },
+  {
+    name: "search_company_documents",
+    label: "Searching company knowledge and your drafts",
+    description: "Search confirmed company knowledge and your own saved drafts by meaning. Returns passages with where each came from. For live records (visits, customers, tasks) use the other tools: they are the truth.",
+    kind: "read",
+    minimumRole: "office",
+    input: { type: "object", properties: { query: { type: "string", max: 500 } } },
+    run: async (ctx, args) => {
+      if (!featureOn(ctx.company, "documentSearch")) return refused("The Owner has switched document search off for this company.");
+      return { status: "deferred", work: { kind: "document_search", query: args.query as string } };
+    },
+  },
+
+  // ── Marketing: Creative Studio ──
+  {
+    name: "request_creative",
+    label: "Marketing is preparing a creative",
+    description:
+      "Generate an illustrative image or a short promotional video in Creative Studio from a prompt. Generated media is labelled as generated and must never be presented as real before/after work. Real job photos are composed in Creative Studio, not generated. Uses the company's monthly generation allowance; the person approves first. Owners and Managers only.",
+    kind: "write",
+    minimumRole: "manager",
+    specialist: "marketing",
+    confirm: true,
+    input: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["image", "video"] },
+        prompt: { type: "string", max: 4000 },
+        size: { type: "string", optional: true, enum: ["1024x1024", "1536x1024", "1024x1536"] },
+        aspectRatio: { type: "string", optional: true, enum: ["16:9", "9:16"] },
+        durationSeconds: { type: "number", optional: true, integer: true, min: 4, max: 10 },
+        count: { type: "number", optional: true, integer: true, min: 1, max: 4 },
+      },
+    },
+    preview: async (ctx, args) => {
+      const kind = args.kind === "video" ? "video_generate" : "image_generate";
+      if (!featureOn(ctx.company, kind)) return refused(`The Owner has switched ${args.kind} generation off for this company.`);
+      let params;
+      try {
+        params = checkedParams(kind, { size: args.size as never, aspectRatio: args.aspectRatio as never, durationSeconds: args.durationSeconds as number | undefined, n: args.count as number | undefined });
+      } catch (error) {
+        return refused((error as { data?: { message?: string } }).data?.message ?? "Those settings are not available.");
+      }
+      const capability = capabilityFor(kind, params);
+      const resolved = resolveCapability(capability, await settingFor(ctx, capability));
+      if (!resolved.ready) return refused(resolved.words);
+      const limit = mediaAllowance(ctx.company);
+      const row = await allowanceRow(ctx, ctx.company._id, monthKey(Date.now()));
+      const used = kind === "video_generate" ? (row?.videosUsed ?? 0) + (row?.videosReserved ?? 0) : (row?.imagesUsed ?? 0) + (row?.imagesReserved ?? 0);
+      const want = kind === "video_generate" ? 1 : (params.n ?? 1);
+      const cap = kind === "video_generate" ? limit.videos : limit.images;
+      if (used + want > cap) return refused(`This company has ${Math.max(0, cap - used)} ${args.kind} generation${cap - used === 1 ? "" : "s"} left this month.`);
+      return {
+        status: "needs_approval",
+        preview: {
+          summary: kind === "video_generate" ? `Generate a ${params.durationSeconds}-second ${params.aspectRatio} video` : `Generate ${want} image${want === 1 ? "" : "s"} at ${params.size}`,
+          lines: [`Prompt: ${String(args.prompt).slice(0, 400)}`, `Model: ${resolved.model.model} (${resolved.model.provider}). Uses ${want} of this month's ${cap} (${used} used or in progress).`, "It is labelled as generated wherever it appears. It is not evidence of real work."],
+          bindsTo: stableHash({ kind, prompt: args.prompt, params, model: resolved.model.model, cap }),
+        },
+      };
+    },
+    run: async (ctx, args) => {
+      const kind = args.kind === "video" ? "video_generate" : "image_generate";
+      try {
+        const jobId = await queueGeneration(ctx, { company: ctx.company, member: ctx.member, kind, prompt: args.prompt as string, sources: [], params: { size: args.size as never, aspectRatio: args.aspectRatio as never, durationSeconds: args.durationSeconds as number | undefined, n: args.count as number | undefined } });
+        return { status: "done", summary: `Started a ${args.kind} generation in Creative Studio`, data: { jobId, state: "queued", note: "It runs in the background; the result appears in Creative Studio when the provider finishes." }, link: { href: "/app/agents/marketing/content-creative", label: "Open Creative Studio" } };
+      } catch (error) {
+        return refused((error as { data?: { message?: string } }).data?.message ?? "The generation could not be started.");
+      }
+    },
+  },
+
   // ── Tasks ──
   {
     name: "create_task",
@@ -760,7 +881,7 @@ const TOOLS: ChatTool[] = [
     minimumRole: "owner",
     specialist: "sales",
     input: { type: "object", properties: { service: { type: "string", optional: true, max: 200 }, priceCents: { type: "number", optional: true, integer: true, min: 0 } } },
-    run: async () => unavailable("Selestial has no price book or service catalog yet, so there is no live price to change. Changing prices is also always a person's decision. Save the pricing as a draft package instead."),
+    run: async () => unavailable("Chat does not change prices: changing prices is always a person's decision. The Owner sets each service's starting price in Settings › Services & pricing. Save the pricing as a draft package to take there."),
   },
   {
     name: "launch_campaign",
@@ -770,7 +891,10 @@ const TOOLS: ChatTool[] = [
     minimumRole: "owner",
     specialist: "marketing",
     input: { type: "object", properties: { name: { type: "string", optional: true, max: 200 } } },
-    run: async () => unavailable("The Marketing agent is not built, and no marketing sending is connected. A campaign can be drafted and saved, but nothing can be sent or scheduled from Selestial."),
+    run: async () =>
+      unavailable(
+        "No ad platform is connected. Running ads needs this company's own Meta ad account and Facebook Page authorized in Selestial, and Selestial's Meta app approved for ads management; neither is in place. Nothing was created in Meta and nothing was spent. The campaign can be drafted and saved, with creatives chosen in Creative Studio.",
+      ),
   },
   {
     name: "send_for_signature",

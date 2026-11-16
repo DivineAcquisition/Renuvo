@@ -4,8 +4,9 @@
  *
  * An integration is a tool an agent can use for the company. Every entry says how available it is, what
  * it lets agents do (`can`), and which agents use it. Nothing here is offered as connectable until its
- * connection is built: a planned integration is listed with what it will do, never with a working Connect
- * button.
+ * connection is built: a built one links to where it is set up; a planned one can only be requested,
+ * which records the company's interest for Selestial (convex/integrations.ts) and promises no date.
+ * convex/lib/integrations.ts lists the same ids for the server; a test keeps them equal.
  *
  * Only the Owner connects or disconnects an integration (the owner's decision of November 16, 2026).
  * Anyone in the company can see what is connected.
@@ -15,8 +16,8 @@ import type { AgentId } from "@/lib/app/navigation";
 export type IntegrationCategory = "payments" | "leads" | "google" | "microsoft" | "reviews" | "communication" | "accounting" | "hiring" | "import";
 
 export type IntegrationStatus =
-  /** Built and ready to connect. */
-  | { kind: "available" }
+  /** Built and ready to connect, at `href`. Its live state comes from the server. */
+  | { kind: "available"; href: string; setUpWhere: string }
   /** Built into the product, switched on by a setting Selestial manages (no account to connect). */
   | { kind: "built_in"; needs: "google-maps-key" }
   /** Not built yet. `phase` is the build phase in docs/integrations/00-plan.md. */
@@ -68,7 +69,7 @@ export const INTEGRATIONS: readonly Integration[] = [
   { id: "google-maps-travel", name: "Travel times", category: "google", does: "Dispatch uses real drive times between visits to choose cleaners and order the day.", can: ["time drives", "order the day"], agents: ["dispatch", "team-coordinator"], status: planned(3) },
   { id: "google-drive", name: "Google Drive", category: "google", does: "Agents read your price sheets, policies and scripts from a folder you choose, and file what they make: job photos and checklists, signed agreements, quotes, applicant resumes and new documents.", can: ["read documents", "save photos", "file agreements", "create documents"], agents: ["marketing", "sales", "dispatch", "quality", "recruiter"], status: planned(3) },
   { id: "google-calendar", name: "Google Calendar", category: "google", does: "Visits and interviews appear in your calendar, and busy times there block scheduling. Both ways.", can: ["read busy times", "add visits", "add interviews"], agents: ["dispatch", "recruiter", "team-coordinator"], status: planned(3) },
-  { id: "gmail", name: "Gmail", category: "google", does: "Agents send email from your company's own address instead of a Selestial one.", can: ["send as your address"], agents: ["sales", "retention", "customer-care", "recruiter"], status: planned(3) },
+  { id: "gmail", name: "Gmail", category: "google", does: "Connect your company's Gmail: Recruiter reads hiring mail from it, and applicant email goes from your own address instead of a Selestial one.", can: ["read hiring mail", "send as your address"], agents: ["recruiter", "sales", "retention", "customer-care"], status: { kind: "available", href: "/app/settings/recruiting", setUpWhere: "Settings › Recruiting rules" } },
   { id: "google-business-profile", name: "Google Business Profile", category: "google", does: "Retention asks happy customers for a Google review and drafts replies to new reviews for your approval.", can: ["ask for reviews", "read reviews", "draft replies"], agents: ["retention", "marketing"], status: planned(3) },
 
   // Microsoft 365
@@ -80,7 +81,7 @@ export const INTEGRATIONS: readonly Integration[] = [
   { id: "facebook-reviews", name: "Facebook recommendations", category: "reviews", does: "Retention asks happy customers to recommend you on Facebook and drafts replies to new recommendations for your approval.", can: ["ask for recommendations", "draft replies"], agents: ["retention", "marketing"], status: planned(6) },
 
   // Texting
-  { id: "texting-number", name: "Business texting number", category: "communication", does: "Selestial gives your company its own local number and handles the carrier registration. You pick the area code.", can: ["send texts", "receive texts", "register with carriers"], agents: ["sales", "dispatch", "retention", "customer-care", "recruiter"], status: planned(5), note: "Provided by Selestial through Twilio. No account of your own needed." },
+  { id: "texting-number", name: "Business texting number", category: "communication", does: "Selestial gives your company its own local number and handles the carrier registration. You pick the area code.", can: ["send texts", "receive texts", "register with carriers"], agents: ["sales", "dispatch", "retention", "customer-care", "recruiter"], status: { kind: "available", href: "/app/settings/compliance", setUpWhere: "Settings › Compliance" }, note: "Provided by Selestial through Telnyx. No account of your own needed." },
 
   // Accounting
   { id: "quickbooks-online", name: "QuickBooks Online", category: "accounting", does: "Customers, invoices, payments and processing fees sync to QuickBooks.", can: ["sync customers", "post invoices", "post payments", "post fees"], agents: [], status: planned(5) },

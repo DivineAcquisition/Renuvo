@@ -61,7 +61,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
       ref = { kind: "job", id: subject.id };
       const label = await visit(subject.id);
       text =
-        { created: `scheduled ${label}`, rescheduled: `moved ${label}`, in_progress: `started ${label}`, completed: `marked ${label} complete`, cancelled: `cancelled ${label}`, taken_over: `took ${label} over from Dispatch`, handed_back: `handed ${label} back to Dispatch` }[what] ?? null;
+        { created: `scheduled ${label}`, rescheduled: `moved ${label}`, in_progress: `started ${label}`, completed: data.review === "none" ? `closed ${label} without a review of the crew's evidence` : data.review === "reviewed" ? `reviewed the crew's report and closed ${label}` : `marked ${label} complete`, completion_reported: `received the whole crew's report that ${label} is done, for review`, completion_returned: `sent the crew's report for ${label} back for correction`, edited: `changed the details of ${label}`, cancelled: `cancelled ${label}`, taken_over: `took ${label} over from Dispatch`, handed_back: `handed ${label} back to Dispatch` }[what] ?? null;
     } else if (subject.table === "assignments") {
       const assignment = await doc(subject.id);
       if (assignment) {
@@ -80,6 +80,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
             delay_recorded: `recorded that ${name} is running late for ${label}`,
             completion_submitted: `received ${name}'s completion of ${label}, for review`,
             no_check_in_contacted: `asked ${name} about the missing check-in for ${label}`,
+            cleaner_asked: `texted ${name} to check in, send an ETA or say they cannot come, for ${label}`,
             no_check_in_alerted: `alerted the operator: ${name} has not checked in for ${label}`,
             no_show_suspected: `flagged a possible no-show by ${name} for ${label}, for a person to confirm`,
             no_show_confirmed: `confirmed ${name} as a no-show for ${label}`,
@@ -90,7 +91,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
                   ? `took ${name} off ${label}: no-show`
                   : cause === "undelivered"
                     ? `ended the offer to ${name} for ${label}: the text was not delivered`
-                    : cause === "job_cancelled" ? `ended ${name}'s assignment because the job was cancelled` : cause === "job_covered" ? `withdrew the offer to ${name}: another cleaner accepted` : `released ${name} from ${label}`,
+                    : cause === "job_cancelled" ? `ended ${name}'s assignment because the job was cancelled` : cause === "job_moved" ? `ended ${name}'s assignment for the old time: the visit was moved` : cause === "job_covered" ? `withdrew the offer to ${name}: another cleaner accepted` : `released ${name} from ${label}`,
           }[what] ?? null;
       }
     } else if (subject.table === "tasks") {

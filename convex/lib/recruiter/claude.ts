@@ -17,12 +17,15 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 
+import { REGISTRY } from "../ai/registry";
+
 import { interpretByRule, type Interpretation } from "./interpret";
 import { plainText, type MessageBody } from "./mail";
 import { rulesLooksLikeHiring, type HiringModel } from "./model";
 import { CLASSIFICATIONS, SOURCES, type Classification, type Source } from "./schema";
 
-const MODEL = "claude-opus-5-5";
+// Routine extraction: the inexpensive route from the registry (Claude Haiku 5.5).
+const MODEL = REGISTRY.classify.primary.model;
 const BETAS = ["server-side-fallback-2026-07-01"];
 const BODY_CHARS = 12_000;
 const ATTACHMENT_CHARS = 6_000;

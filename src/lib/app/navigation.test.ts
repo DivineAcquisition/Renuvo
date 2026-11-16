@@ -300,18 +300,19 @@ describe("navigation behavior", () => {
     expect(activeFor("/app/cleaners")).toMatchObject({ item: "cleaners" });
     // A page that stands in for exactly one destination highlights that destination.
     expect(activeFor("/app/insights")).toMatchObject({ item: "reports" });
-    expect(activeFor("/app/schedule")).toMatchObject({ agent: "dispatch", tab: "schedule", department: "operations" });
-    expect(activeFor("/app/departments/operations")).toMatchObject({ agent: "dispatch", tab: "offers-coverage" });
+    // Dispatch's own screens highlight Dispatch and the tab; the visit panel's address does not change that.
+    expect(activeFor("/app/agents/dispatch")).toMatchObject({ agent: "dispatch", tab: null, department: "operations" });
+    expect(activeFor("/app/agents/dispatch/schedule")).toMatchObject({ agent: "dispatch", tab: "schedule", department: "operations" });
+    expect(activeFor("/app/agents/dispatch/offers-coverage?open=job:abc12345")).toMatchObject({ agent: "dispatch", tab: "offers-coverage" });
     // Pages that only redirect, and department pages nothing points at, highlight nothing.
-    for (const path of ["/app/decisions", "/app/records", "/app/team", "/app/departments/growth"]) expect(resolvePath(path), path).toBeNull();
+    for (const path of ["/app/decisions", "/app/records", "/app/team", "/app/schedule", "/app/departments/operations", "/app/departments/growth"]) expect(resolvePath(path), path).toBeNull();
   });
 
   it("builds breadcrumbs and links from the same definition", () => {
     expect(breadcrumbsFor("/app/agents/dispatch/schedule")).toEqual([
       { label: "Operations", href: null },
-      // Dispatch has no overview page yet, so its crumb is not a link.
-      { label: "Dispatch", href: null },
-      { label: "Schedule", href: "/app/schedule" },
+      { label: "Dispatch", href: "/app/agents/dispatch" },
+      { label: "Schedule", href: "/app/agents/dispatch/schedule" },
     ]);
     expect(breadcrumbsFor("/app/agents/marketing/campaigns")).toEqual([
       { label: "Growth", href: null },
@@ -321,10 +322,16 @@ describe("navigation behavior", () => {
     expect(breadcrumbsFor("/app/approvals")).toEqual([{ label: "Approvals", href: "/app/approvals" }]);
     expect(breadcrumbsFor("/app/unknown")).toEqual([]);
     expect(linkTo("approvals")).toBe("/app/approvals");
-    expect(linkTo("dispatch.schedule")).toBe("/app/schedule");
+    expect(linkTo("dispatch.schedule")).toBe("/app/agents/dispatch/schedule");
+    expect(linkTo("dispatch.dispatch-board")).toBe("/app/agents/dispatch/dispatch-board");
+    expect(linkTo("dispatch.offers-coverage")).toBe("/app/agents/dispatch/offers-coverage");
+    expect(linkTo("dispatch.live-jobs")).toBe("/app/agents/dispatch/live-jobs");
+    expect(linkTo("dispatch.action-links")).toBe("/app/agents/dispatch/action-links");
+    expect(linkTo("dispatch.playbook")).toBe("/app/agents/dispatch/playbook");
     expect(linkTo("reports")).toBe("/app/insights");
     expect(linkTo("finance")).toBeNull();
-    expect(linkTo("dispatch")).toBeNull();
+    expect(linkTo("dispatch")).toBe("/app/agents/dispatch");
+    expect(linkTo("quality")).toBeNull();
     expect(linkTo("nothing")).toBeNull();
   });
 

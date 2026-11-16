@@ -71,7 +71,7 @@ export function DispatchView({ jobId, now, canOffer }: { jobId: Id<"jobs">; now:
                       </li>
                     ))}
                   </ul>
-                  {canOffer && pay && view.coverage === "uncovered" ? (
+                  {canOffer && pay && view.staffing.open > 0 ? (
                     <Button
                       className="mt-2"
                       variant="outline"

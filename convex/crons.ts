@@ -36,5 +36,7 @@ crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.cha
 crons.interval("expire agreement signing requests", { minutes: 30 }, internal.agreementSigning.sweep, {});
 crons.daily("remind about agreement renewals and expiries", { hourUTC: 13, minuteUTC: 11 }, internal.agreementRenewals.sweep, {});
 crons.daily("remove abandoned agreement uploads", { hourUTC: 8, minuteUTC: 29 }, internal.agreementFiles.cleanup, {});
+// Creative Studio: a generation whose worker went quiet is followed again (video) or reported (image), never resent.
+crons.interval("creative studio follows up quiet generations", { minutes: 5 }, internal.media.sweep, {});
 
 export default crons;

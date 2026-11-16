@@ -58,7 +58,9 @@ const NAV = [
   { href: "/staff", label: "Requests" },
   { href: "/staff/trust", label: "Trust records" },
   { href: "/staff/companies", label: "Companies" },
+  { href: "/staff/texting", label: "Texting" },
   { href: "/staff/people", label: "Staff" },
+  { href: "/staff/ai", label: "AI models" },
 ];
 
 function StaffShell({ role, children }: { role: "admin" | "reviewer"; children: React.ReactNode }) {
@@ -917,6 +919,139 @@ export function StaffPeople() {
         ) : null}
         <FormError message={error} />
       </Panel>
+    </>
+  );
+}
+
+// ── Texting numbers and carrier registration ──────────────────────────────────────────────────────
+
+const TEXTING_STATUS: Record<string, { label: string; variant: "info" | "warning" | "error" | "success" | "outline" }> = {
+  requested: { label: "Waiting for approval", variant: "warning" },
+  approved: { label: "Approved · starting", variant: "info" },
+  provisioning: { label: "Setting up", variant: "info" },
+  waiting_on_carriers: { label: "Waiting on carriers", variant: "info" },
+  failed: { label: "Stopped", variant: "error" },
+};
+
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+/**
+ * Cleaning companies' requests for a texting number. Approving spends Selestial's Telnyx money (the
+ * number, and the carriers' brand and campaign fees), so only an admin approves or runs one again.
+ */
+export function TextingQueue() {
+  const rows = useQuery(api.texting.queue, {});
+  const approve = useMutation(api.texting.approve);
+  const reject = useMutation(api.texting.reject);
+  const retry = useMutation(api.texting.retry);
+  const { busy, error, run } = useRun();
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  return (
+    <>
+      <PageHeader title="Texting" lead="Requests for a texting number and its carrier registration, in each company's own name. Approving buys the number and files the brand and campaign on Selestial's Telnyx account." />
+      <FormError message={error} />
+      {rows === undefined ? (
+        <Skeleton className="h-40 rounded-2xl" />
+      ) : rows.length === 0 ? (
+        <Panel>
+          <p className="py-6 text-center text-sm text-muted-foreground">No request is open.</p>
+        </Panel>
+      ) : (
+        <div className="grid gap-3">
+          {rows.map((row) => {
+            const status = TEXTING_STATUS[row.status] ?? { label: row.status, variant: "outline" as const };
+            return (
+              <Panel key={row.requestId}>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p>
+                      <span className="font-semibold text-strong">{row.company}</span>
+                      <span className="text-muted-foreground"> · {row.phoneNumber}</span>
+                    </p>
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                  </div>
+                  <dl className="grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
+                    <div>
+                      Legal name: <span className="text-strong">{row.brand.companyName}</span>
+                    </div>
+                    <div>
+                      Texts sent as: <span className="text-strong">{row.brand.displayName}</span>
+                    </div>
+                    <div>
+                      EIN: <span className="text-strong">{row.brand.ein}</span>
+                    </div>
+                    <div>
+                      Address:{" "}
+                      <span className="text-strong">
+                        {row.brand.street}, {row.brand.city}, {row.brand.state} {row.brand.postalCode}
+                      </span>
+                    </div>
+                    <div>
+                      Website: <span className="text-strong">{row.brand.website}</span>
+                    </div>
+                    <div>
+                      Support: <span className="text-strong">{row.brand.email}</span>
+                    </div>
+                    <div>
+                      Cost at request: <span className="text-strong">{row.upfrontCents !== null ? `${dollars(row.upfrontCents)} up front, ${dollars(row.monthlyCents ?? 0)} a month, plus carrier fees` : "not known"}</span>
+                    </div>
+                    <div>
+                      Asked: <span className="text-strong">{new Date(row.requestedAt).toLocaleString()}</span>
+                    </div>
+                  </dl>
+                  <p className="rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed text-strong">Consent wording: {row.consentWording}</p>
+                  {row.step ? <p className="text-strong">{row.step}</p> : null}
+                  {row.problem ? <p className="text-destructive-foreground">{row.problem}</p> : null}
+                  {row.numberOrderId || row.brandId || row.campaignId ? (
+                    <p className="font-mono text-[11px] text-muted-foreground">
+                      order {row.numberOrderId ?? "none"} · brand {row.brandId ?? "none"} · campaign {row.campaignId ?? "none"}
+                    </p>
+                  ) : null}
+                  {row.status === "requested" ? (
+                    rejecting === row.requestId ? (
+                      <form
+                        className="flex flex-wrap items-center gap-2"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void run(async () => {
+                            await reject({ requestId: row.requestId, note });
+                            setRejecting(null);
+                            setNote("");
+                          });
+                        }}
+                      >
+                        <TextInput autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why, in words the company will read" aria-label="Why it is turned down" required className="max-w-md" />
+                        <Button type="submit" variant="destructive-outline" size="sm" loading={busy}>
+                          Turn down
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setRejecting(null)}>
+                          Never mind
+                        </Button>
+                      </form>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => approve({ requestId: row.requestId }))}>
+                          Approve and buy the number
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setRejecting(row.requestId)}>
+                          Turn down
+                        </Button>
+                      </div>
+                    )
+                  ) : row.status === "failed" ? (
+                    <div>
+                      <Button variant="outline" size="sm" loading={busy} onClick={() => void run(() => retry({ requestId: row.requestId }))}>
+                        Run again from where it stopped
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </Panel>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

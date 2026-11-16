@@ -5,6 +5,8 @@ import type { FunctionReturnType } from "convex/server";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
+import { useNow } from "@/components/app/use-now";
+
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Action, Card, linkKey, Loading, Notice, Page, Problem, problemWords, Row, TextBox, useDraft } from "./shell";
@@ -365,7 +367,9 @@ function Finish({ token, detail }: { token: string; detail: Detail }) {
 
 /** The assigned job. `view` picks the part a text linked to; the full page has all of it. */
 export function JobPage({ token, view }: { token: string; view: "job" | "delay" | "photos" }) {
-  const data = useQuery(api.links.job, { token });
+  const now = useNow();
+  // The current minute goes with the request, so photo addresses refresh before they stop working.
+  const data = useQuery(api.links.job, now ? { token, asOf: now } : "skip");
   const checkIn = useMutation(api.links.checkInJob);
   const { busy, problem, act } = useAct();
   if (data === undefined) return <Loading what="your job" />;

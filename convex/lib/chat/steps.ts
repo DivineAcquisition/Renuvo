@@ -9,11 +9,12 @@ import { InputError, stableHash } from "./fields";
 import { addPart, setState } from "./state";
 import type { StepStatus } from "./schema";
 import { checkInput, roleAllows, TOOL_BY_NAME, type ChatTool, type Outcome, type ToolCtx } from "./tools";
+import type { Work } from "./work";
 
 /** The most a tool result may put back in front of the model. */
 const RESULT_CHARS = 12_000;
 
-export type StepAnswer = { content: string; isError: boolean; waiting: boolean };
+export type StepAnswer = { content: string; isError: boolean; waiting: boolean; deferred?: { stepId: Id<"chatActionSteps">; work: Work } };
 
 function toolCtx(ctx: MutationCtx, input: { company: Doc<"companies">; member: Doc<"members">; role: Role; run: Doc<"chatRuns">; idempotencyKey: string }): ToolCtx {
   return Object.assign(Object.create(null), ctx, { db: ctx.db, scheduler: ctx.scheduler, storage: ctx.storage, auth: ctx.auth, company: input.company, member: input.member, role: input.role, conversationId: input.run.conversationId, runId: input.run._id, idempotencyKey: input.idempotencyKey }) as ToolCtx;
@@ -43,6 +44,9 @@ async function settle(ctx: MutationCtx, step: Doc<"chatActionSteps">, outcome: O
     await ctx.db.patch(step._id, { status: "awaiting_approval", preview: outcome.preview, summary: outcome.preview.summary });
   } else if (outcome.status === "refused" || outcome.status === "unavailable") {
     await ctx.db.patch(step._id, { status: outcome.status, summary: outcome.why, result: JSON.stringify({ why: outcome.why, ...(outcome.data ?? {}) }).slice(0, 20_000), completedAt: now });
+  } else if (outcome.status === "deferred") {
+    // Performed by the run engine (work.ts); the step stays "running" until then.
+    if (outcome.record) await ctx.db.patch(step._id, { record: outcome.record });
   } else if (outcome.status === "done" || outcome.status === "proposed") {
     await ctx.db.patch(step._id, { status: outcome.status, summary: outcome.summary, result: JSON.stringify(outcome.data).slice(0, 20_000), link: outcome.link, record: outcome.record, completedAt: now });
     if (outcome.artifact && messageId) await addPart(ctx, messageId, { kind: "artifact", artifactId: outcome.artifact.artifactId, version: outcome.artifact.version });
@@ -113,6 +117,7 @@ export async function stepFromModel(
   const tc = toolCtx(ctx, { ...input, idempotencyKey });
   const outcome = await attempt(ctx, tool, tc, args, tool.confirm ? "preview" : "run");
   step = await settle(ctx, step, outcome, input.run.assistantMessageId);
+  if (outcome.status === "deferred") return { content: "", isError: false, waiting: false, deferred: { stepId: step._id, work: outcome.work } };
   return { content: forModel(step), isError: false, waiting: step.status === "awaiting_approval" };
 }
 
@@ -154,4 +159,11 @@ export async function decideStep(ctx: MutationCtx, input: { step: Doc<"chatActio
   const conversation = await ctx.db.get(step.conversationId);
   if (conversation && conversation.state === "awaiting_approval" && !stillWaiting.some((row) => row.status === "awaiting_approval")) await setState(ctx, conversation._id, "completed");
   return result;
+}
+
+/** Records the result of deferred work on its step, and what it used. */
+export async function finishDeferred(ctx: MutationCtx, step: Doc<"chatActionSteps">, result: { ok: true; summary: string; data: Record<string, unknown> } | { ok: false; why: string }): Promise<string> {
+  const outcome: Outcome = result.ok ? { status: "done", summary: result.summary, data: result.data } : { status: "refused", why: result.why };
+  const settled = await settle(ctx, step, outcome, null);
+  return forModel(settled);
 }

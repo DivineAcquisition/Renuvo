@@ -8,14 +8,18 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
-import { internalAction, internalMutation, type MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from "./_generated/server";
+import { readProfile } from "./lib/compliance/profile";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
 import { linkPath, linkState, siteOrigin, tokenFor } from "./lib/dispatch/links";
 import { recordEvent } from "./lib/events";
 import type { SendIntent } from "./lib/messaging/outbox";
 import { checkSend } from "./lib/messaging/policy";
 import { emailProvider } from "./lib/messaging/email";
+import { accessToken, googleApp, rawMessage, sendFromGmail } from "./lib/recruiter/gmail";
+import { MailboxAuthError } from "./lib/recruiter/mailbox";
+import { unseal } from "./lib/recruiter/secrets";
 import { messagingProvider } from "./lib/messaging/provider";
 import { afterApplicantMessage } from "./lib/recruiter/delivery";
 import { applicantLinkPath, applicantLinkState } from "./lib/recruiter/links";
@@ -80,6 +84,7 @@ export const claim = internalMutation({
       body = body.replace("{link}", `${siteOrigin()}${linkPath(link.purpose, token, message.linkPath ?? "")}`);
     }
     let fromName = "";
+    let via: { connectionId: Id<"mailboxConnections">; address: string } | null = null;
     if (message.applicationId) {
       // A message to an applicant passes the send gate again at the moment it goes: they may have submitted, withdrawn or asked a question since it was planned.
       const application = await ctx.db.get(message.applicationId);
@@ -98,10 +103,25 @@ export const claim = internalMutation({
       }
       if (link && token) body = body.replace("{link}", `${siteOrigin()}${applicantLinkPath(link.purpose, token)}`);
       fromName = recruiterSettings(company!).fromName;
+      // A company that connected its own mailbox and allowed sending: the email goes from its own address.
+      if ((message.channel ?? "sms") === "email") {
+        const own = (
+          await ctx.db
+            .query("mailboxConnections")
+            .withIndex("by_company", (q) => q.eq("companyId", message.companyId))
+            .take(20)
+        ).find((row) => row.provider === "gmail" && row.canSend && row.status === "connected");
+        if (own) {
+          via = { connectionId: own._id, address: own.address };
+          await ctx.db.patch(message._id, { provider: "gmail" });
+        }
+      }
     }
     const attempt = message.attempts + 1;
     await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now() });
-    return { to: message.to, body, attempt, channel: message.channel ?? ("sms" as const), subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName };
+    // A text goes from the company's own number. The send policy has already checked it is set and approved.
+    const from = (message.channel ?? "sms") === "sms" ? ((await readProfile(ctx, message.companyId)).messaging.smsNumber ?? "") : "";
+    return { to: message.to, from, body, attempt, channel: message.channel ?? ("sms" as const), subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName, via };
   },
 });
 
@@ -139,11 +159,47 @@ export const settle = internalMutation({
   },
 });
 
+/**
+ * Sends one applicant email from the company's own Gmail. Its authorization is opened here and only
+ * here. An authorization that has ended stops sending from that mailbox until the Owner reconnects it.
+ * A connection that drops mid-send throws: nobody knows whether it went, so it is never sent again by itself.
+ */
+async function sendThroughMailbox(
+  ctx: ActionCtx,
+  messageId: Id<"messages">,
+  via: { connectionId: Id<"mailboxConnections">; address: string },
+  claimed: { to: string; body: string; subject: string; replyTo: string; fromName: string },
+): Promise<{ ok: true; providerMessageId: string; delivered: boolean } | { ok: false; retryable: boolean; problem: string }> {
+  const app = googleApp();
+  const credential = await ctx.runQuery(internal.recruiterMailbox.credentialFor, { connectionId: via.connectionId });
+  const refreshToken = credential ? await unseal(credential.sealedRefreshToken, via.connectionId) : null;
+  if (!app || !refreshToken) return { ok: false, retryable: false, problem: "The company's mailbox is not connected for sending." };
+  let token: string;
+  try {
+    token = await accessToken(app, refreshToken);
+  } catch (error) {
+    if (error instanceof MailboxAuthError) {
+      await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+      return { ok: false, retryable: false, problem: "The company's mailbox no longer lets Selestial send. Reconnect it." };
+    }
+    return { ok: false, retryable: true, problem: "Google did not answer." };
+  }
+  const raw = rawMessage({ from: via.address, fromName: claimed.fromName, to: claimed.to, replyTo: claimed.replyTo || undefined, subject: claimed.subject, text: claimed.body, messageId });
+  const result = await sendFromGmail({ token, raw });
+  if (!result.ok && result.problem.startsWith("The company's mailbox no longer")) await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+  return result;
+}
+
 export const deliver = internalAction({
   args: { messageId: v.id("messages") },
   handler: async (ctx, args) => {
     const claimed = await ctx.runMutation(internal.messaging.claim, { messageId: args.messageId });
     if (!claimed) return null;
+    if (claimed.channel === "email" && claimed.via) {
+      const result = await sendThroughMailbox(ctx, args.messageId, claimed.via, claimed);
+      await ctx.runMutation(internal.messaging.settle, { messageId: args.messageId, result });
+      return null;
+    }
     if (claimed.channel === "email") {
       const email = emailProvider();
       if (!email) {
@@ -161,7 +217,7 @@ export const deliver = internalAction({
       return null;
     }
     // If this throws, nobody knows whether the text went. The message stays "sending" and the sweep marks it unconfirmed.
-    const result = await provider.send({ to: claimed.to, body: claimed.body, idempotencyKey: args.messageId, attempt: claimed.attempt });
+    const result = await provider.send({ to: claimed.to, from: claimed.from || undefined, body: claimed.body, idempotencyKey: args.messageId, attempt: claimed.attempt });
     await ctx.runMutation(internal.messaging.settle, { messageId: args.messageId, result });
     return null;
   },
@@ -193,7 +249,7 @@ export const receipt = internalMutation({
       return "delivered" as const;
     }
     const bounced = args.outcome === "bounced";
-    const problem = bounced ? "The address rejected the message." : message.channel === "email" ? "The email service reported that the message was not delivered." : "The carrier reported that the text was not delivered.";
+    const problem = args.problem ?? (bounced ? "The address rejected the message." : message.channel === "email" ? "The email service reported that the message was not delivered." : "The carrier reported that the text was not delivered.");
     await ctx.db.patch(message._id, { status: "failed", failedAt: now, problem, ...(bounced ? { bouncedAt: now } : {}) });
     await recordEvent(ctx, { companyId: message.companyId, type: bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");

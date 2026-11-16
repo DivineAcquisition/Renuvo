@@ -85,7 +85,7 @@ export const WAITING_ON = ["customer", "cleaner", "applicant", "owner", "other"]
 export const waitingOnValidator = literals(WAITING_ON);
 
 /** Why an assignment that ended as cancelled ended. Only some causes count against asking the same cleaner again. */
-export const END_CAUSES = ["released", "job_covered", "job_cancelled", "dropped", "no_show", "undelivered"] as const;
+export const END_CAUSES = ["released", "job_covered", "job_cancelled", "job_moved", "dropped", "no_show", "undelivered"] as const;
 export type EndCause = (typeof END_CAUSES)[number];
 export const endCauseValidator = literals(END_CAUSES);
 

@@ -14,7 +14,9 @@ import { recordEvent } from "./lib/events";
 import { checked, headerEvidence } from "./lib/recruiter/interpret";
 import { ingestMessage, type IngestInput, type Verdict } from "./lib/recruiter/intake";
 import { addressOf, classifyHeader, plainText, worthReading, type MessageHeader } from "./lib/recruiter/mail";
+import { accessToken, gmailConnector, googleApp } from "./lib/recruiter/gmail";
 import { connectorFor, MailboxAuthError } from "./lib/recruiter/mailbox";
+import { unseal } from "./lib/recruiter/secrets";
 import { hiringModel } from "./lib/recruiter/model";
 import { classificationValidator, contactEvidenceValidator, sourceValidator } from "./lib/recruiter/schema";
 import { HOUR } from "./lib/recruiter/settings";
@@ -153,7 +155,23 @@ export const sync = internalAction({
   handler: async (ctx, args): Promise<{ filed: number; opened: number } | null> => {
     const start = await ctx.runQuery(internal.recruiterInbox.begin, { connectionId: args.connectionId });
     if (!start) return null;
-    const connector = connectorFor(start.provider);
+    let connector = connectorFor(start.provider);
+    if (start.provider === "gmail") {
+      // The stored authorization, opened only here and only for this run.
+      const app = googleApp();
+      const credential = await ctx.runQuery(internal.recruiterMailbox.credentialFor, { connectionId: args.connectionId });
+      const refreshToken = credential ? await unseal(credential.sealedRefreshToken, args.connectionId) : null;
+      if (!app || !refreshToken) {
+        await ctx.runMutation(internal.recruiterInbox.failed, { connectionId: args.connectionId, kind: app ? "auth" : "not_built" });
+        return null;
+      }
+      try {
+        connector = gmailConnector({ token: await accessToken(app, refreshToken) });
+      } catch (error) {
+        await ctx.runMutation(internal.recruiterInbox.failed, { connectionId: args.connectionId, kind: error instanceof MailboxAuthError ? "auth" : "provider" });
+        return null;
+      }
+    }
     if (!connector) {
       await ctx.runMutation(internal.recruiterInbox.failed, { connectionId: args.connectionId, kind: "not_built" });
       return null;

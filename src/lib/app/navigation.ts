@@ -297,7 +297,7 @@ export const AGENTS: readonly AgentNav[] = [
     backendAgent: null,
     tabs: [
       ["campaigns", "Campaigns"],
-      ["content-creative", "Content & Creative"],
+      ["content-creative", "Content & Creative", LIVE],
       ["promotions", "Promotions"],
       ["lead-sources", "Lead Sources"],
       ["performance", "Performance"],
@@ -344,17 +344,14 @@ export const AGENTS: readonly AgentNav[] = [
     responsibility: "Staffs jobs, manages scheduling and coverage, and monitors service progress.",
     backendAgent: "dispatch",
     workflow: "built",
+    overview: LIVE,
     tabs: [
-      ["dispatch-board", "Dispatch Board"],
-      ["schedule", "Schedule", interim(`${APP_ROOT}/schedule`, "Arrival windows, projected duration, cleaner availability, conflicts and buffers, and changes that affect later jobs. Today it is visits by day or week with who accepted.")],
-      [
-        "offers-coverage",
-        "Offers & Coverage",
-        interim(`${APP_ROOT}/departments/operations`, "Broadcast offers, backup coverage and urgent-hire requests to Recruiter. Today it lists visits without an accepted cleaner; offers are made from each visit's panel."),
-      ],
-      ["live-jobs", "Live Jobs"],
-      ["action-links", "Action Links"],
-      ["playbook", "Playbook"],
+      ["dispatch-board", "Dispatch Board", LIVE],
+      ["schedule", "Schedule", LIVE],
+      ["offers-coverage", "Offers & Coverage", LIVE],
+      ["live-jobs", "Live Jobs", LIVE],
+      ["action-links", "Action Links", LIVE],
+      ["playbook", "Playbook", LIVE],
     ],
   }),
   agent({
@@ -429,11 +426,11 @@ export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes
   { pattern: `${APP_ROOT}/decisions`, today: "Redirects to Approvals.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/records`, today: "Redirects to Customers & Properties.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/team`, today: "Redirects to Settings, where agent permissions and pause now live.", becomes: "Removed once old links have had time to move." },
-  { pattern: `${APP_ROOT}/schedule`, today: "Visits by day or week.", becomes: "Dispatch › Schedule, at its own path, with a redirect from here." },
+  { pattern: `${APP_ROOT}/schedule`, today: "Redirects to Dispatch › Schedule.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/insights`, today: "The week's measures.", becomes: "Reports, at /app/reports, with a redirect from here." },
   {
     pattern: `${APP_ROOT}/departments/[department]`,
-    today: "A workspace per department. Only Operations is linked, as the stand-in for Dispatch › Offers & Coverage.",
+    today: "A workspace per department. Nothing links to it now that Dispatch has its own screens.",
     becomes: "Nothing directly. Departments are sidebar tabs and have no page; the content moves to agent workspaces.",
   },
 ];

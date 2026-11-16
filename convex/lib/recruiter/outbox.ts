@@ -108,7 +108,16 @@ export async function queueApplicantMessage(ctx: MutationCtx, planned: PlannedAp
   const { application, applicant, company } = planned;
   const settings = recruiterSettings(company);
   const email = planned.channel === "email";
-  const provider = email ? emailProvider() : messagingProvider();
+  // Email can go from the company's own connected mailbox even when no shared email service is set up.
+  const ownMailbox = email
+    ? (
+        await ctx.db
+          .query("mailboxConnections")
+          .withIndex("by_company", (q) => q.eq("companyId", company._id))
+          .take(20)
+      ).some((row) => row.provider === "gmail" && row.canSend && row.status === "connected")
+    : false;
+  const provider = email ? (ownMailbox ? { name: "gmail" } : emailProvider()) : messagingProvider();
   const to = email ? application.contact.address : applicant.smsConsent ? `+${applicant.smsConsent.phone}` : undefined;
 
   let problem = await sendProblem(ctx, application, applicant, planned.purpose, settings);

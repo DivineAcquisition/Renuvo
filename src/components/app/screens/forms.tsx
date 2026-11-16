@@ -261,12 +261,12 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const customers = useQuery(api.customers.list, { companyId });
   const create = useMutation(api.jobs.create);
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "" });
+  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "", crew: "1", arrival: "0", deadlineDate: "", deadlineTime: "", instructions: "" });
   /** Fills the fields from the template. Everything stays editable; the visit keeps a copy of the template as it is now. */
   const choose = (picked: Template | null) =>
     setForm((current) =>
       picked
-        ? { ...current, serviceId: picked.id, duration: picked.durationMinutes, serviceType: picked.name, scope: picked.scope, skills: picked.skills.join(", "), price: picked.startingPriceCents === undefined ? "" : (picked.startingPriceCents / 100).toFixed(2) }
+        ? { ...current, serviceId: picked.id, duration: picked.durationMinutes, serviceType: picked.name, scope: picked.scope, skills: picked.skills.join(", "), crew: String(picked.defaultCrew), price: picked.startingPriceCents === undefined ? "" : (picked.startingPriceCents / 100).toFixed(2) }
         : { ...current, serviceId: "", duration: 0 },
     );
   /** With a template chosen, the end follows the start by the template's duration. */
@@ -288,6 +288,12 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
         if (startsAt === null || endsAt === null) return setError("Choose the day, the start time and the end time.");
         const priceCents = form.price.trim() ? centsFrom(form.price) : undefined;
         if (priceCents === null) return setError("Enter the price as an amount in dollars and cents, or leave it empty.");
+        const [requiredCrew, arrivalWindowMinutes] = [Number(form.crew), Number(form.arrival || "0")];
+        if (!Number.isInteger(requiredCrew) || requiredCrew < 1 || requiredCrew > 12) return setError("Cleaners needed is a whole number from 1 to 12.");
+        if (!Number.isInteger(arrivalWindowMinutes) || arrivalWindowMinutes < 0) return setError("The arrival window is a whole number of minutes. Use 0 for an exact arrival time.");
+        const wantsDeadline = Boolean(form.deadlineDate || form.deadlineTime);
+        const hardDeadlineAt = wantsDeadline ? zonedInstant(form.deadlineDate, form.deadlineTime, timezone) : undefined;
+        if (hardDeadlineAt === null) return setError("Give both the day and the time the service must be finished by, or leave both empty.");
         void run(async () => {
           await create({
             companyId,
@@ -300,6 +306,10 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
             priceCents,
             startsAt,
             endsAt,
+            requiredCrew,
+            arrivalWindowMinutes,
+            hardDeadlineAt,
+            instructions: form.instructions.trim() || undefined,
           });
           onDone();
         });
@@ -352,6 +362,23 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
           <TextInput type="time" value={form.to} onChange={set("to")} required />
         </Field>
       </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Cleaners needed" hint="The visit is staffed only when this many have accepted.">
+          <TextInput inputMode="numeric" value={form.crew} onChange={set("crew")} required />
+        </Field>
+        <Field label="Arrival window, minutes" hint="0 means arrive at the start time. 30 means any time in the half hour after it.">
+          <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} />
+        </Field>
+        <Field label="Must be finished by, day (optional)" hint="For example a guest check-in.">
+          <TextInput type="date" value={form.deadlineDate} onChange={set("deadlineDate")} />
+        </Field>
+        <Field label="Must be finished by, time">
+          <TextInput type="time" value={form.deadlineTime} onChange={set("deadlineTime")} />
+        </Field>
+      </div>
+      <Field label="Instructions for the crew (optional)" hint="What the crew needs to know that is not the scope. A cleaner sees it only after they accept.">
+        <TextArea value={form.instructions} onChange={set("instructions")} rows={2} maxLength={4000} />
+      </Field>
       <p className="text-xs text-muted-foreground">Times are on the company’s clock ({timezone}). A new visit has no cleaner until one accepts it.</p>
       <FormError message={error} />
       <Submit busy={busy} label="Schedule the visit" onCancel={onDone} />
