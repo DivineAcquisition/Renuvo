@@ -3,6 +3,7 @@
 import { usePaginatedQuery } from "convex/react";
 
 import { useCompany } from "@/components/app/company";
+import { Guard } from "@/components/app/settings/guard";
 import { OwnerOnly } from "@/components/app/settings/billing";
 import { Panel } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { api } from "../../../../convex/_generated/api";
 
 const when = (at: number, timezone: string) => new Intl.DateTimeFormat("en-US", { timeZone: timezone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(at));
 
-export function ActivityLog() {
+function ActivityLogInner() {
   const { companyId, role, timezone } = useCompany();
   const events = usePaginatedQuery(api.settings.activity, role === "owner" ? { companyId } : "skip", { initialNumItems: 25 });
   if (role !== "owner") return <OwnerOnly what="The activity log" />;
@@ -47,5 +48,13 @@ export function ActivityLog() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export function ActivityLog() {
+  return (
+    <Guard>
+      <ActivityLogInner />
+    </Guard>
   );
 }

@@ -184,3 +184,14 @@ describe("the overview and navigation", () => {
     expect(renderToStaticMarkup(<SettingsNavList sections={[]} activePath="/" />)).toContain("Nothing in Settings matches");
   });
 });
+
+describe("when a part of Settings cannot load", () => {
+  it("says what is likely wrong instead of leaving a blank page", async () => {
+    const { Unavailable } = await import("@/components/app/settings/guard");
+    const html = renderToStaticMarkup(<Unavailable error={new Error("Could not find public function for 'settings:business'\nstack...")} />);
+    expect(html).toContain("could not load");
+    expect(html).toContain("Deploy the latest Convex functions");
+    expect(html).toContain("Could not find public function for &#x27;settings:business&#x27;");
+    expect(html).not.toContain("stack...");
+  });
+});
