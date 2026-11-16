@@ -89,6 +89,18 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "mediaAssets", index: "by_company_created", omit: ["storageId"], why: "Internal file references. The files themselves are not in the file." },
   { table: "mediaJobs", index: "by_company_created" },
   { table: "mediaAllowances", index: "by_company_month" },
+  // Google (convex/lib/google/schema.ts). What was connected, chosen, received and sent; never a credential.
+  { table: "googleConnections", index: "by_company" },
+  { table: "googleResources", index: "by_company_kind" },
+  { table: "googleJobs", index: "by_company_status", omit: ["payload"], why: "Internal work instructions; what each job did is in its result and in the event log." },
+  { table: "googleCalendarLinks", index: "by_company_subject" },
+  { table: "googleReviews", index: "by_company_created" },
+  { table: "googleLeads", index: "by_company_received" },
+  { table: "googleConversions", index: "by_company_created" },
+  { table: "googleAdDrafts", index: "by_company_updated" },
+  { table: "googleAdsSnapshots", index: "by_company_account" },
+  { table: "googleDriveTexts", index: "by_company_resource" },
+  { table: "googleSettings", index: "by_company" },
 ];
 
 /** Company tables kept out of the export, and why. */
@@ -104,6 +116,13 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   knowledgeChunks: "A search index rebuilt from company knowledge and drafts, which are exported themselves.",
   chatUploads: "Internal file references for chat attachments; the files themselves are private to the member who uploaded them.",
   chatMessages: "The words of private chats, for the same reason as conversations.",
+  googleCredentials: "A sealed authorization to the company's Google account; it opens the account, so a copy must never leave. The connection itself is exported.",
+  googleOAuthStates: "Ten-minute, single-use records of a Google sign-in in progress; nothing in them is about the business.",
+  googleLeadKeys: "The hash of the lead-form key; it proves Google's deliveries and is useless outside Selestial.",
+  googleWatches: "Notification channels with Google, renewed automatically; their secrets must not leave.",
+  googleChoices: "A short-lived copy of what Google listed for the Owner to choose from.",
+  googleBusy: "A short-lived copy of busy times read from Google Calendar; the calendar itself is the record.",
+  googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 

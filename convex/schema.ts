@@ -5,6 +5,7 @@
 import { defineSchema, defineTable } from "convex/server";
 
 import { agreementTables } from "./lib/agreements/schema";
+import { googleTables } from "./lib/google/schema";
 import { aiTables } from "./lib/ai/schema";
 import { billingTables } from "./lib/billing/schema";
 import { chatTables } from "./lib/chat/schema";
@@ -721,6 +722,7 @@ export default defineSchema({
   // ── Company Chat: conversations, runs, action receipts, drafts and confirmed knowledge ─────────
   ...chatTables,
   ...agreementTables,
+  ...googleTables,
 
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,

@@ -11,6 +11,7 @@ const ICON: Record<string, LucideIcon> = {
   people: Users,
   agents: BotIcon,
   connections: Plug,
+  google: Plug,
   billing: Wallet,
   ai: Sparkles,
   security: KeyIcon,

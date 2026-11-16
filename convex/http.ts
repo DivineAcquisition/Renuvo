@@ -5,7 +5,11 @@
  * POST /webhooks/resend         delivery reports, bounces and complaints for email. Needs RESEND_WEBHOOK_SECRET.
  * POST /webhooks/telnyx         delivery reports for texts, and texts coming in. Needs TELNYX_PUBLIC_KEY.
  * POST /webhooks/autumn         plan, purchase and balance changes from Autumn. Needs AUTUMN_WEBHOOK_SECRET.
- * GET  /oauth/google/callback   where Google sends an Owner back after they allowed Gmail access.
+ * GET  /oauth/google/callback   where Google sends an Owner back after they allowed access: the company's
+ *                               Google connection (convex/google.ts) or a Gmail hiring inbox, told apart by the state.
+ * POST /webhooks/google/calendar  Calendar push notifications, checked against each channel's own secret token.
+ * POST /webhooks/google/pubsub    Gmail and Business Profile notifications through Pub/Sub, with Google's signed OIDC token.
+ * POST /webhooks/google/leads     Google Ads lead form leads, with the company's lead key.
  */
 import { httpRouter } from "convex/server";
 
@@ -14,6 +18,10 @@ import { oauthCallback, providerWebhook, signedFileRoute } from "./lib/builders"
 import { exchangeCode, googleApp } from "./lib/recruiter/gmail";
 import { hashToken, seal } from "./lib/recruiter/secrets";
 import { afterConnect, googleRedirectUri } from "./recruiterMailbox";
+import { afterGoogle } from "./google";
+import { exchange as googleExchange, googleApp as googleConnectApp, identityFrom, redirectUri as googleConnectRedirect } from "./lib/google/oauth";
+import { endpoints as googleEndpoints } from "./lib/google/platform";
+import { googleKeys, pushData, verifyOidc } from "./lib/google/pubsub";
 import { verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
 import { parseEvent, signingProvider, verifyBody } from "./lib/agreements/signing";
 import { photoRequestValid } from "./lib/dispatch/photoLinks";
@@ -118,7 +126,34 @@ http.route({
       const code = params.get("code");
       // The Owner said no at Google, or the address was not one Google sent: nothing is stored.
       if (!state || state.length > 200) return afterConnect("failed");
-      const taken = await ctx.runMutation(internal.recruiterMailbox.takeState, { stateHash: await hashToken(state) });
+      const stateHash = await hashToken(state);
+      // The company's Google connection first; a state it does not know belongs to the Gmail inbox flow.
+      const google = await ctx.runMutation(internal.google.takeState, { stateHash });
+      if (google.kind === "expired") return afterGoogle("expired");
+      if (google.kind === "ok") {
+        const app = googleConnectApp();
+        const redirect = googleConnectRedirect();
+        if (!code || params.get("error") || !app || !redirect) return afterGoogle(params.get("error") === "access_denied" ? "declined" : "failed");
+        let tokens;
+        try {
+          tokens = await googleExchange(app, code, redirect);
+        } catch {
+          return afterGoogle("failed");
+        }
+        const who = identityFrom(tokens.idToken);
+        if (!who?.email) return afterGoogle("failed");
+        const done = await ctx.runMutation(internal.google.completeConnect, { companyId: google.companyId, memberId: google.memberId, connectionId: google.connectionId, googleSub: who.sub, email: who.email, scopes: tokens.scopes, hasRefreshToken: Boolean(tokens.refreshToken) });
+        if (!done.ok) return afterGoogle(done.reason);
+        if (tokens.refreshToken) {
+          const sealed = await seal(tokens.refreshToken, done.connectionId);
+          if (!sealed) return afterGoogle("failed");
+          await ctx.runMutation(internal.google.storeCredential, { connectionId: done.connectionId, sealedRefreshToken: sealed });
+        }
+        // Partial consent is kept as it is: only what Google actually granted is switched on.
+        const missing = google.features.filter((f) => !done.enabled.includes(f));
+        return afterGoogle(missing.length ? `partial:${missing.join(",")}` : "connected");
+      }
+      const taken = await ctx.runMutation(internal.recruiterMailbox.takeState, { stateHash });
       if (!taken) return afterConnect("expired");
       const app = googleApp();
       const redirectUri = googleRedirectUri();
@@ -138,6 +173,61 @@ http.route({
       await ctx.runMutation(internal.recruiterMailbox.storeCredential, { companyId: taken.companyId, connectionId, sealedRefreshToken: sealed, scopes });
       return afterConnect("connected");
     },
+  }),
+});
+
+/** Calendar push: the channel id and token are checked against the stored channel; anything else is ignored. */
+http.route({
+  path: "/webhooks/google/calendar",
+  method: "POST",
+  handler: providerWebhook({
+    verify: async (request) => /^selestial-[0-9a-f-]{36}$/.test(request.headers.get("x-goog-channel-id") ?? "") && (request.headers.get("x-goog-channel-token") ?? "").length >= 20,
+    handler: async (ctx, _body, request) => {
+      await ctx.runMutation(internal.googleCalendar.notified, {
+        channelId: request.headers.get("x-goog-channel-id")!,
+        tokenHash: await hashToken(request.headers.get("x-goog-channel-token")!),
+        state: request.headers.get("x-goog-resource-state") ?? "",
+        resourceId: request.headers.get("x-goog-resource-id") ?? undefined,
+      });
+    },
+  }),
+});
+
+/**
+ * Pub/Sub push for Gmail and Business Profile. Only a request carrying Google's signed token for this
+ * address and Selestial's push service account is read. A notification only starts a read; the timers
+ * catch anything missed.
+ */
+http.route({
+  path: "/webhooks/google/pubsub",
+  method: "POST",
+  handler: providerWebhook({
+    verify: async (request) => {
+      const audience = googleEndpoints().pubsubPush;
+      const email = process.env.GOOGLE_PUBSUB_PUSH_SERVICE_ACCOUNT?.trim();
+      const token = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      if (!audience || !email || !token) return false;
+      return (await verifyOidc(token, await googleKeys(), { audience, email })) !== null;
+    },
+    handler: async (ctx, body) => {
+      const message = pushData(body);
+      if (!message) return 400;
+      const data = message.data as { emailAddress?: unknown; location?: unknown; review?: unknown };
+      if (typeof data.emailAddress === "string") await ctx.runMutation(internal.recruiterGmailWatch.notified, { emailAddress: data.emailAddress });
+      else if (typeof data.location === "string") await ctx.runMutation(internal.googleBusiness.notified, { location: data.location });
+      else if (typeof data.review === "string") await ctx.runMutation(internal.googleBusiness.notified, { location: data.review.replace(/\/reviews\/.*$/, "") });
+      // Anything else is acknowledged so Pub/Sub does not redeliver it forever.
+    },
+  }),
+});
+
+/** Google Ads lead forms. The key Google sends must be the company's current key (403 otherwise). */
+http.route({
+  path: "/webhooks/google/leads",
+  method: "POST",
+  handler: providerWebhook({
+    verify: async (_request, body) => body.length > 0 && body.length < 64 * 1024,
+    handler: async (ctx, body) => (await ctx.runMutation(internal.googleAds.leadFormWebhook, { body })).status,
   }),
 });
 

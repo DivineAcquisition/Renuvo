@@ -409,13 +409,14 @@ export function applicantMutation<V extends AnyValidators, R>(def: {
  */
 export function providerWebhook(def: {
   verify: (request: Request, body: string) => Promise<boolean>;
-  handler: (ctx: ActionCtx, body: string, request: Request) => Promise<void>;
+  /** May answer with its own status, for a check that needs the database (an unknown key is 403). */
+  handler: (ctx: ActionCtx, body: string, request: Request) => Promise<void | number>;
 }): PublicHttpAction {
   return httpAction(async (ctx, request) => {
     const body = await request.text();
     if (body.length > 256 * 1024 || !(await def.verify(request, body))) return new Response(null, { status: 401 });
-    await def.handler(ctx, body, request);
-    return new Response(null, { status: 200 });
+    const status = await def.handler(ctx, body, request);
+    return new Response(null, { status: typeof status === "number" ? status : 200 });
   });
 }
 

@@ -41,4 +41,13 @@ crons.interval("creative studio follows up quiet generations", { minutes: 5 }, i
 // Billing: settlements that failed are retried, holds left behind by stopped work are released, and work that never reported back is closed.
 crons.interval("billing settles and recovers AI work", { minutes: 5 }, internal.billing.sweep, {});
 
+// Google: the job worker, calendar sync and watches, reviews, Local Services leads, conversions, drive times and Gmail watches.
+crons.interval("google works its queue", { minutes: 1 }, internal.googleWork.tick, {});
+crons.interval("google calendar sync and watches", { minutes: 10 }, internal.googleCalendar.sweep, {});
+crons.interval("google business profile reviews", { minutes: 60 }, internal.googleBusiness.sweep, {});
+crons.interval("google local services leads", { minutes: 15 }, internal.googleAds.sweepLocalServices, {});
+crons.interval("google conversions for booked jobs", { minutes: 30 }, internal.googleAds.sweepConversions, {});
+crons.interval("google drive times for coming visits", { minutes: 30 }, internal.googleRoutes.sweep, {});
+crons.daily("renew gmail push watches", { hourUTC: 9, minuteUTC: 41 }, internal.recruiterGmailWatch.sweep, {});
+
 export default crons;

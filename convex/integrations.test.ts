@@ -48,7 +48,9 @@ describe("Integrations", () => {
     const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
     const before = await as.query(api.integrations.overview, { companyId });
     // No Google app on this test deployment: Gmail is built but not switched on. Texting is ready to request.
-    expect(before.live).toEqual({ gmail: { state: "not_set_up", detail: null }, "texting-number": { state: "ready", detail: null } });
+    expect(before.live).toMatchObject({ gmail: { state: "not_set_up", detail: null }, "texting-number": { state: "ready", detail: null } });
+    // Google cards are never "connected" because a key exists: nothing was granted here.
+    for (const id of ["google-drive", "google-calendar", "google-business-profile", "google-ads", "google-local-services-ads"]) expect((before.live as Record<string, { state: string }>)[id].state).toBe("not_set_up");
 
     const member = await t.run(async (ctx) => (await ctx.db.query("members").collect()).find((row) => row.companyId === companyId)!);
     await t.run((ctx) => ctx.db.insert("textingRequests", { companyId, phoneNumber: "+15125550100", status: "provisioning", brand: BRAND, consentWording: "Reply STOP to opt out.", requestedBy: member._id, requestedAt: NOW }));
@@ -58,6 +60,6 @@ describe("Integrations", () => {
       await ctx.db.patch(row._id, { status: "active" });
       await ctx.db.insert("mailboxConnections", { companyId, provider: "gmail", address: "hiring@alpha.example", sources: [], processFrom: NOW, status: "connected", failures: 0, createdBy: member._id, createdAt: NOW } as never);
     });
-    expect((await as.query(api.integrations.overview, { companyId })).live).toEqual({ gmail: { state: "connected", detail: "hiring@alpha.example" }, "texting-number": { state: "connected", detail: "+15125550100" } });
+    expect((await as.query(api.integrations.overview, { companyId })).live).toMatchObject({ gmail: { state: "connected", detail: "hiring@alpha.example" }, "texting-number": { state: "connected", detail: "+15125550100" } });
   });
 });
