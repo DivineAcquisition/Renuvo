@@ -8,7 +8,8 @@ import { companyQuery, ownerMutation } from "./lib/builders";
 import { featureOn, settingFor } from "./lib/ai/media";
 import { CAPABILITIES, PROVIDER_NAMES, REGISTRY, resolve } from "./lib/ai/registry";
 import { allowanceRow, mediaAllowance, monthKey } from "./lib/ai/usage";
-import { monthlyRunAllowance, monthOf, planOf, usageRow } from "./lib/chat/state";
+import { verifiedPlan } from "./lib/billing/access";
+import { monthlyRunAllowance, monthOf, usageRow } from "./lib/chat/state";
 import { byMember, recordEvent } from "./lib/events";
 
 export const overview = companyQuery({
@@ -51,12 +52,12 @@ export const overview = companyQuery({
     }
     const chat = await usageRow(ctx, ctx.companyId, monthOf(now));
     const media = await allowanceRow(ctx, ctx.companyId, monthKey(now));
-    const limits = mediaAllowance(ctx.company);
+    const limits = mediaAllowance();
     return {
-      plan: planOf(ctx.company),
+      plan: verifiedPlan(ctx.company),
       month: monthKey(now),
       allowances: {
-        chat: { used: chat?.runs ?? 0, limit: monthlyRunAllowance(ctx.company) },
+        chat: { used: chat?.runs ?? 0, limit: monthlyRunAllowance() },
         images: { used: (media?.imagesUsed ?? 0) + (media?.imagesReserved ?? 0), limit: limits.images },
         videos: { used: (media?.videosUsed ?? 0) + (media?.videosReserved ?? 0), limit: limits.videos },
       },

@@ -34,13 +34,13 @@ const SWITCHES = [
 
 const dollars = (micros: number) => `$${(micros / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-function Meter({ label, used, limit }: { label: string; used: number; limit: number }) {
-  const share = limit > 0 ? Math.min(1, used / limit) : 1;
+function Meter({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+  const share = limit === null ? 0 : limit > 0 ? Math.min(1, used / limit) : 1;
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-0.5 text-lg font-semibold text-strong tabular-nums">
-        {used.toLocaleString("en-US")} <span className="text-sm font-normal text-muted-foreground">of {limit.toLocaleString("en-US")}</span>
+        {used.toLocaleString("en-US")} <span className="text-sm font-normal text-muted-foreground">{limit === null ? "paid with credits" : `of ${limit.toLocaleString("en-US")}`}</span>
       </p>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" role="presentation">
         <div className={cn("h-full rounded-full", share >= 1 ? "bg-destructive" : share > 0.8 ? "bg-warning" : "bg-brand-500")} style={{ width: `${share * 100}%` }} />
@@ -61,13 +61,13 @@ export function AiSettings() {
   };
   return (
     <div className="grid gap-5">
-      <Panel title={`This month (${data.month}, ${data.plan === "scale" ? "Scale" : "Growth"} plan)`}>
+      <Panel title={`This month (${data.month}, ${data.plan === "expand" ? "Expand plan" : data.plan === "operate" ? "Operate plan" : "no plan"})`}>
         <div className="grid gap-3 sm:grid-cols-3">
           <Meter label="Chat answers" used={data.allowances.chat.used} limit={data.allowances.chat.limit} />
           <Meter label="Image generations" used={data.allowances.images.used} limit={data.allowances.images.limit} />
           <Meter label="Video generations" used={data.allowances.videos.used} limit={data.allowances.videos.limit} />
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">Allowances reset at the start of each month (UTC). When one is used up, that feature stops until the next month; nothing is charged beyond it.</p>
+        <p className="mt-3 text-xs text-muted-foreground">AI work is paid for with Selestial Credits; see Plan &amp; Usage for the balance. Image and video generation also have a monthly ceiling that resets at the start of each month (UTC).</p>
       </Panel>
 
       <Panel title="Usage by feature">

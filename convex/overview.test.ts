@@ -125,7 +125,7 @@ describe("the Overview", () => {
     const dispatch = team.agents.find((row) => row.agent === "dispatch")!;
     expect(dispatch).toMatchObject({ state: "clear", department: { id: "operations" } });
     expect(dispatch.recentOutcomes[0].outcome).toContain("Rosa");
-    expect(team.agents.filter((row) => row.state === "not_built").map((row) => row.agent)).toEqual(["sales", "recruiter", "retention"]);
+    expect(team.agents.filter((row) => row.state === "not_built").map((row) => row.agent)).toEqual(["sales", "retention"]);
   });
 
   it("says who is on an uncovered visit today, and stops the run where nobody can be asked", async () => {

@@ -4,6 +4,7 @@
  *
  * POST /webhooks/resend         delivery reports, bounces and complaints for email. Needs RESEND_WEBHOOK_SECRET.
  * POST /webhooks/telnyx         delivery reports for texts, and texts coming in. Needs TELNYX_PUBLIC_KEY.
+ * POST /webhooks/autumn         plan, purchase and balance changes from Autumn. Needs AUTUMN_WEBHOOK_SECRET.
  * GET  /oauth/google/callback   where Google sends an Owner back after they allowed access: the company's
  *                               Google connection (convex/google.ts) or a Gmail hiring inbox, told apart by the state.
  * POST /webhooks/google/calendar  Calendar push notifications, checked against each channel's own secret token.
@@ -42,6 +43,32 @@ http.route({
       if (!outcome) return;
       // The same report delivered twice is recognised by its event id and changes nothing the second time.
       await ctx.runMutation(internal.messaging.receipt, { provider: "resend", eventId: request.headers.get("svix-id")!, providerMessageId: outcome.providerMessageId, outcome: outcome.outcome });
+    },
+  }),
+});
+
+/**
+ * Autumn tells Selestial something changed for a customer. The body only says who; the record itself is
+ * read back from Autumn, so a webhook can never grant anything by what it claims.
+ */
+http.route({
+  path: "/webhooks/autumn",
+  method: "POST",
+  handler: providerWebhook({
+    verify: async (request, body) => {
+      const secret = process.env.AUTUMN_WEBHOOK_SECRET?.trim();
+      if (!secret) return false;
+      return verifyWebhook({ secret, id: request.headers.get("svix-id"), timestamp: request.headers.get("svix-timestamp"), signature: request.headers.get("svix-signature"), body, now: Date.now() });
+    },
+    handler: async (ctx, body, request) => {
+      let parsed: { type?: unknown; data?: { customer_id?: unknown } } = {};
+      try {
+        parsed = JSON.parse(body) as typeof parsed;
+      } catch {
+        return;
+      }
+      const customerId = typeof parsed.data?.customer_id === "string" ? parsed.data.customer_id : undefined;
+      await ctx.runMutation(internal.billing.webhookReceived, { deliveryId: request.headers.get("svix-id")!, type: typeof parsed.type === "string" ? parsed.type : "unknown", customerId });
     },
   }),
 });

@@ -1,19 +1,10 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
+import { redirect } from "next/navigation";
 
-import { GoogleSettings } from "@/components/app/settings/google";
-import { SectionPage } from "@/components/app/settings/section-page";
-import { Skeleton } from "@/components/ui/skeleton";
-
-export const metadata: Metadata = { title: "Google" };
-
-export default function Page() {
-  return (
-    <SectionPage id="google">
-      {/* Google sends the Owner back here with ?result=…, read on the client. */}
-      <Suspense fallback={<Skeleton className="h-96 rounded-2xl" />}>
-        <GoogleSettings />
-      </Suspense>
-    </SectionPage>
-  );
+/**
+ * Google is set up inside Settings › Integrations now (the owner's decision of November 16, 2026). This
+ * address stays so old links, and Google's sign-in return from before the move, still land there.
+ */
+export default async function Page({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
+  const { result } = await searchParams;
+  redirect(`/app/settings/integrations?google=1${result ? `&result=${encodeURIComponent(result)}` : ""}#google`);
 }

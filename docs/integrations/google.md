@@ -1,6 +1,6 @@
 # Google integrations
 
-One Google connection per company, made by the Owner under **Settings › Google** (`/app/settings/google`).
+One Google connection per company, made by the Owner under **Settings › Integrations**, in the "Your Google account" panel (`/app/settings/integrations#google`).
 It is separate from signing in to Selestial with Google (Clerk). Platform credentials (Maps, Routes,
 Gemini, Pub/Sub, the Ads developer token) are Selestial's and never mix with a company's OAuth grant.
 
@@ -53,7 +53,7 @@ Vercel (public, browser):
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Address autocomplete (restrict to Places API (New) and your domains) |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `NEXT_PUBLIC_GOOGLE_PICKER_API_KEY`, `NEXT_PUBLIC_GOOGLE_CLOUD_PROJECT_NUMBER` | Google's file chooser (Picker). Without them, Owners paste Drive links |
 
-Addresses the deployment computes from `CONVEX_SITE_URL` (shown to the Owner under Settings › Google › Setup):
+Addresses the deployment computes from `CONVEX_SITE_URL` (shown to the Owner under Settings › Integrations › Your Google account › Setup):
 
 - OAuth redirect URI: `<CONVEX_SITE_URL>/oauth/google/callback` — register on the OAuth client.
 - Calendar push: `<CONVEX_SITE_URL>/webhooks/google/calendar` — the domain must be verified for the project.

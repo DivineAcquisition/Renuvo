@@ -27,7 +27,8 @@ vi.mock("convex/react", () => ({
   },
   useMutation: () => async () => undefined,
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/app/settings/business", useRouter: () => ({ replace: () => undefined }) }));
+let search = "";
+vi.mock("next/navigation", () => ({ usePathname: () => "/app/settings/business", useRouter: () => ({ replace: () => undefined }), useSearchParams: () => new URLSearchParams(search) }));
 
 const { BusinessDraftProvider } = await import("@/components/app/settings/business-draft");
 const { BusinessSection, ServicesSection } = await import("@/components/app/settings/business-sections");
@@ -108,9 +109,22 @@ describe("business settings forms", () => {
   });
 });
 
-describe("plan and billing", () => {
+describe("plan and usage", () => {
+  const catalog = {
+      plans: [
+        { id: "operate", name: "Operate", monthlyCents: 29900, positioning: "", summary: "Keep sales, hiring, dispatch, and retention moving from one workspace." },
+        { id: "expand", name: "Expand", monthlyCents: 49900, positioning: "", summary: "Add marketing, quality, customer care, and team coordination." },
+      ],
+      bothInclude: ["Company Chat"],
+      agents: [
+        { agent: "dispatch", name: "Dispatch", department: "operations", released: true, operate: true, expand: true, here: false },
+        { agent: "quality", name: "Quality", department: "operations", released: false, operate: false, expand: true, here: false },
+      ],
+      features: [{ feature: "customer_portal", name: "Customer portal", built: false, expandOnly: true, here: false }],
+    };
+
   it("never asks the server for billing unless the person is the Owner", () => {
-    data["settings:billing"] = { activePlan: null, status: "not_started", plans: [], notes: [] };
+    data["billing:planAndUsage"] = { connected: false, message: "Billing is not connected.", plan: null, catalog };
     for (const role of ["manager", "office"] as const) {
       const html = renderToStaticMarkup(
         <CompanyProvider company={{ companyId, name: "Elm", timezone: "UTC", role }}>
@@ -119,21 +133,13 @@ describe("plan and billing", () => {
       );
       expect(html).toContain("is for the Owner");
     }
-    const asked = calls.filter((call) => call.name === "settings:billing");
+    const asked = calls.filter((call) => call.name === "billing:planAndUsage");
     expect(asked.length).toBeGreaterThan(0);
     expect(asked.every((call) => call.args === "skip")).toBe(true);
   });
 
-  it("shows the Owner the two plans and no purchase control", () => {
-    data["settings:billing"] = {
-      activePlan: null,
-      status: "not_started",
-      plans: [
-        { id: "growth", name: "Growth", monthlyCents: 29900, includes: ["All eight agents, as each is released"] },
-        { id: "scale", name: "Scale", monthlyCents: 49900, includes: ["Customer portal access, when it is available"] },
-      ],
-      notes: ["Usage limits are not set yet."],
-    };
+  it("without billing connected, shows the two plans and labels what is unreleased, with nothing to buy", () => {
+    data["billing:planAndUsage"] = { connected: false, message: "Billing is not connected on this deployment, so AI work is paused.", plan: null, catalog };
     const html = renderToStaticMarkup(
       <CompanyProvider company={{ companyId, name: "Elm", timezone: "UTC", role: "owner" }}>
         <PlanBilling />
@@ -141,8 +147,96 @@ describe("plan and billing", () => {
     );
     expect(html).toContain("$299<");
     expect(html).toContain("$499<");
-    expect(html).toContain("No plan has been started");
-    expect(html).not.toMatch(/<button|Subscribe|Buy|Upgrade|Checkout/i);
+    expect(html).toContain("Billing is not connected");
+    expect(html).toContain("not released yet");
+    expect(html).toContain("Included when released");
+    expect(html).toContain("not available yet");
+    expect(html).not.toMatch(/Choose Operate|Choose Expand|Add \d|Confirm and pay/);
+  });
+});
+
+describe("the Usage tab", () => {
+  const connected = {
+    connected: true,
+    env: "sandbox",
+    problem: null,
+    rateCard: null,
+    plan: "operate",
+    catalog: { plans: [], bothInclude: [], agents: [], features: [] },
+    account: { plan: "operate", subscription: { pastDue: false, startedAt: 1, periodEnd: 2, endsAt: null, scheduledPlan: null, scheduledAt: null }, credits: null, reserved: 0, controls: { alertPercents: [80], autoTopUp: { enabled: false } }, notices: [], invoices: [], syncedAt: 1, syncProblem: null },
+    usage: [],
+    recent: [],
+    topUps: { packs: [], validity: "", consumption: "" },
+    pendingIntent: null,
+  };
+  const base = {
+    connected: true,
+    env: "sandbox",
+    problem: null,
+    range: { from: Date.UTC(2026, 10, 1), to: Date.UTC(2026, 10, 4) },
+    cycles: [{ from: Date.UTC(2026, 10, 1), to: Date.UTC(2026, 11, 1), label: "Current cycle" }],
+    series: [
+      { day: "2026-11-01", byAgent: { chat: 3, recruiter: 2 }, byTask: { chat_response_standard: 3, hiring_message_reading: 2 }, total: 5 },
+      { day: "2026-11-02", byAgent: {}, byTask: {}, total: 0 },
+      { day: "2026-11-03", byAgent: { recruiter: 1 }, byTask: { hiring_message_reading: 1 }, total: 1 },
+    ],
+    previous: [0, 0, 0],
+    forecast: null,
+    byAgent: [
+      { key: "chat", label: "Company Chat", units: 3, credits: 3, share: 50 },
+      { key: "recruiter", label: "Recruiter", units: 3, credits: 3, share: 50 },
+      { key: "dispatch", label: "Dispatch", units: 0, credits: 0, share: 0 },
+    ],
+    byTask: [
+      { key: "chat_response_standard", label: "Chat response", units: 3, credits: 3, share: 50 },
+      { key: "hiring_message_reading", label: "Hiring email read by AI", units: 3, credits: 3, share: 50 },
+    ],
+    delivered: [{ agent: "Recruiter", task: "Hiring email read by AI", units: 3, credits: 3, link: { label: "Hiring inbox", path: "/app/settings/recruiting" } }],
+    activity: [{ id: "e1", at: Date.UTC(2026, 10, 3, 15, 42), agent: "Recruiter", agentKey: "recruiter", origin: "Automatic", action: "Hiring email read by AI", record: { label: "Hiring inbox", path: "/app/settings/recruiting" }, status: "Completed", credits: 1, held: false, initiatedBy: "Recruiting workflow" }],
+    truncated: false,
+    filters: { agents: [], tasks: [], statuses: ["Completed"], members: [] },
+    ledger: null,
+    communication: { sms: { total: 4, sent: 4, failed: 0 }, email: { total: 2, sent: 2, failed: 0 }, voice: null },
+    controls: { alertPercents: [50, 80, 100], autoTopUp: { enabled: false } },
+    budgetAgents: [{ key: "chat", label: "Company Chat" }],
+    priceList: { version: "2026-11", fixture: false, rows: [{ task: "video_generation", label: "Video generated", unit: "", credits: 200, startingAt: true, model: "veo", setup: "One 6-second clip" }], free: ["Opening and answering cleaner text-message links"] },
+  };
+  const render = () =>
+    renderToStaticMarkup(
+      <CompanyProvider company={{ companyId, name: "Elm", timezone: "UTC", role: "owner" }}>
+        <PlanBilling />
+      </CompanyProvider>,
+    );
+
+  it("says 'Updating usage' instead of showing an unverified zero", () => {
+    search = "tab=usage";
+    data["billing:planAndUsage"] = connected;
+    data["billingUsage:usage"] = { ...base, overview: { updating: true, syncedAt: null, available: null, usedThisCycle: null, reserved: 0, nextResetAt: null, monthly: null, purchased: null, plan: "operate", zero: false } };
+    const html = render();
+    expect(html).toContain("Updating usage");
+    expect(html).not.toContain("No credits left");
+    search = "";
+  });
+
+  it("shows the balance, where credits went, the work delivered, activity, the price list and texts apart from credits", () => {
+    search = "tab=usage";
+    data["billing:planAndUsage"] = connected;
+    data["billingUsage:usage"] = { ...base, overview: { updating: false, syncedAt: 1, available: 4994, usedThisCycle: 6, reserved: 2, nextResetAt: Date.UTC(2026, 11, 1), monthly: { granted: 5000, remaining: 4994 }, purchased: { granted: 0, remaining: 0, expiresAt: null }, plan: "operate", zero: false } };
+    const html = render();
+    for (const text of ["Available credits", "4,994", "Used this cycle", "Reserved credits", "Next reset", "Monthly credits", "Purchased credits", "Buy credits", "Manage spending", "Usage over time", "Where credits went", "Work delivered", "Activity and credit history", "Recruiting workflow", "Spending controls", "Hard limits", "What costs credits?", "From 200 credits", "Texts, email and calls"]) expect(html, text).toContain(text);
+    // Credits and money are never added together.
+    expect(html).not.toMatch(/\$\d/);
+    search = "";
+  });
+
+  it("at zero credits says what pauses and what keeps working", () => {
+    search = "tab=usage";
+    data["billing:planAndUsage"] = connected;
+    data["billingUsage:usage"] = { ...base, overview: { updating: false, syncedAt: 1, available: 0, usedThisCycle: 5000, reserved: 0, nextResetAt: Date.UTC(2026, 11, 1), monthly: { granted: 5000, remaining: 0 }, purchased: { granted: 0, remaining: 0, expiresAt: null }, plan: "operate", zero: true } };
+    const html = render();
+    expect(html).toContain("No credits left. New AI work is paused.");
+    expect(html).toContain("cleaner text-message links");
+    search = "";
   });
 });
 
@@ -161,7 +255,7 @@ describe("the overview and navigation", () => {
 
   it("links every section the Owner may open, and each one is a real page", () => {
     const html = renderToStaticMarkup(<OverviewGrid sections={sectionsFor("owner")} />);
-    expect(SETTINGS_SECTIONS).toHaveLength(14);
+    expect(SETTINGS_SECTIONS).toHaveLength(13);
     for (const section of SETTINGS_SECTIONS) {
       expect(html, section.id).toContain(`href="${section.path}"`);
       expect(html, section.id).toContain(section.label.replace("&", "&amp;"));

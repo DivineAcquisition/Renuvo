@@ -54,6 +54,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "applicants", index: "by_company_email" },
   { table: "applications", index: "by_company_stage" },
   { table: "mailboxConnections", index: "by_company", omit: ["cursor"], why: "The mail provider's internal read position." },
+  // Plans and credits (convex/lib/billing/schema.ts).
+  { table: "billingAccounts", index: "by_company_env" },
+  { table: "aiExecutions", index: "by_company_created", omit: ["lockId"], why: "Autumn's internal reference for a credit hold." },
+  { table: "billingIntents", index: "by_company_created", omit: ["url"], why: "A short-lived payment or portal address." },
   { table: "sourceMessages", index: "by_company_received" },
   { table: "formSessions", index: "by_company_application" },
   { table: "applicantAttachments", index: "by_company_application", omit: ["storageId", "clientKey"], why: "Internal file references. The files themselves are not in the file." },
@@ -104,6 +108,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   numberSearches: "Lists of numbers that were for sale at the moment of a search; the number the company asked for is in its texting request.",
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
+  billingWebhooks: "Delivery references for Autumn's notices to Selestial; the plan and balances they point to are exported as billingAccounts.",
   mailboxCredentials: "A sealed authorization to read and send from the company's mailbox; it opens the mailbox, so a copy must never leave. The connection itself is exported.",
   oauthStates: "Ten-minute, single-use records of a mailbox sign-in in progress; nothing in them is about the business.",
   sendIntents: "Internal bookkeeping for the sending check: the same facts are in each message and in the event log.",

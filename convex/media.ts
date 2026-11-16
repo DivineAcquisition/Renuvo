@@ -20,6 +20,8 @@ import { interactionId, interactionState, interactionVideo, readVideo, startVide
 import { editImage, generateImage, type ImageSize } from "./lib/ai/openai";
 import { REGISTRY, type Capability } from "./lib/ai/registry";
 import { recordUsage, settle } from "./lib/ai/usage";
+import { finishExecution } from "./lib/billing/executions";
+import { reserveExecution } from "./lib/billing/reserve";
 import type { GenerationParams } from "./lib/ai/media";
 import { recordEvent } from "./lib/events";
 
@@ -43,6 +45,7 @@ export const claim = internalMutation({
       // Stopped before anything reached the provider: nothing was billed.
       await ctx.db.patch(job._id, { state: "cancelled", finishedAt: Date.now(), error: "Stopped before it started. Nothing was sent to the provider." });
       await settle(ctx, job, { images: 0, videos: 0 });
+      if (job.executionId) await finishExecution(ctx, job.executionId, { ended: "canceled" });
       return null;
     }
     if (job.state !== "queued") return null;
@@ -108,6 +111,8 @@ export const complete = internalMutation({
     await ctx.db.patch(job._id, { state: "completed", outputs: assets, finishedAt: Date.now(), error: stopped ? "You asked to stop, but the provider had already finished. The result is kept and counts against the allowance." : undefined });
     const used = job.kind === "video_generate" ? { images: 0, videos: 1 } : { images: args.outputs.length, videos: 0 };
     await settle(ctx, job, used);
+    // Charged per image or video delivered; the rest of the hold goes back.
+    if (job.executionId) await finishExecution(ctx, job.executionId, { completedUnits: used.images + used.videos });
     await recordUsage(ctx, { companyId: job.companyId, memberId: job.requestedBy, feature: job.kind, capability: job.capability as Capability, model: usageFor(job), jobId: job._id, units: job.kind === "video_generate" ? { videoSeconds: params.durationSeconds } : { images: args.outputs.length }, raw: args.raw ? JSON.parse(args.raw) : undefined, outcome: "ok" });
     await recordEvent(ctx, { companyId: job.companyId, type: "media_job.completed", actor: { kind: "system" }, subject: { table: "mediaJobs", id: job._id }, data: { outputs: assets.length } });
     return null;
@@ -125,6 +130,8 @@ export const fail = internalMutation({
     if (!job || job.state === "completed" || job.state === "failed" || job.state === "cancelled" || job.state === "uncertain") return null;
     await ctx.db.patch(job._id, { state: args.state, error: args.words, errorKind: args.kind, finishedAt: Date.now() });
     await settle(ctx, job, args.billed ? job.reserved : { images: 0, videos: 0 });
+    // Nothing was delivered, so the customer is not charged, even when the provider may have billed Selestial.
+    if (job.executionId) await finishExecution(ctx, job.executionId, { ended: args.state === "cancelled" ? "canceled" : "failed" });
     await recordUsage(ctx, { companyId: job.companyId, memberId: job.requestedBy, feature: job.kind, capability: job.capability as Capability, model: usageFor(job), jobId: job._id, units: {}, outcome: args.state === "uncertain" ? "uncertain" : "error", errorKind: args.kind });
     await recordEvent(ctx, { companyId: job.companyId, type: `media_job.${args.state}`, actor: { kind: "system" }, subject: { table: "mediaJobs", id: job._id }, data: { kind: args.kind } });
     return null;
@@ -153,6 +160,12 @@ export const run = internalAction({
     const claimed = await ctx.runMutation(internal.media.claim, { jobId: args.jobId });
     if (!claimed) return null;
     const { job, sources } = claimed;
+    // Credits are held before the provider is called. Without a verified hold, nothing is generated.
+    const held = job.executionId ? await reserveExecution(ctx, job.executionId) : { ok: false as const, message: "This generation has no credit hold, so it was not started. Nothing was charged." };
+    if (!held.ok) {
+      await ctx.runMutation(internal.media.fail, { jobId: job._id, state: "failed", kind: "billing", words: held.message, billed: false });
+      return null;
+    }
     const params = JSON.parse(job.params) as GenerationParams;
     const model = { ...REGISTRY[job.capability as Capability].primary, model: job.model };
     try {
@@ -247,6 +260,7 @@ export const sweep = internalMutation({
         } else {
           await ctx.db.patch(job._id, { state: "uncertain", error: "The worker stopped before the provider answered. The request may have run, so it was not sent again.", errorKind: "uncertain", finishedAt: Date.now() });
           await settle(ctx, job, job.reserved);
+          if (job.executionId) await finishExecution(ctx, job.executionId, { ended: "failed" });
         }
       }
     }

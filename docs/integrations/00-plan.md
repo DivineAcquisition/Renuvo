@@ -1,7 +1,7 @@
 # Integrations
 
 What Selestial connects to, why, and the order it is built in. The list itself is defined once in
-`src/lib/app/integrations.ts`; the page at Company → Integrations (`/app/integrations`) is drawn from it.
+`src/lib/app/integrations.ts`; the page at Settings › Integrations (`/app/settings/integrations`) is drawn from it.
 
 ## The owner's decisions (November 16, 2026)
 

@@ -40,7 +40,7 @@ async function timed<T>(work: () => Promise<T>): Promise<{ value: T | null; ms: 
 
 async function firstTool(role: "owner" | "manager" | "office", ask: string) {
   const model = claudeChatModel(process.env.ANTHROPIC_API_KEY!, REGISTRY.chat.primary);
-  return model.respond({ system: systemPrompt({ company, member, role, knowledge: [], now: Date.now() }), messages: [{ role: "user", content: ask }], tools: toolSpecs(role), maxTokens: 16_000, onText: () => undefined });
+  return model.respond({ system: systemPrompt({ company, member, role, knowledge: [], now: Date.now() }), messages: [{ role: "user", content: ask }], tools: toolSpecs(role, { plan: "expand" }), maxTokens: 16_000, onText: () => undefined });
 }
 
 describe.skipIf(!anthropic)("live: hiring mail (classify route)", () => {

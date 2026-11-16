@@ -87,7 +87,7 @@ export const DEPARTMENTS: readonly Department[] = [
 
 // ── Company-wide items ──────────────────────────────────────────────────────────────────────────────
 
-export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "agreements" | "finance" | "reports" | "integrations" | "settings";
+export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "agreements" | "finance" | "reports" | "settings";
 
 export type NavItem = Destination & {
   id: NavItemId;
@@ -189,19 +189,9 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     availability: interim(`${APP_ROOT}/insights`, "Everything beyond the weekly measures: agent performance, longer periods, breakdowns."),
     minimumRole: "office",
   },
-  {
-    id: "integrations",
-    label: "Integrations",
-    section: "shared",
-    purpose: "The accounts and services Selestial works with: payments, Google, texting, accounting, hiring and imports.",
-    path: `${APP_ROOT}/integrations`,
-    availability: LIVE,
-    minimumRole: "office",
-    accessNote: "Everyone can see what is connected. Only the Owner connects or disconnects, by the owner's decision on November 16, 2026. The list is live; each connection is built in phases (docs/integrations/00-plan.md).",
-  },
 ];
 
-/** One footer item. Business rules, agent permissions, connections, notifications and platform billing live inside it. */
+/** One footer item. Business rules, agent permissions, integrations, notifications and platform billing live inside it. */
 export const FOOTER_ITEMS: readonly NavItem[] = [
   {
     id: "settings",
@@ -390,13 +380,15 @@ export const AGENTS: readonly AgentNav[] = [
     department: "team",
     responsibility: "Manages candidate acquisition, screening, interviews, and hiring offers.",
     backendAgent: "recruiter",
+    workflow: "built",
+    overview: LIVE,
     tabs: [
-      ["hiring-needs", "Hiring Needs"],
-      ["applicants", "Applicants"],
-      ["screening", "Screening"],
-      ["interviews", "Interviews"],
-      ["offers-agreements", "Offers & Agreements"],
-      ["playbook", "Playbook"],
+      ["hiring-needs", "Hiring Needs", LIVE],
+      ["applicants", "Applicants", LIVE],
+      ["screening", "Screening", LIVE],
+      ["interviews", "Interviews", LIVE],
+      ["offers-agreements", "Offers & Agreements", LIVE],
+      ["playbook", "Playbook", LIVE],
     ],
   }),
   agent({
@@ -427,6 +419,9 @@ export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes
   { pattern: `${APP_ROOT}/records`, today: "Redirects to Customers & Properties.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/team`, today: "Redirects to Settings, where agent permissions and pause now live.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/schedule`, today: "Redirects to Dispatch › Schedule.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/integrations`, today: "Redirects to Settings › Integrations (moved November 16, 2026).", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/settings/google`, today: "Redirects to Settings › Integrations with the Google account panel open, so Google's earlier sign-in returns still land.", becomes: "Removed once no Google sign-in can still return here." },
+  { pattern: `${APP_ROOT}/settings/connections`, today: "Redirects to Settings › Integrations (Connections was folded in on November 16, 2026).", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/insights`, today: "The week's measures.", becomes: "Reports, at /app/reports, with a redirect from here." },
   {
     pattern: `${APP_ROOT}/departments/[department]`,

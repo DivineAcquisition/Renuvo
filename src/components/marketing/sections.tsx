@@ -2,7 +2,7 @@ import { ArrowRight, Hand, ListChecks, ScrollTextIcon, ShieldCheck, type LucideI
 import { AgentMark } from "@/components/marketing/agent-mark";
 import { AgentVisual } from "@/components/marketing/agent-visuals";
 import { SpotlightCard } from "@/components/marketing/saas-frame";
-import { AGENTS, CONTROL, INTEGRATIONS, PROBLEM } from "@/lib/marketing/content";
+import { AGENTS, CONTROL, INTEGRATIONS, PRICING, PROBLEM } from "@/lib/marketing/content";
 
 /** The four loose ends from the problem section, each beside the agent that will carry it. */
 export function LooseEnds() {
@@ -107,6 +107,55 @@ export function IntegrationsGrid() {
         ))}
       </div>
       <p className="mt-4 text-xs text-muted-foreground">{INTEGRATIONS.note}</p>
+    </div>
+  );
+}
+
+/** Operate and Expand: what each does today, what comes when released, and the questions people ask. */
+export function PricingPlans() {
+  return (
+    <div className="grid gap-8">
+      <div className="grid gap-4 lg:grid-cols-2">
+        {PRICING.plans.map((plan) => (
+          <SpotlightCard key={plan.id} className="p-6 sm:p-7">
+            <h3 className="font-heading text-2xl tracking-tight text-strong">{plan.name}</h3>
+            <p className="mt-2 text-3xl font-semibold text-strong">
+              {plan.price}
+              <span className="text-base font-normal text-muted-foreground">{plan.period}</span>
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">{plan.summary}</p>
+            <p className="mt-5 text-xs font-semibold tracking-[0.14em] text-brand-300 uppercase">Today</p>
+            <ul className="mt-2 grid gap-1.5 text-[15px] text-strong">
+              {plan.today.map((line) => (
+                <li key={line} className="flex gap-2">
+                  <span aria-hidden>·</span>
+                  {line}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-4 text-xs font-semibold tracking-[0.14em] text-muted-foreground uppercase">Not released yet</p>
+            <ul className="mt-2 grid gap-1.5 text-sm text-muted-foreground">
+              {plan.later.map((line) => (
+                <li key={line} className="flex gap-2">
+                  <span aria-hidden>·</span>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </SpotlightCard>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {PRICING.allowanceNote} {PRICING.services}
+      </p>
+      <div className="grid gap-3">
+        {PRICING.faqs.map((faq) => (
+          <details key={faq.q} className="rounded-xl border border-border bg-card p-5">
+            <summary className="cursor-pointer text-[15px] font-medium text-strong">{faq.q}</summary>
+            <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">{faq.a}</p>
+          </details>
+        ))}
+      </div>
     </div>
   );
 }

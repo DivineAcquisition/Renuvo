@@ -2768,3 +2768,59 @@ html[data-calm="true"] .work-hero-halo-on {
   background: #f1f3f8;
   color: #667085;
 }
+
+/*
+ * Usage charts (Settings › Plan & Usage). The categorical palette is the dataviz reference set, in fixed
+ * order and validated for colour-vision deficiency in both themes; dark steps are their own, not a flip.
+ */
+.usage-viz {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+  --viz-5: #e87ba4;
+  --viz-6: #008300;
+  --viz-7: #6250d6;
+  --viz-8: #e34948;
+  --viz-other: #8a8984;
+  --viz-grid: color-mix(in oklab, currentColor 12%, transparent);
+  --viz-compare: color-mix(in oklab, currentColor 55%, transparent);
+}
+.dark .usage-viz {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-5: #d55181;
+  --viz-6: #0ca30c;
+  --viz-7: #9085e9;
+  --viz-8: #e66767;
+  --viz-other: #9b9a94;
+}
+
+/* Recruiter's pipeline: a dot travels along a connector while work is moving through that step. */
+@keyframes pipeline-flow {
+  from { transform: translateX(-4px); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translateX(calc(var(--flow-length, 48px) - 4px)); opacity: 0; }
+}
+.pipeline-flow-dot {
+  animation: pipeline-flow 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes agent-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.agent-shimmer {
+  background-image: linear-gradient(90deg, currentColor 0%, currentColor 40%, color-mix(in oklab, currentColor 35%, transparent) 50%, currentColor 60%, currentColor 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: agent-shimmer 3s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-flow-dot { animation: none; opacity: 0; }
+  .agent-shimmer { animation: none; color: inherit; background: none; }
+}

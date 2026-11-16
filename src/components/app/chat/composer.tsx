@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
+import { CreditIndicator } from "@/components/app/billing/credit-indicator";
 import { useChat, type OfferedRecord } from "@/components/app/chat/chat-context";
 import { useCompany } from "@/components/app/company";
 import { messageOf } from "@/components/app/form";
@@ -376,8 +377,9 @@ export function Composer({
         </p>
       ) : null}
       <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
-        Answers are written by AI and can be wrong. Actions show what really happened, with links to the records.
-        {usage ? ` ${usage.answers} of ${usage.allowance} answers used this month.` : ""}
+        Answers are written by AI and can be wrong. Actions show what really happened, with links to the records. Each answer uses Selestial Credits.{" "}
+        <CreditIndicator />
+        {usage?.cap ? ` ${usage.answers} of ${usage.cap} answers used this month.` : ""}
       </p>
     </div>
   );

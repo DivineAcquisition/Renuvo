@@ -9,14 +9,16 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { companyMutation, companyQuery, ownerMutation, staffMutation, type MemberAccess } from "./lib/builders";
+import { companyMutation, companyQuery, ownerMutation, type MemberAccess } from "./lib/builders";
 import { mayRead } from "./lib/agreements/access";
+import { verifiedPlan } from "./lib/billing/access";
+import { openExecution } from "./lib/billing/executions";
 import { DOC_TYPE_BY_KEY } from "./lib/agreements/catalog";
 import { CHAT_MODELS, chatModelOption, MAKER_NAMES, chatModelState, DEFAULT_CHAT_MODEL, type ChatModelOption } from "./lib/ai/chatModels";
 import { settingFor } from "./lib/ai/media";
 import { readableArtifact } from "./lib/chat/artifacts";
 import type { ContextRef } from "./lib/chat/schema";
-import { isLive, lastSeq, latestRun, monthlyRunAllowance, monthOf, ownConversation, planOf, usageRow } from "./lib/chat/state";
+import { isLive, lastSeq, latestRun, monthlyRunAllowance, monthOf, ownConversation, usageRow } from "./lib/chat/state";
 import { decideStep as decide } from "./lib/chat/steps";
 import { searchTextFor, titleFrom } from "./lib/chat/titles";
 import { describeRecord, type RecordTable } from "./lib/chat/tools";
@@ -87,8 +89,8 @@ export const resolveContext = companyQuery({
 async function checkAllowance(ctx: MutationCtx & MemberAccess) {
   const month = monthOf(Date.now());
   const row = await usageRow(ctx, ctx.companyId, month);
-  const allowance = monthlyRunAllowance(ctx.company);
-  if (row && row.runs >= allowance) throw userError(`This company has used this month's ${allowance} chat answers. The allowance resets at the start of next month (UTC).`, "limit");
+  const cap = monthlyRunAllowance();
+  if (cap !== null && row && row.runs >= cap) throw userError(`Company Chat is limited to ${cap} answers a month on this deployment for now. The limit resets at the start of next month (UTC).`, "limit");
   if (!(await allow(ctx, `chat.send:${ctx.member._id}`, SENDS_PER_WINDOW, SEND_WINDOW_MS))) throw userError("That is a lot of messages in a few minutes. Wait a moment and send again.", "limit");
   if (row) await ctx.db.patch(row._id, { runs: row.runs + 1 });
   else await ctx.db.insert("chatUsage", { companyId: ctx.companyId, month, runs: 1, inputTokens: 0, outputTokens: 0 });
@@ -110,6 +112,21 @@ async function checkedModel(ctx: Ctx, key: string): Promise<ChatModelOption> {
 
 async function startRun(ctx: MutationCtx & MemberAccess, conversation: Doc<"conversations">, userMessageId: Id<"chatMessages">, retryOf?: Id<"chatRuns">) {
   const now = Date.now();
+  // One answer is one billable unit, priced by the model's cost class. Refused here, nothing is saved.
+  const option = chatModelOption(conversation.modelKey ?? DEFAULT_CHAT_MODEL) ?? chatModelOption(DEFAULT_CHAT_MODEL)!;
+  const opened = await openExecution(ctx, {
+    company: ctx.company,
+    key: `chat:${userMessageId}:${retryOf ?? "first"}`,
+    agent: "chat",
+    task: option.cost === "Higher cost" ? "chat_response_advanced" : "chat_response_standard",
+    units: 1,
+    autonomous: false,
+    memberId: ctx.member._id,
+    source: { table: "chatMessages", id: userMessageId },
+    origin: "chat",
+    link: { label: "Chat conversation", path: `/app/chat/${conversation._id}` },
+  });
+  if (!opened.ok) throw userError(opened.message, "limit");
   const seq = (await lastSeq(ctx, conversation)) + 1;
   const assistantMessageId = await ctx.db.insert("chatMessages", { companyId: ctx.companyId, conversationId: conversation._id, seq, role: "assistant", status: "streaming", parts: [], createdAt: now });
   const runId = await ctx.db.insert("chatRuns", {
@@ -125,6 +142,7 @@ async function startRun(ctx: MutationCtx & MemberAccess, conversation: Doc<"conv
     usage: { inputTokens: 0, outputTokens: 0 },
     heartbeatAt: now,
     retryOf,
+    executionId: opened.executionId,
     startedAt: now,
   });
   await ctx.db.patch(assistantMessageId, { runId });
@@ -499,9 +517,8 @@ export const usage = companyQuery({
   handler: async (ctx) => {
     const now = Date.now();
     const row = await usageRow(ctx, ctx.companyId, monthOf(now));
-    const allowance = monthlyRunAllowance(ctx.company);
     const date = new Date(now);
-    return { month: monthOf(now), plan: planOf(ctx.company), answers: row?.runs ?? 0, allowance, tokens: row ? row.inputTokens + row.outputTokens : 0, resetsAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) };
+    return { month: monthOf(now), plan: verifiedPlan(ctx.company), answers: row?.runs ?? 0, cap: monthlyRunAllowance(), tokens: row ? row.inputTokens + row.outputTokens : 0, resetsAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) };
   },
 });
 
@@ -538,24 +555,6 @@ export const decideKnowledge = ownerMutation({
     if (args.status === "confirmed") await ctx.scheduler.runAfter(0, internal.knowledge.index, { kind: "knowledge", id: entry._id });
     else await ctx.scheduler.runAfter(0, internal.knowledge.remove, { companyId: ctx.companyId, sourceKey: `knowledge:${entry._id}` });
     await recordEvent(ctx, { companyId: ctx.companyId, type: `company_knowledge.${args.status}`, actor: { kind: "member", memberId: ctx.member._id }, subject: { table: "companyKnowledge", id: entry._id } });
-    return null;
-  },
-});
-
-
-// ── Plan (Selestial staff) ───────────────────────────────────────────────────────────────────────
-
-/** Selestial staff set a company's plan. It changes the company's chat allowance from the next answer on. */
-export const setCompanyPlan = staffMutation({
-  args: { companyId: v.id("companies"), plan: v.union(v.literal("growth"), v.literal("scale")), note: v.string() },
-  adminOnly: true,
-  handler: async (ctx, args) => {
-    const company = await ctx.db.get(args.companyId);
-    if (!company) notFound();
-    const note = requiredText(args.note, "The note", 500);
-    if (planOf(company) === args.plan) return null;
-    await ctx.db.patch(company._id, { plan: args.plan });
-    await recordEvent(ctx, { companyId: company._id, type: "company.plan_changed", actor: { kind: "system" }, subject: { table: "companies", id: company._id }, data: { staffId: ctx.staff._id, from: planOf(company), to: args.plan, note } });
     return null;
   },
 });

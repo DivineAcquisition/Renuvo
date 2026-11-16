@@ -13,7 +13,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { companyMutation, companyQuery } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
-import { can, capabilitiesOf, entitlements, mayDraft, mayRead, readableClasses, requireScale } from "./lib/agreements/access";
+import { can, capabilitiesOf, entitlements, mayDraft, mayRead, readableClasses, requireExpand } from "./lib/agreements/access";
 import { DOC_TYPES, DOC_TYPE_BY_KEY, SUPPORTING_KINDS, type AccessClass } from "./lib/agreements/catalog";
 import { kitFor, missingRequired, render } from "./lib/agreements/compose";
 import { diffLines } from "./lib/agreements/diff";
@@ -442,7 +442,7 @@ export const setSecondApproval = companyMutation({
   handler: async (ctx, args) => {
     const agreement = await load(ctx, args.agreementId);
     if (!can(ctx.role, "approve")) throw userError("Your role cannot change approval routing.", "not_allowed");
-    requireScale(ctx.company, "advanced_approval");
+    requireExpand(ctx.company, "advanced_approval");
     if (agreement.workflow !== "draft" && agreement.workflow !== "needs_review") throw userError("Routing can change only while the document is a draft or in review.");
     await ctx.db.patch(agreement._id, { requiresSecondApproval: args.required, approvedVersion: undefined, approvedHash: undefined, approvedBy: undefined, secondApprovedBy: undefined, workflow: "draft", updatedAt: Date.now() });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "agreement.routing_changed", actor: byMember(ctx), subject: { table: "agreements", id: agreement._id }, data: { secondApproval: args.required } });

@@ -107,17 +107,17 @@ describe("connecting Google", () => {
       const response = await t.fetch(`/oauth/google/callback?state=${encodeURIComponent(state)}&error=access_denied`, { method: "GET" });
       return response.headers.get("location");
     };
-    expect(await started("https://selestial.io")).toBe("https://selestial.io/app/settings/google?result=declined");
-    expect(await started("https://selestial-ai-git-x-divine-acquisition.vercel.app")).toMatch(/^https:\/\/selestial-ai-git-x-divine-acquisition\.vercel\.app\/app\/settings\/google/);
-    expect(await started("https://evil.example.test")).toBe("/app/settings/google?result=declined");
-    expect(await started("http://selestial.io")).toBe("/app/settings/google?result=declined");
+    expect(await started("https://selestial.io")).toBe("https://selestial.io/app/settings/integrations?google=1&result=declined#google");
+    expect(await started("https://selestial-ai-git-x-divine-acquisition.vercel.app")).toMatch(/^https:\/\/selestial-ai-git-x-divine-acquisition\.vercel\.app\/app\/settings\/integrations/);
+    expect(await started("https://evil.example.test")).toBe("/app/settings/integrations?google=1&result=declined#google");
+    expect(await started("http://selestial.io")).toBe("/app/settings/integrations?google=1&result=declined#google");
   });
 
   it("keeps partial consent as granted, seals the token, and uses each state once", async () => {
     const { as, companyId } = await company(t, "owner", "Alpha");
     const first = await connect(t, as, companyId, { features: ["drive", "calendar"], grant: [SCOPE.driveFile] });
     expect(first.response.status).toBe(302);
-    expect(first.location).toBe("https://app.selestial.test/app/settings/google?result=partial%3Acalendar");
+    expect(first.location).toBe("https://app.selestial.test/app/settings/integrations?google=1&result=partial%3Acalendar#google");
     const status = await as.query(api.google.status, { companyId });
     expect(status.features.find((f) => f.feature === "drive")?.granted).toBe(true);
     expect(status.features.find((f) => f.feature === "calendar")?.granted).toBe(false);

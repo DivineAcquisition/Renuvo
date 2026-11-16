@@ -7,10 +7,10 @@ import { CoordinationMap } from "@/components/marketing/coordination-map";
 import { HomeScreen } from "@/components/marketing/home-screen";
 import { OwnerDecision } from "@/components/marketing/owner-decision";
 import { BeamFrame, ShinyLabel } from "@/components/marketing/saas-frame";
-import { AgentsGrid, ControlCards, IntegrationsGrid, LooseEnds } from "@/components/marketing/sections";
+import { AgentsGrid, ControlCards, IntegrationsGrid, LooseEnds, PricingPlans } from "@/components/marketing/sections";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/button";
-import { AGENTS_SECTION, CONTROL, COORDINATION, FINAL_CTA, HERO, INTEGRATIONS, PHILOSOPHY, PROBLEM } from "@/lib/marketing/content";
+import { AGENTS_SECTION, CONTROL, COORDINATION, FINAL_CTA, HERO, INTEGRATIONS, PHILOSOPHY, PRICING, PROBLEM } from "@/lib/marketing/content";
 import { marketingDisplayTitle, marketingLead, marketingPageGutter, marketingSectionTitle, marketingShell, marketingSubhead } from "@/lib/marketing/ui";
 import { sectionLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
@@ -81,6 +81,10 @@ export function LandingPage({ trustSection }: { trustSection?: ReactNode }) {
 
       <Section id={INTEGRATIONS.id} headline={INTEGRATIONS.headline} lead={INTEGRATIONS.lead}>
         <IntegrationsGrid />
+      </Section>
+
+      <Section id={PRICING.id} eyebrow={PRICING.eyebrow} headline={PRICING.headline} lead={PRICING.lead}>
+        <PricingPlans />
       </Section>
 
       <section id={PHILOSOPHY.id} className={sectionFrame}>

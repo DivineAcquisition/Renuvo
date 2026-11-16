@@ -9,15 +9,18 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { recordEvent } from "./lib/events";
 import { checked, headerEvidence } from "./lib/recruiter/interpret";
 import { ingestMessage, type IngestInput, type Verdict } from "./lib/recruiter/intake";
-import { addressOf, classifyHeader, plainText, worthReading, type MessageHeader } from "./lib/recruiter/mail";
+import { addressOf, classifyHeader, plainText, worthReading, type MessageBody, type MessageHeader } from "./lib/recruiter/mail";
 import { accessToken, gmailConnector, googleApp } from "./lib/recruiter/gmail";
 import { connectorFor, MailboxAuthError } from "./lib/recruiter/mailbox";
 import { unseal } from "./lib/recruiter/secrets";
-import { hiringModel } from "./lib/recruiter/model";
+import { hiringModel, rulesModel, type HiringModel } from "./lib/recruiter/model";
+import { finishExecution, openExecution } from "./lib/billing/executions";
+import { reserveExecution } from "./lib/billing/reserve";
 import { classificationValidator, contactEvidenceValidator, sourceValidator } from "./lib/recruiter/schema";
 import { HOUR } from "./lib/recruiter/settings";
 import { liveTaskByKey, openTask, setTaskState } from "./lib/taskState";
@@ -176,7 +179,7 @@ export const sync = internalAction({
       await ctx.runMutation(internal.recruiterInbox.failed, { connectionId: args.connectionId, kind: "not_built" });
       return null;
     }
-    const model = hiringModel();
+    const aiModel = hiringModel();
     let cursor = start.cursor;
     let filed = 0;
     let opened = 0;
@@ -201,8 +204,38 @@ export const sync = internalAction({
     }
     return { filed, opened };
 
+    /**
+     * The AI reader, for one message, once Selestial Credits are held for it. Without a verified hold
+     * (no plan, no credits, billing unreachable, the monthly budget for automatic work spent) that
+     * message is read by the rules instead, so no application is dropped and nothing is charged.
+     */
+    async function readerFor(messageId: string): Promise<{ model: HiringModel; executionId: Id<"aiExecutions"> | null }> {
+      if (aiModel.name === "rules") return { model: rulesModel, executionId: null };
+      const opened = await ctx.runMutation(internal.recruiterInbox.openReading, { connectionId: args.connectionId, messageId });
+      if (!opened) return { model: rulesModel, executionId: null };
+      const held = await reserveExecution(ctx, opened);
+      return held.ok ? { model: aiModel, executionId: opened } : { model: rulesModel, executionId: null };
+    }
+
     /** Sender and subject first. The body is fetched only for mail that those say is hiring mail. */
     async function decide(header: MessageHeader, knownApplicant: boolean): Promise<IngestInput> {
+      const held: { reader: { model: HiringModel; executionId: Id<"aiExecutions"> | null } | null } = { reader: null };
+      const pick = async () => (held.reader ??= await readerFor(header.id)).model;
+      const model = {
+        looksLikeHiring: async (input: { from: string; subject: string }) => (await pick()).looksLikeHiring(input),
+        interpret: async (message: MessageBody, known: Parameters<HiringModel["interpret"]>[1]) => (await pick()).interpret(message, known),
+      };
+      try {
+        const decided = await decideWith(header, knownApplicant, model);
+        if (held.reader?.executionId) await ctx.runMutation(internal.recruiterInbox.finishReading, { executionId: held.reader.executionId, read: true });
+        return decided;
+      } catch (error) {
+        if (held.reader?.executionId) await ctx.runMutation(internal.recruiterInbox.finishReading, { executionId: held.reader.executionId, read: false });
+        throw error;
+      }
+    }
+
+    async function decideWith(header: MessageHeader, knownApplicant: boolean, model: Pick<HiringModel, "looksLikeHiring" | "interpret">): Promise<IngestInput> {
       const byHeader = classifyHeader(header);
       let verdict: Verdict;
       if (byHeader.kind === "board") {
@@ -233,6 +266,25 @@ export const sync = internalAction({
         headerEvidence: headerEvidence(message, start!.ours),
       };
     }
+  },
+});
+
+/** Opens the execution for one message's AI reading. Null when it cannot be charged, so the rules read it. */
+export const openReading = internalMutation({
+  args: { connectionId: v.id("mailboxConnections"), messageId: v.string() },
+  handler: async (ctx, args) => {
+    const connection = await ctx.db.get(args.connectionId);
+    const company = connection ? await ctx.db.get(connection.companyId) : null;
+    if (!connection || !company) return null;
+    const opened = await openExecution(ctx, { company, key: `hiring-read:${connection._id}:${args.messageId.slice(0, 200)}`, agent: "recruiter", task: "hiring_message_reading", units: 1, autonomous: true, origin: "automatic", source: { table: "mailboxConnections", id: connection._id }, link: { label: "Hiring inbox", path: "/app/settings/recruiting" } });
+    return opened.ok && !opened.repeated ? opened.executionId : null;
+  },
+});
+
+export const finishReading = internalMutation({
+  args: { executionId: v.id("aiExecutions"), read: v.boolean() },
+  handler: async (ctx, args) => {
+    await finishExecution(ctx, args.executionId, args.read ? { completedUnits: 1 } : { ended: "failed" });
   },
 });
 

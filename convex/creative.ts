@@ -77,7 +77,7 @@ export const allowance = companyQuery({
   handler: async (ctx) => {
     const month = monthKey(Date.now());
     const row = await allowanceRow(ctx, ctx.companyId, month);
-    const limit = mediaAllowance(ctx.company);
+    const limit = mediaAllowance();
     return {
       month,
       images: { used: row?.imagesUsed ?? 0, reserved: row?.imagesReserved ?? 0, limit: limit.images },

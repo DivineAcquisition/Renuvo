@@ -19,6 +19,8 @@ import { chatEntryFor, chatModelOption, chatModelState, DEFAULT_CHAT_MODEL } fro
 import { REGISTRY, type Override } from "./lib/ai/registry";
 import { bytesToBase64 } from "./lib/ai/http";
 import { recordUsage } from "./lib/ai/usage";
+import { finishExecution } from "./lib/billing/executions";
+import { reserveExecution } from "./lib/billing/reserve";
 import { chatModel, ModelError, type ModelMessage, type ToolSpec } from "./lib/chat/model";
 import { systemPrompt, userTurn } from "./lib/chat/prompt";
 import { runStatusValidator, type RunStatus } from "./lib/chat/schema";
@@ -45,7 +47,7 @@ export const begin = internalMutation({
     const run = await ctx.db.get(args.runId);
     if (!run || run.status !== "queued") return null;
     await ctx.db.patch(run._id, { status: "running", heartbeatAt: Date.now() });
-    return { startedAt: run.startedAt, limits: run.limits };
+    return { startedAt: run.startedAt, limits: run.limits, executionId: run.executionId ?? null };
   },
 });
 
@@ -132,7 +134,7 @@ export const load = internalQuery({
     const staffOff = new Set((await ctx.db.query("chatModelSettings").take(100)).filter((row) => !row.enabled).map((row) => row.key));
     return {
       system: systemPrompt({ company, member: now.member, role: now.role, knowledge: knowledge.map((row) => row.text), now: Date.now() }),
-      tools: toolSpecs(now.role),
+      tools: toolSpecs(now.role, company),
       history,
       currentMessageId: userMessage._id,
       companyId: company._id,
@@ -272,6 +274,8 @@ async function effectsSoFar(ctx: MutationCtx, run: Doc<"chatRuns">): Promise<str
 async function close(ctx: MutationCtx, run: Doc<"chatRuns">, status: RunStatus, error?: string, notice?: string) {
   const now = Date.now();
   await ctx.db.patch(run._id, { status, error, endedAt: now, heartbeatAt: now });
+  // An answer that was given is charged once; a stopped or failed one releases its credits.
+  if (run.executionId) await finishExecution(ctx, run.executionId, status === "completed" || status === "awaiting_approval" || status === "needs_input" ? { completedUnits: 1 } : { ended: status === "stopped" ? "canceled" : "failed" });
   const message = await ctx.db.get(run.assistantMessageId);
   if (message) {
     if (notice) await addPart(ctx, message._id, { kind: "notice", tone: "info", text: notice });
@@ -364,7 +368,7 @@ async function readAttachment(ctx: { storage: { get: (id: Id<"_storage">) => Pro
 export const execute = internalAction({
   args: { runId: v.id("chatRuns") },
   handler: async (ctx, args): Promise<null> => {
-    const started: { startedAt: number; limits: Doc<"chatRuns">["limits"] } | null = await ctx.runMutation(internal.chatRuns.begin, { runId: args.runId });
+    const started: { startedAt: number; limits: Doc<"chatRuns">["limits"]; executionId: Id<"aiExecutions"> | null } | null = await ctx.runMutation(internal.chatRuns.begin, { runId: args.runId });
     if (!started) return null;
     const finish = async (status: RunStatus, error?: string, notice?: string): Promise<null> => {
       await ctx.runMutation(internal.chatRuns.finish, { runId: args.runId, status, error, notice });
@@ -376,6 +380,10 @@ export const execute = internalAction({
     if (loaded.modelUnavailable) return finish("failed", loaded.modelUnavailable);
     const choice = chatModel(loaded.chatSetting, loaded.modelKey);
     if (!choice.model) return finish("failed", choice.why);
+    // Credits are held before the model is called. Without a verified hold, nothing is answered.
+    if (!started.executionId) return finish("failed", "This answer has no credit hold, so it was not started. Nothing was charged.");
+    const held = await reserveExecution(ctx, started.executionId);
+    if (!held.ok) return finish("failed", held.message);
     let model = choice.model;
     let label = choice.label;
     let switched = false;
