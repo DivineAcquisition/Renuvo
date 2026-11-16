@@ -10,7 +10,7 @@ import { HoldButton } from "@/components/app/hold-button";
 import { Modal } from "@/components/app/modal";
 import { EditVisitForm, MoveVisitForm } from "@/components/app/screens/visit-forms";
 import { Button } from "@/components/ui/button";
-import { centsFrom, zonedInstant } from "@/lib/app/format";
+import { centsFrom, clock, zonedInstant } from "@/lib/app/format";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -112,6 +112,48 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
 const REPORT_KIND: Record<string, string> = { condition: "Condition reported", addon_request: "Add-on requested", incomplete: "Work left unfinished" };
 const REPORT_STATUS: Record<string, string> = { awaiting_decision: "Waiting for a decision", acknowledged: "Acknowledged", approved: "Approved", declined: "Declined" };
 
+const PHOTO_KIND: Record<string, string> = { before: "Before", after: "After", item: "Checklist items", issue: "Issues reported" };
+
+/** The crew's photos, grouped as they were taken. Each opens full size in a new tab. */
+function Photos({ jobId }: { jobId: Id<"jobs"> }) {
+  const { companyId, timezone } = useCompany();
+  const photos = useQuery(api.dispatchViews.jobPhotos, { companyId, jobId });
+  if (photos === undefined) return <div className="h-16 animate-pulse rounded-lg bg-card" />;
+  if (photos.length === 0) return <p className="text-xs text-muted-foreground">No photos were added to this visit.</p>;
+  return (
+    <div className="grid gap-2.5">
+      {(["before", "after", "item", "issue"] as const).map((kind) => {
+        const group = photos.filter((photo) => photo.kind === kind);
+        if (group.length === 0) return null;
+        return (
+          <div key={kind}>
+            <p className="text-xs font-medium text-strong">
+              {PHOTO_KIND[kind]} · {group.length}
+            </p>
+            <ul className="mt-1 grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+              {group.map((photo) => (
+                <li key={photo.evidenceId}>
+                  {photo.url ? (
+                    <a href={photo.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border focus-visible:outline-2 focus-visible:outline-brand-500" title={`${photo.item ? `${photo.item} · ` : ""}${photo.by}, ${clock(photo.uploadedAt, timezone)}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.url} alt={`${PHOTO_KIND[kind]} photo${photo.item ? ` for ${photo.item}` : ""} by ${photo.by}`} className="aspect-square w-full object-cover" loading="lazy" />
+                    </a>
+                  ) : (
+                    <span className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-border text-[11px] text-muted-foreground">File missing</span>
+                  )}
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                    {photo.item ?? photo.by} · {clock(photo.uploadedAt, timezone)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * The crew's report and a person's decision on it. Submitted is not approved: the visit closes only when
  * a manager reviews it here, or closes it without a review and says why.
@@ -203,7 +245,8 @@ function CompletionReview({ detail }: { detail: Detail }) {
           ))}
         </ul>
       ) : null}
-      <p className="text-xs leading-relaxed text-muted-foreground">Photos are counted here. Viewing them in this panel is not built yet. Closing a visit approves no payment and releases no payout.</p>
+      <Photos jobId={jobId} />
+      <p className="text-xs leading-relaxed text-muted-foreground">Closing a visit approves no payment and releases no payout.</p>
       <FormError message={error} />
       {!manager ? (
         <p className="text-sm text-muted-foreground">Owners and Managers review and close visits.</p>

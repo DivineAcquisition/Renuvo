@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { accepted, dispatchTestEnv, flush, PHONES, setup } from "../tests/dispatchHarness";
-import { addMember, HOUR, JOB_END, JOB_START, NOW, PRICE, refusal } from "../tests/harness";
+import { addMember, company, HOUR, JOB_END, JOB_START, NOW, PRICE, refusal } from "../tests/harness";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { mockOutbox } from "./lib/messaging/provider";
@@ -337,5 +337,33 @@ describe("Dispatch: checklists come from the service's template, as it was when 
     expect(await items(third)).toBe(0);
     expect(await items(second)).toBe(3);
     expect(await refusal(s.as.mutation(api.dispatchOps.setChecklistTemplate, { companyId: s.companyId, serviceType: "Deep", items: [] }))).toContain("at least one item");
+  });
+});
+
+describe("Dispatch: the crew's photos are the company's to see, and only theirs", () => {
+  let undo = () => {};
+  beforeEach(() => {
+    undo = dispatchTestEnv();
+  });
+  afterEach(() => undo());
+
+  it("lists each photo with who took it and for which item, and refuses another company", async () => {
+    const s = await setup();
+    const a = await accepted(s);
+    await s.as.mutation(api.dispatchOps.setChecklist, { companyId: s.companyId, jobId: a.jobId, items: [{ label: "Oven", requiresPhoto: true }] });
+    vi.setSystemTime(JOB_START);
+    await s.t.mutation(api.links.checkInJob, { token: a.jobToken });
+    const [oven] = (await s.t.query(api.links.job, { token: a.jobToken })).detail!.checklist;
+    for (const [kind, key, itemId] of [["before", "before-photo-0001", undefined], ["item", "oven-photo-00001", oven.id]] as const) {
+      const storageId = await s.t.run(async (ctx) => ctx.storage.store(new Blob(["jpeg-bytes"], { type: "image/jpeg" })));
+      await s.t.mutation(api.links.attachPhoto, { token: a.jobToken, storageId, kind, clientKey: key, itemId });
+    }
+    const photos = await s.as.query(api.dispatchViews.jobPhotos, { companyId: s.companyId, jobId: a.jobId });
+    expect(photos.map((row) => [row.kind, row.by, row.item, typeof row.url])).toEqual([
+      ["before", "Lena", null, "string"],
+      ["item", "Lena", "Oven", "string"],
+    ]);
+    const other = await company(s.t, "owner-b", "Bravo Cleaning");
+    expect(await refusal(other.as.query(api.dispatchViews.jobPhotos, { companyId: other.companyId, jobId: a.jobId }))).toBe("Not found.");
   });
 });

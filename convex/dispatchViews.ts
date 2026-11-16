@@ -383,3 +383,31 @@ export const jobRecord = companyQuery({
     };
   },
 });
+
+/**
+ * The photos the crew added to one visit, for a person in the company to review. Read only through the
+ * company's own access check; a cleaner's link is never used for this. Each address is the stored
+ * file's, served to whoever holds it, so it is fetched here per view and never stored or logged.
+ */
+export const jobPhotos = companyQuery({
+  args: { jobId: v.id("jobs") },
+  handler: async (ctx, args) => {
+    const job = await owned(ctx, args.jobId);
+    const rows = await jobEvidence(ctx, job);
+    const items = await jobChecklist(ctx, job);
+    const names = new Map<string, string>();
+    const out = [];
+    for (const row of [...rows].sort((a, b) => a.uploadedAt - b.uploadedAt)) {
+      if (!names.has(row.cleanerId)) names.set(row.cleanerId, (await ctx.db.get(row.cleanerId))?.name ?? "A cleaner");
+      out.push({
+        evidenceId: row._id,
+        kind: row.kind,
+        url: await ctx.storage.getUrl(row.storageId),
+        by: names.get(row.cleanerId)!,
+        uploadedAt: row.uploadedAt,
+        item: row.checklistItemId ? (items.find((item) => item._id === row.checklistItemId)?.label ?? null) : null,
+      });
+    }
+    return out;
+  },
+});
