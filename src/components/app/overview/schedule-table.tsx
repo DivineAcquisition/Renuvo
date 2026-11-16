@@ -9,6 +9,7 @@ export const VISIT_STATE: Record<VisitState, { label: string; variant: NonNullab
   completed: { label: "Completed", variant: "success" },
   in_progress: { label: "In progress", variant: "info" },
   accepted: { label: "Accepted", variant: "success" },
+  partly_staffed: { label: "Partly staffed", variant: "warning" },
   awaiting_acceptance: { label: "Awaiting acceptance", variant: "warning" },
   needs_coverage: { label: "Coverage at risk", variant: "error" },
   cancelled: { label: "Cancelled", variant: "outline" },
@@ -28,13 +29,35 @@ function Crew({ visit, now, timezone }: { visit: Visit; now: number; timezone: s
       </span>
     );
   }
+  // A crew job says how many of its places are accepted. One name is never shown as if it were the whole crew.
+  const places = visit.requiredCrew > 1 ? `${visit.acceptedCrew} of ${visit.requiredCrew} accepted` : null;
+  if (visit.state === "partly_staffed") {
+    return (
+      <span className="flex items-start gap-1.5">
+        <SirenIcon className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+        <span>
+          <span className="font-medium text-strong">{visit.crew.join(", ")}</span>
+          <span className="block text-xs font-medium text-warning-foreground">{places} · no offer out for the rest</span>
+        </span>
+      </span>
+    );
+  }
   if (visit.state === "awaiting_acceptance") {
     return (
       <span className="flex items-start gap-1.5">
         <CircleDashed className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
         <span>
-          <span className="text-muted-foreground">Offered to</span> <span className="font-medium text-strong">{visit.cleaner}</span>
-          <span className="block text-xs text-muted-foreground">Not accepted{visit.respondBy ? ` · answer due ${whenLabel(visit.respondBy, now, timezone)}` : ""}</span>
+          {visit.acceptedCrew > 0 ? (
+            <span className="font-medium text-strong">{visit.crew.join(", ")}</span>
+          ) : (
+            <>
+              <span className="text-muted-foreground">Offered to</span> <span className="font-medium text-strong">{visit.cleaner}</span>
+            </>
+          )}
+          <span className="block text-xs text-muted-foreground">
+            {places ? `${places} · offer out` : "Not accepted"}
+            {visit.respondBy ? ` · answer due ${whenLabel(visit.respondBy, now, timezone)}` : ""}
+          </span>
         </span>
       </span>
     );
@@ -42,8 +65,8 @@ function Crew({ visit, now, timezone }: { visit: Visit; now: number; timezone: s
   return (
     <span className="flex items-center gap-1.5">
       {visit.state === "completed" ? <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden /> : <UserCheckIcon className="size-4 shrink-0 text-success" aria-hidden />}
-      <span className="font-medium text-strong">{visit.cleaner ?? "Unknown"}</span>
-      {visit.state === "accepted" ? <span className="text-xs text-muted-foreground">accepted</span> : null}
+      <span className="font-medium text-strong">{visit.crew.length > 0 ? visit.crew.join(", ") : (visit.cleaner ?? "Unknown")}</span>
+      {visit.state === "accepted" ? <span className="text-xs text-muted-foreground">{places ?? "accepted"}</span> : null}
     </span>
   );
 }
@@ -103,12 +126,12 @@ export function ScheduleTable({ visits, dayStarts, now, timezone, onOpen, emptyH
         const end = dayStarts[index + 1] ?? Number.POSITIVE_INFINITY;
         const day = visits.filter((visit) => visit.startsAt >= start && visit.startsAt < end);
         if (day.length === 0) return null;
-        const open = day.filter((visit) => visit.state === "needs_coverage" || visit.state === "awaiting_acceptance").length;
+        const open = day.filter((visit) => visit.state === "needs_coverage" || visit.state === "awaiting_acceptance" || visit.state === "partly_staffed").length;
         return (
           <section key={start}>
             <h3 className="flex items-center justify-between border-y border-border bg-muted px-4 py-1.5 text-xs font-semibold text-muted-foreground first:border-t-0 sm:px-5">
               {longDay(start, timezone)}
-              <span className={cn("font-medium", open > 0 ? "text-warning-foreground" : "text-success-foreground")}>{open > 0 ? `${open} without an accepted cleaner` : "Covered"}</span>
+              <span className={cn("font-medium", open > 0 ? "text-warning-foreground" : "text-success-foreground")}>{open > 0 ? `${open} short of an accepted cleaner` : "Covered"}</span>
             </h3>
             <Rows visits={day} now={now} timezone={timezone} onOpen={onOpen} />
           </section>

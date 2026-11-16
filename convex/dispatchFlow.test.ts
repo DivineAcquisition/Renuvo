@@ -232,7 +232,11 @@ describe("Dispatch: from a staffing need to accepted coverage", () => {
     const handoffs = await s.tasks("needs_decision");
     expect(handoffs).toMatchObject([{ handoffTo: "team_coordinator", title: "Check how to reach Lena: a text did not go through" }]);
     expect(after.assignments.find((row) => row.cleanerId === s.cleaners.Rosa)).toMatchObject({ status: "offered" });
-    expect((await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId })).excluded).toMatchObject([{ name: "Lena", reason: "could not be reached: the offer message for this visit was not delivered" }]);
+    expect((await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId })).excluded).toMatchObject([
+      // Rosa holds the open offer now, so she is not someone to ask again for the same visit.
+      { name: "Rosa", reason: "already has an open offer for this visit" },
+      { name: "Lena", reason: "could not be reached: the offer message for this visit was not delivered" },
+    ]);
   });
 
   it("retries a text the carrier dropped without sending it twice, and never resends one whose fate is unknown", async () => {
@@ -357,7 +361,10 @@ describe("Dispatch: from a staffing need to accepted coverage", () => {
     expect((await s.tasks("needs_decision")).find((task) => task.handoffTo === "team_coordinator")?.openQuestion).toContain("An offer was not sent. This number replied STOP");
     expect(after.assignments.find((row) => row.cleanerId === s.cleaners.Rosa)).toMatchObject({ status: "offered" });
     expect(mockOutbox.filter((row) => row.to === PHONES.Rosa && row.body.includes("job offer"))).toHaveLength(1);
-    expect((await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId })).excluded).toMatchObject([{ name: "Lena", code: "already_asked" }]);
+    // Lena was already asked; Rosa holds the open offer, so neither is offered this visit again.
+    const excluded = (await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId })).excluded;
+    expect(excluded).toHaveLength(2);
+    expect(excluded).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Lena", code: "already_asked" }), expect.objectContaining({ name: "Rosa", code: "offer_out" })]));
   });
 
   it("does not burn through every cleaner when no text can go out at all, and still never records silence", async () => {

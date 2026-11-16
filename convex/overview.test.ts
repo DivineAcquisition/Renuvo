@@ -37,7 +37,7 @@ describe("the Overview", () => {
     const first = await as.query(api.overview.today, s.at());
     expect(first.indicators.jobs.total).toBe(0);
     expect(first.indicators.payments).toEqual({ state: "not_set_up" });
-    expect(first.briefing.map((row) => row.text)).toEqual(["No visits are scheduled today.", "Tomorrow has 1 visit without an accepted cleaner.", expect.stringMatching(/^1 decision is waiting for you; the earliest is due /)]);
+    expect(first.briefing.map((row) => row.text)).toEqual(["No visits are scheduled today.", "Tomorrow has 1 visit short of an accepted cleaner.", expect.stringMatching(/^1 decision is waiting for you; the earliest is due /)]);
     expect(first.briefing[1]).toMatchObject({ certainty: "attention", link: { kind: "view", view: "schedule_tomorrow" } });
     expect(await as.query(api.overview.decisionCount, { companyId })).toBe(1);
     // The sidebar's badges come from the same record: one decision, and one visit nobody has been asked to take.
@@ -101,10 +101,10 @@ describe("the Overview", () => {
     vi.setSystemTime(TUESDAY_MORNING);
     const covered = await as.query(api.overview.today, s.at(TUESDAY_MORNING));
     expect(covered.briefing.map((row) => [row.certainty, row.text])).toEqual([
-      ["confirmed", "Today's one visit has a cleaner who accepted it."],
+      ["confirmed", "Today's one visit has every cleaner it needs, accepted."],
       ["confirmed", "Nothing is waiting on your decision."],
     ]);
-    expect(covered.indicators.coverage).toEqual({ needing: 1, accepted: 1, awaiting: 0, uncovered: 0 });
+    expect(covered.indicators.coverage).toEqual({ needing: 1, accepted: 1, awaiting: 0, partly: 0, uncovered: 0 });
     expect(covered.lastChangeAt).not.toBeNull();
 
     const done = await as.query(api.details.get, { ...s.at(TUESDAY_MORNING), ref: { kind: "job", id: s.jobId } });
@@ -159,7 +159,7 @@ describe("the Overview", () => {
     await as.mutation(api.assignments.recordAnswer, { companyId, assignmentId: detail.job!.assignments[0].id, answer: "accepted" });
     vi.setSystemTime(JOB_START);
     await as.mutation(api.jobs.start, { companyId, jobId: s.jobId });
-    await as.mutation(api.jobs.complete, { companyId, jobId: s.jobId });
+    await as.mutation(api.jobs.closeWithoutReview, { companyId, jobId: s.jobId, reason: "Done without the cleaner link; the owner checked in person." });
 
     const week = await as.query(api.overview.week, s.at(JOB_START + HOUR));
     const measure = (key: string) => week.measures.find((row) => row.key === key)!;

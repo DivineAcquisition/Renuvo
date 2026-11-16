@@ -3,7 +3,9 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import type { Span } from "../availability";
 import type { CleanerFacts, Ended, JobFacts } from "./eligibility";
-import { payFor } from "./pay";
+import { nextRole } from "./crew";
+import { CREW_PAY_DEFAULT, payFor, type CrewPay } from "./pay";
+import { crewPayOf } from "./policy";
 import { dispatchSettings } from "./settings";
 
 type Db = QueryCtx | MutationCtx;
@@ -54,6 +56,8 @@ export type JobHistory = {
   prior: Map<string, number>;
   /** Cleaners already ruled out for this visit at this time. */
   ended: Map<string, Ended>;
+  /** The Owner's crew pay rule and the role the next offer would carry, so a candidate's pay is the pay they would be offered. */
+  crewPay: { rule: CrewPay; role: "lead" | "support" };
 };
 
 /**
@@ -85,7 +89,8 @@ export async function jobHistory(ctx: Db, job: Doc<"jobs">, assignments: Doc<"as
       if (row.status === "accepted") prior.set(row.cleanerId, (prior.get(row.cleanerId) ?? 0) + 1);
     }
   }
-  return { prior, ended };
+  const company = await ctx.db.get(job.companyId);
+  return { prior, ended, crewPay: { rule: company ? crewPayOf(company) : CREW_PAY_DEFAULT, role: nextRole(assignments) } };
 }
 
 export async function cleanerFacts(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"cleaners">, history: JobHistory): Promise<CleanerFacts> {
@@ -108,7 +113,7 @@ export async function cleanerFacts(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"clea
     held: await heldSpans(ctx, job.companyId, cleaner._id, job._id),
     endedForJob: history.ended.get(cleaner._id) ?? null,
     priorVisitsForCustomer: history.prior.get(cleaner._id) ?? 0,
-    pay: payFor(cleaner, job),
+    pay: payFor(cleaner, job, history.crewPay),
   };
 }
 

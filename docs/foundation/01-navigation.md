@@ -170,10 +170,11 @@ planned.
 
 | Destination | Path | Today |
 |---|---|---|
-| Dispatch overview | `/app/agents/dispatch` | **Planned.** Until it exists, Dispatch's name in the sidebar is not a link. |
-| Dispatch › Schedule | `/app/agents/dispatch/schedule` | **Interim** at `/app/schedule`: visits by day or week, with who accepted. |
-| Dispatch › Offers & Coverage | `/app/agents/dispatch/offers-coverage` | **Interim** at `/app/departments/operations`: visits without an accepted cleaner. Offers are made from each visit's panel. |
-| Dispatch › Dispatch Board, Live Jobs, Action Links, Playbook | `/app/agents/dispatch/<tab>` | **Planned.** |
+| Dispatch (overview) | `/app/agents/dispatch` | **Live.** Today and tomorrow, counted, with what needs a person and what Dispatch did. |
+| Dispatch › Dispatch Board | `/app/agents/dispatch/dispatch-board` | **Live.** Visits grouped by where staffing stands, as a board or a list. |
+| Dispatch › Schedule | `/app/agents/dispatch/schedule` | **Live.** Cleaner lanes by day or week. `/app/schedule` redirects here. |
+| Dispatch › Offers & Coverage | `/app/agents/dispatch/offers-coverage` | **Live.** Open offers, places that lost a cleaner, places nobody is asked for, and history. Starting a broadcast or a Recruiter request by hand is not built. |
+| Dispatch › Live Jobs, Action Links, Playbook | `/app/agents/dispatch/<tab>` | **Live.** |
 | All tabs of the other seven agents | `/app/agents/<agent>/<tab>` | **Planned.** |
 
 The exact path of every tab is `tabPath(agent, tab)` in `navigation.ts`; tab
@@ -187,7 +188,7 @@ ids are the kebab-case of the label (`quotes-proposals`, `re-cleans`,
 | `/app/decisions` | Redirects to Approvals. | Removed once old links have moved. |
 | `/app/records` | Redirects to Customers & Properties. | Removed once old links have moved. |
 | `/app/team` | Redirects to Settings. The AI Team page is retired. | Removed once old links have moved. |
-| `/app/schedule` | Visits by day or week. | Dispatch › Schedule at its own path, with a redirect. |
+| `/app/schedule` | Redirects to Dispatch › Schedule. | Removed once old links have had time to move. |
 | `/app/insights` | The week's measures. | Reports at `/app/reports`, with a redirect. |
 | `/app/departments/[department]` | A workspace per department. Only Operations is linked, as the stand-in for Offers & Coverage. | Nothing directly. Departments have no page. |
 

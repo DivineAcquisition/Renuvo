@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 export type Indicators = {
   jobs: { total: number; completed: number; inProgress: number; upcoming: number };
-  coverage: { needing: number; accepted: number; awaiting: number; uncovered: number };
+  coverage: { needing: number; accepted: number; awaiting: number; partly: number; uncovered: number };
   decisions: { count: number; nextDeadline: number | null };
   payments: { state: "not_set_up" };
 };
@@ -33,7 +33,7 @@ function Tile({ icon: Icon, label, value, detail, tone, onClick }: { icon: Lucid
 /** Four compact indicators. Operational problems come before money, and money says when it is not connected. */
 export function IndicatorRow({ indicators, now, onSchedule, onDecisions }: { indicators: Indicators; now: number; onSchedule: () => void; onDecisions: () => void }) {
   const { jobs, coverage, decisions } = indicators;
-  const open = coverage.awaiting + coverage.uncovered;
+  const open = coverage.awaiting + coverage.partly + coverage.uncovered;
   return (
     <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <Tile
@@ -47,7 +47,7 @@ export function IndicatorRow({ indicators, now, onSchedule, onDecisions }: { ind
         icon={CalendarCheckIcon}
         label="Coverage"
         value={coverage.needing === 0 ? "—" : `${coverage.accepted} of ${coverage.needing}`}
-        detail={coverage.needing === 0 ? "No visits to cover today" : open === 0 ? "Every visit has a cleaner who accepted" : `${coverage.awaiting} awaiting an answer · ${coverage.uncovered} with no cleaner`}
+        detail={coverage.needing === 0 ? "No visits to cover today" : open === 0 ? "Every visit has every cleaner it needs, accepted" : `${coverage.awaiting} awaiting an answer · ${coverage.partly} partly staffed · ${coverage.uncovered} with no cleaner`}
         tone={open > 0 ? "attention" : "good"}
         onClick={onSchedule}
       />

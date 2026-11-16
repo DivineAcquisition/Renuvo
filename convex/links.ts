@@ -16,6 +16,7 @@ import { requiredCrew } from "./lib/dispatch/crew";
 import { jobAssignments } from "./lib/dispatch/facts";
 import { handOff } from "./lib/dispatch/handoffs";
 import { assignmentLinks, linkState, liveLink, tokenFor } from "./lib/dispatch/links";
+import { signedPhotoUrl, signingTime } from "./lib/dispatch/photoLinks";
 import { arrivalEndsAt, cannotAttend, checkIn, completionGaps, EARLY_CHECK_IN_MINUTES, jobChecklist, jobEvidence, liveAssignment, reportDelay, submitCompletion } from "./lib/dispatch/live";
 import { money } from "./lib/dispatch/pay";
 import { dispatchPolicy } from "./lib/dispatch/policy";
@@ -144,8 +145,9 @@ export type JobPageState = "active" | "submitted" | "ended" | "expired" | "job_c
  * nothing else.
  */
 export const job = linkQuery({
-  args: {},
-  handler: async (ctx) => {
+  /** The page's current minute. Photo addresses are signed for it, so they refresh as time passes. */
+  args: { asOf: v.optional(v.number()) },
+  handler: async (ctx, args) => {
     if (ctx.link.purpose !== "job") notFound();
     const { assignment, job: jobDoc, cleaner } = await linked(ctx);
     const now = Date.now();
@@ -167,7 +169,8 @@ export const job = linkQuery({
     for (const row of crewRows) names.set(row.cleanerId, firstName((await ctx.db.get(row.cleanerId))?.name ?? "A cleaner"));
     const items = await jobChecklist(ctx, jobDoc);
     const evidence = await jobEvidence(ctx, jobDoc);
-    const photo = async (row: Doc<"evidence">) => ({ id: row._id, url: await ctx.storage.getUrl(row.storageId), mine: row.assignmentId === assignment._id, by: names.get(row.cleanerId) ?? "A cleaner", itemId: row.checklistItemId ?? null });
+    const at = signingTime(args.asOf);
+    const photo = async (row: Doc<"evidence">) => ({ id: row._id, url: (await signedPhotoUrl(row._id, at)) ?? (await ctx.storage.getUrl(row.storageId)), mine: row.assignmentId === assignment._id, by: names.get(row.cleanerId) ?? "A cleaner", itemId: row.checklistItemId ?? null });
     const photos = { before: [] as Awaited<ReturnType<typeof photo>>[], after: [] as Awaited<ReturnType<typeof photo>>[], item: [] as Awaited<ReturnType<typeof photo>>[], issue: [] as Awaited<ReturnType<typeof photo>>[] };
     for (const row of evidence) photos[row.kind].push(await photo(row));
     const reports = await ctx.db

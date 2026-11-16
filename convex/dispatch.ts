@@ -9,8 +9,9 @@ import { internalMutation } from "./_generated/server";
 import { owned } from "./lib/access";
 import { authorityFor } from "./lib/authority";
 import { companyMutation, companyQuery, ownerMutation } from "./lib/builders";
+import { coverageOf, staffing } from "./lib/dispatch/crew";
 import { checkedSettings, DISPATCH_LIMITS, dispatchSettings } from "./lib/dispatch/settings";
-import { candidatesFor, coverAction, coverJob, coverKey, holdForPerson, jobApprovals } from "./lib/dispatch/workflow";
+import { candidatesFor, coverAction, coverJob, coverKey, holdForPerson, jobApprovals, withoutCrew } from "./lib/dispatch/workflow";
 import { notAllowed, userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { isManager } from "./lib/roles";
@@ -70,6 +71,7 @@ export const candidates = companyQuery({
   handler: async (ctx, args) => {
     const job = await owned(ctx, args.jobId);
     const found = await candidatesFor(ctx, ctx.company, job);
+    const askable = withoutCrew(found);
     const action = coverAction(found.assignments);
     const authority = await authorityFor(ctx, ctx.companyId, action);
     const task = await liveTaskByKey(ctx, ctx.companyId, coverKey(job._id));
@@ -77,7 +79,9 @@ export const candidates = companyQuery({
     const showPay = ctx.role === "owner";
     return {
       jobId: job._id,
-      coverage: found.assignments.some((row) => row.status === "accepted") ? ("covered" as const) : found.assignments.some((row) => row.status === "offered") ? ("offered" as const) : ("uncovered" as const),
+      /** Covered only when every required place is accepted. The counts behind it are in `staffing`. */
+      coverage: coverageOf(found.assignments, job),
+      staffing: staffing(job, found.assignments),
       /** The permission that covers finding a cleaner for this job now. */
       action,
       /** What Dispatch may do with that permission right now. */
@@ -89,7 +93,7 @@ export const candidates = companyQuery({
       /** The cleaner the pending proposal names, if there is one. */
       proposedCleanerId: pending?.proposal?.kind === "offer_assignment" ? pending.proposal.cleanerId : null,
       settings: dispatchSettings(ctx.company),
-      candidates: found.candidates.map((candidate, index) => ({
+      candidates: askable.candidates.map((candidate, index) => ({
         cleanerId: candidate.cleanerId as (typeof found.cleaners)[number]["_id"],
         name: candidate.name,
         rank: index + 1,
@@ -98,7 +102,7 @@ export const candidates = companyQuery({
         otherVisitsThatDay: candidate.otherVisitsThatDay,
         pay: showPay && candidate.pay.ok ? { payCents: candidate.pay.payCents, basis: candidate.pay.basis } : null,
       })),
-      excluded: found.excluded.map((entry) => ({
+      excluded: askable.excluded.map((entry) => ({
         cleanerId: entry.cleanerId as (typeof found.cleaners)[number]["_id"],
         name: entry.name,
         code: entry.code,
