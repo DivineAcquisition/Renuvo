@@ -56,6 +56,15 @@ describe("Dispatch: one staffing count, a reviewed completion, and a guided move
     // One acceptance is not coverage, so the visit cannot be started and today's count does not include it.
     expect(await refusal(s.as.mutation(api.jobs.start, { companyId: s.companyId, jobId }))).toBe("Not every place on this job has an accepted cleaner yet, so it cannot start.");
 
+    // Lena is on the job, so she is not offered as a candidate for its other places, and the run trace
+    // does not call a visit covered that has one of its three cleaners.
+    const partial = await s.as.query(api.dispatch.candidates, { companyId: s.companyId, jobId });
+    expect(partial.candidates.map((row) => row.name)).not.toContain("Lena");
+    expect(partial.excluded.find((row) => row.name === "Lena")).toMatchObject({ code: "on_this_job", reason: "has already accepted this visit" });
+    const run = (await s.as.query(api.details.get, { companyId: s.companyId, ref: { kind: "job", id: jobId }, asOf: NOW })).job!.run;
+    expect(run.at(-1)).toMatchObject({ key: "accept", state: "todo", detail: "Lena accepted: 1 of 3 places. The visit is not covered until every place is accepted." });
+    expect(run.map((row) => row.detail).join(" ")).not.toContain("The visit is covered");
+
     // The owner can still staff the remaining places: an acceptance does not close the job to offers.
     const rosa = await offer(s, jobId, "Rosa");
     expect(await everywhere(s, jobId)).toMatchObject({ candidates: "offered", counted: "1/3", board: "offers_out", visit: "awaiting_acceptance", detail: "Partly staffed · 1 of 3" });
@@ -68,6 +77,8 @@ describe("Dispatch: one staffing count, a reviewed completion, and a guided move
     expect(await refusal(answer(s, noor))).toBe("This offer is cancelled, so it can no longer be answered.");
     expect(await everywhere(s, jobId)).toMatchObject({ candidates: "covered", counted: "3/3", job: "covered", board: "fully_staffed", visit: "accepted", detail: "Fully staffed · 3 of 3", detailCrew: expect.arrayContaining(["Lena:lead", "Rosa:support", "Mia:support"]) });
     expect(await refusal(offer(s, jobId, "Noor"))).toBe("This job already has every cleaner it needs.");
+    const full = (await s.as.query(api.details.get, { companyId: s.companyId, ref: { kind: "job", id: jobId }, asOf: NOW })).job!.run;
+    expect(full.at(-1)!.detail).toContain("All 3 places are accepted.");
     expect((await s.job(jobId)).assignments.filter((row) => row.status === "accepted")).toHaveLength(3);
   });
 

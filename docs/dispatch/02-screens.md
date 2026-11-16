@@ -4,16 +4,18 @@ Operations → Dispatch opens the overview. Its dropdown: Dispatch Board, Schedu
 Live Jobs, Action Links, Playbook (already defined in `src/lib/app/navigation.ts`). Chat, activity,
 permissions and agent controls belong to the agent workspace, not to more sidebar tabs.
 
-**No visual screen is built.** Each screen below has the query it will read and the actions it will call.
-Every query takes `companyId` and goes through the access builders. Unknown values are `null`.
+**Built:** the overview, Dispatch Board, Schedule, Offers & Coverage, and the visit panel
+(`src/components/app/screens/dispatch/`, `detail-actions.tsx`). **Not built:** Live Jobs, Action Links,
+Playbook; their queries below are still only contracts. Every query takes `companyId` and goes through
+the access builders. Unknown values are `null`.
 
 | Screen | Reads | Actions |
 |---|---|---|
 | Overview | `dispatchViews.overview({from,to})` | links only |
 | Dispatch Board | `dispatchViews.board({from,to})` | `assignments.offer`, `dispatch.takeOver`, `dispatch.handBack`, `approvals.decide` |
-| Schedule | `dispatchViews.schedule({from,to})` | `jobs.reschedule`, `availability.*` |
+| Schedule | `dispatchViews.schedule({from,to})` | `jobs.reschedulePreview`, `jobs.reschedule`, `jobs.edit`, `availability.*` |
 | Offers & Coverage | `dispatchViews.offersAndCoverage({from,to})`, `dispatch.candidates({jobId})` | `assignments.offer`, `assignments.release`, `assignments.recordAnswer`, `dispatchOps.reissueLink` |
-| Live Jobs | `dispatchViews.liveJobs({from,to})` | `dispatchOps.confirmNoShow`, `cleanerIsComing`, `decideReport`, `jobs.complete` |
+| Live Jobs | `dispatchViews.liveJobs({from,to})` | `dispatchOps.confirmNoShow`, `cleanerIsComing`, `decideReport`, `jobs.reviewCompletion`, `jobs.closeWithoutReview` |
 | Action Links | `dispatchViews.actionLinks({limit})` | `dispatchOps.revokeActionLink`, `reissueLink`, `revealActionLink` |
 | Job record | `dispatchViews.jobRecord({jobId})`, `dispatchTools.forJob({jobId})` | all of the above, `dispatchOps.setChecklist` |
 | Playbook | `dispatch.settings`, `dispatchOps.policy`, `permissions.list` | `dispatch.setSettings`, `dispatchOps.setPolicy`, `permissions.set` |
@@ -56,3 +58,25 @@ reported), `lastAction` and `lastActionAt`, `response`, `deadline`, `nextAction`
 
 `opened` is always `null`. Page views are not recorded, so the screen must say "not tracked", not "not
 opened". A text's `delivered` means the provider confirmed the handset got it, and nothing more.
+
+## Rules the screens and queries share
+
+- **One staffing count.** `staffing()` and `coverageOf()` in `convex/lib/dispatch/crew.ts` are the only
+  place required crew is compared with accepted crew. `dispatch.candidates`, `overview.*`, `details.get`,
+  `jobs.*` and `dispatchViews.*` all read through them, and `convex/dispatchCore.test.ts` checks that a
+  three-cleaner job reads the same at 1 of 3 and 2 of 3 on each.
+- **The visit panel** opens from the address, `?open=job:<id>` (also `approval:` and `task:`), on any page
+  under `/app`. It lists every accepted cleaner with their role and keeps offering available while any
+  place is open. A cleaner already on the visit is not offered as a candidate for its other places.
+- **Closing a visit.** There is no "mark complete". `jobs.reviewCompletion` (Owner or Manager) closes a
+  visit the whole crew reported done, or sends it back, which clears the crew's reports so they can
+  submit again. `jobs.closeWithoutReview` is the override: it needs a reason, stores
+  `completionReview.decision = "closed_without_review"` and records `job.closed_without_review`. Neither
+  touches money. Photos are counted in the panel; viewing them there is not built.
+- **Moving a visit.** `jobs.reschedulePreview` says what the move does; `jobs.reschedule` does exactly
+  that in one transaction and is refused if the visit changed since (`version`). Open offers are
+  withdrawn, everyone who had accepted is asked again for the new time at the pay they accepted, and a
+  cleaner who cannot work it is told and their place reopens. These assignments end with cause
+  `job_moved`, which does not count against asking the same cleaner again.
+- **Lists stop at 200 visits.** Each screen says so when it reaches that, instead of showing a total.
+  Real pagination is still to do.

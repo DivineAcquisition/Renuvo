@@ -60,6 +60,7 @@ import type * as lib_dispatch_live from "../lib/dispatch/live.js";
 import type * as lib_dispatch_offers from "../lib/dispatch/offers.js";
 import type * as lib_dispatch_pay from "../lib/dispatch/pay.js";
 import type * as lib_dispatch_policy from "../lib/dispatch/policy.js";
+import type * as lib_dispatch_reschedule from "../lib/dispatch/reschedule.js";
 import type * as lib_dispatch_run from "../lib/dispatch/run.js";
 import type * as lib_dispatch_settings from "../lib/dispatch/settings.js";
 import type * as lib_dispatch_sms from "../lib/dispatch/sms.js";
@@ -197,6 +198,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dispatch/offers": typeof lib_dispatch_offers;
   "lib/dispatch/pay": typeof lib_dispatch_pay;
   "lib/dispatch/policy": typeof lib_dispatch_policy;
+  "lib/dispatch/reschedule": typeof lib_dispatch_reschedule;
   "lib/dispatch/run": typeof lib_dispatch_run;
   "lib/dispatch/settings": typeof lib_dispatch_settings;
   "lib/dispatch/sms": typeof lib_dispatch_sms;

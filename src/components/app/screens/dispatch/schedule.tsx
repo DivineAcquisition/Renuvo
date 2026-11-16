@@ -71,8 +71,9 @@ function conflictsFor(cleaner: Cleaner, day: { from: number; to: number }, buffe
   return out;
 }
 
-function Block({ left, width, className, title, onClick, children }: { left: number; width: number; className: string; title: string; onClick?: () => void; children?: React.ReactNode }) {
-  const style = { left: `${left}%`, width: `${Math.max(width, 1.5)}%` };
+function Block({ left, width, row, className, title, onClick, children }: { left: number; width: number; row?: number; className: string; title: string; onClick?: () => void; children?: React.ReactNode }) {
+  // Visits at the same time in one lane sit under each other, never on top of each other.
+  const style = { left: `${left}%`, width: `${Math.max(width, 1.5)}%`, ...(row === undefined ? {} : { top: `${0.375 + row * 3.25}rem`, height: "2.75rem", bottom: "auto" }) };
   if (!onClick) return <span aria-hidden title={title} style={style} className={cn("absolute inset-y-1 rounded-md", className)} />;
   return (
     <button type="button" onClick={onClick} title={title} style={style} className={cn("absolute inset-y-1.5 overflow-hidden rounded-md border px-1.5 text-left text-[11px] leading-tight focus-visible:outline-2 focus-visible:outline-brand-500", className)}>
@@ -81,14 +82,14 @@ function Block({ left, width, className, title, onClick, children }: { left: num
   );
 }
 
-function Lane({ name, note, lines, children }: { name: string; note?: React.ReactNode; lines: number[]; children: React.ReactNode }) {
+function Lane({ name, note, lines, rows = 1, children }: { name: string; note?: React.ReactNode; lines: number[]; rows?: number; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[9rem_1fr] border-t border-border first:border-t-0 sm:grid-cols-[11rem_1fr]">
       <div className="min-w-0 border-r border-border px-3 py-2">
         <p className="truncate text-sm font-medium text-strong">{name}</p>
         {note ? <div className="text-[11px] leading-snug text-muted-foreground">{note}</div> : null}
       </div>
-      <div className="relative min-h-14">
+      <div className="relative min-h-14" style={rows > 1 ? { height: `${0.75 + rows * 3.25}rem` } : undefined}>
         {lines.map((left) => (
           <span key={left} aria-hidden className="absolute inset-y-0 w-px bg-border/60" style={{ left: `${left}%` }} />
         ))}
@@ -117,6 +118,15 @@ function DayLanes({ data, from, to, timezone, onOpen }: { data: Data; from: numb
   const label = (row: JobRow) => `${row.customer ?? "Unknown customer"} · ${row.serviceType} · ${clock(row.startsAt, timezone)} to ${clock(row.endsAt, timezone)}`;
 
   const lines = hours.slice(1, -1).map(pos);
+  // Each short visit takes the first row in which nothing before it is still running.
+  const rowEnds: number[] = [];
+  const rowOf = new Map<Id<"jobs">, number>();
+  for (const row of [...short].sort((a, b) => a.startsAt - b.startsAt)) {
+    let index = rowEnds.findIndex((end) => end <= row.startsAt);
+    if (index === -1) index = rowEnds.length;
+    rowEnds[index] = row.endsAt;
+    rowOf.set(row.jobId, index);
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -132,9 +142,9 @@ function DayLanes({ data, from, to, timezone, onOpen }: { data: Data; from: numb
           </div>
         </div>
 
-        <Lane lines={lines} name="Not fully staffed" note={short.length === 0 ? "Nothing short today" : `${short.length} ${short.length === 1 ? "visit" : "visits"} short a cleaner`}>
+        <Lane lines={lines} rows={Math.max(1, rowEnds.length)} name="Not fully staffed" note={short.length === 0 ? "Nothing short today" : `${short.length} ${short.length === 1 ? "visit" : "visits"} short a cleaner`}>
           {short.map((row) => (
-            <Block key={row.jobId} {...place(row.startsAt, row.endsAt)} onClick={() => onOpen(row.jobId)} title={`${label(row)} · ${row.acceptedCrew} of ${row.requiredCrew} accepted`} className="border-dashed border-destructive/50 bg-destructive/8 text-destructive-foreground hover:bg-destructive/12">
+            <Block key={row.jobId} {...place(row.startsAt, row.endsAt)} row={rowOf.get(row.jobId) ?? 0} onClick={() => onOpen(row.jobId)} title={`${label(row)} · ${row.acceptedCrew} of ${row.requiredCrew} accepted`} className="border-dashed border-destructive/50 bg-destructive/8 text-destructive-foreground hover:bg-destructive/12">
               <span className="block truncate font-semibold">{row.customer ?? "Unknown"}</span>
               <span className="block truncate">
                 {row.acceptedCrew} of {row.requiredCrew} · {row.offersOut > 0 ? `${row.offersOut} asked` : "nobody asked"}

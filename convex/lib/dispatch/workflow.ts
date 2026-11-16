@@ -96,6 +96,24 @@ export async function candidatesFor(ctx: QueryCtx | MutationCtx, company: Doc<"c
 }
 
 /**
+ * The same answer for a person looking at a job that already has someone on it: a cleaner who accepted
+ * this job, or holds an open offer for it, is not someone to ask for its remaining places. They are
+ * listed with the others who cannot be asked, and the reason says which it is.
+ */
+export function withoutCrew<C extends { cleanerId: string; name: string }, E extends { cleanerId: string; name: string; code: string; reason: string }>(found: { candidates: C[]; excluded: E[]; assignments: Doc<"assignments">[] }) {
+  const held = new Map<string, "accepted" | "offered">();
+  for (const row of found.assignments) if (row.status === "accepted" || (row.status === "offered" && !held.has(row.cleanerId))) held.set(row.cleanerId, row.status);
+  const onJob = found.candidates.filter((row) => held.has(row.cleanerId));
+  return {
+    candidates: found.candidates.filter((row) => !held.has(row.cleanerId)),
+    excluded: [
+      ...onJob.map((row) => ({ cleanerId: row.cleanerId, name: row.name, code: held.get(row.cleanerId) === "accepted" ? "on_this_job" : "offer_out", reason: held.get(row.cleanerId) === "accepted" ? "has already accepted this visit" : "already has an open offer for this visit" })),
+      ...found.excluded.map((row) => ({ cleanerId: row.cleanerId, name: row.name, code: row.code as string, reason: row.reason })),
+    ],
+  };
+}
+
+/**
  * Which permission covers finding a cleaner now. Each is the Owner's to set on its own: a first offer,
  * the next cleaner after a no or no answer, cover for a place whose cleaner dropped out or did not
  * arrive, and replacing a cleaner a person took off a confirmed visit.
