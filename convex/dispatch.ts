@@ -9,6 +9,7 @@ import { internalMutation } from "./_generated/server";
 import { owned } from "./lib/access";
 import { authorityFor } from "./lib/authority";
 import { companyMutation, companyQuery, ownerMutation } from "./lib/builders";
+import { coverageOf, staffing } from "./lib/dispatch/crew";
 import { checkedSettings, DISPATCH_LIMITS, dispatchSettings } from "./lib/dispatch/settings";
 import { candidatesFor, coverAction, coverJob, coverKey, holdForPerson, jobApprovals } from "./lib/dispatch/workflow";
 import { notAllowed, userError } from "./lib/errors";
@@ -77,7 +78,9 @@ export const candidates = companyQuery({
     const showPay = ctx.role === "owner";
     return {
       jobId: job._id,
-      coverage: found.assignments.some((row) => row.status === "accepted") ? ("covered" as const) : found.assignments.some((row) => row.status === "offered") ? ("offered" as const) : ("uncovered" as const),
+      /** Covered only when every required place is accepted. The counts behind it are in `staffing`. */
+      coverage: coverageOf(found.assignments, job),
+      staffing: staffing(job, found.assignments),
       /** The permission that covers finding a cleaner for this job now. */
       action,
       /** What Dispatch may do with that permission right now. */

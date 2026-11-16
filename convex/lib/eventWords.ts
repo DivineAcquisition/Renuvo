@@ -61,7 +61,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
       ref = { kind: "job", id: subject.id };
       const label = await visit(subject.id);
       text =
-        { created: `scheduled ${label}`, rescheduled: `moved ${label}`, in_progress: `started ${label}`, completed: `marked ${label} complete`, cancelled: `cancelled ${label}`, taken_over: `took ${label} over from Dispatch`, handed_back: `handed ${label} back to Dispatch` }[what] ?? null;
+        { created: `scheduled ${label}`, rescheduled: `moved ${label}`, in_progress: `started ${label}`, completed: data.review === "none" ? `closed ${label} without a review of the crew's evidence` : data.review === "reviewed" ? `reviewed the crew's report and closed ${label}` : `marked ${label} complete`, completion_reported: `received the whole crew's report that ${label} is done, for review`, completion_returned: `sent the crew's report for ${label} back for correction`, edited: `changed the details of ${label}`, cancelled: `cancelled ${label}`, taken_over: `took ${label} over from Dispatch`, handed_back: `handed ${label} back to Dispatch` }[what] ?? null;
     } else if (subject.table === "assignments") {
       const assignment = await doc(subject.id);
       if (assignment) {
@@ -90,7 +90,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
                   ? `took ${name} off ${label}: no-show`
                   : cause === "undelivered"
                     ? `ended the offer to ${name} for ${label}: the text was not delivered`
-                    : cause === "job_cancelled" ? `ended ${name}'s assignment because the job was cancelled` : cause === "job_covered" ? `withdrew the offer to ${name}: another cleaner accepted` : `released ${name} from ${label}`,
+                    : cause === "job_cancelled" ? `ended ${name}'s assignment because the job was cancelled` : cause === "job_moved" ? `ended ${name}'s assignment for the old time: the visit was moved` : cause === "job_covered" ? `withdrew the offer to ${name}: another cleaner accepted` : `released ${name} from ${label}`,
           }[what] ?? null;
       }
     } else if (subject.table === "tasks") {

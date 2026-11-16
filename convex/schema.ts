@@ -311,6 +311,14 @@ export default defineSchema({
     instructions: v.optional(v.string()),
     /** When the crew reported the service complete. It is a report: not a quality approval, not a payment. */
     completionReportedAt: v.optional(v.number()),
+    /**
+     * What a person decided about the crew's report. "closed" follows a review. "closed_without_review" is
+     * the override: it always carries the reason, and it is kept apart so it is never read as a review.
+     * Neither approves a payment or releases a payout.
+     */
+    completionReview: v.optional(v.object({ decision: v.union(v.literal("closed"), v.literal("closed_without_review")), by: v.id("members"), at: v.number(), note: v.optional(v.string()) })),
+    /** How many times the crew's report was sent back for correction. */
+    completionReturns: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])

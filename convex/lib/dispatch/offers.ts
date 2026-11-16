@@ -65,7 +65,7 @@ export async function placeOffer(
   request: OfferRequest,
   actor: Actor,
   data: EventData = {},
-  options: { kind?: OfferKind; coverageRequestId?: Id<"coverageRequests"> } = {},
+  options: { kind?: OfferKind; coverageRequestId?: Id<"coverageRequests">; /** The cleaner had accepted an earlier time for this job, and is asked again for the new one. */ moved?: boolean } = {},
 ): Promise<Id<"assignments">> {
   const { company, job, cleaner, respondBy, payCents } = request;
   const kind = options.kind ?? "initial";
@@ -101,7 +101,7 @@ export async function placeOffer(
     jobId: job._id,
     assignmentId,
     link,
-    body: offerSms({ company, job, property: await ctx.db.get(job.propertyId), assignment, backup: kind === "backup" }),
+    body: offerSms({ company, job, property: await ctx.db.get(job.propertyId), assignment, backup: kind === "backup", moved: options.moved === true }),
     dedupeKey: `offer:${assignmentId}`,
     actor,
   });
