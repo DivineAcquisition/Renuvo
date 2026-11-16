@@ -1,14 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { Connections } from "@/components/app/settings/connections";
-import { SectionPage } from "@/components/app/settings/section-page";
-
-export const metadata: Metadata = { title: "Connections" };
-
+/** Connections was folded into Settings › Integrations (the owner's decision of November 16, 2026). */
 export default function Page() {
-  return (
-    <SectionPage id="connections">
-      <Connections />
-    </SectionPage>
-  );
+  redirect("/app/settings/integrations");
 }

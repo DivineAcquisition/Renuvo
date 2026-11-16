@@ -1,5 +1,5 @@
 /**
- * Company → Integrations: every card has something to do. Built integrations report their live state and
+ * Settings › Integrations: every card has something to do. Built integrations report their live state and
  * link to where they are set up; planned ones can be requested by the Owner, once, for this company only.
  *
  * @vitest-environment edge-runtime
@@ -20,7 +20,7 @@ describe("Integrations", () => {
     // Every built integration on the page is one the server treats as built, and the reverse.
     const built = INTEGRATIONS.filter((row) => row.status.kind !== "planned").map((row) => row.id).sort();
     expect([...BUILT].sort()).toEqual(built);
-    for (const row of INTEGRATIONS) if (row.status.kind === "available") expect(row.status.href).toMatch(/^\/app\/settings\//);
+    for (const row of INTEGRATIONS) if (row.status.kind === "available") expect(row.status.href).toMatch(/^(\/app\/settings\/|#google$)/);
   });
 
   it("lets the Owner request a planned integration once, and nobody else", async () => {
