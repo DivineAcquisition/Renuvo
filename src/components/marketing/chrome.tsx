@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/brand/logo";
+import { CookiePreferencesLink } from "@/components/consent/banner";
 import { Menu } from "@/components/icons";
 import { Button, type ButtonSize } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/constants";
@@ -69,21 +70,90 @@ export function SiteHeader({ onHome = true }: { onHome?: boolean }) {
   );
 }
 
-export function SiteFooter() {
+/** The footer's two link groups. Every link here goes to a page that exists. */
+export const FOOTER_TRUST = [
+  { href: "/security", label: "Security" },
+  { href: "/security/subprocessors", label: "Subprocessors" },
+  { href: "/security/report", label: "Report a vulnerability" },
+  { href: "/security/review", label: "Request a security review" },
+] as const;
+
+export const FOOTER_LEGAL = [
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+  { href: "/cookies", label: "Cookies" },
+  { href: "/privacy/requests", label: "Data requests" },
+  { href: "/messaging", label: "Messaging practices" },
+  { href: "mailto:support@selestial.io", label: "Contact" },
+] as const;
+
+const footerLink = "rounded text-sm text-muted-foreground transition-colors hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]";
+
+/**
+ * The site footer. `entity` is shown only when the operator's details are verified in the trust
+ * records (src/lib/trust/public.ts); otherwise only the product name appears.
+ */
+export function SiteFooter({ entity }: { entity?: { name: string; address: string | null } | null }) {
   return (
     <footer className={cn("border-t border-border py-12", marketingPageGutter)}>
-      <div className={cn(marketingShell, "grid gap-8 sm:grid-cols-[1fr_auto] sm:items-end")}>
+      <div className={cn(marketingShell, "grid gap-10 md:grid-cols-[1.2fr_1fr_1fr]")}>
         <div>
           <Logo />
           <p className="mt-3 text-sm text-strong">{FOOTER.tagline}</p>
           <p className="mt-2 text-sm text-muted-foreground">{FOOTER.roles.join(" · ")}</p>
+          <p className="mt-6 max-w-sm text-xs leading-relaxed text-muted-foreground">{FOOTER.note}</p>
         </div>
-        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground sm:text-right">
-          {FOOTER.note}
-          <span className="mt-1 block">
-            © {new Date().getFullYear()} {FOOTER.name}
-          </span>
+        <nav aria-labelledby="footer-trust">
+          <h2 id="footer-trust" className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
+            Trust
+          </h2>
+          <ul className="mt-3 grid gap-2">
+            {FOOTER_TRUST.map((link) => (
+              <li key={link.href}>
+                <Link href={link.href} className={footerLink}>
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <nav aria-labelledby="footer-legal">
+          <h2 id="footer-legal" className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
+            Legal &amp; Privacy
+          </h2>
+          <ul className="mt-3 grid gap-2">
+            {FOOTER_LEGAL.slice(0, 3).map((link) => (
+              <li key={link.href}>
+                <Link href={link.href} className={footerLink}>
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+            <li>
+              <CookiePreferencesLink className={cn(footerLink, "text-left")} />
+            </li>
+            {FOOTER_LEGAL.slice(3).map((link) => (
+              <li key={link.href}>
+                {link.href.startsWith("mailto:") ? (
+                  <a href={link.href} className={footerLink}>
+                    {link.label}
+                  </a>
+                ) : (
+                  <Link href={link.href} className={footerLink}>
+                    {link.label}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
+      <div className={cn(marketingShell, "mt-10 flex flex-col gap-1 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:justify-between")}>
+        <p>
+          © {new Date().getFullYear()} {entity?.name ?? FOOTER.name}
+          {entity?.name ? <span> · {FOOTER.name} is operated by {entity.name}</span> : null}
         </p>
+        {entity?.address ? <p>{entity.address}</p> : null}
       </div>
     </footer>
   );

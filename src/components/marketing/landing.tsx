@@ -30,7 +30,7 @@ function Section({ id, eyebrow, headline, lead, children }: { id?: string; eyebr
   );
 }
 
-export function LandingPage() {
+export function LandingPage({ trustSection }: { trustSection?: ReactNode }) {
   return (
     <>
       <section className={cn(marketingPageGutter, "relative pb-16 pt-14 sm:pb-24 sm:pt-20")}>
@@ -98,6 +98,8 @@ export function LandingPage() {
           </div>
         </BlurFade>
       </section>
+
+      {trustSection}
 
       <section id={FINAL_CTA.id} className={sectionFrame}>
         <BlurFade inView offset={12} blur="2px" duration={0.55} className={marketingShell}>

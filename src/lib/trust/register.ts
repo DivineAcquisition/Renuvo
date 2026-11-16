@@ -1,0 +1,74 @@
+/**
+ * The control and disclosure register: every data flow and control Selestial relies on, what backs it,
+ * and whether it may be said in public. This is the inventory behind the public pages, the landing
+ * cards and the launch-readiness report (docs/foundation/04-trust.md). A flag or a setting alone is
+ * never evidence; evidence is code plus a test, a provider document, or a recorded decision.
+ *
+ * Statuses:
+ *   verified    implemented, and a test or check in this repository proves it
+ *   unverified  implemented, not yet proven by a test or a live run
+ *   planned     not built
+ *   external    needs setup or approval outside this repository (a provider, a carrier, a dashboard)
+ *   decision    needs a legal or business decision before it can be built or said
+ */
+export type RegisterStatus = "verified" | "unverified" | "planned" | "external" | "decision";
+export type Layer = "platform" | "company" | "recipient";
+
+export type RegisterItem = {
+  id: string;
+  layer: Layer;
+  /** The data or action involved. */
+  item: string;
+  purpose: string;
+  /** Who is responsible for it. */
+  responsible: "Selestial" | "Cleaning company" | "Recipient" | "Provider";
+  provider: string | null;
+  implementation: string;
+  evidence: string;
+  status: RegisterStatus;
+  reviewedOn: string;
+  /** Whether it may be stated on a public page as it stands. */
+  publicOk: boolean;
+};
+
+const D = "2026-11-16";
+
+export const REGISTER: readonly RegisterItem[] = [
+  // ── Platform: accounts, tenants, providers ────────────────────────────────────────────────────
+  { id: "auth", layer: "platform", item: "Accounts and sign-in", purpose: "Know who is using a workspace.", responsible: "Selestial", provider: "Clerk", implementation: "Selestial's own screens over Clerk; email confirmed by code; provider password rules incl. breached-password refusal; new-device codes; re-confirmation for sensitive changes.", evidence: "src/components/auth/*, tests/e2e/auth.mjs (33 browser checks), docs/foundation/03-authentication.md", status: "verified", reviewedOn: D, publicOk: true },
+  { id: "tenant-isolation", layer: "platform", item: "Business records are separated by workspace", purpose: "One business never reads or changes another's records.", responsible: "Selestial", provider: "Convex", implementation: "Every public function goes through a builder that checks membership; another company's id answers \"Not found.\".", evidence: "convex/lib/builders.ts, convex/lib/access.ts, convex/isolation.test.ts, convex/guard.test.ts", status: "verified", reviewedOn: D, publicOk: true },
+  { id: "roles", layer: "platform", item: "Roles: Owner, Manager, Office", purpose: "Limit settings, pay and approvals to the right people.", responsible: "Selestial", provider: null, implementation: "Role checks in builders; pay and settings Owner-only.", evidence: "convex/lib/roles.ts, convex/isolation.test.ts", status: "verified", reviewedOn: D, publicOk: true },
+  { id: "audit-log", layer: "platform", item: "Activity log", purpose: "Trace important actions, approvals and outcomes.", responsible: "Selestial", provider: "Convex", implementation: "recordEvent only; the guard refuses any patch or delete of events.", evidence: "convex/lib/events.ts, convex/lib/guard.ts (eventLogViolations), convex/guard.test.ts", status: "verified", reviewedOn: D, publicOk: true },
+  { id: "staff", layer: "platform", item: "Selestial staff access", purpose: "Run trust information and request queues without access to company records.", responsible: "Selestial", provider: null, implementation: "Staff role in the record; staff builders; being staff opens no company.", evidence: "convex/lib/builders.ts (staffQuery/staffMutation), convex/staff.test.ts", status: "verified", reviewedOn: D, publicOk: false },
+  { id: "hosting", layer: "platform", item: "Website hosting and request logs", purpose: "Serve the site and the app.", responsible: "Provider", provider: "Vercel", implementation: "Vercel project renuvo.", evidence: "Vercel project; provider's own terms", status: "external", reviewedOn: D, publicOk: true },
+  { id: "database", layer: "platform", item: "Database and file storage", purpose: "Hold every business record and cleaner photo.", responsible: "Provider", provider: "Convex", implementation: "Convex deployments (dev: terrific-avocet-835).", evidence: "convex/schema.ts", status: "verified", reviewedOn: D, publicOk: true },
+  { id: "provider-locations", layer: "platform", item: "Where providers process data", purpose: "Disclose processing locations.", responsible: "Selestial", provider: "Clerk, Convex, Vercel", implementation: "Not recorded.", evidence: "Needs each provider's region settings and data processing terms checked.", status: "external", reviewedOn: D, publicOk: false },
+  { id: "dpa", layer: "platform", item: "Data processing terms with providers and customers", purpose: "Contractual basis for processing on customers' behalf.", responsible: "Selestial", provider: null, implementation: "None signed or published.", evidence: "—", status: "decision", reviewedOn: D, publicOk: false },
+  { id: "encryption", layer: "platform", item: "Encryption at rest and in transit", purpose: "Protect stored and moving data.", responsible: "Provider", provider: "Convex, Vercel, Clerk", implementation: "Provided by the providers, not checked.", evidence: "Needs each provider's security documentation reviewed and recorded.", status: "external", reviewedOn: D, publicOk: false },
+  { id: "backups", layer: "platform", item: "Backups and restoration", purpose: "Recover from loss.", responsible: "Provider", provider: "Convex", implementation: "Managed by Convex; no restore has been tested.", evidence: "—", status: "external", reviewedOn: D, publicOk: false },
+  { id: "staff-mfa", layer: "platform", item: "Second factor for Selestial staff", purpose: "Protect staff accounts.", responsible: "Selestial", provider: "Clerk", implementation: "Not enforced.", evidence: "—", status: "planned", reviewedOn: D, publicOk: false },
+  { id: "certification", layer: "platform", item: "Security certification (SOC 2, ISO 27001)", purpose: "Independent assurance.", responsible: "Selestial", provider: null, implementation: "None held.", evidence: "—", status: "decision", reviewedOn: D, publicOk: false },
+  { id: "pentest", layer: "platform", item: "Independent security assessment", purpose: "Find what tests miss.", responsible: "Selestial", provider: null, implementation: "None done.", evidence: "—", status: "decision", reviewedOn: D, publicOk: false },
+  { id: "no-sale", layer: "platform", item: "Personal information is not sold", purpose: "A commitment in the privacy notice.", responsible: "Selestial", provider: null, implementation: "No code sells or shares data; the owner approved the privacy notice that says so.", evidence: "Privacy notice privacy-2026-11-16, approved by the owner 2026-11-16", status: "decision", reviewedOn: D, publicOk: false },
+  { id: "requests", layer: "platform", item: "Privacy and security requests", purpose: "Receive and work access, correction, deletion and security reports.", responsible: "Selestial", provider: null, implementation: "Public forms persist first, notify with retries; staff queue with verification, routing, due dates and actions.", evidence: "convex/requests.ts and tests", status: "unverified", reviewedOn: D, publicOk: true },
+  { id: "export-delete", layer: "platform", item: "Export and deletion", purpose: "Let a business take its data and erase a person's details.", responsible: "Cleaning company", provider: "Convex", implementation: "Owner-only export (24-hour link) and erasure of a customer or cleaner with a deletion record; company deletion goes through staff.", evidence: "convex/dataRights.ts and tests", status: "unverified", reviewedOn: D, publicOk: false },
+  { id: "billing", layer: "platform", item: "Selestial subscription charges", purpose: "Charge for the service.", responsible: "Selestial", provider: null, implementation: "No payment provider; nothing is charged through the service.", evidence: "No payment code in the repository.", status: "decision", reviewedOn: D, publicOk: true },
+  { id: "customer-payments", layer: "platform", item: "Customer payments to cleaning businesses and cleaner pay", purpose: "Take payments and pay cleaners.", responsible: "Cleaning company", provider: null, implementation: "Not built. Pay is computed by code from the business's settings and shown to the Owner only; no money moves.", evidence: "convex/lib/dispatch/pay.ts", status: "planned", reviewedOn: D, publicOk: true },
+  { id: "ai", layer: "platform", item: "AI model providers", purpose: "Interpret messages, draft text.", responsible: "Selestial", provider: null, implementation: "None connected. Dispatch is deterministic; Recruiter (open PR #77) uses rules only and has a model interface that sees sender and subject, then the body of hiring mail only.", evidence: "convex/lib/dispatch/*, PR #77 convex/lib/recruiter/model.ts", status: "planned", reviewedOn: D, publicOk: true },
+  { id: "ai-training", layer: "platform", item: "Model training on customer data", purpose: "—", responsible: "Selestial", provider: null, implementation: "No model provider is connected, so no customer data reaches one. A provider's training terms must be recorded before one is connected.", evidence: "—", status: "decision", reviewedOn: D, publicOk: false },
+  { id: "cross-customer", layer: "platform", item: "Use of business records across companies", purpose: "Benchmarks or product improvement.", responsible: "Selestial", provider: null, implementation: "None. Needs a reviewed purpose, contract basis and notice first.", evidence: "—", status: "decision", reviewedOn: D, publicOk: false },
+
+  // ── Cleaning-company configuration ────────────────────────────────────────────────────────────
+  { id: "business-identity", layer: "company", item: "Business identity", purpose: "Who the sender is and who is accountable.", responsible: "Cleaning company", provider: null, implementation: "Settings → Trust & Compliance, Owner-only.", evidence: "convex/compliance.ts and tests", status: "unverified", reviewedOn: D, publicOk: false },
+  { id: "agent-authority", layer: "company", item: "What each agent may do", purpose: "Owner decides per action; outsider-facing actions start on Propose.", responsible: "Cleaning company", provider: null, implementation: "Permission catalog with levels and ceilings; pause per agent.", evidence: "convex/lib/permissionCatalog.ts, convex/authority.test.ts", status: "verified", reviewedOn: D, publicOk: true },
+  { id: "sms-sender", layer: "company", item: "Texting sender and carrier registration", purpose: "Texts come from a registered, identified sender.", responsible: "Cleaning company", provider: "Telnyx (planned)", implementation: "Sender, number and registration status recorded; texts blocked until registration is approved (set by staff).", evidence: "convex/lib/messaging/policy.ts and tests", status: "external", reviewedOn: D, publicOk: false },
+  { id: "agreements", layer: "company", item: "Terms acceptance", purpose: "Know which version each business agreed to, who, and when.", responsible: "Cleaning company", provider: null, implementation: "Acceptance recorded with the exact version id at setup or in Settings.", evidence: "convex/agreements.ts and tests", status: "unverified", reviewedOn: D, publicOk: false },
+
+  // ── Recipient choices ─────────────────────────────────────────────────────────────────────────
+  { id: "consent", layer: "recipient", item: "Permission to message, per person, channel and category", purpose: "Message only people who agreed, for what they agreed to.", responsible: "Cleaning company", provider: null, implementation: "Permission records with source, wording and history; imports never count.", evidence: "convex/consent.ts and tests", status: "unverified", reviewedOn: D, publicOk: false },
+  { id: "send-policy", layer: "recipient", item: "One server-side check before every text", purpose: "Sender ready, permission, opt-outs, quiet hours, frequency, pauses, checked at queueing and again at sending.", responsible: "Selestial", provider: null, implementation: "checkSend wired into Dispatch's outbox and delivery.", evidence: "convex/lib/messaging/policy.ts and tests", status: "unverified", reviewedOn: D, publicOk: true },
+  { id: "stop", layer: "recipient", item: "STOP, HELP, START and plain-language opt-outs", purpose: "Honour opt-outs by phone number, whatever the provider.", responsible: "Selestial", provider: "Telnyx (planned)", implementation: "Inbound handling ready; no provider webhook connected.", evidence: "convex/inbound.ts and tests", status: "unverified", reviewedOn: D, publicOk: false },
+  { id: "cookies", layer: "recipient", item: "Cookie and tracking choices", purpose: "Optional analytics and advertising only with a valid choice.", responsible: "Selestial", provider: "Vercel Analytics, Google Analytics 4, Google Ads, Meta Pixel (none switched on)", implementation: "Banner, preferences, GPC as opt-out, loader that adds scripts only after a choice and only on public pages.", evidence: "src/lib/consent/*, src/components/consent/*, tests", status: "unverified", reviewedOn: D, publicOk: true },
+  { id: "task-links", layer: "recipient", item: "Cleaner task links", purpose: "Let a cleaner act on one assignment without an account.", responsible: "Selestial", provider: null, implementation: "Random id plus signature; scoped actions; expiry; revoked when the assignment ends; never stored readable.", evidence: "convex/lib/dispatch/links.ts, convex/linkAudit.test.ts", status: "unverified", reviewedOn: D, publicOk: false },
+  { id: "applicant-inbox", layer: "recipient", item: "Recruiter inbox and applicant records", purpose: "Read hiring mail and keep applications.", responsible: "Cleaning company", provider: "Gmail (planned)", implementation: "In open PR #77, mock mailbox only. No OAuth scopes requested; no Google verification started.", evidence: "PR #77", status: "external", reviewedOn: D, publicOk: false },
+];

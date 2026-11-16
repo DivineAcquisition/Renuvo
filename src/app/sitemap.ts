@@ -10,5 +10,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${origin}/`, changeFrequency: "weekly", priority: 1 },
     { url: `${origin}${ASSESSMENT_PATH}`, changeFrequency: "monthly", priority: 0.8 },
+    ...["/security", "/security/subprocessors", "/security/report", "/security/review", "/privacy", "/privacy/requests", "/terms", "/cookies", "/messaging"].map((path) => ({ url: `${origin}${path}`, changeFrequency: "monthly" as const, priority: 0.4 })),
   ];
 }
