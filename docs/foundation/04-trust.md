@@ -151,7 +151,7 @@ proven by a test or check here), **unverified** (built, not yet proven live), **
 | Encryption at rest and in transit | Provider | Convex, Vercel, Clerk | external | no | Needs each provider's security documentation reviewed and recorded. |
 | Backups and restoration | Provider | Convex | external | no | — |
 | Second factor for Selestial staff | Selestial | Clerk | planned | no | — |
-| Security certification (SOC 2, ISO 27001) | Selestial | — | decision | no | — |
+| Security certification (SOC 2, ISO 27001) | Selestial | — | planned | no | — |
 | Independent security assessment | Selestial | — | planned | no | — |
 | Personal information is not sold | Selestial | — | verified | yes | Privacy notice privacy-2026-11-16 and the owner's commitment of 2026-11-16; shown as a claim on /security |
 | Privacy and security requests | Selestial | — | verified | yes | convex/requests.ts, convex/requests.test.ts, src/lib/trust/requests.test.ts, tests/e2e/trust.mjs (a privacy request and a vulnerability report saved from a real browser) |
@@ -265,6 +265,9 @@ Made by the owner on 2026-11-16 and applied:
 | Service levels | No promises yet | Terms, as written |
 | Data processing terms | On request, case by case | Security overview, `/security/review` |
 | Independent assessment | Outside penetration test before public launch | Launch readiness above |
+| Certification | SOC 2 readiness after the penetration test; nothing claimed until then | Register |
+| Use of business records across companies | Left unstated: not done, and the Privacy notice says it would need a reviewed purpose and a notice update first | Privacy notice, as written |
+| First staff admins | malik@divineacquisition.io, then malik@selestial.io | Added on production with `staff:grant` |
 
 The 2026-11-16 documents were edited in place for these decisions rather than given new versions,
 because they had not been served anywhere public yet. From the first production publication on, any
@@ -272,7 +275,4 @@ change is a new version.
 
 Still open:
 
-1. **Use of business records across companies** (benchmarks, product improvement). Not done; the
-   Privacy notice says it would need a reviewed purpose and a notice update first.
-2. **Certification** such as SOC 2: not planned. The site claims none.
-3. **Outside legal review** of the documents: declined by the owner; recorded on each publication.
+1. **Outside legal review** of the documents: declined by the owner; recorded on each publication.

@@ -4,6 +4,7 @@
  */
 import { v } from "convex/values";
 
+import { internalMutation } from "./_generated/server";
 import { signedInQuery, staffFor, staffMutation, staffQuery } from "./lib/builders";
 import { notFound, userError } from "./lib/errors";
 import { email, text } from "./lib/text";
@@ -50,5 +51,24 @@ export const remove = staffMutation({
     if (row._id === ctx.staff._id) throw userError("You cannot remove yourself. Ask another admin.");
     await ctx.db.patch(row._id, { status: "removed" });
     return null;
+  },
+});
+
+/**
+ * For whoever runs the deployment, from the command line only (`npx convex run staff:grant`). Adds a
+ * staff member without anyone signed in, for example the first admins. Running it twice adds nothing.
+ */
+export const grant = internalMutation({
+  args: { email: v.string(), name: v.string(), role: staffRoleValidator },
+  handler: async (ctx, args) => {
+    const address = email(args.email);
+    const rows = await ctx.db
+      .query("staff")
+      .withIndex("by_email", (q) => q.eq("email", address))
+      .take(5);
+    const active = rows.find((row) => row.status === "active");
+    if (active) return { staffId: active._id, added: false };
+    const staffId = await ctx.db.insert("staff", { email: address, name: text(args.name, "Name", 120), role: args.role, status: "active", addedAt: Date.now(), addedBy: "console" });
+    return { staffId, added: true };
   },
 });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { refusal, start } from "../tests/harness";
 
 const admin = { subject: "user_admin", email: "boss@selestial.example", emailVerified: true, name: "Boss" };
@@ -40,5 +40,15 @@ describe("Selestial staff", () => {
     expect(await t.withIdentity(helper).query(api.staff.me, {})).toMatchObject({ role: "reviewer" });
     expect(await refusal(t.withIdentity(helper).mutation(api.staff.add, { email: "y@example.com", name: "Y", role: "admin" }))).toBe("Not allowed.");
     expect(await t.withIdentity({ ...helper, emailVerified: false }).query(api.staff.me, {})).toBeNull();
+  });
+
+  test("an admin added from the command line is staff once they sign in with that confirmed email, and adding twice adds nothing", async () => {
+    const t = start();
+    const first = await t.mutation(internal.staff.grant, { email: " Owner@Selestial.Example ", name: "Owner", role: "admin" });
+    expect(first.added).toBe(true);
+    expect((await t.mutation(internal.staff.grant, { email: "owner@selestial.example", name: "Owner", role: "admin" })).added).toBe(false);
+    const owner = { subject: "user_owner", email: "owner@selestial.example", emailVerified: true, name: "Owner" };
+    expect(await t.withIdentity(owner).query(api.staff.me, {})).toMatchObject({ role: "admin" });
+    expect(await t.withIdentity({ ...owner, emailVerified: false }).query(api.staff.me, {})).toBeNull();
   });
 });
