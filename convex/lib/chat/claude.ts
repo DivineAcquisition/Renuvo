@@ -6,27 +6,28 @@
  * the run, as the API requires for tool use. Between runs only the visible words are replayed: no
  * reasoning is stored or shown.
  *
- * Refusals fall back to another model server-side ("fallbacks": "default"). Retries for rate limits,
- * server errors and dropped connections are the SDK's own.
+ * Refusals may be answered by another Claude model server-side ("fallbacks": "default"), as the owner
+ * allowed; never by another provider. Retries for rate limits, server errors and dropped connections are
+ * the SDK's own; after them, an outage may go to the OpenRouter stand-in (model.ts).
  *
  * NOT VERIFIED against the live API in this build: no key was available.
  */
 import Anthropic from "@anthropic-ai/sdk";
 
+import type { ModelEntry } from "../ai/registry";
 import { ModelError, type ChatModel, type ModelReply } from "./model";
 
-export const CHAT_MODEL_ID = "claude-opus-5-5";
 const BETAS = ["server-side-fallback-2026-07-01"];
 
-export function claudeChatModel(apiKey: string, options: { fetch?: typeof fetch; maxRetries?: number } = {}): ChatModel {
-  const client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: options.maxRetries ?? 2, fetch: options.fetch });
+export function claudeChatModel(apiKey: string, entry: ModelEntry, options: { fetch?: typeof fetch; maxRetries?: number } = {}): ChatModel {
+  const client = new Anthropic({ apiKey, timeout: entry.timeoutMs, maxRetries: options.maxRetries ?? 2, fetch: options.fetch });
   return {
     name: "claude",
     async respond(request): Promise<ModelReply> {
       try {
         const stream = client.beta.messages.stream(
           {
-            model: CHAT_MODEL_ID,
+            model: entry.model,
             max_tokens: request.maxTokens,
             betas: BETAS,
             fallbacks: "default",
@@ -48,10 +49,12 @@ export function claudeChatModel(apiKey: string, options: { fetch?: typeof fetch;
       } catch (error) {
         if (error instanceof Anthropic.APIUserAbortError) throw new ModelError("Stopped.", false);
         if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) throw new ModelError("The model provider did not accept this deployment's key. An administrator needs to check ANTHROPIC_API_KEY.", false);
-        if (error instanceof Anthropic.RateLimitError) throw new ModelError("The model is busy right now. Try again in a minute.", true);
+        // Busy or down: another allowed provider may continue. A bad request or a refusal never qualifies.
+        if (error instanceof Anthropic.RateLimitError) throw new ModelError("The model is busy right now. Try again in a minute.", true, true);
         if (error instanceof Anthropic.BadRequestError) throw new ModelError("The model could not take this request. Try rephrasing, or start a new chat if this one is very long.", false);
-        if (error instanceof Anthropic.APIError) throw new ModelError("The model provider had a problem. Try again.", true);
-        // A tool input the stream could not parse, a dropped connection after retries, or anything else.
+        if (error instanceof Anthropic.APIConnectionError) throw new ModelError("The model provider could not be reached. Try again.", true, true);
+        if (error instanceof Anthropic.APIError) throw new ModelError("The model provider had a problem. Try again.", true, (error.status ?? 500) >= 500);
+        // A tool input the stream could not parse, or anything else: not an outage.
         throw new ModelError("The answer was interrupted. Try again.", true);
       }
     },

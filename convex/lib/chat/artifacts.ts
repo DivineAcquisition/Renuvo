@@ -4,6 +4,7 @@
  * never makes a disconnected copy. A revision names the version it starts from, so two edits made from
  * the same version cannot silently overwrite each other.
  */
+import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { notFound, userError } from "../errors";
@@ -55,6 +56,7 @@ export async function createArtifact(
   });
   await ctx.db.insert("chatArtifactVersions", { companyId: input.companyId, artifactId, version: 1, content: content(input.content), author: input.author, createdAt: now });
   await recordEvent(ctx, { companyId: input.companyId, type: "chat_artifact.created", actor: input.actor, subject: { table: "chatArtifacts", id: artifactId }, data: { kind: input.kind } });
+  await ctx.scheduler.runAfter(0, internal.knowledge.index, { kind: "artifact", id: artifactId });
   return artifactId;
 }
 
@@ -81,6 +83,7 @@ export async function reviseArtifact(ctx: MutationCtx, artifact: Doc<"chatArtifa
     ...(reopened ? { state: "draft" as const, approvedVersion: undefined, stateNote: `Version ${next} changed the document after it was marked ${STATE_WORDS[artifact.state].toLowerCase()}; it is a draft again.`, stateAt: now } : {}),
   });
   await recordEvent(ctx, { companyId: artifact.companyId, type: "chat_artifact.revised", actor: input.actor, subject: { table: "chatArtifacts", id: artifact._id }, data: { version: next, reopened } });
+  await ctx.scheduler.runAfter(0, internal.knowledge.index, { kind: "artifact", id: artifact._id });
   return next;
 }
 

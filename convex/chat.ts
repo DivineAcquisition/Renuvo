@@ -29,6 +29,7 @@ const MESSAGE_MAX = 20_000;
 const SENDS_PER_WINDOW = 20;
 const SEND_WINDOW_MS = 10 * 60 * 1000;
 const UPLOAD_MAX_BYTES = 512 * 1024;
+const PDF_MAX_BYTES = 10 * 1024 * 1024;
 const TEXT_TYPES = ["text/plain", "text/markdown", "text/csv", "application/json", "text/x-markdown"];
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|json)$/i;
 const THREAD_MESSAGES = 300;
@@ -123,9 +124,10 @@ async function checkedAttachments(ctx: MutationCtx & MemberAccess, files: { stor
     if (!meta) notFound();
     const name = requiredText(file.name, "The file name", 200);
     const type = (meta.contentType ?? "").split(";")[0].trim().toLowerCase();
-    if (!TEXT_TYPES.includes(type) && !TEXT_EXTENSIONS.test(name)) throw userError(`"${name}" cannot be read yet. Chat reads text files (.txt, .md, .csv, .json); paste the text of other documents instead.`);
-    if (meta.size > UPLOAD_MAX_BYTES) throw userError(`"${name}" is larger than 512 KB.`);
-    out.push({ storageId: file.storageId, name, contentType: type || "text/plain", size: meta.size, state: "pending" as const });
+    const pdf = type === "application/pdf" || /\.pdf$/i.test(name);
+    if (!pdf && !TEXT_TYPES.includes(type) && !TEXT_EXTENSIONS.test(name)) throw userError(`"${name}" cannot be read yet. Chat reads PDFs and text files (.pdf, .txt, .md, .csv, .json); paste the text of other documents instead.`);
+    if (meta.size > (pdf ? PDF_MAX_BYTES : UPLOAD_MAX_BYTES)) throw userError(`"${name}" is larger than ${pdf ? "10 MB" : "512 KB"}.`);
+    out.push({ storageId: file.storageId, name, contentType: pdf ? "application/pdf" : type || "text/plain", size: meta.size, state: "pending" as const });
   }
   return out;
 }
@@ -407,9 +409,9 @@ export const registerUpload = companyMutation({
     }
     const meta = await ctx.db.system.get(args.storageId);
     if (!meta) notFound();
-    if (meta.size > UPLOAD_MAX_BYTES) {
+    if (meta.size > PDF_MAX_BYTES) {
       await ctx.storage.delete(args.storageId);
-      throw userError("The file is larger than 512 KB.");
+      throw userError("The file is larger than 10 MB.");
     }
     await ctx.db.insert("chatUploads", { companyId: ctx.companyId, memberId: ctx.member._id, storageId: args.storageId, createdAt: Date.now() });
     return null;
@@ -458,6 +460,9 @@ export const decideKnowledge = ownerMutation({
     const entry = await ctx.db.get(args.knowledgeId);
     if (!entry || entry.companyId !== ctx.companyId) notFound();
     await ctx.db.patch(entry._id, { status: args.status, text: args.text === undefined ? entry.text : requiredText(args.text, "The knowledge", 500), decidedBy: ctx.member._id, decidedAt: Date.now() });
+    // The search index follows: confirmed knowledge becomes findable, anything else stops being.
+    if (args.status === "confirmed") await ctx.scheduler.runAfter(0, internal.knowledge.index, { kind: "knowledge", id: entry._id });
+    else await ctx.scheduler.runAfter(0, internal.knowledge.remove, { companyId: ctx.companyId, sourceKey: `knowledge:${entry._id}` });
     await recordEvent(ctx, { companyId: ctx.companyId, type: `company_knowledge.${args.status}`, actor: { kind: "member", memberId: ctx.member._id }, subject: { table: "companyKnowledge", id: entry._id } });
     return null;
   },
