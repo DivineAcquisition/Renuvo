@@ -146,6 +146,7 @@ try {
     expect((await heading(ownerPage)) === "Set up your company", `Heading was ${await heading(ownerPage)}`);
     await shot(ownerPage, "03-workspace-setup");
     await ownerPage.getByLabel("Company name").fill(company);
+    await ownerPage.getByLabel(/I accept the/).check();
     await ownerPage.getByRole("button", { name: "Create company" }).click();
     await ownerPage.getByText(company).first().waitFor({ timeout: 30000 });
     await ownerPage.getByRole("button", { name: /Account menu/ }).waitFor({ timeout: 30000 });
@@ -502,6 +503,7 @@ try {
     });
     await report.check("sending workspace setup twice makes one company", async () => {
       const name = `E2E New ${run}`;
+      await signupPage.getByLabel(/I accept the/).check();
       await signupPage.getByLabel("Company name").fill(name);
       await signupPage.getByRole("button", { name: "Create company" }).dblclick();
       await signupPage.getByRole("button", { name: /Account menu/ }).waitFor({ timeout: 30000 });

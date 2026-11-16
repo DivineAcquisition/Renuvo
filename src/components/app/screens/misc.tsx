@@ -8,6 +8,7 @@ import { DispatchSettings } from "@/components/app/dispatch-view";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { WeekMeasures } from "@/components/app/overview/week-measures";
 import { AgentPermissions } from "@/components/app/screens/agent-permissions";
+import { ComplianceLink } from "@/components/app/screens/compliance";
 import { NotBuilt, PageHeader, Panel } from "@/components/app/shell";
 import { useNow } from "@/components/app/use-now";
 import { SecuritySettings } from "@/components/auth/security";
@@ -264,6 +265,7 @@ export function SettingsScreen({ extra }: { extra?: React.ReactNode }) {
       <div className="grid gap-5">
         <CompanyDetails />
         <People />
+        <ComplianceLink />
         <SecuritySettings />
         <AgentPermissions />
         <DispatchSettings />

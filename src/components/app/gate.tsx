@@ -23,6 +23,7 @@ import { LANDING_PATH } from "@/lib/app/navigation";
 import { AUTH, withNext } from "@/lib/auth/routes";
 
 import { api } from "../../../convex/_generated/api";
+import { currentVersion } from "../../../convex/lib/trust/documents";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const STORED = "selestial.company";
@@ -56,6 +57,8 @@ function Onboarding() {
   const create = useMutation(api.companies.create);
   const join = useMutation(api.members.join);
   const [name, setName] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const terms = currentVersion("terms");
   // Starts at the zone this browser reports. Nothing is assumed when it reports none.
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "");
   const { busy, error, run } = useRun();
@@ -118,15 +121,29 @@ function Onboarding() {
           if (busy) return;
           note("Creating your company");
           void run(async () => {
-            await create({ name, timezone, setupKey });
+            await create({ name, timezone, setupKey, acceptTerms: terms.id });
             note("Company created");
           });
         }}
       >
         <TextField label="Company name" name="organization" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} autoComplete="organization" autoFocus={!hasInvitations} />
         <TextField label="Time zone" name="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} required autoComplete="off" hint="The IANA name of your zone, such as America/Chicago. Schedules, availability and deadlines are shown on this clock." />
+        <label className="flex items-start gap-2.5 text-sm text-[#3d3654]">
+          <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} required className="mt-0.5 size-4 shrink-0 accent-[#6838ef]" />
+          <span>
+            I accept the{" "}
+            <a href="/terms" target="_blank" rel="noreferrer" className="font-medium text-[#5126c7] underline underline-offset-2">
+              {terms.title}
+            </a>{" "}
+            for this company, and have read the{" "}
+            <a href="/privacy" target="_blank" rel="noreferrer" className="font-medium text-[#5126c7] underline underline-offset-2">
+              Privacy notice
+            </a>
+            .
+          </span>
+        </label>
         {error ? <Notice tone="error">{error}</Notice> : null}
-        <SubmitButton busy={busy} busyLabel="Creating your company" disabled={name.trim() === "" || timezone.trim() === ""}>
+        <SubmitButton busy={busy} busyLabel="Creating your company" disabled={name.trim() === "" || timezone.trim() === "" || !agreed}>
           Create company
         </SubmitButton>
       </form>
