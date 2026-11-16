@@ -5,7 +5,7 @@ read, nothing was purchased, no real offer was made, and nothing was deployed.
 
 ## Automated tests (`npm test`)
 
-60 Recruiter tests in four files, alongside the 145 that were already there (205 pass). `recruiterProviders.test.ts` runs the Resend and Claude adapters against a fake `fetch`: the request each sends, plain-words failures, signed and unsigned webhooks, a bounce arriving by webhook, Claude's answer passing through the same checks as the rules reader, and the fallback to rules on a refusal, an error or a malformed answer.
+60 Recruiter tests in four files; with the working branch merged on November 16, 270 tests pass in all. `recruiterProviders.test.ts` runs the Resend and Claude adapters against a fake `fetch`: the request each sends, plain-words failures, signed and unsigned webhooks, a bounce arriving by webhook, Claude's answer passing through the same checks as the rules reader, and the fallback to rules on a refusal, an error or a malformed answer.
 
 | Scenario from the brief | Test |
 |---|---|

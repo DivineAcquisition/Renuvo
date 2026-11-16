@@ -10,6 +10,8 @@ The sidebar, the route map and the navigation rules are in
 [`docs/foundation/01-navigation.md`](docs/foundation/01-navigation.md).
 Which host shows what (public site, workspace, link pages) is in
 [`docs/foundation/02-hosts.md`](docs/foundation/02-hosts.md).
+Signing in, invitations, the emails and the setup outside this repository are in
+[`docs/foundation/03-authentication.md`](docs/foundation/03-authentication.md).
 
 This repository and its Vercel project are still named Renuvo, which was the
 working name.
@@ -17,7 +19,10 @@ working name.
 ## What is here
 
 - The public landing page.
-- **Sign-in with Clerk** and the signed-in app under `/app`: Home, Approvals,
+- **Sign-in**: Selestial's own screens for signing in, creating an account,
+  confirming an email, resetting a password, accepting an invitation and
+  managing security, on top of Clerk.
+- **The signed-in app** under `/app`: Home, Approvals,
   Schedule, Customers & Properties, Cleaners, Reports, Settings, and one shared
   detail panel for a visit, an approval or a task.
 - **The sidebar**, drawn from one navigation definition: three departments
@@ -62,17 +67,21 @@ need no deployment.
 
 ### Sign-in
 
-Clerk signs people in; Convex checks every read and write again.
+Clerk signs people in, used without any of its own screens: sign-in, account
+creation, email confirmation, password reset, invitations and security settings
+are Selestial's own pages. Convex checks every read and write again.
 
 1. Web server: `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`.
-2. Clerk dashboard: turn on the Convex integration, so the session token is
-   issued for Convex.
-3. Convex deployment: `CLERK_JWT_ISSUER_DOMAIN`, the Clerk instance's issuer
-   (`https://<name>.clerk.accounts.dev` in development). It is `none` until
-   then, which means nobody can sign in.
+2. Convex deployment: `CLERK_JWT_ISSUER_DOMAIN`, the sign-in instance's address
+   (it is `none` until then, which means nobody can sign in), and
+   `ACTION_LINK_SECRET`, which signs invitation links.
+3. The sign-in instance itself: `npm run auth:doctor` checks it and says what
+   is missing; `npm run auth:emails -- --apply --app-origin <address>` installs
+   the branded emails.
 
 A signed-in person with no company creates one (and becomes its Owner) or
-joins one they were invited to by email.
+accepts an invitation. The whole flow, the settings and what is not built are in
+[`docs/foundation/03-authentication.md`](docs/foundation/03-authentication.md).
 
 ## Rules the backend enforces
 

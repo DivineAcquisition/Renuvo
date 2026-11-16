@@ -5,16 +5,16 @@ import { Logo } from "@/components/brand/logo";
 import { Menu } from "@/components/icons";
 import { Button, type ButtonSize } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/constants";
-import { EARLY_ACCESS_ANCHOR, FOOTER, NAV } from "@/lib/marketing/content";
+import { ASSESSMENT_PATH, FOOTER, NAV } from "@/lib/marketing/content";
 import { marketingNavLink, marketingPageGutter, marketingShell } from "@/lib/marketing/ui";
 import { cn } from "@/lib/utils";
 
 const ctaShape = "h-12! rounded-[8px]! before:rounded-[7px]!";
 
-/** "Get early access". Every one of these goes to the request form at the foot of the page. */
+/** "Get early access". Every one of these goes to the operations assessment, on its own page. */
 export function EarlyAccessLink({ position, size = "xl", className, children }: { position: string; size?: ButtonSize; className?: string; children: ReactNode }) {
   return (
-    <Button variant="gradient" size={size} className={cn(ctaShape, className)} render={<a href={EARLY_ACCESS_ANCHOR} data-cta-position={position} />}>
+    <Button variant="gradient" size={size} className={cn(ctaShape, className)} render={<Link href={ASSESSMENT_PATH} data-cta-position={position} />}>
       {children}
     </Button>
   );
@@ -22,12 +22,13 @@ export function EarlyAccessLink({ position, size = "xl", className, children }: 
 
 export const outlineCta = cn(ctaShape, "border-border bg-card hover:bg-muted");
 
-function NavLinks({ className }: { className?: string }) {
+/** The section links. Away from the home page they lead back to it. */
+function NavLinks({ className, onHome }: { className?: string; onHome: boolean }) {
   return (
     <ul className={className}>
       {NAV.links.map((link) => (
         <li key={link.href}>
-          <a href={link.href} className={cn(marketingNavLink, "block")}>
+          <a href={onHome ? link.href : `/${link.href}`} className={cn(marketingNavLink, "block")}>
             {link.label}
           </a>
         </li>
@@ -36,15 +37,15 @@ function NavLinks({ className }: { className?: string }) {
   );
 }
 
-export function SiteHeader() {
+export function SiteHeader({ onHome = true }: { onHome?: boolean }) {
   return (
     <header className={cn("sticky top-0 z-50 border-b border-border bg-background", marketingPageGutter)}>
       <div className={cn(marketingShell, "flex h-[4.5rem] items-center justify-between gap-4")}>
         <Link href="/" className="shrink-0 rounded-md" aria-label={`${APP_NAME} home`}>
           <Logo />
         </Link>
-        <nav aria-label="On this page" className="hidden lg:block">
-          <NavLinks className="flex items-center gap-1" />
+        <nav aria-label={onHome ? "On this page" : "Selestial"} className="hidden lg:block">
+          <NavLinks onHome={onHome} className="flex items-center gap-1" />
         </nav>
         <EarlyAccessLink position="nav" size="lg" className="hidden shrink-0 lg:inline-flex">
           {NAV.cta}
@@ -59,7 +60,7 @@ export function SiteHeader() {
               {NAV.cta}
             </EarlyAccessLink>
             <nav aria-label="On this page" className="mt-2">
-              <NavLinks className="grid gap-1" />
+              <NavLinks onHome={onHome} className="grid gap-1" />
             </nav>
           </div>
         </details>

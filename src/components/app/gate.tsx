@@ -1,23 +1,26 @@
 "use client";
 
-import { RedirectToSignIn, useAuth, UserButton } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { AgentDock } from "@/components/app/agent-dock";
 import { CompanyProvider, type Role, useCompany } from "@/components/app/company";
 import { DetailProvider, useDetail } from "@/components/app/detail-panel";
-import { Field, FormError, TextInput, useRun } from "@/components/app/form";
+import { useRun } from "@/components/app/form";
 import { missingSetup, NotSetUp } from "@/components/app/not-set-up";
 import type { TeamDepartment } from "@/components/app/overview/team-at-work";
 import { AppShell } from "@/components/app/shell";
+import { Notice, SubmitButton, TextField } from "@/components/auth/fields";
+import { AuthShell, useEvents, type TraceStep } from "@/components/auth/shell";
+import { UserMenu, useSignOut } from "@/components/auth/user-menu";
 import { Sidebar, SidebarStateProvider, type BusinessOption } from "@/components/app/sidebar";
 import { useNow } from "@/components/app/use-now";
-import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LANDING_PATH } from "@/lib/app/navigation";
+import { AUTH, withNext } from "@/lib/auth/routes";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -56,53 +59,78 @@ function Onboarding() {
   // Starts at the zone this browser reports. Nothing is assumed when it reports none.
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "");
   const { busy, error, run } = useRun();
+  // One key for this setup. If the request is sent twice (a double click, a retry after a dropped
+  // connection), the record makes one company, not two.
+  const [setupKey] = useState(() => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`));
+  const { events, note } = useEvents();
+  const signOut = useSignOut();
+  const hasInvitations = Boolean(invitations && invitations.length > 0);
+  const steps: TraceStep[] = [
+    { key: "account", label: "Sign in", detail: "Your session is confirmed.", state: "done" },
+    { key: "company", label: hasInvitations ? "Join a company, or name your own" : "Name your company", detail: "Whoever creates a company is its Owner. This is the only way an Owner comes to exist.", state: busy ? "active" : error ? "failed" : "needs_you" },
+    { key: "standards", label: "Start on review", detail: "Your team starts on review: nothing reaches a customer or a cleaner until you approve it.", state: "todo" },
+    { key: "workspace", label: "Open your workspace", detail: "You land on Home.", state: "todo" },
+  ];
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-between">
-          <Logo />
-          <UserButton />
+    <AuthShell
+      eyebrow="Workspace setup"
+      title="Set up your company"
+      lead="You set the standards. Your team starts on review: nothing reaches a customer or a cleaner until you approve it."
+      steps={steps}
+      events={events}
+      below={
+        <button type="button" className="font-medium text-[#5126c7] underline-offset-4 hover:underline" onClick={() => void signOut()}>
+          Sign out
+        </button>
+      }
+    >
+      {hasInvitations ? (
+        <div className="mb-6 grid gap-2">
+          <p className="text-sm font-medium text-[#211a35]">You have been invited</p>
+          {invitations?.map((invitation) => (
+            <div key={invitation.companyId} className="flex items-center justify-between gap-3 rounded-xl border border-[#e4e7ef] bg-[#f8f9fc] px-3.5 py-3">
+              <span className="min-w-0 text-sm">
+                <span className="block truncate font-medium text-[#211a35]">{invitation.companyName}</span>
+                <span className="text-[#667085] capitalize">as {invitation.role}</span>
+              </span>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={busy}
+                onClick={() =>
+                  void run(async () => {
+                    note(`Joining ${invitation.companyName}`);
+                    await join({ companyId: invitation.companyId as Id<"companies"> });
+                  })
+                }
+              >
+                Join
+              </Button>
+            </div>
+          ))}
+          <p className="mt-1 text-xs text-[#667085]">Or start a new company below.</p>
         </div>
-        <h1 className="mt-8 font-heading text-2xl tracking-tight text-strong">Set up your company</h1>
-        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">You set the standards. Your team starts on review: nothing reaches a customer or a cleaner until you approve it.</p>
-
-        {invitations && invitations.length > 0 ? (
-          <div className="mt-6 grid gap-2">
-            <p className="text-sm font-medium text-strong">You have been invited</p>
-            {invitations.map((invitation) => (
-              <div key={invitation.companyId} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
-                <span className="text-sm">
-                  <span className="font-medium text-strong">{invitation.companyName}</span> <span className="text-muted-foreground">· as {invitation.role}</span>
-                </span>
-                <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => join({ companyId: invitation.companyId as Id<"companies"> }))}>
-                  Join
-                </Button>
-              </div>
-            ))}
-            <p className="mt-2 text-xs text-muted-foreground">Or start a new company below.</p>
-          </div>
-        ) : null}
-
-        <form
-          className="mt-6 grid gap-4 rounded-2xl border border-border bg-card p-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(() => create({ name, timezone }));
-          }}
-        >
-          <Field label="Company name">
-            <TextInput value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} autoComplete="organization" />
-          </Field>
-          <Field label="Time zone" hint="The IANA name of your zone. Schedules, availability and deadlines are shown on this clock.">
-            <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} required />
-          </Field>
-          <FormError message={error} />
-          <Button type="submit" variant="primary" loading={busy}>
-            Create company
-          </Button>
-        </form>
-      </div>
-    </main>
+      ) : null}
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (busy) return;
+          note("Creating your company");
+          void run(async () => {
+            await create({ name, timezone, setupKey });
+            note("Company created");
+          });
+        }}
+      >
+        <TextField label="Company name" name="organization" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} autoComplete="organization" autoFocus={!hasInvitations} />
+        <TextField label="Time zone" name="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} required autoComplete="off" hint="The IANA name of your zone, such as America/Chicago. Schedules, availability and deadlines are shown on this clock." />
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        <SubmitButton busy={busy} busyLabel="Creating your company" disabled={name.trim() === "" || timezone.trim() === ""}>
+          Create company
+        </SubmitButton>
+      </form>
+    </AuthShell>
   );
 }
 
@@ -137,7 +165,7 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, children }: 
             company={company.name}
             decisionCount={count}
             sidebar={(close) => <LiveSidebar businesses={businesses} onSwitch={onSwitch} onNavigate={close} />}
-            userSlot={<UserButton />}
+            userSlot={<UserMenu />}
             dock={<Dock departments={team?.departments} />}
           >
             {children}
@@ -179,20 +207,27 @@ function Companies({ userId, children }: { userId: string; children: React.React
   );
 }
 
+/**
+ * No session: the workspace is taken off the screen and the person goes to sign-in, which remembers
+ * this page. This covers a session that ended while the page was open, as well as a fresh visit.
+ */
+function ToSignIn() {
+  const router = useRouter();
+  const pathname = usePathname();
+  useEffect(() => {
+    router.replace(withNext(AUTH.login, pathname));
+  }, [pathname, router]);
+  return <Loading />;
+}
+
 function SignedIn({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated } = useConvexAuth();
   const { isLoaded, isSignedIn, userId } = useAuth();
   if (isLoading || !isLoaded) return <Loading />;
-  if (!isSignedIn || !userId) return <RedirectToSignIn />;
+  if (!isSignedIn || !userId) return <ToSignIn />;
   if (!isAuthenticated) {
-    // Clerk knows this person, but the record did not accept their session. That is a setup gap, and the screen says which.
-    return (
-      <NotSetUp
-        title="You are signed in, but the record did not accept it"
-        body="Clerk and Convex are not connected to each other yet. Two settings finish it:"
-        items={["Clerk dashboard: turn on the Convex integration", "Convex: set CLERK_JWT_ISSUER_DOMAIN to this Clerk instance"]}
-      />
-    );
+    // The sign-in service knows this person, but the record did not accept their session. That is a setup gap.
+    return <NotSetUp title="You are signed in, but the workspace did not accept it" body="Sign-in and the live record are not connected to each other on this deployment yet. Nothing is wrong with your account. The setup steps are in the authentication guide in the repository." />;
   }
   return <Companies userId={userId}>{children}</Companies>;
 }
@@ -201,7 +236,7 @@ function SignedIn({ children }: { children: React.ReactNode }) {
 export function AppGate({ children }: { children: React.ReactNode }) {
   const missing = missingSetup();
   if (missing.length > 0) {
-    return <NotSetUp title="The app is not set up yet" body="Sign-in and the live record need these settings on this deployment before anyone can come in:" items={missing} />;
+    return <NotSetUp title="The app is not set up yet" body="This deployment is not connected to its sign-in service or its live record yet, so nobody can come in. The setup steps are in the authentication guide in the repository." />;
   }
   return <SignedIn>{children}</SignedIn>;
 }

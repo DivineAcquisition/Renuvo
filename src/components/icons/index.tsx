@@ -142,6 +142,9 @@ import {
   Handshake as PhNHandshake,
   House as PhNHouse,
   IdentificationCard as PhNIdentificationCard,
+  Desktop as PhNDesktop,
+  DeviceMobile as PhNDeviceMobile,
+  EyeSlash as PhNEyeSlash,
   Key as PhNKey,
   Lightning as PhNLightning,
   PauseCircle as PhNPauseCircle,
@@ -348,6 +351,9 @@ export const PauseCircleIcon = wrap(PhNPauseCircle, "PauseCircleIcon", true);
 export const UserCheckIcon = wrap(PhNUserCheck, "UserCheckIcon", true);
 export const UserPlusIcon = wrap(PhNUserPlus, "UserPlusIcon", true);
 export const IdCardIcon = wrap(PhNIdentificationCard, "IdCardIcon", true);
+export const DesktopIcon = wrap(PhNDesktop, "DesktopIcon", true);
+export const DeviceMobileIcon = wrap(PhNDeviceMobile, "DeviceMobileIcon", true);
+export const EyeOffIcon = wrap(PhNEyeSlash, "EyeOffIcon", true);
 export const KeyIcon = wrap(PhNKey, "KeyIcon", true);
 export const TableIcon = wrap(PhNTable, "TableIcon", true);
 export const FunnelIcon = wrap(PhNFunnel, "FunnelIcon", false);

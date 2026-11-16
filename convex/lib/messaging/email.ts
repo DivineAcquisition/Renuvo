@@ -1,11 +1,11 @@
 /**
  * The one door every outbound email goes through. Applicant email is sent from a Selestial sending
- * domain with the company's name on it and the company's hiring inbox as Reply-To. Resend is the real
- * provider (resend.ts); it runs only when its key and sending address are set. The mock answers from the address alone, so a test can
+ * address with the company's name on it and the company's hiring inbox as Reply-To. The real provider is
+ * the shared one in convex/lib/email/provider.ts. The mock answers from the address alone, so a test can
  * ask for a delivered message, a bounce, a provider that fails and recovers, or a send that dies half way.
  */
+import { emailProvider as sharedEmailProvider } from "../email/provider";
 import type { SendResult } from "./provider";
-import { resendProvider } from "./resend";
 
 export type EmailInput = { to: string; fromName: string; replyTo: string; subject: string; text: string; idempotencyKey: string; attempt: number };
 
@@ -45,17 +45,29 @@ export const mockEmailProvider: EmailProvider = {
   },
 };
 
+/** An applicant email's text as simple HTML: the company is the sender, so it carries no Selestial branding. */
+export function plainHtml(text: string): string {
+  const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const paragraphs = text.split(/\n{2,}/).map((block) => `<p style="margin:0 0 14px 0;">${escape(block).replace(/\n/g, "<br>")}</p>`);
+  return `<!doctype html><html><body style="margin:0;padding:24px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:16px;line-height:24px;color:#211A35;">${paragraphs.join("")}</body></html>`;
+}
+
 /**
- * The provider this deployment uses, from EMAIL_PROVIDER. Null means email is not connected, including
- * "resend" chosen without its key or its sending address: nothing is sent half set up.
+ * The provider applicant email uses. "mock" is the applicant test double above (it can bounce). Every
+ * real provider is the one shared email door, convex/lib/email/provider.ts, the same Resend connection
+ * that sends member invitations. Null means email is not connected, including Resend set up only half.
  */
 export function emailProvider(): EmailProvider | null {
   const name = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
   if (name === "mock") return mockEmailProvider;
-  if (name === "resend") {
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    const fromAddress = process.env.EMAIL_FROM_ADDRESS?.trim().toLowerCase();
-    return apiKey && fromAddress && /^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/.test(fromAddress) ? resendProvider({ apiKey, fromAddress }) : null;
-  }
-  return null;
+  const shared = sharedEmailProvider();
+  if (!shared) return null;
+  return {
+    name: shared.name,
+    async send(input) {
+      const result = await shared.send({ to: input.to, subject: input.subject, text: input.text, html: plainHtml(input.text), idempotencyKey: input.idempotencyKey, fromName: input.fromName, replyTo: input.replyTo });
+      // The provider took it. Whether it arrived comes later, from the webhook (convex/http.ts).
+      return result.ok ? { ok: true, providerMessageId: result.providerMessageId, delivered: false } : result;
+    },
+  };
 }

@@ -4,12 +4,13 @@
  * The real adapters (Resend for email, Claude for reading hiring mail), against stand-ins for the two
  * services. Nothing here reaches the network: every request goes to a fake `fetch`.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { emailsTo, indeedApplication, invited, recruiterTestEnv, setup } from "../tests/recruiterHarness";
 import { checked } from "./lib/recruiter/interpret";
 import { claudeModel } from "./lib/recruiter/claude";
-import { resendProvider, verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
+import { emailProvider } from "./lib/messaging/email";
+import { verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
 
 type Call = { url: string; init: RequestInit };
 function fakeFetch(answer: (call: Call) => Response | Promise<Response>) {
@@ -31,31 +32,47 @@ async function sign(id: string, timestamp: number, body: string) {
   return `v1,${btoa(String.fromCharCode(...mac))}`;
 }
 
-describe("Resend", () => {
-  const input = { to: "maria.lopez@example.test", fromName: 'Alpha "Cleaning" <Hiring>', replyTo: "hiring@alpha.test", subject: "Next step", text: "Hello", idempotencyKey: "msg-1", attempt: 1 };
+describe("Resend, through the shared email door", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+  const input = { to: "maria.lopez@example.test", fromName: 'Alpha "Cleaning" <Hiring>', replyTo: "hiring@alpha.test", subject: "Next step", text: "Hi Maria,\n\nPlease <apply>: https://link.selestial.test/c/apply/x", idempotencyKey: "msg-1", attempt: 1 };
 
-  it("sends from the verified address under the company's name, replies to the company, and is idempotent per message", async () => {
+  it("sends from the shared address under the company's name, replies to the company, and is idempotent per message", async () => {
+    vi.stubEnv("EMAIL_PROVIDER", "resend");
+    vi.stubEnv("RESEND_API_KEY", "test-key-not-real");
+    vi.stubEnv("EMAIL_FROM", "Selestial <team@mail.selestial.test>");
     const api = fakeFetch(() => json(200, { id: "re_123" }));
-    const result = await resendProvider({ apiKey: "re_test_key", fromAddress: "hiring@mail.selestial.test", fetch: api.fn }).send(input);
-    expect(result).toEqual({ ok: true, providerMessageId: "re_123", delivered: false });
+    vi.stubGlobal("fetch", api.fn);
+    const provider = emailProvider()!;
+    expect(provider.name).toBe("resend");
+    expect(await provider.send(input)).toEqual({ ok: true, providerMessageId: "re_123", delivered: false });
     const [call] = api.calls;
     expect(call.url).toBe("https://api.resend.com/emails");
-    const headers = call.init.headers as Record<string, string>;
-    expect(headers).toMatchObject({ Authorization: "Bearer re_test_key", "Idempotency-Key": "msg-1" });
-    expect(JSON.parse(String(call.init.body))).toEqual({ from: '"Alpha Cleaning Hiring" <hiring@mail.selestial.test>', to: ["maria.lopez@example.test"], reply_to: "hiring@alpha.test", subject: "Next step", text: "Hello" });
+    expect(call.init.headers).toMatchObject({ Authorization: "Bearer test-key-not-real", "Idempotency-Key": "msg-1" });
+    const body = JSON.parse(String(call.init.body));
+    expect(body).toMatchObject({ from: '"Alpha Cleaning Hiring" <team@mail.selestial.test>', to: ["maria.lopez@example.test"], reply_to: "hiring@alpha.test", subject: "Next step", text: input.text });
+    // The company is the sender: no Selestial branding, and the applicant's text is escaped.
+    expect(body.html).not.toContain("SELESTIAL");
+    expect(body.html).toContain("Please &lt;apply&gt;");
   });
 
-  it("says in plain words why a send failed, and retries only what may work later", async () => {
-    const answer = async (status: number) => resendProvider({ apiKey: "k", fromAddress: "a@b.test", fetch: fakeFetch(() => json(status, { message: "raw provider text with secrets" })).fn }).send(input);
-    expect(await answer(429)).toEqual({ ok: false, retryable: true, problem: "The email service is busy or unavailable." });
-    expect(await answer(503)).toMatchObject({ ok: false, retryable: true });
-    expect(await answer(422)).toEqual({ ok: false, retryable: false, problem: "The email service would not send this message." });
-    expect(await answer(401)).toMatchObject({ retryable: false, problem: "The email service refused the sending credentials." });
-    expect(JSON.stringify(await answer(422))).not.toContain("raw provider text");
-    // A connection that drops is not an answer: the send is left unknown, never retried by itself.
-    await expect(resendProvider({ apiKey: "k", fromAddress: "a@b.test", fetch: fakeFetch(() => Promise.reject(new Error("reset"))).fn }).send(input)).rejects.toThrow("no answer");
+  it("is not connected when Resend is only half set up, and says in plain words why a send failed", async () => {
+    vi.stubEnv("EMAIL_PROVIDER", "resend");
+    vi.stubEnv("RESEND_API_KEY", "test-key-not-real");
+    expect(emailProvider()).toBeNull();
+    vi.stubEnv("EMAIL_FROM", "Selestial <team@mail.selestial.test>");
+    vi.stubGlobal("fetch", fakeFetch(() => json(422, { message: "raw provider text" })).fn);
+    const failed = await emailProvider()!.send(input);
+    expect(failed).toMatchObject({ ok: false, retryable: false });
+    expect(JSON.stringify(failed)).not.toContain("raw provider text");
+    vi.stubGlobal("fetch", fakeFetch(() => json(429, {})).fn);
+    expect(await emailProvider()!.send(input)).toMatchObject({ ok: false, retryable: true });
   });
+});
 
+describe("Resend's webhook signature", () => {
   it("accepts only signed, fresh webhooks and reads delivery, bounce and complaint events", async () => {
     const now = Date.UTC(2027, 2, 1, 16, 0);
     const body = JSON.stringify({ type: "email.bounced", data: { email_id: "re_123" } });

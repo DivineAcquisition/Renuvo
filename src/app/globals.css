@@ -2,7 +2,6 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "tw-shimmer";
-@import "@clerk/ui/themes/shadcn.css";
 @import "../components/agent-elements/agent-ui.css";
 @plugin "@tailwindcss/typography";
 
@@ -2502,4 +2501,269 @@ html[data-calm="true"] .work-hero-scan {
 html[data-calm="true"] .work-hero-orb-on,
 html[data-calm="true"] .work-hero-halo-on {
   animation: none;
+}
+
+/* ---------- Sign-in screens ----------
+   A calm page with one focused form, and beside it a dark panel that shows the work as it happens.
+   The panel's colours are literal: it is Deep Plum in both themes, like a console. */
+.auth-page {
+  background-color: #f8f9fc;
+  background-image:
+    radial-gradient(60rem 36rem at 105% -10%, rgba(104, 56, 239, 0.1), transparent 60%),
+    radial-gradient(40rem 28rem at -10% 110%, rgba(104, 56, 239, 0.06), transparent 60%);
+}
+
+.auth-card {
+  background: #ffffff;
+  border: 1px solid #e4e7ef;
+  border-radius: 1.25rem;
+  box-shadow:
+    0 1px 2px rgba(33, 26, 53, 0.04),
+    0 24px 48px -32px rgba(33, 26, 53, 0.22);
+}
+
+.auth-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #e9e4ff;
+  background:
+    radial-gradient(34rem 24rem at 85% 0%, rgba(104, 56, 239, 0.55), transparent 62%),
+    radial-gradient(28rem 22rem at 0% 100%, rgba(81, 38, 199, 0.5), transparent 60%),
+    #1a1430;
+}
+
+.auth-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(233, 228, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(233, 228, 255, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse at 60% 30%, #000 20%, transparent 75%);
+}
+
+.auth-glass {
+  border: 1px solid rgba(233, 228, 255, 0.14);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(6px);
+}
+
+/* The step that is running: its label shimmers, the way a working agent's line does. */
+.auth-working {
+  background: linear-gradient(90deg, #b39eff 0%, #ffffff 45%, #b39eff 90%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: auth-shimmer 2.2s linear infinite;
+}
+
+@keyframes auth-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes auth-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+.auth-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: auth-pulse 1.8s ease-out infinite;
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.auth-rise {
+  animation: auth-rise 0.35s var(--ease-out-quint) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-working {
+    animation: none;
+    -webkit-text-fill-color: #ffffff;
+  }
+  .auth-dot::after,
+  .auth-rise {
+    animation: none;
+  }
+}
+
+/* ---------- The icon's paint, for filled buttons ----------
+   Exactly what the app icon's tile is painted with (src/components/brand/logo.tsx): Selestial Violet at
+   the top-left running to Deep Violet at the bottom-right, under a soft highlight from the top-left.
+   White text is at least 5:1 anywhere a label sits. Literal colours: the icon does not change with the theme. */
+.icon-gradient {
+  background-color: #6838ef;
+  background-image:
+    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(135deg, #6838ef 0%, #5126c7 100%);
+  color: #ffffff;
+}
+
+.icon-gradient:hover:not(:disabled):not([data-disabled]),
+.icon-gradient[data-pressed]:not(:disabled) {
+  background-image:
+    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(135deg, #5c2fdb 0%, #431fa6 100%);
+}
+
+.icon-gradient:disabled,
+.icon-gradient[data-disabled] {
+  background-image:
+    radial-gradient(80% 80% at 30% 10%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
+    linear-gradient(135deg, #a58cf6 0%, #8f76e0 100%);
+}
+
+/* While a button's request runs, a band of light crosses it: the work is under way. */
+.icon-gradient[aria-busy="true"] {
+  background-image:
+    linear-gradient(105deg, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0.28) 50%, rgba(255, 255, 255, 0) 60%),
+    linear-gradient(135deg, #6838ef 0%, #5126c7 100%);
+  background-size:
+    220% 100%,
+    100% 100%;
+  animation: auth-sweep 1.4s linear infinite;
+}
+
+@keyframes auth-sweep {
+  from {
+    background-position:
+      120% 0,
+      0 0;
+  }
+  to {
+    background-position:
+      -120% 0,
+      0 0;
+  }
+}
+
+/* The agent's line at the top of each sign-in card. */
+.agent-line-working {
+  background: linear-gradient(90deg, #5126c7 0%, #b39eff 45%, #5126c7 90%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: auth-shimmer 2.2s linear infinite;
+}
+
+@keyframes auth-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.auth-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: auth-blink 1.1s steps(1) infinite;
+}
+
+@keyframes auth-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(104, 56, 239, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 9px rgba(104, 56, 239, 0);
+  }
+}
+
+.agent-avatar-working {
+  animation: auth-ring 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-gradient[aria-busy="true"],
+  .agent-avatar-working,
+  .auth-caret {
+    animation: none;
+  }
+  .agent-line-working {
+    animation: none;
+    -webkit-text-fill-color: #5126c7;
+  }
+}
+
+/* One control style for every sign-in field, so labels, focus and errors look the same everywhere. */
+.auth-input {
+  display: block;
+  width: 100%;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid #d5dae5;
+  background: #ffffff;
+  padding: 0 0.875rem;
+  font-size: 0.9375rem;
+  color: #211a35;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.auth-input::placeholder {
+  color: #98a1b3;
+}
+
+.auth-input:hover {
+  border-color: #b9c0cf;
+}
+
+.auth-input:focus-visible {
+  outline: none;
+  border-color: #6838ef;
+  box-shadow: 0 0 0 3px rgba(104, 56, 239, 0.22);
+}
+
+.auth-input[aria-invalid="true"] {
+  border-color: #dc2626;
+}
+
+.auth-input[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
+.auth-input:disabled {
+  background: #f1f3f8;
+  color: #667085;
 }

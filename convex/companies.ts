@@ -14,12 +14,39 @@ function timezone(value: string): string {
   return zone;
 }
 
-/** Whoever creates a company is its Owner. This is the only way an Owner comes to exist. */
+/** A setup key is chosen by the browser, once for one setup. It only has to be hard to repeat by accident. */
+function setupKey(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.length < 8 || value.length > 80) throw userError("The setup key must be 8 to 80 characters.");
+  return value;
+}
+
+/**
+ * Whoever creates a company is its Owner. This is the only way an Owner comes to exist.
+ *
+ * With a setup key, the same person sending the same key again (a double click, a retry on a bad
+ * connection) gets the company they already made and nothing new is created.
+ */
 export const create = signedInMutation({
-  args: { name: v.string(), timezone: v.string() },
+  args: { name: v.string(), timezone: v.string(), setupKey: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    const key = setupKey(args.setupKey);
+    if (key !== undefined) {
+      const made = await ctx.db
+        .query("companies")
+        .withIndex("by_creator_setupKey", (q) => q.eq("createdBy", ctx.userId).eq("setupKey", key))
+        .first();
+      if (made) return made._id;
+    }
     const now = Date.now();
-    const companyId = await ctx.db.insert("companies", { name: text(args.name, "Company name", 160), timezone: timezone(args.timezone), pausedAgents: [], createdAt: now });
+    const companyId = await ctx.db.insert("companies", {
+      name: text(args.name, "Company name", 160),
+      timezone: timezone(args.timezone),
+      pausedAgents: [],
+      createdBy: ctx.userId,
+      ...(key !== undefined ? { setupKey: key } : {}),
+      createdAt: now,
+    });
     const memberId = await ctx.db.insert("members", { companyId, userId: ctx.userId, email: ctx.email, name: ctx.name, role: "owner", status: "active", createdAt: now });
     await recordEvent(ctx, { companyId, type: "company.created", actor: { kind: "member", memberId }, subject: { table: "companies", id: companyId } });
     return companyId;

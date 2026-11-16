@@ -44,9 +44,23 @@ export async function company(t: T, subject: string, name: string) {
   return { as, companyId };
 }
 
+/** A link secret for tests. It is not a real one: nothing outside the test run is signed with it. */
+export const TEST_LINK_SECRET = "test-only-secret-for-action-links-0123456789";
+
+/** Runs `work` with a link secret set, and puts the setting back as it was. Inviting needs one. */
+export async function withLinkSecret<R>(work: () => Promise<R>): Promise<R> {
+  const before = process.env.ACTION_LINK_SECRET;
+  if (!before) process.env.ACTION_LINK_SECRET = TEST_LINK_SECRET;
+  try {
+    return await work();
+  } finally {
+    if (!before) delete process.env.ACTION_LINK_SECRET;
+  }
+}
+
 /** Adds a person to a company the way the product does: the Owner invites, the person joins. */
 export async function addMember(t: T, owner: ReturnType<T["withIdentity"]>, companyId: Id<"companies">, subject: string, role: "manager" | "office") {
-  await owner.mutation(api.members.invite, { companyId, email: `${subject}@example.com`, name: subject, role });
+  await withLinkSecret(() => owner.mutation(api.invitations.create, { companyId, email: `${subject}@example.com`, name: subject, role }));
   const as = t.withIdentity(person(subject));
   await as.mutation(api.members.join, { companyId });
   return as;

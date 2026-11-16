@@ -12,6 +12,4 @@ export function convexUrl(): string | null {
   return url && (/^https:\/\//.test(url) || /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(url)) ? url : null;
 }
 
-export const SIGN_IN_PATH = "/sign-in";
-export const SIGN_UP_PATH = "/sign-up";
 export const APP_PATH = "/app";

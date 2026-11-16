@@ -1,54 +1,10 @@
 /**
- * Resend, behind the EmailProvider interface (email.ts). Used when EMAIL_PROVIDER is "resend" and both
- * RESEND_API_KEY and EMAIL_FROM_ADDRESS (an address on the verified sending domain, for example
- * hiring@mail.selestial.io) are set on the deployment.
+ * Resend's webhook: delivery reports, bounces and complaints for email sent through the shared email
+ * door (convex/lib/email/provider.ts). Route: convex/http.ts. Needs RESEND_WEBHOOK_SECRET.
  *
- * The company's name is the display name and the company's hiring inbox is the Reply-To, so applicants
- * see who is writing and their replies reach the company. The message id is sent as the idempotency
- * key, so a retried send is one email.
- *
- * Delivery and bounces arrive later through the webhook in convex/http.ts.
- *
- * NOT VERIFIED against the live Resend API in this build: no key or verified domain was available. The
- * request and webhook shapes follow Resend's public documentation as understood when this was written.
+ * NOT VERIFIED against Resend itself in this build. The signing scheme and event shape follow Resend's
+ * public documentation as understood when this was written.
  */
-import type { EmailInput, EmailProvider, EmailResult } from "./email";
-
-const ENDPOINT = "https://api.resend.com/emails";
-
-/** Keeps a display name from breaking the From header. */
-function displayName(name: string): string {
-  return name.replace(/["<>\r\n]/g, "").trim().slice(0, 80) || "Hiring Team";
-}
-
-export function resendProvider(config: { apiKey: string; fromAddress: string; fetch?: typeof fetch }): EmailProvider {
-  const send = config.fetch ?? fetch;
-  return {
-    name: "resend",
-    async send(input: EmailInput): Promise<EmailResult> {
-      let response: Response;
-      try {
-        response = await send(ENDPOINT, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
-          body: JSON.stringify({ from: `"${displayName(input.fromName)}" <${config.fromAddress}>`, to: [input.to], reply_to: input.replyTo, subject: input.subject, text: input.text }),
-        });
-      } catch {
-        // Nobody knows whether it went. The message stays "sending" and is marked unconfirmed, never re-sent by itself.
-        throw new Error("resend: no answer");
-      }
-      if (response.ok) {
-        const body = (await response.json().catch(() => null)) as { id?: unknown } | null;
-        if (body && typeof body.id === "string") return { ok: true, providerMessageId: body.id, delivered: false };
-        return { ok: false, retryable: false, problem: "The email service accepted the request but did not say which message it was." };
-      }
-      // Words for a person, never the provider's raw response.
-      if (response.status === 429 || response.status >= 500) return { ok: false, retryable: true, problem: "The email service is busy or unavailable." };
-      if (response.status === 401 || response.status === 403) return { ok: false, retryable: false, problem: "The email service refused the sending credentials." };
-      return { ok: false, retryable: false, problem: "The email service would not send this message." };
-    },
-  };
-}
 
 // ── The webhook: delivery reports, bounces and complaints ───────────────────────────────────────
 

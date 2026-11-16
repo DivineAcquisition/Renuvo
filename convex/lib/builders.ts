@@ -15,6 +15,7 @@ import { requireIdentity, requireMember } from "./access";
 import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkState } from "./dispatch/links";
 import { notAllowed, notFound, userError } from "./errors";
 import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
+import { invitationForToken } from "./invitations";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -79,6 +80,17 @@ export function managerMutation<V extends AnyValidators, R>(def: MutationDef<V, 
     args: def.args,
     handler: async (ctx, args) => {
       if (!isManager(ctx.role)) notAllowed();
+      return def.handler(ctx, args);
+    },
+  });
+}
+
+/** A read only the Owner makes: who has been invited, and what became of each invitation. */
+export function ownerQuery<V extends AnyValidators, R>(def: QueryDef<V, R>) {
+  return companyQuery({
+    args: def.args,
+    handler: async (ctx, args) => {
+      if (!isOwner(ctx.role)) notAllowed();
       return def.handler(ctx, args);
     },
   });
@@ -150,6 +162,35 @@ export function serverMutation<V extends AnyValidators, R>(def: {
       const rest: Record<string, unknown> = { ...args };
       delete rest.secret;
       return def.handler(ctx, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+// ── Invitation links: what a link says before the person holding it has signed in ───────────────
+
+export type InviteAccess = {
+  /** The invitation the token names and its company, or null when the token names nothing. */
+  invite: { invitation: Doc<"invitations">; company: Doc<"companies"> } | null;
+};
+
+/**
+ * A read through an invitation link, by someone who has not signed in. The token is the only thing
+ * trusted: no id in the arguments is, and everything the handler shows must hang off `ctx.invite`. A
+ * wrong signature, an unknown id, a malformed token and a deployment with no secret all arrive as null,
+ * so the handler cannot tell them apart and neither can the caller. It is a query, so opening a link
+ * (or a mail program previewing it) changes nothing. Joining is a separate, signed-in step.
+ */
+export function inviteQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & InviteAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const invitation = await invitationForToken(ctx, token);
+      const company = invitation ? await ctx.db.get(invitation.companyId) : null;
+      return def.handler({ ...ctx, invite: invitation && company ? { invitation, company } : null }, rest as ObjectType<V>);
     },
   } as any);
 }

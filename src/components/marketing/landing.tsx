@@ -4,7 +4,6 @@ import { TaskTrail } from "@/components/marketing/agent-visuals";
 import { AutonomyDial } from "@/components/marketing/autonomy-dial";
 import { EarlyAccessLink, outlineCta } from "@/components/marketing/chrome";
 import { CoordinationMap } from "@/components/marketing/coordination-map";
-import { EarlyAccessForm } from "@/components/marketing/early-access-form";
 import { HomeScreen } from "@/components/marketing/home-screen";
 import { OwnerDecision } from "@/components/marketing/owner-decision";
 import { BeamFrame, ShinyLabel } from "@/components/marketing/saas-frame";
@@ -111,8 +110,9 @@ export function LandingPage() {
                 </p>
               ))}
             </div>
-            <div className="mt-8 border-t border-border pt-8">
-              <EarlyAccessForm />
+            <div className="mt-8 flex flex-col gap-3 border-t border-border pt-8 sm:flex-row sm:items-center">
+              <EarlyAccessLink position="final">{FINAL_CTA.cta}</EarlyAccessLink>
+              <p className="text-sm text-muted-foreground">{FINAL_CTA.note}</p>
             </div>
           </BeamFrame>
         </BlurFade>

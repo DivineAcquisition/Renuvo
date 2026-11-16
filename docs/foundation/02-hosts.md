@@ -9,7 +9,7 @@ read and write are checked elsewhere.
 | Host | Setting | Shows |
 |---|---|---|
 | `www.selestial.io` | `NEXT_PUBLIC_SITE_ORIGIN` | The public site. The only host search engines may index. `selestial.io` redirects here in Vercel. |
-| `app.selestial.io` | `APP_ORIGIN` | The signed-in workspace (`/app`) and sign-in (`/sign-in`, `/sign-up`). Its root opens `/app`. |
+| `app.selestial.io` | `APP_ORIGIN` | The signed-in workspace (`/app`), the sign-in pages (`/login`, `/signup`, `/auth/...`, `/forgot-password`, `/reset-password`) and invitations (`/invite/...`). Its root opens `/app`. |
 | `link.selestial.io` | `LINK_ORIGIN` | The link pages sent in texts (`/c`). Nothing else. |
 | `admin.selestial.io` | `ADMIN_ORIGIN` | Not built. Answers "Not found." |
 | `docs.selestial.io` | `DOCS_ORIGIN` | Not built. Answers "Not available yet." |
