@@ -67,6 +67,14 @@ export const aiTables = {
     updatedAt: v.number(),
   }).index("by_capability", ["capability"]),
 
+  /** Staff's switch for one model a person may choose in chat (lib/ai/chatModels.ts). No row: on. */
+  chatModelSettings: defineTable({
+    key: v.string(),
+    enabled: v.boolean(),
+    updatedBy: v.id("staff"),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
   /**
    * One file in Creative Studio. The bytes behind `storageId` are never changed: a composition or a
    * generation is a new asset that points at its sources.

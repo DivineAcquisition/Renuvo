@@ -196,7 +196,7 @@ export default defineSchema({
     /** The Selestial plan, set by Selestial staff. Absent means Growth. It sets usage allowances such as chat answers. */
     plan: v.optional(v.union(v.literal("growth"), v.literal("scale"))),
     /** AI features the Owner switched off. Absent means on, within the plan's allowances. */
-    aiFeatures: v.optional(v.object({ imageGeneration: v.optional(v.boolean()), videoGeneration: v.optional(v.boolean()), photoReview: v.optional(v.boolean()), documentSearch: v.optional(v.boolean()) })),
+    aiFeatures: v.optional(v.object({ imageGeneration: v.optional(v.boolean()), videoGeneration: v.optional(v.boolean()), photoReview: v.optional(v.boolean()), documentSearch: v.optional(v.boolean()), otherChatModels: v.optional(v.boolean()) })),
     createdAt: v.number(),
   }).index("by_creator_setupKey", ["createdBy", "setupKey"]),
 

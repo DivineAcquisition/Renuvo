@@ -28,6 +28,7 @@ const rate = (value: number | null | undefined, unit: string) => (value === null
 export function AiModels() {
   const data = useQuery(api.aiAdmin.models, {});
   const set = useMutation(api.aiAdmin.setCapability);
+  const setChatModel = useMutation(api.aiAdmin.setChatModel);
   const [error, setError] = useState<string | null>(null);
   if (!data) return <Skeleton className="h-64 rounded-2xl" />;
   return (
@@ -46,8 +47,37 @@ export function AiModels() {
           ))}
         </ul>
         <p className="mt-2 text-xs text-muted-foreground">
-          Chat backup on OpenRouter: {data.openRouterChatModel ? <code>{data.openRouterChatModel}</code> : "none (set OPENROUTER_CHAT_MODEL to the exact OpenRouter model ID)"}. Used only for outages and rate limits.
+          Chat backup on OpenRouter: {data.openRouterChatModel ? <code>{data.openRouterChatModel}</code> : "none"} (OPENROUTER_CHAT_MODEL changes it). Used only for outages and rate limits.
         </p>
+      </Panel>
+      <Panel title="Models people may choose in chat" className="mt-5">
+        <ul className="grid gap-2 text-sm">
+          {data.chatModels.map((row) => (
+            <li key={row.key} className="flex flex-wrap items-center gap-2">
+              {row.connected ? <CheckCircle2 className="size-4 text-success" aria-hidden /> : <CircleDashed className="size-4 text-warning" aria-hidden />}
+              <span className="font-medium text-strong">{row.label}</span>
+              <span className="text-xs text-muted-foreground">
+                {row.maker} · {row.route === "anthropic" ? "direct" : "via OpenRouter"} · <code>{row.model}</code> · {rate(row.rates.inputPerMTok, "/M in")}, {rate(row.rates.outputPerMTok, "/M out")}
+                {row.readsFiles ? " · reads PDFs" : ""}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={row.enabled}
+                aria-label={`Offer ${row.label} in chat`}
+                disabled={row.key === "claude-sonnet"}
+                onClick={() => {
+                  setError(null);
+                  setChatModel({ key: row.key, enabled: !row.enabled }).catch((caught: unknown) => setError(messageOf(caught)));
+                }}
+                className={cn("relative ml-auto inline-flex h-6 w-11 rounded-full border transition-colors disabled:opacity-40", row.enabled ? "border-brand-600 bg-brand-500" : "border-border bg-muted")}
+              >
+                <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white shadow transition-transform", row.enabled ? "translate-x-5.5" : "translate-x-0.5")} />
+              </button>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-muted-foreground">Every model gets the same instructions and tools, and every tool keeps its own checks. Other providers are reached through OpenRouter with data collection denied. Owners can turn other providers off for their company.</p>
       </Panel>
       <FormError message={error} />
       <div className="mt-5 grid gap-3">

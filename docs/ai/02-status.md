@@ -11,7 +11,8 @@ Four levels, used strictly:
 |---|---|---|---|---|
 | Capability registry, resolve, staff overrides | Yes | Yes | n/a | No: not deployed |
 | Chat on Claude Sonnet 5.5 | Yes | Yes (scripted model) | **No** | No |
-| OpenRouter outage stand-in for chat | Yes | Yes (conversion and continuation; no repeated tool) | **No** | No: `OPENROUTER_CHAT_MODEL` not chosen |
+| OpenRouter outage stand-in for chat | Yes | Yes (conversion and continuation; no repeated tool) | **No** | No |
+| Chat model picker (Claude direct, others via OpenRouter) | Yes | Yes (request shape, data_collection deny, pricing, staff/Owner/key checks, PDFs) | **No** | No |
 | Recruiter on Claude Haiku 5.5 | Yes | Yes (stubbed fetch) | **No** | No |
 | Photo review (Sonnet image input) | Yes | Yes (real SDK, stubbed fetch) | **No** | No: needs the photo evaluation |
 | Video review (Gemini 3.8 Flash) | Yes | Response parsing only | **No** | No |
@@ -26,10 +27,9 @@ Four levels, used strictly:
 
 ## Setup steps that remain
 
-1. **Keys on the Convex deployment.** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and `GEMINI_API_KEY` are
-   there, per the owner. Add `OPENROUTER_API_KEY` and `OPENROUTER_CHAT_MODEL`, the exact OpenRouter ID
-   of the backup chat model. It could not be confirmed from here, so none is assumed. Until both are
-   set, chat has no stand-in.
+1. **Keys on the Convex deployment.** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` and
+   `OPENROUTER_API_KEY` are set (checked by name only). The chat stand-in defaults to
+   `anthropic/claude-sonnet-5.5` on OpenRouter; `OPENROUTER_CHAT_MODEL` changes it.
 2. **Model access.** Confirm that each account can use these models: `claude-sonnet-5-5`,
    `claude-haiku-5-5`, `gpt-image-2.6-sunburst`, `gpt-image-2.6-flare`, `text-embedding-3-small`,
    `gemini-3.8-flash` and `gemini-omni-1.2-flash`. The OpenAI image models need the organization's

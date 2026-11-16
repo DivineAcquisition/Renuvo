@@ -65,6 +65,7 @@ export const overview = companyQuery({
         videoGeneration: featureOn(ctx.company, "video_generate"),
         photoReview: featureOn(ctx.company, "photoReview"),
         documentSearch: featureOn(ctx.company, "documentSearch"),
+        otherChatModels: ctx.company.aiFeatures?.otherChatModels !== false,
       },
       usage: [...byFeature.entries()].map(([feature, row]) => ({ feature, ...row })),
       truncated: rows.length === 5000,
@@ -76,10 +77,11 @@ export const overview = companyQuery({
 
 /** The Owner switches AI features off or back on for the company. Allowances are the plan's. */
 export const setFeatures = ownerMutation({
-  args: { imageGeneration: v.boolean(), videoGeneration: v.boolean(), photoReview: v.boolean(), documentSearch: v.boolean() },
+  args: { imageGeneration: v.boolean(), videoGeneration: v.boolean(), photoReview: v.boolean(), documentSearch: v.boolean(), otherChatModels: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
-    await ctx.db.patch(ctx.companyId, { aiFeatures: args });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "company.ai_features_changed", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { imageGeneration: args.imageGeneration, videoGeneration: args.videoGeneration, photoReview: args.photoReview, documentSearch: args.documentSearch } });
+    const otherChatModels = args.otherChatModels ?? ctx.company.aiFeatures?.otherChatModels;
+    await ctx.db.patch(ctx.companyId, { aiFeatures: { ...args, otherChatModels } });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "company.ai_features_changed", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { imageGeneration: args.imageGeneration, videoGeneration: args.videoGeneration, photoReview: args.photoReview, documentSearch: args.documentSearch, otherChatModels: otherChatModels !== false } });
     return null;
   },
 });

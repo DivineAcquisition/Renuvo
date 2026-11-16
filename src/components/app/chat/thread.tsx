@@ -344,6 +344,7 @@ function AgentTurn({ message, thread, last, onChoice, onRetry }: { message: Mess
         <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
           <span className="font-semibold text-strong">Selestial</span>
           <span className={cn("text-muted-foreground", streaming && "live-shimmer-text")}>{verbFor(message, allSteps)}</span>
+          {message.answeredBy ? <span className="text-[11px] text-muted-foreground/80">· {message.answeredBy}</span> : null}
         </p>
         <div className="mt-2 grid gap-3">
           {groups.length === 0 && streaming ? <Thinking /> : null}
@@ -499,8 +500,12 @@ export function ChatThread({ conversationId, compact, onStarted, autoFocus }: { 
   const { page } = useChat();
   const send = useMutation(api.chat.send);
   const stop = useMutation(api.chat.stop);
+  const setModel = useMutation(api.chat.setModel);
   const thread = useQuery(api.chat.thread, conversationId ? { companyId, conversationId } : "skip");
   const [draft, setDraft] = useState("");
+  // A new chat keeps the person's pick until it is created; an existing chat shows its own.
+  const [picked, setPicked] = useState<string | null>(null);
+  const model = conversationId ? (thread?.modelKey ?? null) : picked;
   const live = thread?.run?.status === "running" || thread?.run?.status === "queued";
 
   const submit = async (outgoing: Outgoing) => {
@@ -512,6 +517,7 @@ export function ChatThread({ conversationId, compact, onStarted, autoFocus }: { 
       page: outgoing.includePage && page ? page.path : undefined,
       context: outgoing.records.map((record) => ({ table: record.table, id: record.id })),
       attachments: outgoing.files.map((file) => ({ storageId: file.storageId as Id<"_storage">, name: file.name })),
+      model: model ?? undefined,
     });
     if (!conversationId || result.conversationId !== conversationId) onStarted(result.conversationId);
   };
@@ -541,6 +547,11 @@ export function ChatThread({ conversationId, compact, onStarted, autoFocus }: { 
           autoFocus={autoFocus}
           placeholder={conversationId ? (thread?.conversation.state === "needs_input" ? "Answer, or tap a choice…" : "Reply, ask a follow-up, or ask for something new…") : "Ask anything about your business…"}
           onSend={submit}
+          model={model}
+          onModel={async (key) => {
+            if (conversationId) await setModel({ companyId, conversationId, model: key });
+            else setPicked(key);
+          }}
           onStop={() => (conversationId ? stop({ companyId, conversationId }).then(() => undefined) : Promise.resolve())}
         />
       </div>

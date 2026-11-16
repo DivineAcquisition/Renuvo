@@ -15,6 +15,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { settingFor } from "./lib/ai/media";
+import { chatEntryFor, chatModelOption, chatModelState, DEFAULT_CHAT_MODEL } from "./lib/ai/chatModels";
 import { REGISTRY, type Override } from "./lib/ai/registry";
 import { bytesToBase64 } from "./lib/ai/http";
 import { recordUsage } from "./lib/ai/usage";
@@ -71,7 +72,7 @@ type HistoryEntry = {
   attachments: { storageId: Id<"_storage">; name: string; state: "pending" | "read" | "unreadable"; note: string | undefined; contentType: string }[];
   messageId: Id<"chatMessages">;
 };
-type Loaded = { system: string; tools: ToolSpec[]; history: HistoryEntry[]; currentMessageId: Id<"chatMessages">; companyId: Id<"companies">; memberId: Id<"members">; chatSetting: Override | null };
+type Loaded = { system: string; tools: ToolSpec[]; history: HistoryEntry[]; currentMessageId: Id<"chatMessages">; companyId: Id<"companies">; memberId: Id<"members">; chatSetting: Override | null; modelKey: string; modelUnavailable: string | null };
 
 /** Everything the model is given for this run, read fresh, for the member as they are now. */
 export const load = internalQuery({
@@ -125,6 +126,9 @@ export const load = internalQuery({
         if (text) history.push({ role: "assistant" as const, text, page: undefined, records: [], attachments: [], messageId: message._id });
       }
     }
+    const chatSetting = await settingFor(ctx, "chat");
+    const option = chatModelOption(run.modelKey) ?? chatModelOption(DEFAULT_CHAT_MODEL)!;
+    const staffOff = new Set((await ctx.db.query("chatModelSettings").take(100)).filter((row) => !row.enabled).map((row) => row.key));
     return {
       system: systemPrompt({ company, member: now.member, role: now.role, knowledge: knowledge.map((row) => row.text), now: Date.now() }),
       tools: toolSpecs(now.role),
@@ -132,7 +136,12 @@ export const load = internalQuery({
       currentMessageId: userMessage._id,
       companyId: company._id,
       memberId: now.member._id,
-      chatSetting: await settingFor(ctx, "chat"),
+      chatSetting,
+      modelKey: option.key,
+      modelUnavailable: option.key === DEFAULT_CHAT_MODEL ? null : (() => {
+        const state = chatModelState(option, company, staffOff, chatSetting);
+        return state.available ? null : `${state.why} Choose another model and retry.`;
+      })(),
     };
   },
 });
@@ -216,8 +225,7 @@ export const addUsage = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run) return null;
-    const chat = REGISTRY.chat.primary;
-    const rates = args.providerModel === chat.model ? chat.rates : { inputPerMTok: null, outputPerMTok: null };
+    const rates = chatEntryFor(args.provider, args.providerModel)?.rates ?? { inputPerMTok: null, outputPerMTok: null };
     await recordUsage(ctx, { companyId: run.companyId, memberId: run.initiatedBy, feature: "chat", capability: "chat", model: { provider: args.provider as never, model: args.providerModel, rates }, runId: run._id, units: { inputTokens: args.inputTokens, outputTokens: args.outputTokens }, outcome: "ok" });
     await ctx.db.patch(run._id, { model: args.model, usage: { inputTokens: run.usage.inputTokens + args.inputTokens, outputTokens: run.usage.outputTokens + args.outputTokens }, heartbeatAt: Date.now() });
     const month = monthOf(run.startedAt);
@@ -364,7 +372,8 @@ export const execute = internalAction({
 
     const loaded: Loaded | null = await ctx.runQuery(internal.chatRuns.load, { runId: args.runId });
     if (!loaded) return finish("failed", "This chat or your membership is no longer available, so nothing was answered.");
-    const choice = chatModel(loaded.chatSetting);
+    if (loaded.modelUnavailable) return finish("failed", loaded.modelUnavailable);
+    const choice = chatModel(loaded.chatSetting, loaded.modelKey);
     if (!choice.model) return finish("failed", choice.why);
     let model = choice.model;
     let label = choice.label;
@@ -466,7 +475,7 @@ export const execute = internalAction({
             switched = true;
             model = choice.fallback.model;
             label = choice.fallback.label;
-            await ctx.runMutation(internal.chatRuns.addNotice, { runId: args.runId, text: `The main model was unavailable, so a backup model (${label}) continued this answer. Nothing already done was repeated.` });
+            await ctx.runMutation(internal.chatRuns.addNotice, { runId: args.runId, text: `The chosen model was unavailable, so a backup model (${label}) continued this answer. Nothing already done was repeated.` });
             step -= 1;
             continue;
           }
@@ -474,7 +483,7 @@ export const execute = internalAction({
         }
         await chain;
         await flush();
-        await ctx.runMutation(internal.chatRuns.addUsage, { runId: args.runId, inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens, model: `${model.name}:${reply.model}`, provider: label.split(":")[0], providerModel: reply.model.replace(/^openrouter:/, "") });
+        await ctx.runMutation(internal.chatRuns.addUsage, { runId: args.runId, inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens, model: `${model.name}:${reply.model}`, provider: label.split(":")[0], providerModel: label.startsWith("openrouter:") ? label.slice("openrouter:".length) : reply.model });
         if (stopped) {
           status = "stopped";
           break;

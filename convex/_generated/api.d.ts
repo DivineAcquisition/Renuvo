@@ -44,6 +44,7 @@ import type * as jobs from "../jobs.js";
 import type * as knowledge from "../knowledge.js";
 import type * as lib_access from "../lib/access.js";
 import type * as lib_ai_anthropic from "../lib/ai/anthropic.js";
+import type * as lib_ai_chatModels from "../lib/ai/chatModels.js";
 import type * as lib_ai_errors from "../lib/ai/errors.js";
 import type * as lib_ai_eval_cases from "../lib/ai/eval/cases.js";
 import type * as lib_ai_google from "../lib/ai/google.js";
@@ -222,6 +223,7 @@ declare const fullApi: ApiFromModules<{
   knowledge: typeof knowledge;
   "lib/access": typeof lib_access;
   "lib/ai/anthropic": typeof lib_ai_anthropic;
+  "lib/ai/chatModels": typeof lib_ai_chatModels;
   "lib/ai/errors": typeof lib_ai_errors;
   "lib/ai/eval/cases": typeof lib_ai_eval_cases;
   "lib/ai/google": typeof lib_ai_google;

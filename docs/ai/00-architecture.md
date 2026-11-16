@@ -25,7 +25,7 @@ capability; nothing else names a model.
 
 | Capability | Default | Verified | Stand-in |
 |---|---|---|---|
-| chat | anthropic `claude-sonnet-5-5` | docs, 2026-11-16 | OpenRouter `OPENROUTER_CHAT_MODEL`, for outages and rate limits only |
+| chat | anthropic `claude-sonnet-5-5` (people may choose others, §3a) | docs, 2026-11-16 | OpenRouter `anthropic/claude-sonnet-5.5` (or `OPENROUTER_CHAT_MODEL`), for outages and rate limits only |
 | reasoning (optional, off) | anthropic `claude-opus-5-5` | docs | — |
 | classify | anthropic `claude-haiku-5-5` | docs | Recruiter's rules reader |
 | image_understanding | anthropic `claude-sonnet-5-5` | docs | — |
@@ -72,6 +72,29 @@ connected.
   - Chat's idempotency keys mean nothing is carried out twice.
   - Requests ask OpenRouter for providers that do not collect data.
   - The reply says that a backup answered.
+
+## 3a. Choosing a chat model
+
+People pick a model in the chat composer. The choice is saved on the conversation, used by its next
+answer, and shown under each answer ("· GPT-6.1 Sol").
+
+- **The list.** `lib/ai/chatModels.ts` is the whole list.
+  - Claude Sonnet 5.5 (default), Opus 5.5 and Haiku 5.5 are called directly.
+  - GPT-6.1 Sol, Gemini 3.8 Flash, Grok 4.7, Mistral Large 4, Qwen4 Max, DeepSeek V4.1 Flash and Kimi
+    K3.1 Pro go through OpenRouter.
+  - IDs and prices were read from OpenRouter's public model list on 2026-11-16.
+- **What the browser sends.** Only a key from the list, never a model ID.
+- **Server checks.** The server checks the key on send, retry and change. A model is refused when:
+  - staff have switched it off (staff console › AI models);
+  - its provider's key is missing;
+  - the model is from another provider and the Owner has turned other providers off (Settings › AI & usage).
+- **Same rules for every model.** Each model gets the same instructions and tools, and every tool keeps
+  its own checks. Choosing a model never widens what chat can do.
+- **Data.** OpenRouter requests carry `data_collection: "deny"`.
+- **Attachments.** Only Claude models read PDFs. Sending a PDF to another model is refused with a reason.
+- **Outages.** On an outage or rate limit, a Claude choice continues on OpenRouter (Claude Sonnet 5.5
+  there by default). Any other choice continues on Claude Sonnet 5.5 directly. Never after a refusal.
+- **Usage.** Each answer is recorded with the chosen model's own rates.
 
 ## 4. Tools and agents (§4, §5)
 

@@ -95,14 +95,22 @@ const HAIKU: ModelEntry = { provider: "anthropic", model: "claude-haiku-5-5", ve
 const OPUS: ModelEntry = { provider: "anthropic", model: "claude-opus-5-5", verification: docs("Anthropic model overview"), rates: { inputPerMTok: 4, outputPerMTok: 20, cacheReadPerMTok: 0.2 }, timeoutMs: 180_000 };
 
 /**
- * OpenRouter answers chat only when Anthropic is down or rate limited, and only when the deployment
- * names the exact OpenRouter model in OPENROUTER_CHAT_MODEL: its catalog IDs could not be confirmed
- * from here, so none is assumed.
+ * OpenRouter answers chat when the chosen model's own provider is down or rate limited (never after a
+ * refusal). The default stand-in is Claude Sonnet 5.5 through OpenRouter, which can reach it through
+ * other hosts when Anthropic's own API is down; OPENROUTER_CHAT_MODEL names a different one. The ID was
+ * read from OpenRouter's public model list on 2026-11-16.
  */
+export const DEFAULT_OPENROUTER_CHAT_MODEL = "anthropic/claude-sonnet-5.5";
 export function openRouterChatModel(): ModelEntry | null {
-  const model = process.env.OPENROUTER_CHAT_MODEL?.trim();
-  if (!model) return null;
-  return { provider: "openrouter", model, verification: unverified("Set by the deployment; confirm the ID in OpenRouter's model list"), rates: { inputPerMTok: null, outputPerMTok: null }, timeoutMs: 120_000 };
+  const model = process.env.OPENROUTER_CHAT_MODEL?.trim() || DEFAULT_OPENROUTER_CHAT_MODEL;
+  const known = model === DEFAULT_OPENROUTER_CHAT_MODEL;
+  return {
+    provider: "openrouter",
+    model,
+    verification: known ? docs("OpenRouter public model list") : unverified("Set by the deployment; confirm the ID in OpenRouter's model list"),
+    rates: known ? { inputPerMTok: 2, outputPerMTok: 10 } : { inputPerMTok: null, outputPerMTok: null },
+    timeoutMs: 120_000,
+  };
 }
 
 export const REGISTRY: Record<Capability, CapabilityEntry> = {

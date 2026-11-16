@@ -74,7 +74,7 @@ describe("the AI layer", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
-    for (const name of ["CHAT_MODEL", "CHAT_MOCK_FALLBACK", "OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "MEDIA_IMAGES_PER_MONTH", "STAFF_BOOTSTRAP_EMAIL"]) delete process.env[name];
+    for (const name of ["CHAT_MODEL", "CHAT_MOCK_FALLBACK", "OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "MEDIA_IMAGES_PER_MONTH", "STAFF_BOOTSTRAP_EMAIL", "OPENROUTER_API_KEY"]) delete process.env[name];
   });
 
   describe("registry and honest states", () => {
@@ -166,6 +166,82 @@ describe("the AI layer", () => {
       expect(after.cleaner?.status).toBe("ready");
       expect(after.tasks.filter((task) => task.agent === "dispatch" && /quality|photo/i.test(task.title))).toEqual([]);
       expect((await t.run((ctx) => ctx.db.query("aiUsage").collect())).map((row) => row.feature)).toContain("photo_review");
+    });
+  });
+
+  describe("choosing a chat model", () => {
+    const staff = { subject: "user_staff", email: "staff@selestial.example", emailVerified: true, name: "Staff" };
+
+    it("answers on the chosen model through OpenRouter, with the same tools, no data collection, and its own price", async () => {
+      const { t, as, companyId } = await setup();
+      delete process.env.CHAT_MODEL;
+      process.env.ANTHROPIC_API_KEY = "test";
+      process.env.OPENROUTER_API_KEY = "test";
+      respond = (call) => (call.url === "https://openrouter.ai/api/v1/chat/completions" ? json(200, { model: "openai/gpt-6.1-sol", choices: [{ finish_reason: "stop", message: { content: "Hello from GPT." } }], usage: { prompt_tokens: 1000, completion_tokens: 50 } }) : new Response("{}", { status: 404 }));
+      const sent = await as.mutation(api.chat.send, { companyId, text: "Say hello.", clientKey: key(), model: "gpt-6.1-sol" });
+      await settle(t);
+      expect(calls).toHaveLength(1);
+      const body = JSON.parse(calls[0].body);
+      expect(body).toMatchObject({ model: "openai/gpt-6.1-sol", provider: { data_collection: "deny" } });
+      expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name)).toContain("create_task");
+      const view = await as.query(api.chat.thread, { companyId, conversationId: sent.conversationId });
+      expect(view.modelKey).toBe("gpt-6.1-sol");
+      expect(view.run?.status).toBe("completed");
+      expect(view.messages.at(-1)).toMatchObject({ answeredBy: "GPT-6.1 Sol" });
+      expect(JSON.stringify(view.messages.at(-1)!.parts)).toContain("Hello from GPT.");
+      const usage = await t.run((ctx) => ctx.db.query("aiUsage").collect());
+      expect(usage).toMatchObject([{ feature: "chat", provider: "openrouter", model: "openai/gpt-6.1-sol", estimatedMicros: 1000 * 2 + 50 * 10 }]);
+      // The chat keeps its model for the next message, and switching back is one call.
+      await as.mutation(api.chat.setModel, { companyId, conversationId: sent.conversationId, model: "claude-sonnet" });
+      expect((await as.query(api.chat.thread, { companyId, conversationId: sent.conversationId })).modelKey).toBe("claude-sonnet");
+    });
+
+    it("offers only Selestial's list, and only what staff, the Owner and the deployment allow", async () => {
+      const { t, as, companyId } = await setup();
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "openai/gpt-6.1-sol" }))).toMatch(/not offered/);
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "grok-4.7" }))).toMatch(/not connected/);
+      process.env.OPENROUTER_API_KEY = "test";
+      process.env.ANTHROPIC_API_KEY = "test";
+      process.env.STAFF_BOOTSTRAP_EMAIL = staff.email;
+      await t.withIdentity(staff).mutation(api.aiAdmin.setChatModel, { key: "grok-4.7", enabled: false });
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "grok-4.7" }))).toMatch(/switched off by Selestial/);
+      expect(await refusal(t.withIdentity(staff).mutation(api.aiAdmin.setChatModel, { key: "claude-sonnet", enabled: false }))).toMatch(/default/);
+      expect(await refusal(as.mutation(api.aiAdmin.setChatModel, { key: "grok-4.7", enabled: true }))).toBe(NOT_FOUND);
+
+      // The Owner turns other providers off: Claude models stay, the rest go.
+      await as.mutation(api.ai.setFeatures, { companyId, imageGeneration: true, videoGeneration: true, photoReview: true, documentSearch: true, otherChatModels: false });
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "gemini-3.8-flash" }))).toMatch(/Owner/);
+      const offered = await as.query(api.chat.models, { companyId });
+      expect(offered.options.filter((row) => row.available).map((row) => row.key)).toEqual(["claude-sonnet", "claude-opus", "claude-haiku"]);
+      expect(JSON.stringify(offered)).not.toContain("OPENROUTER_API_KEY");
+      const opus = await as.mutation(api.chat.send, { companyId, text: "Think hard.", clientKey: key(), model: "claude-opus" });
+      expect((await as.query(api.chat.thread, { companyId, conversationId: opus.conversationId })).modelKey).toBe("claude-opus");
+      // Saving another switch keeps the Owner's choice about other models.
+      await as.mutation(api.ai.setFeatures, { companyId, imageGeneration: false, videoGeneration: true, photoReview: true, documentSearch: true });
+      expect((await as.query(api.ai.overview, { companyId })).features.otherChatModels).toBe(false);
+    });
+
+    it("refuses a PDF for a model that cannot read it, and fails honestly if the model is withdrawn mid-chat", async () => {
+      const { t, as, companyId } = await setup();
+      process.env.OPENROUTER_API_KEY = "test";
+      process.env.ANTHROPIC_API_KEY = "test";
+      process.env.STAFF_BOOTSTRAP_EMAIL = staff.email;
+      const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4"], { type: "application/pdf" })));
+      await t.run(async (ctx) => {
+        const member = (await ctx.db.query("members").collect()).find((row) => row.companyId === companyId)!;
+        await ctx.db.insert("chatUploads", { companyId, memberId: member._id, storageId, createdAt: NOW } as never);
+      });
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Read this.", clientKey: key(), model: "deepseek-v4.1-flash", attachments: [{ storageId, name: "terms.pdf" }] }))).toMatch(/cannot read PDFs/);
+
+      const first = await as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "mistral-large-4" });
+      await settle(t);
+      await t.withIdentity(staff).mutation(api.aiAdmin.setChatModel, { key: "mistral-large-4", enabled: false });
+      expect(await refusal(as.mutation(api.chat.send, { companyId, conversationId: first.conversationId, text: "Again", clientKey: key() }))).toMatch(/switched off by Selestial/);
+      await as.mutation(api.chat.setModel, { companyId, conversationId: first.conversationId, model: "claude-haiku" });
+      await as.mutation(api.chat.send, { companyId, conversationId: first.conversationId, text: "Again", clientKey: key() });
+      await settle(t);
+      const view = await as.query(api.chat.thread, { companyId, conversationId: first.conversationId });
+      expect(view.messages.filter((row) => row.role === "assistant").map((row) => row.answeredBy)).toEqual(["Mistral Large 4", "Claude Haiku 5.5"]);
     });
   });
 

@@ -1,13 +1,13 @@
 /**
- * OpenRouter, as the stand-in for chat when Anthropic is down or rate limited (never after a refusal).
- * It speaks the OpenAI chat-completions format, so the conversation is converted both ways: the run
+ * OpenRouter: the models a person chooses from other providers in chat (lib/ai/chatModels.ts), and the
+ * stand-in when Anthropic is down or rate limited (never after a refusal). It speaks the OpenAI chat-completions format, so the conversation is converted both ways: the run
  * engine keeps one shape (Anthropic's content blocks) whichever model answered. Tool results already
  * carried out travel with the conversation, so the stand-in continues from them and repeats nothing.
  *
  * Reasoning blocks are dropped in conversion; attachments that are not text are named, not sent.
  * Requests ask OpenRouter to use only providers that do not collect data (`data_collection: "deny"`).
  *
- * NOT VERIFIED against the live API in this build: no key was available.
+ * Model IDs are from OpenRouter's public model list (2026-11-16). Live calls are checked after deploy.
  */
 import type { ChatModel, ModelMessage, ModelReply } from "../chat/model";
 import { ModelError } from "../chat/model";
@@ -58,14 +58,14 @@ type Completion = {
 /** An OpenAI-format completion back into the engine's shape. Unparseable tool arguments fail closed. */
 export function fromOpenAi(body: Completion, fallbackModel: string): ModelReply {
   const choice = body.choices?.[0];
-  if (!choice?.message) throw new ModelError("The backup model returned no answer.", true);
+  if (!choice?.message) throw new ModelError("The model returned no answer.", true);
   const text = choice.message.content ?? "";
   const toolCalls = (choice.message.tool_calls ?? []).map((call) => {
     let input: unknown;
     try {
       input = JSON.parse(call.function.arguments || "{}");
     } catch {
-      throw new ModelError("The backup model's action could not be read, so it was not carried out.", false);
+      throw new ModelError("The model's action could not be read, so it was not carried out.", false);
     }
     return { id: call.id, name: call.function.name, input };
   });
@@ -80,7 +80,7 @@ export function openRouterChatModel(entry: ModelEntry): ChatModel {
     name: "openrouter",
     async respond(request) {
       const key = process.env.OPENROUTER_API_KEY?.trim();
-      if (!key) throw new ModelError("The backup model is not connected.", false);
+      if (!key) throw new ModelError("OpenRouter is not connected on this deployment.", false);
       try {
         const response = await providerFetch("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
@@ -101,8 +101,8 @@ export function openRouterChatModel(entry: ModelEntry): ChatModel {
         return reply;
       } catch (error) {
         if (error instanceof ModelError) throw error;
-        if (error instanceof AiError) throw new ModelError(error.kind === "cancelled" ? "Stopped." : `The backup model could not answer: ${error.words}`, error.fallbackEligible);
-        throw new ModelError("The backup model could not answer.", true);
+        if (error instanceof AiError) throw new ModelError(error.kind === "cancelled" ? "Stopped." : `${entry.model} could not answer: ${error.words}`, error.fallbackEligible);
+        throw new ModelError(`${entry.model} could not answer.`, true);
       }
     },
     toolResults(results) {

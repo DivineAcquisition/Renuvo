@@ -10,6 +10,8 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { companyMutation, companyQuery, ownerMutation, staffMutation, type MemberAccess } from "./lib/builders";
+import { CHAT_MODELS, chatModelOption, chatModelState, DEFAULT_CHAT_MODEL, type ChatModelOption } from "./lib/ai/chatModels";
+import { settingFor } from "./lib/ai/media";
 import { readableArtifact } from "./lib/chat/artifacts";
 import type { ContextRef } from "./lib/chat/schema";
 import { isLive, lastSeq, latestRun, monthlyRunAllowance, monthOf, ownConversation, planOf, usageRow } from "./lib/chat/state";
@@ -87,6 +89,20 @@ async function checkAllowance(ctx: MutationCtx & MemberAccess) {
   else await ctx.db.insert("chatUsage", { companyId: ctx.companyId, month, runs: 1, inputTokens: 0, outputTokens: 0 });
 }
 
+async function staffOffModels(ctx: QueryCtx | MutationCtx): Promise<Set<string>> {
+  return new Set((await ctx.db.query("chatModelSettings").take(100)).filter((row) => !row.enabled).map((row) => row.key));
+}
+
+/** The model a person chose, checked: only keys from the catalog, and only while it may be used here. */
+async function checkedModel(ctx: Ctx, key: string): Promise<ChatModelOption> {
+  const option = chatModelOption(key);
+  if (!option) throw userError("That model is not offered in Selestial.");
+  if (option.key === DEFAULT_CHAT_MODEL) return option;
+  const state = chatModelState(option, ctx.company, await staffOffModels(ctx), await settingFor(ctx, "chat"));
+  if (!state.available) throw userError(state.why);
+  return option;
+}
+
 async function startRun(ctx: MutationCtx & MemberAccess, conversation: Doc<"conversations">, userMessageId: Id<"chatMessages">, retryOf?: Id<"chatRuns">) {
   const now = Date.now();
   const seq = (await lastSeq(ctx, conversation)) + 1;
@@ -98,6 +114,7 @@ async function startRun(ctx: MutationCtx & MemberAccess, conversation: Doc<"conv
     userMessageId,
     assistantMessageId,
     status: "queued",
+    modelKey: conversation.modelKey,
     steps: 0,
     limits: LIMITS,
     usage: { inputTokens: 0, outputTokens: 0 },
@@ -144,6 +161,8 @@ export const send = companyMutation({
     page: v.optional(v.string()),
     context: v.optional(v.array(contextInput)),
     attachments: v.optional(v.array(v.object({ storageId: v.id("_storage"), name: v.string() }))),
+    /** A key from lib/ai/chatModels.ts. Unset: keep this chat's model. */
+    model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const words = requiredText(args.text, "Your message", MESSAGE_MAX);
@@ -169,16 +188,19 @@ export const send = companyMutation({
     if (conversation && isLive(await latestRun(ctx, conversation))) throw userError("A response is still being written in this chat. Stop it or wait for it to finish.");
     const context = await checkedContext(ctx, args.context ?? []);
     const attachments = await checkedAttachments(ctx, args.attachments ?? []);
+    const model = await checkedModel(ctx, args.model ?? conversation?.modelKey ?? DEFAULT_CHAT_MODEL);
+    if (!model.readsFiles && attachments.some((file) => file.contentType === "application/pdf")) throw userError(`${model.label} cannot read PDFs in Selestial. Choose a Claude model to send this file, or paste its text.`);
     await checkAllowance(ctx);
+    const modelKey = model.key === DEFAULT_CHAT_MODEL ? undefined : model.key;
 
     const now = Date.now();
     if (!conversation) {
       const title = titleFrom(words);
-      const id = await ctx.db.insert("conversations", { companyId: ctx.companyId, createdBy: ctx.member._id, title, titleSource: "generated", visibility: "private", state: "idle", searchText: searchTextFor(title, [words]), shelf: "active", messageCount: 0, createdAt: now, updatedAt: now });
+      const id = await ctx.db.insert("conversations", { companyId: ctx.companyId, createdBy: ctx.member._id, title, titleSource: "generated", visibility: "private", state: "idle", searchText: searchTextFor(title, [words]), shelf: "active", messageCount: 0, modelKey, createdAt: now, updatedAt: now });
       conversation = (await ctx.db.get(id))!;
     } else {
       const asked = conversation.searchText.length < 3500 ? `${conversation.searchText} \n${words}`.slice(0, 4000) : conversation.searchText;
-      await ctx.db.patch(conversation._id, { searchText: asked, shelf: "active", archivedAt: undefined });
+      await ctx.db.patch(conversation._id, { searchText: asked, shelf: "active", archivedAt: undefined, modelKey });
       conversation = (await ctx.db.get(conversation._id))!;
     }
 
@@ -223,6 +245,7 @@ export const retry = companyMutation({
     if (!run) throw userError("There is nothing to retry yet.");
     if (isLive(run)) throw userError("A response is still being written.");
     if (run.status !== "failed" && run.status !== "stopped") throw userError("The last response finished. Send a new message instead.");
+    await checkedModel(ctx, conversation.modelKey ?? DEFAULT_CHAT_MODEL);
     await checkAllowance(ctx);
     await startRun(ctx, conversation, run.userMessageId, run._id);
     return null;
@@ -324,10 +347,17 @@ export const thread = companyQuery({
       if (artifact && artifact.createdBy === ctx.member._id) artifacts[artifactId] = { artifactId, title: artifact.title, kind: artifact.kind, state: artifact.state, currentVersion: artifact.currentVersion };
     }
     const run = await latestRun(ctx, conversation);
+    const answeredBy: Record<string, string> = {};
+    for (const message of messages) {
+      if (message.role !== "assistant" || !message.runId) continue;
+      const answered = await ctx.db.get(message.runId);
+      if (answered) answeredBy[message._id] = (chatModelOption(answered.modelKey) ?? chatModelOption(DEFAULT_CHAT_MODEL)!).label;
+    }
     return {
       conversation: sessionRow(conversation),
+      modelKey: conversation.modelKey ?? DEFAULT_CHAT_MODEL,
       run: run ? { status: run.status, stopping: Boolean(run.stopRequestedAt) && isLive(run), error: run.error ?? null, canRetry: run.status === "failed" || run.status === "stopped" } : null,
-      messages: messages.map((message) => ({ messageId: message._id, role: message.role, status: message.status, text: message.text ?? null, parts: message.parts ?? [], contextRefs: message.contextRefs ?? [], attachments: (message.attachments ?? []).map((file) => ({ name: file.name, size: file.size, state: file.state, note: file.note ?? null })), createdAt: message.createdAt })),
+      messages: messages.map((message) => ({ messageId: message._id, role: message.role, status: message.status, answeredBy: answeredBy[message._id] ?? null, text: message.text ?? null, parts: message.parts ?? [], contextRefs: message.contextRefs ?? [], attachments: (message.attachments ?? []).map((file) => ({ name: file.name, size: file.size, state: file.state, note: file.note ?? null })), createdAt: message.createdAt })),
       steps,
       artifacts,
     };
@@ -419,6 +449,35 @@ export const registerUpload = companyMutation({
 });
 
 // ── Usage ────────────────────────────────────────────────────────────────────────────────────────
+
+// ── Models ───────────────────────────────────────────────────────────────────────────────────────
+
+/** The models this person may choose, and why any is not available. Never a key or a provider's raw ID. */
+export const models = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const off = await staffOffModels(ctx);
+    const chat = await settingFor(ctx, "chat");
+    return {
+      defaultKey: DEFAULT_CHAT_MODEL,
+      options: CHAT_MODELS.map((option) => {
+        const state = chatModelState(option, ctx.company, off, chat);
+        return { key: option.key, label: option.label, maker: option.maker, via: option.route === "anthropic" ? "Anthropic" : "OpenRouter", readsFiles: option.readsFiles, blurb: option.blurb, rates: option.entry.rates.inputPerMTok === null ? null : { inputPerMTok: option.entry.rates.inputPerMTok, outputPerMTok: option.entry.rates.outputPerMTok }, available: state.available, why: state.available ? null : state.why };
+      }),
+    };
+  },
+});
+
+/** Change the model for the rest of this chat. The next answer uses it; earlier answers are unchanged. */
+export const setModel = companyMutation({
+  args: { conversationId: v.string(), model: v.string() },
+  handler: async (ctx, args) => {
+    const conversation = await ownConversation(ctx, ctx.companyId, ctx.member._id, args.conversationId);
+    const model = await checkedModel(ctx, args.model);
+    await ctx.db.patch(conversation._id, { modelKey: model.key === DEFAULT_CHAT_MODEL ? undefined : model.key });
+    return null;
+  },
+});
 
 export const usage = companyQuery({
   args: {},

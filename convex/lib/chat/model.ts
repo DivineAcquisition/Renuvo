@@ -7,7 +7,8 @@
  * A model only ever returns text and tool calls. It writes nothing: tools do, after their own checks.
  */
 import { openRouterChatModel } from "../ai/openrouter";
-import { resolve, type Override } from "../ai/registry";
+import { chatModelOption, DEFAULT_CHAT_MODEL } from "../ai/chatModels";
+import { providerConfigured, REGISTRY, resolve, type Override } from "../ai/registry";
 import { claudeChatModel } from "./claude";
 
 /** One message in the provider's own shape. The run loop appends the model's own content unchanged. */
@@ -87,20 +88,35 @@ const mock: ChatModel = {
 export type ModelChoice = { model: ChatModel; label: string; fallback: { model: ChatModel; label: string } | null } | { model: null; why: string };
 
 /**
- * The chat model, from the registry (lib/ai/registry.ts): Claude Sonnet 5.5 by default. With an
- * OpenRouter key and OPENROUTER_CHAT_MODEL set, OpenRouter is the stand-in for outages and rate limits.
- * `override` is the platform administrator's setting for the chat capability, if any.
+ * The chat model for one run. `key` is the person's choice from lib/ai/chatModels.ts (unset: Claude
+ * Sonnet 5.5); `override` is the platform administrators' setting for chat as a whole.
+ *  - A Claude model is called directly. On an outage or rate limit, OpenRouter continues (Claude Sonnet
+ *    5.5 through OpenRouter unless OPENROUTER_CHAT_MODEL names another).
+ *  - Any other model goes through OpenRouter. On an outage or rate limit, Claude Sonnet 5.5 continues
+ *    directly, when Anthropic is connected.
+ * Never after a refusal. Under CHAT_MODEL=mock the scripted model answers whatever was chosen.
  */
-export function chatModel(override?: Override | null): ModelChoice {
+export function chatModel(override?: Override | null, key?: string | null): ModelChoice {
   const choice = process.env.CHAT_MODEL?.trim().toLowerCase();
-  if (choice === "mock") return { model: mock, label: "mock", fallback: process.env.CHAT_MOCK_FALLBACK === "1" ? { model: mockFallback, label: "mock-fallback" } : null };
+  const option = chatModelOption(key) ?? chatModelOption(DEFAULT_CHAT_MODEL)!;
+  if (choice === "mock") return { model: mock, label: option.key === DEFAULT_CHAT_MODEL ? "mock" : `mock:${option.key}`, fallback: process.env.CHAT_MOCK_FALLBACK === "1" ? { model: mockFallback, label: "mock-fallback" } : null };
   if (choice === "off") return { model: null, why: "Company Chat's model is switched off on this deployment." };
   const resolved = resolve("chat", override);
-  if (!resolved.ready) return { model: null, why: resolved.reason === "not_configured" ? "No model is connected to Company Chat on this deployment yet, so no answer was written. An administrator needs to set ANTHROPIC_API_KEY." : resolved.words };
+  if (!resolved.ready && resolved.reason !== "not_configured") return { model: null, why: resolved.words };
+  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (option.route === "openrouter") {
+    if (!providerConfigured("openrouter")) return { model: null, why: `${option.label} is not connected on this deployment yet. An administrator needs to set OPENROUTER_API_KEY.` };
+    return {
+      model: openRouterChatModel(option.entry),
+      label: `openrouter:${option.entry.model}`,
+      fallback: anthropicKey ? { model: claudeChatModel(anthropicKey, REGISTRY.chat.primary), label: `anthropic:${REGISTRY.chat.primary.model}` } : null,
+    };
+  }
+  if (!resolved.ready || !anthropicKey) return { model: null, why: "No model is connected to Company Chat on this deployment yet, so no answer was written. An administrator needs to set ANTHROPIC_API_KEY." };
   const backup = resolved.fallbacks.find((row) => row.provider === "openrouter");
   return {
-    model: claudeChatModel(process.env.ANTHROPIC_API_KEY!.trim(), resolved.model),
-    label: `${resolved.model.provider}:${resolved.model.model}`,
+    model: claudeChatModel(anthropicKey, option.entry),
+    label: `${option.entry.provider}:${option.entry.model}`,
     fallback: backup ? { model: openRouterChatModel(backup), label: `openrouter:${backup.model}` } : null,
   };
 }

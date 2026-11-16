@@ -112,6 +112,8 @@ export const chatTables = {
     /** "active", "archived" or "deleted", so search and lists filter by one field. */
     shelf: v.union(v.literal("active"), v.literal("archived"), v.literal("deleted")),
     messageCount: v.number(),
+    /** The model the person chose for this chat (lib/ai/chatModels.ts). Unset: the default. */
+    modelKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -150,6 +152,8 @@ export const chatTables = {
     status: runStatusValidator,
     /** The adapter and model that answered, for example "claude:claude-opus-5-5". */
     model: v.optional(v.string()),
+    /** The chat model the person had chosen when this run started. */
+    modelKey: v.optional(v.string()),
     steps: v.number(),
     limits: v.object({ maxSteps: v.number(), maxMs: v.number(), maxOutputTokens: v.number() }),
     usage: v.object({ inputTokens: v.number(), outputTokens: v.number() }),

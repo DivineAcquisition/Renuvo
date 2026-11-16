@@ -29,6 +29,7 @@ const SWITCHES = [
   { key: "videoGeneration", label: "Video generation", detail: "Creative Studio and chat may generate short promotional videos, within the plan's allowance." },
   { key: "photoReview", label: "Photo review", detail: "Chat may send a visit's evidence photos to a model to describe what they show." },
   { key: "documentSearch", label: "Document search", detail: "Confirmed company knowledge and each person's own drafts are indexed so chat can search them." },
+  { key: "otherChatModels", label: "Other chat models", detail: "People may choose models from OpenAI, Google, xAI and others in chat. Those go through OpenRouter, only to hosts that do not keep or train on the data. Claude models are always available." },
 ] as const;
 
 const dollars = (micros: number) => `$${(micros / 1e6).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
