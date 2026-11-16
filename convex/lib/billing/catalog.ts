@@ -39,9 +39,7 @@ export const AGENT_CATALOG: Record<AgentId, { name: string; department: "growth"
  *
  *   dispatch    released: offers, coverage, live jobs and cleaner action links run end to end.
  *   recruiter   released: the hiring inbox, invitations, applicant pages, screening, interviews, offers
- *               and onboarding handoff run end to end. Its own owner screens are not built yet
- *               (AGENT_PROFILES still says so, for the screens); its work is reached through Chat,
- *               Settings and the applicant pages.
+ *               and onboarding handoff run end to end, with its own screens under Team › Recruiter.
  *   sales, retention, marketing, quality, customer-care, team-coordinator   not released: no workflow.
  *
  * Quality's photo and video review and Marketing's creative requests run in Chat today, but those agents
@@ -49,7 +47,7 @@ export const AGENT_CATALOG: Record<AgentId, { name: string; department: "growth"
  */
 const RELEASED: Record<AgentId, boolean> = {
   dispatch: AGENT_PROFILES.dispatch.built,
-  recruiter: true,
+  recruiter: AGENT_PROFILES.recruiter.built,
   sales: AGENT_PROFILES.sales.built,
   retention: AGENT_PROFILES.retention.built,
   marketing: false,

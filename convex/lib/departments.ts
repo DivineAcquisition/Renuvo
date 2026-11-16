@@ -34,7 +34,7 @@ export const AGENT_PROFILES: Record<Agent, { name: string; responsibility: strin
     name: "Recruiter",
     responsibility: "Applicants, interviews and onboarding.",
     completion: "An owner-approved cleaner ready for appropriate work, with availability and onboarding confirmed.",
-    built: false,
+    built: true,
   },
   dispatch: {
     name: "Dispatch",

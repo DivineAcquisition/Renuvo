@@ -1,6 +1,13 @@
 # Recruiter: navigation and screen data contracts
 
-The owner-facing pages are **not built**. This is what each will read and which actions it will call.
+The owner-facing pages are built in `src/components/app/screens/recruiter/` (pages under
+`src/app/(product)/app/agents/recruiter/`). This is what each reads and which actions it calls.
+
+Shared pieces (`shared.tsx`): the connected **pipeline flow** (eight steps, counts, a dot for steps that
+need the owner), the **who-acts badge** (Needs you · Recruiter is on it · Waiting on applicant · Closed),
+the **journey timeline**, the collapsible **evidence trace** ("How Recruiter got here", each step with its
+source), the **criteria list** (outcome plus the applicant's own words, never a score) and a progress ring.
+Animation stops under reduced motion. `recruiter.test.tsx` renders every screen with sample data.
 All functions exist and are tested. Arguments omit `companyId`, which every call takes.
 
 **Sidebar:** Team → Recruiter. Clicking Recruiter opens the overview. Tabs: Hiring Needs · Applicants ·
