@@ -221,7 +221,8 @@ production and no tracking tool is switched on.
    "not yet verified" until then.
 5. **Texting.** A Telnyx account and number, carrier registration for each company (US 10DLC; Canadian
    carrier requirements), and a web route for inbound texts, which is **not built**: STOP handling is
-   tested in the record but does not yet run on real texts.
+   tested in the record but does not yet run on real texts. Add that route to the `convex/http.ts` router the
+   Recruiter (PR #77) introduces for email receipts, rather than a second router.
 6. **Sign-in service dashboard.** The development instance still requires a phone number and username at
    sign-up (see `03-authentication.md`), and staff second-factor sign-in is not enforced.
 7. **security.txt** expires 2027-11-15. Renew it in the staff console before then.
@@ -231,7 +232,9 @@ production and no tracking tool is switched on.
 - An offer the sending policy refuses stays open until its deadline, then expires as if the cleaner were
   silent. Sent to the Dispatch session to change.
 - The Recruiter (PR #77) does not use the sending policy yet, and applicants are not yet recipients the
-  consent records can find. Sent to the Recruiter session.
+  consent records can find. The owner decided the Recruiter adopts it after this branch merges; that
+  session will move applicant messages to `queueMessage` and add applicants to
+  `convex/lib/compliance/recipients.ts`.
 - Finding the company and person for an inbound text scans up to 2,000 rows per status: there is no
   index on phone or email. Fine now; needs an index before volume.
 - The export builds the whole file in memory. Not tested on a very large company.
