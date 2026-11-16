@@ -8,10 +8,10 @@ import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, managerMutation, ownerMutation } from "./lib/builders";
-import { assignmentLinks, issueLink, linkPath, linkState, revokeLink, siteOrigin, tokenFor } from "./lib/dispatch/links";
-import { declareNoShow, jobChecklist, noCheckInKey, noShowConditions, watchJob } from "./lib/dispatch/live";
+import { assignmentLinks, issueLink, linkPath, linkState, liveLink, revokeLink, siteOrigin, tokenFor } from "./lib/dispatch/links";
+import { cannotAttend, declareNoShow, jobChecklist, noCheckInKey, noShowConditions, watchJob } from "./lib/dispatch/live";
 import { checkedPolicy, dispatchPolicy, POLICY_LIMITS } from "./lib/dispatch/policy";
-import { confirmedSms, offerSms } from "./lib/dispatch/sms";
+import { checkInNudgeSms, confirmedSms, offerSms } from "./lib/dispatch/sms";
 import { notFound, userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { messageByKey, queueMessage } from "./lib/messaging/outbox";
@@ -128,6 +128,53 @@ export const cleanerIsComing = managerMutation({
     const task = await liveTaskByKey(ctx, ctx.companyId, noCheckInKey(assignment._id));
     if (task) await setTaskState(ctx, task, "done", { outcome: `Reached by a person: ${note}`, closedAt: now, withPersonSince: null }, byMember(ctx));
     return null;
+  },
+});
+
+/**
+ * A person texts a cleaner who has not checked in, asking them to check in, send an ETA or say they
+ * cannot come. One text per cleaner per quarter hour at most, however often the button is pressed, so a
+ * failing number is never sent a stream of texts. The text says nothing about the cleaner being late.
+ */
+export const askCleaner = managerMutation({
+  args: { assignmentId: v.id("assignments") },
+  handler: async (ctx, args) => {
+    const assignment = await owned(ctx, args.assignmentId);
+    const job = await ctx.db.get(assignment.jobId);
+    const cleaner = await ctx.db.get(assignment.cleanerId);
+    if (!job || !cleaner) notFound();
+    if (assignment.status !== "accepted" || assignment.checkIn) throw userError("This only applies to an accepted cleaner who has not checked in.");
+    if (job.status !== "scheduled" && job.status !== "in_progress") throw userError("This visit is closed.");
+    if (!cleaner.phone) throw userError(`${cleaner.name} has no phone number on record. Add one on their record, or call them another way.`);
+    const dedupeKey = `manual_nudge:${assignment._id}:${Math.floor(Date.now() / (15 * 60_000))}`;
+    const repeated = (await messageByKey(ctx, ctx.companyId, dedupeKey)) !== null;
+    const message = await queueMessage(ctx, {
+      companyId: ctx.companyId,
+      purpose: "check_in_nudge",
+      cleaner,
+      jobId: job._id,
+      assignmentId: assignment._id,
+      link: await liveLink(ctx, assignment, "job"),
+      linkPath: "/delay",
+      body: checkInNudgeSms({ company: ctx.company, job }),
+      dedupeKey,
+      actor: byMember(ctx),
+    });
+    if (!repeated) await recordEvent(ctx, { companyId: ctx.companyId, type: "assignment.cleaner_asked", actor: byMember(ctx), subject: { table: "assignments", id: assignment._id }, data: { jobId: job._id, messageStatus: message.status } });
+    return { status: message.status, problem: message.problem ?? null, repeated };
+  },
+});
+
+/**
+ * A person records that the cleaner told them they cannot come. Their place opens and cover starts at
+ * once, exactly as when the cleaner says so through their link. This is not a no-show.
+ */
+export const recordCannotAttend = managerMutation({
+  args: { assignmentId: v.id("assignments"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const assignment = await owned(ctx, args.assignmentId);
+    if (assignment.status !== "accepted") throw userError("Only a cleaner on the visit can drop out of it.");
+    return cannotAttend(ctx, assignment._id, text(args.reason, "What the cleaner said", 500), byMember(ctx));
   },
 });
 

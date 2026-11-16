@@ -80,6 +80,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
             delay_recorded: `recorded that ${name} is running late for ${label}`,
             completion_submitted: `received ${name}'s completion of ${label}, for review`,
             no_check_in_contacted: `asked ${name} about the missing check-in for ${label}`,
+            cleaner_asked: `texted ${name} to check in, send an ETA or say they cannot come, for ${label}`,
             no_check_in_alerted: `alerted the operator: ${name} has not checked in for ${label}`,
             no_show_suspected: `flagged a possible no-show by ${name} for ${label}, for a person to confirm`,
             no_show_confirmed: `confirmed ${name} as a no-show for ${label}`,

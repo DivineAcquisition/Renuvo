@@ -229,3 +229,44 @@ describe("Dispatch: one staffing count, a reviewed completion, and a guided move
     expect(after.staffing).toMatchObject({ required: 3, accepted: 2, open: 1, state: "partial" });
   });
 });
+
+describe("Dispatch: what a person does on the day", () => {
+  let undo = () => {};
+  beforeEach(() => {
+    undo = dispatchTestEnv();
+  });
+  afterEach(() => undo());
+
+  it("texts a cleaner who has not checked in at most once a quarter hour, and records a drop-out as one", async () => {
+    const s = await setup();
+    const a = await accepted(s);
+    const office = await addMember(s.t, s.as, s.companyId, "office-2", "office");
+    vi.setSystemTime(JOB_START + 5 * 60_000);
+    const ask = (as: typeof s.as) => as.mutation(api.dispatchOps.askCleaner, { companyId: s.companyId, assignmentId: a.assignmentId });
+    expect(await refusal(ask(office))).toBe("Not allowed.");
+    const before = mockOutbox.length;
+    expect(await ask(s.as)).toMatchObject({ repeated: false, problem: null });
+    expect(await ask(s.as)).toMatchObject({ repeated: true });
+    await flush(s.t);
+    const sent = mockOutbox.slice(before);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).toMatch(/^Alpha Cleaning: we don't have a check-in for your 10:00 AM job yet\. .*\/c\/job\/.*\/delay$/);
+    vi.setSystemTime(JOB_START + 21 * 60_000);
+    expect(await ask(s.as)).toMatchObject({ repeated: false });
+
+    // The live read shows the phone to a manager only, and what still stands before a no-show.
+    const live = async (as: typeof s.as) => (await as.query(api.dispatchViews.liveJobs, { companyId: s.companyId, from: JOB_START - HOUR, to: JOB_END })).jobs[0].crew[0];
+    expect(await live(s.as)).toMatchObject({ phone: PHONES.Lena, hasPhone: true });
+    expect((await live(office)).phone).toBeNull();
+    expect((await live(s.as)).noShowNotYet).toEqual(expect.arrayContaining(["the cleaner has not been asked yet"]));
+
+    expect(await refusal(s.as.mutation(api.dispatchOps.recordCannotAttend, { companyId: s.companyId, assignmentId: a.assignmentId, reason: "" }))).toContain("required");
+    await s.as.mutation(api.dispatchOps.recordCannotAttend, { companyId: s.companyId, assignmentId: a.assignmentId, reason: "Called in sick at 9:50" });
+    const after = await s.job(a.jobId);
+    expect(after.assignments.find((row) => row._id === a.assignmentId)).toMatchObject({ status: "cancelled", endCause: "dropped" });
+    expect(after.staffing.open).toBe(1);
+    const events = await s.as.query(api.events.forSubject, { companyId: s.companyId, subject: { table: "assignments", id: a.assignmentId } });
+    expect(events.at(-1)).toMatchObject({ type: "assignment.cancelled", actor: { kind: "member" } });
+    expect(await refusal(ask(s.as))).toBe("This only applies to an accepted cleaner who has not checked in.");
+  });
+});

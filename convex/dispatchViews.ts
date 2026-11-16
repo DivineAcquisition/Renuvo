@@ -14,7 +14,8 @@ import { jobCoverageRequests } from "./lib/dispatch/coverage";
 import { staffing } from "./lib/dispatch/crew";
 import { jobAssignments } from "./lib/dispatch/facts";
 import { linkState } from "./lib/dispatch/links";
-import { affectedLaterJobs, arrivalEndsAt, jobChecklist, jobEvidence } from "./lib/dispatch/live";
+import { affectedLaterJobs, arrivalEndsAt, jobChecklist, jobEvidence, noShowConditions } from "./lib/dispatch/live";
+import { isManager } from "./lib/roles";
 import { dispatchPolicy } from "./lib/dispatch/policy";
 import { dispatchSettings } from "./lib/dispatch/settings";
 import { coverKey, jobApprovals } from "./lib/dispatch/workflow";
@@ -238,7 +239,8 @@ export const liveJobs = companyQuery({
     const now = Date.now();
     const policy = dispatchPolicy(ctx.company);
     const out = [];
-    for (const job of await jobsBetween(ctx, args.from, args.to)) {
+    const all = await jobsBetween(ctx, args.from, args.to);
+    for (const job of all) {
       if (job.status === "cancelled") continue;
       const row = await jobRow(ctx, job);
       const items = await jobChecklist(ctx, job);
@@ -254,7 +256,19 @@ export const liveJobs = companyQuery({
         else if (now < job.startsAt) arrival = "not_due";
         else arrival = now <= row.arrivalEndsAt ? "due" : "not_checked_in";
         const affected = member.late && member.checkedInAt === null ? await affectedLaterJobs(ctx, { assignment, job, company: ctx.company }, member.late.etaAt + (job.endsAt - job.startsAt)) : [];
-        crew.push({ ...member, arrival, affectedLaterJobs: affected, messages: await delivery(ctx, member.assignmentId) });
+        const cleaner = await ctx.db.get(member.cleanerId);
+        // What still stands between this cleaner and a no-show, so a person confirms one knowing it.
+        const notYet = arrival === "checked_in" || now < job.startsAt ? null : noShowConditions(assignment, job, policy, now, null).missing.filter((row) => !row.startsWith("the cleaner checked in"));
+        crew.push({
+          ...member,
+          arrival,
+          affectedLaterJobs: affected,
+          messages: await delivery(ctx, member.assignmentId),
+          /** A phone number is shown to Owners and Managers, who are the ones who call. */
+          phone: isManager(ctx.role) ? (cleaner?.phone ?? null) : null,
+          hasPhone: Boolean(cleaner?.phone),
+          noShowNotYet: notYet,
+        });
       }
       out.push({
         ...row,
@@ -271,7 +285,7 @@ export const liveJobs = companyQuery({
         ).map((report) => ({ reportId: report._id, kind: report.kind, text: report.text, status: report.status, assignmentId: report.assignmentId })),
       });
     }
-    return { asOf: now, jobs: out };
+    return { asOf: now, jobs: out, truncated: all.length === 200 };
   },
 });
 
