@@ -61,6 +61,8 @@ export type ModelEntry = {
   verification: { state: "verified" | "unverified"; on: string | null; how: string };
   rates: Rates;
   timeoutMs: number;
+  /** OpenRouter only: read PDFs with OpenRouter's own text extraction, for a model without native PDF input. */
+  pdfEngine?: "pdf-text";
 };
 
 export type CapabilityEntry = {

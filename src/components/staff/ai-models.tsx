@@ -58,7 +58,7 @@ export function AiModels() {
               <span className="font-medium text-strong">{row.label}</span>
               <span className="text-xs text-muted-foreground">
                 {row.maker} · {row.route === "anthropic" ? "direct" : "via OpenRouter"} · <code>{row.model}</code> · {rate(row.rates.inputPerMTok, "/M in")}, {rate(row.rates.outputPerMTok, "/M out")}
-                {row.readsFiles ? " · reads PDFs" : ""}
+                {` · ${row.cost}`}
               </span>
               <button
                 type="button"

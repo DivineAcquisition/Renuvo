@@ -12,7 +12,7 @@ Four levels, used strictly:
 | Capability registry, resolve, staff overrides | Yes | Yes | n/a | No: not deployed |
 | Chat on Claude Sonnet 5.5 | Yes | Yes (scripted model) | **No** | No |
 | OpenRouter outage stand-in for chat | Yes | Yes (conversion and continuation; no repeated tool) | **No** | No |
-| Chat model picker (Claude direct, others via OpenRouter) | Yes | Yes (request shape, data_collection deny, pricing, staff/Owner/key checks, PDFs) | **No** | No |
+| Chat model picker (six makers; uploads to every model) | Yes | Yes (request shape, files and images, pdf-text for DeepSeek/Kimi, data_collection deny, pricing, staff/Owner/key checks) | **No** | No |
 | Recruiter on Claude Haiku 5.5 | Yes | Yes (stubbed fetch) | **No** | No |
 | Photo review (Sonnet image input) | Yes | Yes (real SDK, stubbed fetch) | **No** | No: needs the photo evaluation |
 | Video review (Gemini 3.8 Flash) | Yes | Response parsing only | **No** | No |

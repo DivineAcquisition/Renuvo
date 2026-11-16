@@ -10,7 +10,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { companyMutation, companyQuery, ownerMutation, staffMutation, type MemberAccess } from "./lib/builders";
-import { CHAT_MODELS, chatModelOption, chatModelState, DEFAULT_CHAT_MODEL, type ChatModelOption } from "./lib/ai/chatModels";
+import { CHAT_MODELS, chatModelOption, MAKER_NAMES, chatModelState, DEFAULT_CHAT_MODEL, type ChatModelOption } from "./lib/ai/chatModels";
 import { settingFor } from "./lib/ai/media";
 import { readableArtifact } from "./lib/chat/artifacts";
 import type { ContextRef } from "./lib/chat/schema";
@@ -32,6 +32,9 @@ const SENDS_PER_WINDOW = 20;
 const SEND_WINDOW_MS = 10 * 60 * 1000;
 const UPLOAD_MAX_BYTES = 512 * 1024;
 const PDF_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES: Record<string, string> = { "image/png": "image/png", "image/jpeg": "image/jpeg", "image/jpg": "image/jpeg", "image/webp": "image/webp", "image/gif": "image/gif" };
+const IMAGE_EXTENSIONS: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" };
 const TEXT_TYPES = ["text/plain", "text/markdown", "text/csv", "application/json", "text/x-markdown"];
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|json)$/i;
 const THREAD_MESSAGES = 300;
@@ -142,9 +145,11 @@ async function checkedAttachments(ctx: MutationCtx & MemberAccess, files: { stor
     const name = requiredText(file.name, "The file name", 200);
     const type = (meta.contentType ?? "").split(";")[0].trim().toLowerCase();
     const pdf = type === "application/pdf" || /\.pdf$/i.test(name);
-    if (!pdf && !TEXT_TYPES.includes(type) && !TEXT_EXTENSIONS.test(name)) throw userError(`"${name}" cannot be read yet. Chat reads PDFs and text files (.pdf, .txt, .md, .csv, .json); paste the text of other documents instead.`);
-    if (meta.size > (pdf ? PDF_MAX_BYTES : UPLOAD_MAX_BYTES)) throw userError(`"${name}" is larger than ${pdf ? "10 MB" : "512 KB"}.`);
-    out.push({ storageId: file.storageId, name, contentType: pdf ? "application/pdf" : type || "text/plain", size: meta.size, state: "pending" as const });
+    const image = IMAGE_TYPES[type] ?? IMAGE_EXTENSIONS[name.split(".").pop()?.toLowerCase() ?? ""];
+    if (!pdf && !image && !TEXT_TYPES.includes(type) && !TEXT_EXTENSIONS.test(name)) throw userError(`"${name}" cannot be read yet. Chat reads PDFs, images and text files (.pdf, .png, .jpg, .webp, .gif, .txt, .md, .csv, .json); paste the text of other documents instead.`);
+    const limit = pdf ? PDF_MAX_BYTES : image ? IMAGE_MAX_BYTES : UPLOAD_MAX_BYTES;
+    if (meta.size > limit) throw userError(`"${name}" is larger than ${pdf ? "10 MB" : image ? "5 MB" : "512 KB"}.`);
+    out.push({ storageId: file.storageId, name, contentType: pdf ? "application/pdf" : image ? image : type || "text/plain", size: meta.size, state: "pending" as const });
   }
   return out;
 }
@@ -189,7 +194,6 @@ export const send = companyMutation({
     const context = await checkedContext(ctx, args.context ?? []);
     const attachments = await checkedAttachments(ctx, args.attachments ?? []);
     const model = await checkedModel(ctx, args.model ?? conversation?.modelKey ?? DEFAULT_CHAT_MODEL);
-    if (!model.readsFiles && attachments.some((file) => file.contentType === "application/pdf")) throw userError(`${model.label} cannot read PDFs in Selestial. Choose a Claude model to send this file, or paste its text.`);
     await checkAllowance(ctx);
     const modelKey = model.key === DEFAULT_CHAT_MODEL ? undefined : model.key;
 
@@ -452,7 +456,7 @@ export const registerUpload = companyMutation({
 
 // ── Models ───────────────────────────────────────────────────────────────────────────────────────
 
-/** The models this person may choose, and why any is not available. Never a key or a provider's raw ID. */
+/** The models this person may choose, and why any is not available. Never a key, a provider's raw ID or a price. */
 export const models = companyQuery({
   args: {},
   handler: async (ctx) => {
@@ -462,7 +466,7 @@ export const models = companyQuery({
       defaultKey: DEFAULT_CHAT_MODEL,
       options: CHAT_MODELS.map((option) => {
         const state = chatModelState(option, ctx.company, off, chat);
-        return { key: option.key, label: option.label, maker: option.maker, via: option.route === "anthropic" ? "Anthropic" : "OpenRouter", readsFiles: option.readsFiles, blurb: option.blurb, rates: option.entry.rates.inputPerMTok === null ? null : { inputPerMTok: option.entry.rates.inputPerMTok, outputPerMTok: option.entry.rates.outputPerMTok }, available: state.available, why: state.available ? null : state.why };
+        return { key: option.key, label: option.label, maker: option.maker, makerName: MAKER_NAMES[option.maker], cost: option.cost, bestFor: option.bestFor, available: state.available, why: state.available ? null : state.why };
       }),
     };
   },

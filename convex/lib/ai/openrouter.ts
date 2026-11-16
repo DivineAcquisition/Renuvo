@@ -4,7 +4,7 @@
  * engine keeps one shape (Anthropic's content blocks) whichever model answered. Tool results already
  * carried out travel with the conversation, so the stand-in continues from them and repeats nothing.
  *
- * Reasoning blocks are dropped in conversion; attachments that are not text are named, not sent.
+ * Reasoning blocks are dropped in conversion. Uploaded PDFs and images are sent as files.
  * Requests ask OpenRouter to use only providers that do not collect data (`data_collection: "deny"`).
  *
  * Model IDs are from OpenRouter's public model list (2026-11-16). Live calls are checked after deploy.
@@ -15,9 +15,11 @@ import { AiError } from "./errors";
 import { providerFetch, readJson } from "./http";
 import type { ModelEntry } from "./registry";
 
-type Block = { type: string; text?: string; id?: string; name?: string; input?: unknown; tool_use_id?: string; content?: unknown; is_error?: boolean };
+type Block = { type: string; text?: string; id?: string; name?: string; input?: unknown; tool_use_id?: string; content?: unknown; is_error?: boolean; title?: string; source?: { type: string; media_type?: string; data?: string } };
+type UserPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } } | { type: "file"; file: { filename: string; file_data: string } };
 type OpenAiMessage =
-  | { role: "system" | "user"; content: string }
+  | { role: "system"; content: string }
+  | { role: "user"; content: string | UserPart[] }
   | { role: "assistant"; content: string | null; tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[] }
   | { role: "tool"; tool_call_id: string; content: string };
 
@@ -42,8 +44,17 @@ export function toOpenAi(system: string, messages: ModelMessage[]): OpenAiMessag
       out.push({ role: "assistant", content: text || null, ...(calls.length ? { tool_calls: calls } : {}) });
     } else {
       for (const block of blocks.filter((row) => row.type === "tool_result")) out.push({ role: "tool", tool_call_id: block.tool_use_id!, content: textOf(block.content) });
-      const rest = textOf(blocks.filter((row) => row.type !== "tool_result"));
-      if (rest.trim()) out.push({ role: "user", content: rest });
+      // Uploaded PDFs and images travel as files, the way OpenRouter takes them; words stay words.
+      const files: UserPart[] = [];
+      for (const block of blocks) {
+        const data = block.source?.type === "base64" ? block.source.data : undefined;
+        if (!data) continue;
+        if (block.type === "image") files.push({ type: "image_url", image_url: { url: `data:${block.source!.media_type ?? "image/png"};base64,${data}` } });
+        else if (block.type === "document") files.push({ type: "file", file: { filename: (block.title ?? "document.pdf").replace(/[^\w .()-]/g, "_").slice(0, 120) || "document.pdf", file_data: `data:application/pdf;base64,${data}` } });
+      }
+      const rest = textOf(blocks.filter((row) => row.type !== "tool_result" && row.type !== "image" && row.type !== "document"));
+      if (files.length) out.push({ role: "user", content: [...files, ...(rest.trim() ? [{ type: "text" as const, text: rest }] : [])] });
+      else if (rest.trim()) out.push({ role: "user", content: rest });
     }
   }
   return out;
@@ -75,6 +86,8 @@ export function fromOpenAi(body: Completion, fallbackModel: string): ModelReply 
   return { stop, text, toolCalls, content, usage: { inputTokens: body.usage?.prompt_tokens ?? 0, outputTokens: body.usage?.completion_tokens ?? 0 }, model: `openrouter:${body.model ?? fallbackModel}` };
 }
 
+const hasPdf = (messages: ModelMessage[]) => messages.some((message) => Array.isArray(message.content) && (message.content as Block[]).some((block) => block.type === "document"));
+
 export function openRouterChatModel(entry: ModelEntry): ChatModel {
   return {
     name: "openrouter",
@@ -94,6 +107,8 @@ export function openRouterChatModel(entry: ModelEntry): ChatModel {
             tool_choice: "auto",
             max_completion_tokens: request.maxTokens,
             provider: { data_collection: "deny" },
+            // A model without native PDF input gets the PDF's text from OpenRouter's own extraction.
+            ...(entry.pdfEngine && hasPdf(request.messages) ? { plugins: [{ id: "file-parser", pdf: { engine: entry.pdfEngine } }] } : {}),
           }),
         });
         const reply = fromOpenAi(await readJson<Completion>(response), entry.model);

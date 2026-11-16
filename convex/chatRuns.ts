@@ -380,16 +380,18 @@ export const execute = internalAction({
     let switched = false;
 
     // Attached files are read here, as data. A file that cannot be read is said so, visibly.
-    const files = new Map<string, { text: string | null; note?: string; pdf?: string }>();
+    const files = new Map<string, { text: string | null; note?: string; binary?: { kind: "pdf" | "image"; mediaType: string; data: string } }>();
     for (const message of loaded.history) {
       for (const file of message.attachments) {
+        const kind = file.contentType === "application/pdf" ? "pdf" : file.contentType.startsWith("image/") ? "image" : null;
         if (file.state === "unreadable") files.set(file.storageId, { text: null, note: file.note });
-        else if (file.contentType === "application/pdf") {
-          // A PDF goes to the model as a document with the latest message; earlier ones are named only.
-          if (message.messageId !== loaded.currentMessageId) files.set(file.storageId, { text: "(A PDF attached earlier in this chat. Ask for it again to read it.)" });
+        else if (kind) {
+          // A PDF or an image goes to the model as a file with the latest message; earlier ones are named only.
+          const what = kind === "pdf" ? "A PDF" : "An image";
+          if (message.messageId !== loaded.currentMessageId) files.set(file.storageId, { text: `(${what} attached earlier in this chat. Ask for it again to see it.)` });
           else {
             const blob = await ctx.storage.get(file.storageId);
-            files.set(file.storageId, blob ? { text: "(Sent as a document.)", pdf: bytesToBase64(new Uint8Array(await blob.arrayBuffer())) } : { text: null, note: "The file is no longer stored." });
+            files.set(file.storageId, blob ? { text: kind === "pdf" ? "(Sent as a document.)" : "(Sent as an image.)", binary: { kind, mediaType: file.contentType, data: bytesToBase64(new Uint8Array(await blob.arrayBuffer())) } } : { text: null, note: "The file is no longer stored." });
           }
         } else files.set(file.storageId, await readAttachment(ctx, file.storageId));
       }
@@ -408,10 +410,20 @@ export const execute = internalAction({
     const messages: ModelMessage[] = loaded.history.map((message) => {
       if (message.role !== "user") return { role: "assistant", content: message.text };
       const words = userTurn({ text: message.text, page: message.page, records: message.records, attachments: message.attachments.map((file) => ({ name: file.name, text: files.get(file.storageId)?.text ?? null, note: files.get(file.storageId)?.note })) });
-      const pdfs = message.attachments.map((file) => ({ name: file.name, data: files.get(file.storageId)?.pdf })).filter((file): file is { name: string; data: string } => Boolean(file.data));
-      if (pdfs.length === 0) return { role: "user", content: words };
-      // Documents first, then the words that refer to them. The document is data, as the system prompt says.
-      return { role: "user", content: [...pdfs.map((file) => ({ type: "document", title: file.name.slice(0, 200), source: { type: "base64", media_type: "application/pdf", data: file.data } })), { type: "text", text: words }] };
+      const sent = message.attachments.map((file) => ({ name: file.name, binary: files.get(file.storageId)?.binary })).filter((file): file is { name: string; binary: { kind: "pdf" | "image"; mediaType: string; data: string } } => Boolean(file.binary));
+      if (sent.length === 0) return { role: "user", content: words };
+      // Files first, then the words that refer to them. A file is data, as the system prompt says.
+      return {
+        role: "user",
+        content: [
+          ...sent.map((file) =>
+            file.binary.kind === "pdf"
+              ? { type: "document", title: file.name.slice(0, 200), source: { type: "base64", media_type: "application/pdf", data: file.binary.data } }
+              : { type: "image", source: { type: "base64", media_type: file.binary.mediaType, data: file.binary.data } },
+          ),
+          { type: "text", text: words },
+        ],
+      };
     });
     const deadline = started.startedAt + started.limits.maxMs;
     let status: RunStatus = "completed";

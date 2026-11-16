@@ -75,14 +75,16 @@ connected.
 
 ## 3a. Choosing a chat model
 
-People pick a model in the chat composer. The choice is saved on the conversation, used by its next
-answer, and shown under each answer ("· GPT-6.1 Sol").
+People pick a model in the chat composer. The menu groups models by maker, with each maker's mark, and
+gives each a short line: a cost level in words, never a price, and what it is best for. The choice is
+saved on the conversation, used by its next answer, and shown under each answer ("· GPT-6.1 Sol").
 
-- **The list.** `lib/ai/chatModels.ts` is the whole list.
-  - Claude Sonnet 5.5 (default), Opus 5.5 and Haiku 5.5 are called directly.
-  - GPT-6.1 Sol, Gemini 3.8 Flash, Grok 4.7, Mistral Large 4, Qwen4 Max, DeepSeek V4.1 Flash and Kimi
-    K3.1 Pro go through OpenRouter.
+- **The list.** `lib/ai/chatModels.ts` is the whole list, from six makers:
+  - Anthropic: Claude Sonnet 5.5 (default), Opus 5.5 and Haiku 5.5, called directly.
+  - OpenAI: GPT-6.1 Sol. Google: Gemini 3.8 Flash. xAI: Grok 4.7. DeepSeek: DeepSeek V4.1 Flash.
+    Moonshot: Kimi K3.1 Pro. These go through OpenRouter, which people choosing never see named.
   - IDs and prices were read from OpenRouter's public model list on 2026-11-16.
+  - Icons: `src/components/app/chat/model-icons.tsx`, from LobeHub's MIT-licensed set.
 - **What the browser sends.** Only a key from the list, never a model ID.
 - **Server checks.** The server checks the key on send, retry and change. A model is refused when:
   - staff have switched it off (staff console › AI models);
@@ -90,8 +92,13 @@ answer, and shown under each answer ("· GPT-6.1 Sol").
   - the model is from another provider and the Owner has turned other providers off (Settings › AI & usage).
 - **Same rules for every model.** Each model gets the same instructions and tools, and every tool keeps
   its own checks. Choosing a model never widens what chat can do.
+- **Uploads reach every model.**
+  - People can attach PDFs (10 MB), images (PNG, JPEG, WebP or GIF, 5 MB) and text files.
+  - Text files travel as text. PDFs and images travel as files: content blocks for Claude, `file` and
+    `image_url` parts through OpenRouter.
+  - OpenAI, Gemini and Grok read PDFs natively. DeepSeek and Kimi have no PDF input, so OpenRouter's own
+    `pdf-text` extraction reads the PDF's text layer. No outside OCR service is used.
 - **Data.** OpenRouter requests carry `data_collection: "deny"`.
-- **Attachments.** Only Claude models read PDFs. Sending a PDF to another model is refused with a reason.
 - **Outages.** On an outage or rate limit, a Claude choice continues on OpenRouter (Claude Sonnet 5.5
   there by default). Any other choice continues on Claude Sonnet 5.5 directly. Never after a refusal.
 - **Usage.** Each answer is recorded with the chosen model's own rates.

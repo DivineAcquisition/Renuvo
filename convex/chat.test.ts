@@ -350,10 +350,10 @@ describe("Company Chat", () => {
     const ownerChat = await ask(t, as, companyId, "Summarize this.", { attachments: [{ storageId: ownerFile, name: "notes.txt" }] });
     expect(steps(await thread(as, companyId, ownerChat))[0]).toMatchObject({ status: "awaiting_approval" });
     expect(await t.run((ctx) => ctx.db.query("hiringNeeds").collect())).toEqual([]);
-    // A file that is not text is refused at the door, visibly.
-    const image = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" })));
-    await as.mutation(api.chat.registerUpload, { companyId, storageId: image });
-    expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Read", clientKey: key(), attachments: [{ storageId: image, name: "photo.png" }] }))).toMatch(/cannot be read yet/);
+    // A file chat cannot read (not a PDF, an image or text) is refused at the door, visibly.
+    const archive = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array([80, 75, 3, 4])], { type: "application/zip" })));
+    await as.mutation(api.chat.registerUpload, { companyId, storageId: archive });
+    expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Read", clientKey: key(), attachments: [{ storageId: archive, name: "files.zip" }] }))).toMatch(/cannot be read yet/);
   });
 
   it("reports exactly what was already done when the person presses Stop", async () => {

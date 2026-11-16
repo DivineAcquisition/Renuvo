@@ -221,27 +221,65 @@ describe("the AI layer", () => {
       expect((await as.query(api.ai.overview, { companyId })).features.otherChatModels).toBe(false);
     });
 
-    it("refuses a PDF for a model that cannot read it, and fails honestly if the model is withdrawn mid-chat", async () => {
+    it("sends uploaded PDFs and images to every model, using OpenRouter's own text reader only where a model has no PDF input", async () => {
+      const { t, as, companyId } = await setup();
+      delete process.env.CHAT_MODEL;
+      process.env.OPENROUTER_API_KEY = "test";
+      process.env.ANTHROPIC_API_KEY = "test";
+      respond = (call) => (call.url === "https://openrouter.ai/api/v1/chat/completions" ? json(200, { choices: [{ finish_reason: "stop", message: { content: "I read it." } }], usage: { prompt_tokens: 10, completion_tokens: 5 } }) : new Response("{}", { status: 404 }));
+      const member = await t.run(async (ctx) => (await ctx.db.query("members").collect()).find((row) => row.companyId === companyId)!);
+      const upload = async (bytes: BlobPart, type: string) =>
+        t.run(async (ctx) => {
+          const storageId = await ctx.storage.store(new Blob([bytes], { type }));
+          await ctx.db.insert("chatUploads", { companyId, memberId: member._id, storageId, createdAt: NOW });
+          return storageId;
+        });
+      const png = Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0));
+      const sentTo = async (model: string) => {
+        calls = [];
+        const pdf = await upload("%PDF-1.4 terms", "application/pdf");
+        const photo = await upload(png, "image/png");
+        await as.mutation(api.chat.send, { companyId, text: "What do these say?", clientKey: key(), model, attachments: [{ storageId: pdf, name: "terms.pdf" }, { storageId: photo, name: "kitchen.png" }] });
+        await settle(t);
+        return JSON.parse(calls[0].body);
+      };
+      // GPT reads the PDF natively: the file goes as a file, with no parser asked for.
+      const gpt = await sentTo("gpt-6.1-sol");
+      const gptParts = gpt.messages.find((row: { role: string; content: unknown }) => row.role === "user" && Array.isArray(row.content)).content;
+      expect(gptParts.map((part: { type: string }) => part.type)).toEqual(["file", "image_url", "text"]);
+      expect(gptParts[0].file).toMatchObject({ filename: "terms.pdf", file_data: expect.stringMatching(/^data:application\/pdf;base64,/) });
+      expect(gptParts[1].image_url.url).toMatch(/^data:image\/png;base64,/);
+      expect(gpt.plugins).toBeUndefined();
+      // DeepSeek has no PDF input: OpenRouter's own text reader is named, never an outside OCR service.
+      const deepseek = await sentTo("deepseek-v4.1-flash");
+      expect(deepseek.plugins).toEqual([{ id: "file-parser", pdf: { engine: "pdf-text" } }]);
+      expect(JSON.stringify(deepseek.messages)).toContain("data:image/png;base64,");
+
+      // An unsupported file type is still refused with a reason.
+      const zip = await upload("PK", "application/zip");
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Open this", clientKey: key(), model: "kimi-k3.1-pro", attachments: [{ storageId: zip, name: "archive.zip" }] }))).toMatch(/PDFs, images and text files/);
+    });
+
+    it("lists only the six makers' models, and fails honestly if a model is withdrawn mid-chat", async () => {
       const { t, as, companyId } = await setup();
       process.env.OPENROUTER_API_KEY = "test";
       process.env.ANTHROPIC_API_KEY = "test";
       process.env.STAFF_BOOTSTRAP_EMAIL = staff.email;
-      const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["%PDF-1.4"], { type: "application/pdf" })));
-      await t.run(async (ctx) => {
-        const member = (await ctx.db.query("members").collect()).find((row) => row.companyId === companyId)!;
-        await ctx.db.insert("chatUploads", { companyId, memberId: member._id, storageId, createdAt: NOW } as never);
-      });
-      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Read this.", clientKey: key(), model: "deepseek-v4.1-flash", attachments: [{ storageId, name: "terms.pdf" }] }))).toMatch(/cannot read PDFs/);
+      const offered = await as.query(api.chat.models, { companyId });
+      expect([...new Set(offered.options.map((row) => row.maker))]).toEqual(["anthropic", "openai", "google", "xai", "deepseek", "moonshot"]);
+      for (const row of offered.options) expect(`${row.cost} · ${row.bestFor}`).toMatch(/^(Lowest|Low|Low to moderate|Moderate|Higher) cost · Best /);
+      expect(JSON.stringify(offered)).not.toMatch(/OpenRouter|\$\d|inputPerMTok/);
+      expect(await refusal(as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "mistral-large-4" }))).toMatch(/not offered/);
 
-      const first = await as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "mistral-large-4" });
+      const first = await as.mutation(api.chat.send, { companyId, text: "Hi", clientKey: key(), model: "grok-4.7" });
       await settle(t);
-      await t.withIdentity(staff).mutation(api.aiAdmin.setChatModel, { key: "mistral-large-4", enabled: false });
+      await t.withIdentity(staff).mutation(api.aiAdmin.setChatModel, { key: "grok-4.7", enabled: false });
       expect(await refusal(as.mutation(api.chat.send, { companyId, conversationId: first.conversationId, text: "Again", clientKey: key() }))).toMatch(/switched off by Selestial/);
       await as.mutation(api.chat.setModel, { companyId, conversationId: first.conversationId, model: "claude-haiku" });
       await as.mutation(api.chat.send, { companyId, conversationId: first.conversationId, text: "Again", clientKey: key() });
       await settle(t);
       const view = await as.query(api.chat.thread, { companyId, conversationId: first.conversationId });
-      expect(view.messages.filter((row) => row.role === "assistant").map((row) => row.answeredBy)).toEqual(["Mistral Large 4", "Claude Haiku 5.5"]);
+      expect(view.messages.filter((row) => row.role === "assistant").map((row) => row.answeredBy)).toEqual(["Grok 4.7", "Claude Haiku 5.5"]);
     });
   });
 

@@ -26,7 +26,7 @@ export const models = staffQuery({
         route: option.route,
         model: option.entry.model,
         rates: option.entry.rates,
-        readsFiles: option.readsFiles,
+        cost: option.cost,
         connected: providerConfigured(option.entry.provider),
         enabled: chatModelRows.find((row) => row.key === option.key)?.enabled ?? true,
       })),
