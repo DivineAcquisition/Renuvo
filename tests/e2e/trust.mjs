@@ -26,7 +26,9 @@ const browser = await chromium.launch({ proxy: process.env.HTTPS_PROXY ? { serve
 
 /** A fresh visitor. `hits` records every request to a tracking host; none of them leaves the machine. */
 async function visitor({ gpc = false, viewport = { width: 1280, height: 860 } } = {}) {
-  const ctx = await browser.newContext({ viewport, extraHTTPHeaders: gpc ? { "Sec-GPC": "1" } : {} });
+  // Each visitor has its own address, so the hourly limit on request forms counts this run only.
+  const address = `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
+  const ctx = await browser.newContext({ viewport, extraHTTPHeaders: { "X-Forwarded-For": address, ...(gpc ? { "Sec-GPC": "1" } : {}) } });
   if (gpc) await ctx.addInitScript(() => Object.defineProperty(Navigator.prototype, "globalPrivacyControl", { get: () => true }));
   const hits = [];
   await ctx.route(TRACKER, (route) => {
@@ -215,6 +217,7 @@ try {
     await page.getByLabel("Your email").fill(`e2e-${run}@example.com`);
     await page.getByLabel("What would you like to do?").selectOption({ index: 1 });
     await page.getByLabel("Your relationship to Selestial").selectOption({ index: 1 });
+    await page.getByLabel("The cleaning company's name").fill("Synthetic Test Cleaning");
     await page.getByLabel("Details").fill("Synthetic test request from the trust browser run. Please ignore.");
     await page.getByRole("button", { name: /Send/ }).click();
     await page.getByText("Received").waitFor({ timeout: 20000 });

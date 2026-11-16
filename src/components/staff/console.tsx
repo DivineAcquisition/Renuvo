@@ -446,6 +446,7 @@ export function TrustRecords() {
       <PageHeader title="Trust records" lead="What the public pages say about Selestial. Only rows marked verified and public are shown on the site. Every change needs a note and is logged with before and after." />
       {!data.seeded ? <p className="mb-4 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-sm text-strong">The record has not been seeded, so the site shows the built-in starting facts.</p> : null}
       <div className="grid gap-5">
+        {data.settings ? <OperatorSettings settings={data.settings} canEdit={canEdit} /> : null}
         <Panel title="Documents">
           <ul className="grid gap-2">
             {data.publications.map((row) => (
@@ -463,22 +464,9 @@ export function TrustRecords() {
         <Panel title="Providers">
           <ul className="grid gap-2">
             {data.providers.map((provider) => (
-              <li key={provider.key} className="rounded-xl border border-border px-3.5 py-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold text-strong">{provider.name}</p>
-                  <div className="flex gap-1.5">
-                    <Badge variant="outline">{PROVIDER_STATUS_LABEL[provider.status]}</Badge>
-                    <Badge variant={provider.reviewStatus === "verified" ? "success" : "warning"}>{provider.reviewStatus === "verified" ? "Reviewed" : "Needs review"}</Badge>
-                  </div>
-                </div>
-                <p className="mt-1 text-muted-foreground">{provider.purpose}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Locations: {provider.locations ?? "not verified"} · Agreement: {provider.agreementRef ?? "none on file"} · Reviewed {provider.reviewedOn}
-                </p>
-              </li>
+              <ProviderRow key={provider.key} provider={provider} canEdit={canEdit} />
             ))}
           </ul>
-          <p className="mt-3 text-xs text-muted-foreground">Provider rows are changed through the record&rsquo;s upsertProvider function, with a note.</p>
         </Panel>
         <Panel title="Change log">
           {changes === undefined ? (
@@ -500,6 +488,175 @@ export function TrustRecords() {
         </Panel>
       </div>
     </>
+  );
+}
+
+type Settings = { legalEntity: string; mailingAddress: string; governingPlace: string; contacts: { security: string; privacy: string; support: string }; securityTxtExpiresOn: string; verified: { legalEntity: boolean; mailingAddress: boolean; security: boolean; privacy: boolean; support: boolean } };
+
+/** Who operates Selestial and how to reach it. A detail reaches the public pages only when ticked as verified. */
+function OperatorSettings({ settings, canEdit }: { settings: Settings; canEdit: boolean }) {
+  const update = useMutation(api.trust.updateSettings);
+  const { busy, error, run } = useRun();
+  const [form, setForm] = useState(settings);
+  const [note, setNote] = useState("");
+  const [saved, setSaved] = useState(false);
+  const text = (label: string, value: string, change: (value: string) => void, verifiedKey?: keyof Settings["verified"]) => (
+    <div className="grid gap-1">
+      <Field label={label}>
+        <TextInput value={value} onChange={(event) => (setSaved(false), change(event.target.value))} disabled={!canEdit} />
+      </Field>
+      {verifiedKey ? (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input type="checkbox" checked={form.verified[verifiedKey]} disabled={!canEdit} onChange={(event) => (setSaved(false), setForm({ ...form, verified: { ...form.verified, [verifiedKey]: event.target.checked } }))} className="size-3.5 accent-[#6838ef]" />
+          Verified, show it in public
+        </label>
+      ) : null}
+    </div>
+  );
+  return (
+    <Panel title="Operator and contacts">
+      <form
+        className="grid gap-3 sm:grid-cols-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void run(async () => {
+            await update({ ...form, note });
+            setNote("");
+            setSaved(true);
+          });
+        }}
+      >
+        {text("Legal entity", form.legalEntity, (value) => setForm({ ...form, legalEntity: value }), "legalEntity")}
+        {text("Mailing address", form.mailingAddress, (value) => setForm({ ...form, mailingAddress: value }), "mailingAddress")}
+        {text("Governing law", form.governingPlace, (value) => setForm({ ...form, governingPlace: value }))}
+        {text("security.txt expires on (YYYY-MM-DD)", form.securityTxtExpiresOn, (value) => setForm({ ...form, securityTxtExpiresOn: value }))}
+        {text("Security contact", form.contacts.security, (value) => setForm({ ...form, contacts: { ...form.contacts, security: value } }), "security")}
+        {text("Privacy contact", form.contacts.privacy, (value) => setForm({ ...form, contacts: { ...form.contacts, privacy: value } }), "privacy")}
+        {text("Support contact", form.contacts.support, (value) => setForm({ ...form, contacts: { ...form.contacts, support: value } }), "support")}
+        {canEdit ? (
+          <div className="grid gap-2 sm:col-span-2">
+            <Field label="Why this changed" hint="Kept in the change log with what it was before.">
+              <TextInput value={note} onChange={(event) => setNote(event.target.value)} required />
+            </Field>
+            <FormError message={error} />
+            {saved ? <p role="status" className="text-sm text-success-foreground">Saved. The public pages pick it up within five minutes.</p> : null}
+            <div>
+              <Button type="submit" variant="primary" size="sm" loading={busy} disabled={!note.trim()}>
+                Save
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </form>
+    </Panel>
+  );
+}
+
+type Provider = { key: string; name: string; purpose: string; dataHandled: string; locations: string | null; agreementRef: string | null; policyUrl: string | null; status: "in_use" | "connected_not_live" | "planned"; reviewStatus: "verified" | "needs_review"; reviewedOn: string; publicNote?: string };
+
+function ProviderRow({ provider, canEdit }: { provider: Provider; canEdit: boolean }) {
+  const upsert = useMutation(api.trust.upsertProvider);
+  const { busy, error, run } = useRun();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ ...provider, locations: provider.locations ?? "", agreementRef: provider.agreementRef ?? "", policyUrl: provider.policyUrl ?? "", publicNote: provider.publicNote ?? "" });
+  const [note, setNote] = useState("");
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [key]: event.target.value });
+  return (
+    <li className="rounded-xl border border-border px-3.5 py-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold text-strong">{provider.name}</p>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline">{PROVIDER_STATUS_LABEL[provider.status]}</Badge>
+          <Badge variant={provider.reviewStatus === "verified" ? "success" : "warning"}>{provider.reviewStatus === "verified" ? "Reviewed" : "Needs review"}</Badge>
+          {canEdit ? (
+            <Button size="sm" variant="ghost" onClick={() => setOpen(!open)} aria-expanded={open}>
+              {open ? "Close" : "Edit"}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <p className="mt-1 text-muted-foreground">{provider.purpose}</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Locations: {provider.locations ?? "not verified"} · Agreement: {provider.agreementRef ?? "none on file"} · Reviewed {provider.reviewedOn}
+      </p>
+      {open ? (
+        <form
+          className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              await upsert({
+                key: provider.key,
+                name: form.name,
+                purpose: form.purpose,
+                dataHandled: form.dataHandled,
+                locations: form.locations.trim() || null,
+                agreementRef: form.agreementRef.trim() || null,
+                policyUrl: form.policyUrl.trim() || null,
+                status: form.status,
+                reviewStatus: form.reviewStatus,
+                reviewedOn: form.reviewedOn,
+                publicNote: form.publicNote,
+                note,
+              });
+              setNote("");
+              setOpen(false);
+            });
+          }}
+        >
+          <Field label="Name">
+            <TextInput value={form.name} onChange={set("name")} required />
+          </Field>
+          <Field label="Status">
+            <SelectInput value={form.status} onChange={set("status")}>
+              {Object.entries(PROVIDER_STATUS_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <Field label="What it does for us" className="sm:col-span-2">
+            <TextInput value={form.purpose} onChange={set("purpose")} required />
+          </Field>
+          <Field label="Data it handles" className="sm:col-span-2">
+            <TextInput value={form.dataHandled} onChange={set("dataHandled")} required />
+          </Field>
+          <Field label="Where it processes data" hint="Leave empty until checked against the provider's terms.">
+            <TextInput value={form.locations} onChange={set("locations")} />
+          </Field>
+          <Field label="Data processing agreement" hint="A reference to where the signed terms are kept. Never public.">
+            <TextInput value={form.agreementRef} onChange={set("agreementRef")} />
+          </Field>
+          <Field label="Privacy policy address">
+            <TextInput value={form.policyUrl} onChange={set("policyUrl")} />
+          </Field>
+          <Field label="Public note">
+            <TextInput value={form.publicNote} onChange={set("publicNote")} />
+          </Field>
+          <Field label="Review">
+            <SelectInput value={form.reviewStatus} onChange={set("reviewStatus")}>
+              <option value="verified">Reviewed</option>
+              <option value="needs_review">Needs review</option>
+            </SelectInput>
+          </Field>
+          <Field label="Reviewed on">
+            <TextInput type="date" value={form.reviewedOn} onChange={set("reviewedOn")} required />
+          </Field>
+          <Field label="Why this changed" className="sm:col-span-2">
+            <TextInput value={note} onChange={(event) => setNote(event.target.value)} required />
+          </Field>
+          <div className="grid gap-2 sm:col-span-2">
+            <FormError message={error} />
+            <div>
+              <Button type="submit" variant="primary" size="sm" loading={busy} disabled={!note.trim()}>
+                Save provider
+              </Button>
+            </div>
+          </div>
+        </form>
+      ) : null}
+    </li>
   );
 }
 

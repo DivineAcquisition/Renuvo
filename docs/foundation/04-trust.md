@@ -135,12 +135,131 @@ The full register with evidence is `src/lib/trust/register.ts`. Statuses: **veri
 proven by a test or check here), **unverified** (built, not yet proven live), **planned**, **external**
 (needs a provider, carrier or dashboard), **decision** (needs a legal or business decision).
 
-REGISTER_TABLES
+#### Platform
+
+| Item | Responsible | Provider | Status | Public | Evidence |
+|---|---|---|---|---|---|
+| Accounts and sign-in | Selestial | Clerk | verified | yes | src/components/auth/*, tests/e2e/auth.mjs (33 browser checks), docs/foundation/03-authentication.md |
+| Business records are separated by workspace | Selestial | Convex | verified | yes | convex/lib/builders.ts, convex/lib/access.ts, convex/isolation.test.ts, convex/guard.test.ts |
+| Roles: Owner, Manager, Office | Selestial | — | verified | yes | convex/lib/roles.ts, convex/isolation.test.ts |
+| Activity log | Selestial | Convex | verified | yes | convex/lib/events.ts, convex/lib/guard.ts (eventLogViolations), convex/guard.test.ts |
+| Selestial staff access | Selestial | — | verified | no | convex/lib/builders.ts (staffQuery/staffMutation), convex/staff.test.ts |
+| Website hosting and request logs | Provider | Vercel | external | yes | Vercel project; provider's own terms |
+| Database and file storage | Provider | Convex | verified | yes | convex/schema.ts |
+| Where providers process data | Selestial | Clerk, Convex, Vercel | external | no | Needs each provider's region settings and data processing terms checked. |
+| Data processing terms with providers and customers | Selestial | — | decision | no | — |
+| Encryption at rest and in transit | Provider | Convex, Vercel, Clerk | external | no | Needs each provider's security documentation reviewed and recorded. |
+| Backups and restoration | Provider | Convex | external | no | — |
+| Second factor for Selestial staff | Selestial | Clerk | planned | no | — |
+| Security certification (SOC 2, ISO 27001) | Selestial | — | decision | no | — |
+| Independent security assessment | Selestial | — | decision | no | — |
+| Personal information is not sold | Selestial | — | decision | no | Privacy notice privacy-2026-11-16, approved by the owner 2026-11-16 |
+| Privacy and security requests | Selestial | — | verified | yes | convex/requests.ts, convex/requests.test.ts, src/lib/trust/requests.test.ts, tests/e2e/trust.mjs (a privacy request and a vulnerability report saved from a real browser) |
+| Export and deletion | Cleaning company | Convex | verified | no | convex/dataRights.ts, convex/dataRights.test.ts (every company table is exported or left out with a reason). Not tested on a very large company. |
+| Selestial subscription charges | Selestial | — | decision | yes | No payment code in the repository. |
+| Customer payments to cleaning businesses and cleaner pay | Cleaning company | — | planned | yes | convex/lib/dispatch/pay.ts |
+| AI model providers | Selestial | — | planned | yes | convex/lib/dispatch/*, PR #77 convex/lib/recruiter/model.ts |
+| Model training on customer data | Selestial | — | decision | no | — |
+| Use of business records across companies | Selestial | — | decision | no | — |
+
+#### Cleaning company
+
+| Item | Responsible | Provider | Status | Public | Evidence |
+|---|---|---|---|---|---|
+| Business identity | Cleaning company | — | verified | no | convex/compliance.ts, convex/compliance.test.ts |
+| What each agent may do | Cleaning company | — | verified | yes | convex/lib/permissionCatalog.ts, convex/authority.test.ts |
+| Texting sender and carrier registration | Cleaning company | Telnyx (planned) | external | no | convex/lib/messaging/policy.ts and tests |
+| Terms acceptance | Cleaning company | — | verified | no | convex/agreements.ts, convex/companies.ts (accepted in the same transaction as the company), convex/compliance.test.ts |
+
+#### Recipient
+
+| Item | Responsible | Provider | Status | Public | Evidence |
+|---|---|---|---|---|---|
+| Permission to message, per person, channel and category | Cleaning company | — | verified | no | convex/consent.ts, convex/compliance.test.ts |
+| One server-side check before every text | Selestial | — | verified | yes | convex/lib/messaging/policy.ts, convex/messaging.ts (checked again in claim), convex/compliance.test.ts, the Dispatch tests |
+| STOP, HELP, START and plain-language opt-outs | Selestial | Telnyx (planned) | external | no | convex/inbound.ts, convex/compliance.test.ts |
+| Cookie and tracking choices | Selestial | Vercel Analytics, Google Analytics 4, Google Ads, Meta Pixel (none switched on) | verified | yes | src/lib/consent/*, src/components/consent/*, src/lib/consent/consent.test.ts, tests/e2e/trust.mjs (14 browser checks with fake tool ids and every tracker request intercepted) |
+| Cleaner task links | Selestial | — | verified | no | convex/lib/dispatch/links.ts, convex/linkAudit.test.ts (11 checks) |
+| Recruiter inbox and applicant records | Cleaning company | Gmail (planned) | external | no | PR #77 |
 
 ## Launch readiness
 
-LAUNCH_READINESS
+Checked on 2026-11-16 on branch `claude/selestial-trust`: eslint, both type checks, 293 unit and
+record tests, the production build, and `tests/e2e/trust.mjs` (14 browser checks against the dev
+record, with fake tool ids and every tracker request intercepted). Nothing was deployed to
+production and no tracking tool is switched on.
+
+### Ready in this repository
+
+- The ten public pages, the footer groups and the landing trust section (three cards today:
+  permissions, access, audit; the messaging card waits for its claim to be verified and public).
+- The five documents, version `*-2026-11-16`, published on the owner's approval with no outside legal
+  review, recorded on each publication row.
+- Cookie choices: banner, preferences, withdrawal, GPC, versioning and expiry; tools load only after a
+  choice, only on public pages, and are told the path only.
+- Public request forms that save before anyone is told, with references, rate limits and a bot trap;
+  the staff queue with verification, routing, due dates, notes and outcomes.
+- Settings → Trust & Compliance with per-operation readiness; Terms accepted at workspace setup.
+- One sending policy, checked at queueing and again at sending, wired into Dispatch.
+- Owner export (24-hour link), erasure of a customer or cleaner, and company deletion through staff.
+- The staff console (`/staff`): requests, operator details and contacts, providers, claims,
+  publications, change log, carrier registrations and suspensions, staff list.
+
+### Needs a person or a provider before launch
+
+1. **Production record.** Deploy the Convex functions to production, run `npx convex run trust:seed`
+   there once, set `STAFF_BOOTSTRAP_EMAIL`, sign in with that address and add the real staff. Until the
+   seed runs, the site shows the same seed facts.
+2. **Request notifications.** `EMAIL_PROVIDER`, `RESEND_API_KEY` and `EMAIL_FROM` on Convex, and working
+   privacy@ and security@selestial.io mailboxes. Without them a request is still saved and visible in
+   `/staff`, and its "our inbox told" line says why the email did not go.
+3. **Tracking tools.** Each turns on only when its id is set on Vercel (`NEXT_PUBLIC_VERCEL_ANALYTICS`,
+   `NEXT_PUBLIC_GA4_ID`, `NEXT_PUBLIC_GOOGLE_ADS_ID`, `NEXT_PUBLIC_META_PIXEL_ID`). Then mark each one
+   in use on the Subprocessors list.
+4. **Providers.** Check where Clerk, Convex, Vercel and Resend process data, their data processing
+   terms, encryption and backups, and record each in the staff console. The Subprocessors page says
+   "not yet verified" until then.
+5. **Texting.** A Telnyx account and number, carrier registration for each company (US 10DLC; Canadian
+   carrier requirements), and a web route for inbound texts, which is **not built**: STOP handling is
+   tested in the record but does not yet run on real texts.
+6. **Sign-in service dashboard.** The development instance still requires a phone number and username at
+   sign-up (see `03-authentication.md`), and staff second-factor sign-in is not enforced.
+7. **security.txt** expires 2027-11-15. Renew it in the staff console before then.
+
+### Known gaps in the code
+
+- An offer the sending policy refuses stays open until its deadline, then expires as if the cleaner were
+  silent. Sent to the Dispatch session to change.
+- The Recruiter (PR #77) does not use the sending policy yet, and applicants are not yet recipients the
+  consent records can find. Sent to the Recruiter session.
+- Finding the company and person for an inbound text scans up to 2,000 rows per status: there is no
+  index on phone or email. Fine now; needs an index before volume.
+- The export builds the whole file in memory. Not tested on a very large company.
+- The staff console has not been driven in a browser yet (it is covered by type checks and the record
+  tests behind each function).
 
 ## Unresolved decisions
 
-UNRESOLVED
+Each of these needs the owner's answer. Nothing here was guessed into the documents or the site.
+
+1. **Messaging claim.** Show "Texts go out only after checking…" on the site once texting is live, or now?
+   (The check is built and tested; texting itself is not live.)
+2. **AI claim.** Show "No AI model provider is connected…" in public? It is true today and changes the
+   day the Recruiter connects a model.
+3. **Model training and cross-company use.** What will Selestial say about training models on, or
+   learning across, companies' records?
+4. **"Does not sell personal information."** The Privacy notice says it; should it also appear as a
+   claim on the Security page?
+5. **Retention.** How long records, requests, exports and deletion records are kept. Nothing is stated.
+6. **Data processing terms** for cleaning companies, and with each provider.
+7. **Billing.** Price, billing cycle, cancellation and refunds (the Terms say they will be shown before
+   any fee).
+8. **Service levels.** Availability, support hours and response times. None promised.
+9. **Researchers.** Offer a safe-harbour statement for good-faith security research? Not offered today.
+10. **Assessment.** Whether and when to get an independent security test or a certification.
+11. **Messaging defaults.** Quiet hours 21:00–08:00 with work texts excluded, and a shared number needing
+    every person's permission: keep both?
+12. **Human-only actions.** List in the Security overview and Terms the actions that always need a person
+    (consequences for a cleaner, decisions after a background check, pay runs, price and policy changes)?
+13. **Terms additions to confirm:** companies must tell cleaners what is recorded (check-ins, location,
+    photos), and features may stop if a provider stops a service.

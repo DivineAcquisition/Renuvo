@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useId } from "react";
+import { startTransition, useActionState, useId } from "react";
 
 import { AlertTriangle, CircleCheckIcon, Loader } from "@/components/icons";
 import type { RequestState } from "@/lib/trust/requests";
@@ -36,7 +36,17 @@ export function RequestForm({ action, fields, submitLabel, consentNote }: { acti
   }
   const values = state.status === "invalid" || state.status === "failed" || state.status === "limited" ? state.values : {};
   return (
-    <form action={run} className="grid gap-5" noValidate>
+    <form
+      className="grid gap-5"
+      noValidate
+      // Submitted by hand rather than through `action`, so React does not reset the form afterwards:
+      // whatever the person typed stays in the fields when a field is refused or saving fails.
+      onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        startTransition(() => run(data));
+      }}
+    >
       {fields.map((field) => {
         const id = `${base}-${field.name}`;
         const error = state.status === "invalid" && state.field === field.name ? state.message : null;
