@@ -10,6 +10,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { recordEvent } from "../events";
 import { askPerson, isActive, RECRUITER, setNextAction, withdrawApplication } from "./applications";
+import { grantApplicationEmail, withdrawApplicantContact } from "./consent";
 import { resolveContact } from "./contact";
 import type { Interpretation } from "./interpret";
 import { routeApplication } from "./invitations";
@@ -164,6 +165,7 @@ async function handleReply(ctx: MutationCtx, connection: Doc<"mailboxConnections
   }
   if (intent === "no_contact") {
     await ctx.db.patch(applicant._id, { doNotContact: { at: Date.now(), reason: "Asked by email not to be contacted." } });
+    await withdrawApplicantContact(ctx, applicant, { source: "email_reply", evidence: "Asked by email not to be contacted.", recordedBy: { kind: "recipient" } }, { kind: "system" });
     for (const row of applications) {
       await setNextAction(ctx, row, { what: `${who} asked not to be contacted. Nothing more will be sent. Close the application unless they tell you otherwise.`, by: "owner", dueAt: Date.now() + DAY });
       await askPerson(ctx, row, { what: "reply", title: `${who} asked not to be contacted`, question: "Recruiter has stopped all messages to this person. Close the application, or record that they changed their mind.", dueAt: Date.now() + DAY, completionCondition: "The application was closed, or contact was allowed again" });
@@ -294,6 +296,7 @@ export async function ingestMessage(ctx: MutationCtx, connection: Doc<"mailboxCo
     createdAt: Date.now(),
   });
   await ctx.db.patch(sourceMessageId, { applicationId });
+  await grantApplicationEmail(ctx, (await ctx.db.get(applicationId))!, need?.title ?? read.role, RECRUITER);
   await recordEvent(ctx, { companyId, type: "application.received", actor: RECRUITER, subject: { table: "applications", id: applicationId }, data: { source, contact: contact.status, matchedRole: Boolean(need) } });
   if (found.maybe) {
     await askPerson(ctx, { _id: applicationId, companyId }, { what: "duplicate", title: `Is ${read.name ?? "this applicant"} already on file?`, question: `Another applicant has the same name and nothing else ties them together. They were kept as two people. Check, and merge them only if they are the same person.`, dueAt: Date.now() + 2 * DAY, completionCondition: "A person confirmed whether these are the same person" });

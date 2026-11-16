@@ -11,6 +11,8 @@ import { owned } from "./lib/access";
 import { companyMutation, companyQuery, managerMutation, managerQuery, type MemberAccess } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
+import { setPermission } from "./lib/compliance/permissions";
+import { grantApplicationEmail, withdrawApplicantContact } from "./lib/recruiter/consent";
 import { askPerson, closeApplication, isActive, setNextAction, setStage, settleTask, withdrawApplication } from "./lib/recruiter/applications";
 import { CONTACT_WORDS } from "./lib/recruiter/contact";
 import { sendDecline } from "./lib/recruiter/decisions";
@@ -236,6 +238,7 @@ export const addManually = managerMutation({
       followUpsSent: 0,
       createdAt: Date.now(),
     });
+    await grantApplicationEmail(ctx, (await ctx.db.get(applicationId))!, need.title, byMember(ctx));
     await recordEvent(ctx, { companyId: ctx.companyId, type: "application.received", actor: byMember(ctx), subject: { table: "applications", id: applicationId }, data: { source: "manual", contact: "direct", matchedRole: true } });
     await routeApplication(ctx, applicationId);
     return applicationId;
@@ -383,7 +386,12 @@ export const setDoNotContact = managerMutation({
   args: { applicantId: v.id("applicants"), doNotContact: v.boolean(), reason: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const applicant = await owned(ctx, args.applicantId);
-    await ctx.db.patch(applicant._id, { doNotContact: args.doNotContact ? { at: Date.now(), reason: optionalText(args.reason, "The reason", 300) ?? `Recorded by ${ctx.member.name}.` } : undefined });
+    const reason = optionalText(args.reason, "The reason", 300) ?? `Recorded by ${ctx.member.name}.`;
+    await ctx.db.patch(applicant._id, { doNotContact: args.doNotContact ? { at: Date.now(), reason } : undefined });
+    const recordedBy = { kind: "member" as const, memberId: ctx.member._id };
+    if (args.doNotContact) await withdrawApplicantContact(ctx, applicant, { source: "staff", evidence: reason, recordedBy }, byMember(ctx));
+    // The person said they may be contacted again: email about their application. Texting needs their own tick again.
+    else await setPermission(ctx, { companyId: ctx.companyId, recipient: { kind: "applicant", id: applicant._id }, channel: "email", category: "recruiting", status: "granted", source: "staff", evidence: reason, recordedBy, at: Date.now(), actor: byMember(ctx) });
     await recordEvent(ctx, { companyId: ctx.companyId, type: args.doNotContact ? "applicant.do_not_contact" : "applicant.contact_allowed", actor: byMember(ctx), subject: { table: "applicants", id: applicant._id } });
     return null;
   },
