@@ -23,4 +23,10 @@ crons.interval("expire company data exports", { minutes: 15 }, internal.dataRigh
 // Requests to Selestial and deletion records are kept three years after they close (Privacy notice).
 crons.daily("delete requests and deletion records past retention", { hourUTC: 7, minuteUTC: 17 }, internal.retention.purge, {});
 
+// Recruiter: the hiring inbox, reminders that are due, interviews coming up, and records past their retention date.
+crons.interval("recruiter reads the hiring inboxes", { minutes: 10 }, internal.recruiterInbox.sweep, {});
+crons.interval("recruiter follows up on unfinished applications", { minutes: 30 }, internal.recruiter.followUps, {});
+crons.interval("recruiter sends interview reminders", { minutes: 15 }, internal.recruiter.interviewReminders, {});
+crons.interval("recruiter removes applicant details past retention", { hours: 24 }, internal.recruiter.retention, {});
+
 export default crons;

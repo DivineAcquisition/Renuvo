@@ -10,6 +10,7 @@ import { owned } from "./lib/access";
 import { requestApproval } from "./lib/approvalQueue";
 import { managerMutation, managerQuery } from "./lib/builders";
 import { afterDecision, afterExpiry, type CarriedOut } from "./lib/dispatch/workflow";
+import { afterRecruiterDecision, afterRecruiterExpiry, isRecruiterProposal } from "./lib/recruiter/approvals";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { approvalStatusValidator } from "./lib/statuses";
@@ -68,7 +69,10 @@ export const decide = managerMutation({
     const decided = { status: args.decision, decidedBy: ctx.member._id, decidedAt: Date.now(), note };
     await ctx.db.patch(approval._id, decided);
     await recordEvent(ctx, { companyId: ctx.companyId, type: `approval.${args.decision}`, actor: byMember(ctx), subject: { table: "approvals", id: approval._id }, data: { action: approval.action } });
-    return { carriedOut: await afterDecision(ctx, { ...approval, ...decided }, args.decision, byMember(ctx)) };
+    const decidedApproval = { ...approval, ...decided };
+    // Each agent carries out its own proposals. Whichever it is, every check runs again at this moment.
+    if (isRecruiterProposal(approval)) return { carriedOut: await afterRecruiterDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
+    return { carriedOut: await afterDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
   },
 });
 
@@ -83,7 +87,8 @@ export const expireDue = internalMutation({
     for (const approval of due) {
       await ctx.db.patch(approval._id, { status: "expired" });
       await recordEvent(ctx, { companyId: approval.companyId, type: "approval.expired", actor: { kind: "system" }, subject: { table: "approvals", id: approval._id }, data: { action: approval.action } });
-      await afterExpiry(ctx, { ...approval, status: "expired" });
+      if (isRecruiterProposal(approval)) await afterRecruiterExpiry(ctx, { ...approval, status: "expired" });
+      else await afterExpiry(ctx, { ...approval, status: "expired" });
     }
     return due.length;
   },

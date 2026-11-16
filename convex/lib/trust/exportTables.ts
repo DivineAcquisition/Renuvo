@@ -46,11 +46,26 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "permissionHistory", index: "by_company_recipient_at" },
   { table: "suppressions", index: "by_company_at" },
   { table: "agreementAcceptances", index: "by_company_at" },
+  // Recruiter (convex/lib/recruiter/schema.ts).
+  { table: "hiringNeeds", index: "by_company_status" },
+  { table: "applicants", index: "by_company_email" },
+  { table: "applications", index: "by_company_stage" },
+  { table: "mailboxConnections", index: "by_company", omit: ["cursor"], why: "The mail provider's internal read position." },
+  { table: "sourceMessages", index: "by_company_received" },
+  { table: "formSessions", index: "by_company_application" },
+  { table: "applicantAttachments", index: "by_company_application", omit: ["storageId", "clientKey"], why: "Internal file references. The files themselves are not in the file." },
+  { table: "screenings", index: "by_company_application" },
+  { table: "hiringDecisions", index: "by_company_application" },
+  { table: "interviewSlots", index: "by_company_start" },
+  { table: "interviews", index: "by_company_application" },
+  { table: "hiringOffers", index: "by_company_application" },
+  { table: "onboardingHandoffs", index: "by_company_status" },
 ];
 
 /** Company tables kept out of the export, and why. */
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
+  applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
   sendIntents: "Internal bookkeeping for the sending check: the same facts are in each message and in the event log.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };

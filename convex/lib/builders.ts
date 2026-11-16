@@ -6,14 +6,15 @@
  * of caller-supplied validators. Each builder states its exact registered type instead, so the generated
  * `api` keeps every argument and return type. The validators still run.
  */
-import type { RegisteredMutation, RegisteredQuery, UserIdentity } from "convex/server";
+import type { PublicHttpAction, RegisteredMutation, RegisteredQuery, UserIdentity } from "convex/server";
 import { v, type ObjectType, type PropertyValidators } from "convex/values";
 
 import type { Doc, Id } from "../_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "../_generated/server";
+import { httpAction, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireIdentity, requireMember } from "./access";
 import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkState } from "./dispatch/links";
 import { notAllowed, notFound, userError } from "./errors";
+import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
 import { invitationForToken } from "./invitations";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
@@ -335,4 +336,85 @@ export function linkMutation<V extends AnyValidators, R>(def: {
       return result;
     },
   } as any);
+}
+
+// ── Applicant links: an applicant acting on one application without signing in ───────────────────
+
+export type ApplicantAccess = {
+  link: Doc<"applicantLinks">;
+  linkState: LinkState;
+  company: Doc<"companies">;
+  companyId: Id<"companies">;
+  application: Doc<"applications">;
+  applicant: Doc<"applicants">;
+};
+
+async function applicantAccess(ctx: QueryCtx | MutationCtx, token: string, purpose: ApplicantLinkPurpose): Promise<ApplicantAccess> {
+  const link = await applicantLinkForToken(ctx, token);
+  const company = link ? await ctx.db.get(link.companyId) : null;
+  const application = link ? await ctx.db.get(link.applicationId) : null;
+  const applicant = link ? await ctx.db.get(link.applicantId) : null;
+  // A token for another kind of page, or one whose records left its company, names nothing.
+  if (!link || !company || !application || !applicant || link.purpose !== purpose) notFound();
+  if (application.companyId !== link.companyId || applicant.companyId !== link.companyId || application.applicantId !== applicant._id) notFound();
+  return { link, linkState: applicantLinkState(link, Date.now()), company, companyId: link.companyId, application, applicant };
+}
+
+/**
+ * A read through an applicant link. The token is the only authorization, and the handler is given the
+ * link's own application and applicant and nothing else. A read changes nothing, so opening a link (or a
+ * mail scanner following it) submits nothing and accepts nothing.
+ */
+export function applicantQuery<V extends AnyValidators, R>(def: {
+  purpose: ApplicantLinkPurpose;
+  args: V;
+  handler: (ctx: QueryCtx & ApplicantAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await applicantAccess(ctx, token, def.purpose)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/** One named action through an applicant link. Refused unless the link is active and lists the action. */
+export function applicantMutation<V extends AnyValidators, R>(def: {
+  purpose: ApplicantLinkPurpose;
+  action: ApplicantAction;
+  args: V;
+  handler: (ctx: MutationCtx & ApplicantAccess, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const access = await applicantAccess(ctx, token, def.purpose);
+      if (access.linkState !== "active") throw userError(CLOSED_WORDS[access.linkState], "not_allowed");
+      if (!access.link.allowed.includes(def.action)) notAllowed();
+      const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
+      await noteApplicantAction(ctx, access.link, def.action);
+      return result;
+    },
+  } as any);
+}
+
+// ── Provider webhooks: a delivery service telling us what happened to a message ──────────────────
+
+/**
+ * An HTTP endpoint for one provider's webhook. The handler receives the raw body only after `verify`
+ * has accepted it; anything else gets a bare 401 and nothing is read. A webhook can never reach a
+ * company's records except through the internal function the handler calls.
+ */
+export function providerWebhook(def: {
+  verify: (request: Request, body: string) => Promise<boolean>;
+  handler: (ctx: ActionCtx, body: string, request: Request) => Promise<void>;
+}): PublicHttpAction {
+  return httpAction(async (ctx, request) => {
+    const body = await request.text();
+    if (body.length > 256 * 1024 || !(await def.verify(request, body))) return new Response(null, { status: 401 });
+    await def.handler(ctx, body, request);
+    return new Response(null, { status: 200 });
+  });
 }

@@ -66,6 +66,10 @@ export const ACTIONS: readonly ActionDef[] = [
   action("recruiter.decline_fixed_requirement", "recruiter", "Decline on a published fixed requirement", "execute_and_report"),
   action("recruiter.run_interview", "recruiter", "Coordinate and run the interview", "execute"),
   action("recruiter.advance_candidate", "recruiter", "Move a candidate forward, mark a cleaner ready", "propose", { ceiling: "propose", outsider: false }),
+  action("recruiter.send_invitation", "recruiter", "Email an applicant the application link", "execute"),
+  action("recruiter.follow_up", "recruiter", "Remind an applicant about an unfinished application", "execute"),
+  action("recruiter.send_offer", "recruiter", "Send a hiring offer on terms the Owner approved", "propose", { ceiling: "propose" }),
+  action("recruiter.urgent_outreach", "recruiter", "Contact existing applicants about an urgent staffing need", "propose", { ceiling: "propose" }),
 ];
 
 /** These need a person at any setting. They are not permissions, so nothing can switch them on. */
