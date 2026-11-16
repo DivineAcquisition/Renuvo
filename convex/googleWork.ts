@@ -157,7 +157,7 @@ export const verifyResource = internalAction({
         await ctx.runMutation(internal.google.setResourceAccess, { resourceId: args.resourceId, access: "verified", note: "Reviews can be read for this location." });
       } else if (resource.kind === "ads_account" || resource.kind === "conversion_destination") {
         const developer = adsDeveloperToken();
-        if (!developer) throw new GoogleError("not_configured", "The Google Ads developer token (GOOGLE_ADS_DEVELOPER_TOKEN) is not set on this deployment.");
+        if (!developer) throw new GoogleError("not_configured", "Google Ads access isn't available yet. Selestial's team needs to finish setting it up.");
         const account = resource.kind === "ads_account" ? resource.externalId : (resource.detail ?? "").split(":")[0];
         const reachable = await accessibleCustomers(access.token, developer);
         if (!reachable.includes(account.replace(/-/g, ""))) throw new GoogleError("not_found", "The connected Google account cannot reach this ad account.");
@@ -199,7 +199,7 @@ export const listChoices = internalAction({
         await store(items, items.length ? undefined : "No Business Profile locations are managed by this Google account.");
       } else if (args.kind === "ads_accounts") {
         const developer = adsDeveloperToken();
-        if (!developer) return await store([], "The Google Ads developer token (GOOGLE_ADS_DEVELOPER_TOKEN) is not set on this deployment."), null;
+        if (!developer) return await store([], "Google Ads access isn't available yet. Selestial's team needs to finish setting it up."), null;
         const ids = await accessibleCustomers(access.token, developer);
         await store(ids.map((id) => ({ id, label: `${id.slice(0, 3)}-${id.slice(3, 6)}-${id.slice(6)}` })), ids.length ? undefined : "This Google account cannot reach any Google Ads account.");
       } else if (args.kind === "folder_contents" && args.scope) {

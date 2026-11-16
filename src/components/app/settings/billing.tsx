@@ -27,7 +27,7 @@ const n = (value: number) => value.toLocaleString("en-US");
 type Tab = "plan" | "usage" | "billing";
 const tabOf = (params: URLSearchParams | null): Tab => {
   const value = params?.get("tab");
-  return value === "plan" || value === "billing" ? value : "usage";
+  return value === "usage" || value === "billing" ? value : "plan";
 };
 function useTab(): Tab {
   return tabOf(useSearchParams());
@@ -36,9 +36,9 @@ function useTab(): Tab {
 function Tabs() {
   const tab = useTab();
   return (
-    <nav aria-label="Plan & Usage" className="flex gap-1 border-b border-border">
+    <nav aria-label="Plan & Usage sections" className="flex gap-1 overflow-x-auto border-b border-border">
       {(["plan", "usage", "billing"] as const).map((id) => (
-        <Link key={id} href={`/app/settings/billing?tab=${id}`} aria-current={tab === id ? "page" : undefined} className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === id ? "border-brand-500 font-medium text-strong" : "border-transparent text-muted-foreground hover:text-strong"}`}>
+        <Link key={id} href={`/app/settings/billing?tab=${id}`} aria-current={tab === id ? "page" : undefined} className={`-mb-px min-h-10 border-b-2 px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand-500 ${tab === id ? "border-brand-500 font-medium text-strong" : "border-transparent text-muted-foreground hover:text-strong"}`}>
           {id === "plan" ? "Plan" : id === "usage" ? "Usage" : "Billing"}
         </Link>
       ))}
@@ -55,10 +55,10 @@ function PlanUsageInner() {
   return (
     <div className="grid gap-5">
       {!data.connected ? (
-        <Panel title="Billing is not connected">
-          <p className="text-sm text-muted-foreground">{data.message}</p>
-          <p className="mt-1 text-sm text-muted-foreground">Records, schedules, cleaner links and everything that does not use AI keep working.</p>
-        </Panel>
+        <div role="status" className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5">
+          <p className="text-sm font-semibold text-strong">Billing isn&apos;t available for your account yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">Selestial&apos;s team is finishing setup. Until then AI work is paused; schedules, records, cleaner links and everything else keep working. The plans are shown below for reference.</p>
+        </div>
       ) : (
         <ConnectedView data={data} />
       )}
@@ -81,7 +81,7 @@ function ConnectedView({ data }: { data: Connected }) {
   return (
     <>
       {data.env === "sandbox" ? <p className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2 text-sm text-strong">Sandbox billing: test cards only, nothing is really charged{data.rateCard?.fixture ? ", and credit prices are test values, not offers" : ""}.</p> : null}
-      {data.problem ? <p className="rounded-xl border border-border bg-muted px-4 py-2 text-sm text-strong">{data.problem} New AI work is paused until this is fixed.</p> : null}
+      {data.problem ? <p role="status" className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-2 text-sm text-strong">AI prices aren&apos;t published for your account yet, so new AI work is paused. Everything else keeps working.</p> : null}
       {account?.notices.length ? (
         <ul className="grid gap-2">
           {account.notices.slice(0, 3).map((notice) => (
@@ -103,9 +103,12 @@ function ConnectedView({ data }: { data: Connected }) {
       ) : null}
       <div className="flex items-center gap-3">
         <Button size="sm" variant="outline" loading={busy} onClick={() => void run(() => refresh({ companyId }))}>
-          Check with billing again
+          Refresh billing details
         </Button>
-        <span className="text-xs text-muted-foreground">{account ? `Last checked ${new Date(account.syncedAt).toLocaleString()}.` : "Not checked yet."}{account?.syncProblem ? ` Last problem: ${account.syncProblem}` : ""}</span>
+        <span className="text-xs text-muted-foreground">
+          {account ? `Last updated ${new Date(account.syncedAt).toLocaleString()}.` : "Not updated yet."}
+          {account?.syncProblem ? " The last update didn't finish. Try again in a few minutes." : ""}
+        </span>
       </div>
       <FormError message={error} />
     </>
@@ -126,14 +129,14 @@ function CurrentPlan({ data, onIntent }: { data: Connected; onIntent: (id: Id<"b
   return (
     <Panel title="Current plan">
       {!name ? (
-        <p className="text-sm text-strong">No active plan. AI work needs Operate or Expand; choose one below.</p>
+        <p className="text-sm text-strong">No active plan yet. Agents and AI work need the Operate or Expand plan.</p>
       ) : (
         <div className="grid gap-1 text-sm">
           <p className="text-base font-semibold text-strong">
             {name.name} · {money(name.monthlyCents)} a month
           </p>
           <p className="text-muted-foreground">
-            {sub?.pastDue ? "Payment overdue. " : "Active, as confirmed by billing. "}
+            {sub?.pastDue ? "Payment is overdue. Update your payment method on the Billing tab. " : "Active. "}
             {sub?.endsAt ? `Ends ${day(sub.endsAt)} and will not renew.` : `Renews ${day(sub?.periodEnd)}.`}
           </p>
           {sub?.scheduledPlan ? <p className="text-muted-foreground">Changes to {sub.scheduledPlan === "operate" ? "Operate" : "Expand"} on {day(sub.scheduledAt ?? sub.periodEnd)}.</p> : null}
@@ -212,7 +215,7 @@ function Billing({ data, onIntent }: { data: Connected; onIntent: (id: Id<"billi
   const invoices = data.account?.invoices ?? [];
   return (
     <Panel title="Billing">
-      <p className="text-sm text-muted-foreground">Payment methods, the billing contact and receipts are managed in the billing portal (Stripe).</p>
+      <p className="text-sm text-muted-foreground">Update your card, billing contact and receipts in the secure billing portal.</p>
       <div className="mt-2 flex flex-wrap gap-2">
         <Button size="sm" variant="outline" loading={busy} disabled={!data.account} onClick={() => void run(async () => onIntent(await portal({ companyId, purpose: "portal" })))}>
           Open billing portal
@@ -229,7 +232,7 @@ function Billing({ data, onIntent }: { data: Connected; onIntent: (id: Id<"billi
           {invoices.map((invoice) => (
             <li key={invoice.id} className="flex justify-between gap-2 border-b border-border py-1 last:border-0">
               <span className="text-strong">
-                {day(invoice.createdAt)} · {invoice.status}
+                {day(invoice.createdAt)} · {({ paid: "Paid", open: "Due", draft: "Draft", void: "Voided", uncollectible: "Unpaid" } as Record<string, string>)[invoice.status] ?? "Invoice"}
               </span>
               <span className="tabular-nums">
                 {money(invoice.cents)}

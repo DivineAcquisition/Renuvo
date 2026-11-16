@@ -39,8 +39,8 @@ export function connectionList(input: { mailboxes: { provider: string; status: s
   out.push({
     key: "texting",
     label: "Text messages",
-    state: texting === null ? "not_configured" : texting.name === "mock" ? "test_mode" : "unavailable",
-    detail: texting === null ? "No text-message provider is selected." : texting.name === "mock" ? TEST : "A provider is named but its connection is not built, so no text can be sent.",
+    state: texting === null ? "not_configured" : texting.name === "mock" ? "test_mode" : "configured",
+    detail: texting === null ? "No text-message provider is selected." : texting.name === "mock" ? TEST : "A text-message provider is configured. Delivery is confirmed only by the carrier's later report.",
     usedBy: ["Dispatch", "Recruiter"],
   });
 
@@ -75,12 +75,12 @@ export function connectionList(input: { mailboxes: { provider: string; status: s
   out.push({
     key: "hiring_inbox",
     label: "Hiring inbox",
-    state: input.mailboxes.length === 0 ? "not_configured" : real > 0 ? "unavailable" : "test_mode",
+    state: input.mailboxes.length === 0 ? "not_configured" : real > 0 ? "configured" : "test_mode",
     detail:
       input.mailboxes.length === 0
         ? "No hiring inbox has been recorded."
         : real > 0
-          ? "A mailbox is recorded, but no connector for its provider is built, so nothing is read from it."
+          ? `${connected} of ${real} mailbox${real === 1 ? " is" : "es are"} connected.`
           : `${connected} of ${input.mailboxes.length} recorded mailbox${input.mailboxes.length === 1 ? " is" : "es are"} a test stand-in.`,
     usedBy: ["Recruiter"],
   });

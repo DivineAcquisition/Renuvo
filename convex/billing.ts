@@ -318,7 +318,7 @@ export const clearLegacyPlans = internalMutation({
 
 function connectedOrRefuse() {
   const state = billingState();
-  if (!state.connected) throw userError("Billing is not connected on this deployment yet.", "limit");
+  if (!state.connected) throw userError("Billing isn't set up for your account yet.", "limit");
   return state;
 }
 

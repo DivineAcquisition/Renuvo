@@ -231,14 +231,14 @@ describe("billing", () => {
     it("without billing connected, pauses AI work and nothing else", async () => {
       const s = await setup();
       delete process.env.AUTUMN_SECRET_KEY;
-      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/Billing is not connected/);
+      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/Billing isn.t set up/);
       expect(await s.as.query(api.billing.creditIndicator, { companyId: s.companyId })).toMatchObject({ state: "not_connected" });
       // Records still work.
       await s.as.mutation(api.customers.create, { companyId: s.companyId, name: "Dana Customer" } as never).catch(() => undefined);
       process.env.AUTUMN_SECRET_KEY = "am_sk_live_not_a_real_key";
-      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/test values and cannot be used with a live billing key/);
+      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/AI prices aren.t published yet/);
       process.env.BILLING_RATE_CARD = "no-such-card";
-      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/No rate card is selected/);
+      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/AI prices aren.t published yet/);
     });
   });
 

@@ -1,14 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { AiSettings } from "@/components/app/settings/ai";
-import { SectionPage } from "@/components/app/settings/section-page";
-
-export const metadata: Metadata = { title: "AI & usage" };
-
+/** AI features now sit on Agent controls. Old links land there. */
 export default function Page() {
-  return (
-    <SectionPage id="ai">
-      <AiSettings />
-    </SectionPage>
-  );
+  redirect("/app/settings/agents#ai-features");
 }

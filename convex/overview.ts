@@ -8,6 +8,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { companyQuery, type MemberAccess } from "./lib/builders";
+import { agentVerdict } from "./lib/billing/access";
 import { AGENT_PROFILES, departmentOf, DEPARTMENTS } from "./lib/departments";
 import { staffing } from "./lib/dispatch/crew";
 import { coverRun, type RunStep } from "./lib/dispatch/run";
@@ -544,6 +545,8 @@ export const agents = companyQuery({
         ...work,
         completion: AGENT_PROFILES[agent].completion,
         department: { id: department.id, name: department.name },
+        // Whether the company's plan and the release schedule let this agent work, kept apart from paused.
+        access: agentVerdict(ctx.company, agent),
         recentOutcomes: done.map((task) => ({ taskId: task._id, title: task.title, outcome: task.outcome ?? "", closedAt: task.closedAt ?? null })),
       });
     }

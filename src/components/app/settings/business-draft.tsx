@@ -1,14 +1,18 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 
 import { Guard } from "@/components/app/settings/guard";
 import { useCompany } from "@/components/app/company";
 import { messageOf } from "@/components/app/form";
-import { type BusinessDraft, draftFrom, isDirty, leavesSettings, localProblems, payloadFrom, type SavedBusiness } from "@/lib/app/settings-draft";
+import { useUnsavedWarning } from "@/components/app/settings/save-bar";
+import { type BusinessDraft, draftFrom, isDirty, localProblems, payloadFrom, type SavedBusiness } from "@/lib/app/settings-draft";
 
 import { api } from "../../../../convex/_generated/api";
+
+/** The business draft lives above every Settings page, so moving between them loses nothing. */
+const staysInSettings = (target: URL) => target.pathname === "/app/settings" || target.pathname.startsWith("/app/settings/");
 
 type BusinessState = {
   /** The saved record, or undefined while it loads. */
@@ -80,7 +84,7 @@ function LoadedDraft({ children }: { children: React.ReactNode }) {
     try {
       const result = await saveBusiness({ companyId, expectedRevision: edits.baseRevision, ...payloadFrom(edits.draft) });
       setEdits(null);
-      setNotice(result.changed ? "Saved." : "Nothing had changed.");
+      setNotice(result.changed ? "Saved. Your changes are live." : "Saved. Nothing had changed.");
     } catch (caught) {
       setError(messageOf(caught));
     } finally {
@@ -88,30 +92,8 @@ function LoadedDraft({ children }: { children: React.ReactNode }) {
     }
   }, [companyId, dirty, edits, problems.length, saveBusiness, saved, stale]);
 
-  // Leaving the page with unsaved edits asks first. History buttons are left alone on purpose.
-  useEffect(() => {
-    if (!dirty) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    const onClick = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const link = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
-      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
-      if (!leavesSettings(link.href, window.location.origin, { pathname: window.location.pathname, search: window.location.search })) return;
-      if (!window.confirm("You have unsaved changes in Settings. Leave without saving?")) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    document.addEventListener("click", onClick, true);
-    return () => {
-      window.removeEventListener("beforeunload", beforeUnload);
-      document.removeEventListener("click", onClick, true);
-    };
-  }, [dirty]);
+  // Leaving Settings with unsaved edits asks first. Moving between Settings pages keeps the draft.
+  useUnsavedWarning(dirty, staysInSettings);
 
   const value: BusinessState = {
     saved,

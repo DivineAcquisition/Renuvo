@@ -2,16 +2,15 @@
 
 import { Component, type ReactNode } from "react";
 
-/** What a person is shown when a Settings part cannot load. It names the likely cause instead of blanking the page. */
-export function Unavailable({ error }: { error?: unknown }) {
-  const detail = error instanceof Error ? error.message.split("\n")[0].slice(0, 200) : null;
+/**
+ * What a person sees when a part of Settings cannot load. It says what to do, never what went wrong
+ * inside: the details belong in the logs, not on an owner's screen.
+ */
+export function Unavailable({ what = "This section" }: { error?: unknown; what?: string }) {
   return (
     <div role="alert" className="rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center">
-      <p className="text-base font-semibold text-strong">This part of Settings could not load</p>
-      <p className="mx-auto mt-1.5 max-w-lg text-sm text-muted-foreground">
-        The most likely cause is that the server has not been updated with it yet. Deploy the latest Convex functions to this environment, then reload. Everything else in Settings still works.
-      </p>
-      {detail ? <p className="mx-auto mt-3 max-w-lg break-words text-xs text-muted-foreground/80">{detail}</p> : null}
+      <p className="text-base font-semibold text-strong">{what} couldn&apos;t load right now</p>
+      <p className="mx-auto mt-1.5 max-w-lg text-sm text-muted-foreground">Refresh the page to try again. The rest of Settings still works. If this keeps happening, contact Selestial support.</p>
     </div>
   );
 }
@@ -27,8 +26,12 @@ export class Guard extends Component<Props, { error: unknown; failed: boolean }>
   static getDerivedStateFromError(error: unknown) {
     return { error, failed: true };
   }
+  componentDidCatch(error: unknown) {
+    // Kept for whoever reads the browser console; never shown on the page.
+    console.error("Settings section failed to load", error);
+  }
   render() {
     if (!this.state.failed) return this.props.children;
-    return this.props.fallback ? this.props.fallback(this.state.error) : <Unavailable error={this.state.error} />;
+    return this.props.fallback ? this.props.fallback(this.state.error) : <Unavailable />;
   }
 }

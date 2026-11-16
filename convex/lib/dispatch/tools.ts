@@ -261,7 +261,7 @@ export async function runTool(ctx: MutationCtx, company: Doc<"companies">, tool:
       const expiresAt = job.endsAt + dispatchPolicy(company).jobAccessGraceHours * 60 * MINUTE;
       if (expiresAt <= Date.now()) return refused(may.label, "The time a link would cover has passed.");
       const link = await issueLink(ctx, { assignment, purpose: "job", expiresAt, actor: DISPATCH });
-      if (!link) return refused(may.label, "Action links are not set up on this deployment.");
+      if (!link) return refused(may.label, "Team links need setup by Selestial's team before they can be used.");
       const message = await queueMessage(ctx, { companyId: company._id, purpose: "assignment_confirmed", cleaner, jobId: job._id, assignmentId: assignment._id, link, body: confirmedSms({ company, job }), dedupeKey: `reissue:${link._id}`, actor: DISPATCH });
       return { outcome: "done", authorization: may.label, jobId: job._id, assignmentId: assignment._id, result: { linkId: link._id, issued: true, text: message.status } };
     }

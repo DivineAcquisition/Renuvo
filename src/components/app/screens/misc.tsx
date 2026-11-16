@@ -107,7 +107,7 @@ export function Invitations() {
           setNote(null);
           void run(async () => {
             const result = await create({ companyId, ...form });
-            setNote(result.delivery === "queued" ? `Invitation created. An email is on its way to ${form.email.trim()}.` : `Invitation created. Email is not connected on this deployment, so copy the link below and send it to ${form.email.trim()} yourself.`);
+            setNote(result.delivery === "queued" ? `Invitation created. An email is on its way to ${form.email.trim()}.` : `Invitation created. Email sending isn't set up yet, so copy the link below and send it to ${form.email.trim()} yourself.`);
             setForm({ name: "", email: "", role: "office" });
           });
         }}

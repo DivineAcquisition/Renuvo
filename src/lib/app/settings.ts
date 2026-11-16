@@ -14,10 +14,10 @@ export const SETTINGS_ROOT = "/app/settings";
 export type SettingsRole = "owner" | "manager" | "office";
 
 export const SETTINGS_GROUPS = [
-  { id: "business", label: "Your business" },
-  { id: "agents", label: "Agents" },
-  { id: "platform", label: "Account" },
-  { id: "trust", label: "Trust & records" },
+  { id: "company", label: "Company" },
+  { id: "agents", label: "Your agents" },
+  { id: "apps", label: "Apps & billing" },
+  { id: "account", label: "Account & privacy" },
 ] as const;
 export type SettingsGroupId = (typeof SETTINGS_GROUPS)[number]["id"];
 
@@ -26,17 +26,22 @@ export type SettingsSection = {
   label: string;
   group: SettingsGroupId;
   path: string;
-  /** What the page is for, in a sentence. */
+  /** What the page is for, in one sentence an owner would recognise. */
   purpose: string;
   /** The least role that may open the page. Everything is checked again in Convex. */
   minimumRole: SettingsRole;
-  /** What a person who cannot edit sees, in a phrase. */
+  /** Who may change what is on the page, in a phrase. Shown only to people who cannot change it. */
   access: string;
   /** Other words someone might search for it by. */
   keywords: readonly string[];
+  /**
+   * A page reached from another page rather than from the menu. It is highlighted as that page in the
+   * menu, and searching finds the page that links to it.
+   */
+  parent?: string;
 };
 
-const section = (id: string, label: string, group: SettingsGroupId, purpose: string, access: string, keywords: string[], minimumRole: SettingsRole = "office"): SettingsSection => ({
+const section = (id: string, label: string, group: SettingsGroupId, purpose: string, access: string, keywords: string[], minimumRole: SettingsRole = "office", parent?: string): SettingsSection => ({
   id,
   label,
   group,
@@ -45,23 +50,30 @@ const section = (id: string, label: string, group: SettingsGroupId, purpose: str
   minimumRole,
   access,
   keywords,
+  ...(parent ? { parent } : {}),
 });
 
+const OWNER_CHANGES = "Only the Owner can change these settings. You can view them.";
+
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
-  section("business", "Business & hours", "business", "Company name and time zone, the postal codes you work in, and the hours appointments may be booked.", "Everyone reads. The Owner changes.", ["company", "name", "timezone", "time zone", "clock", "areas", "zip", "postal", "hours", "open", "schedule"]),
-  section("services", "Services & pricing", "business", "The services you offer: scope, duration, default crew, skills and a starting price for new visits.", "Everyone reads. The Owner changes.", ["catalog", "service", "price", "pricing", "duration", "crew", "skills", "templates", "archive"]),
-  section("people", "People & access", "business", "Who is in the company, their roles, and invitations.", "Everyone reads. The Owner invites, changes roles and removes access.", ["members", "team", "roles", "owner", "manager", "office", "invite", "invitation", "remove"]),
-  section("agents", "Agent permissions", "agents", "What each agent may do without asking, and a way to pause it.", "Everyone reads. The Owner changes.", ["permissions", "authority", "pause", "approve", "execute", "propose", "limits"]),
-  section("dispatch", "Dispatch rules", "agents", "How long cleaners have to answer, buffers, coverage, the day of service and the evidence required.", "Everyone reads. The Owner changes.", ["offers", "buffer", "travel", "coverage", "no-show", "photos", "evidence", "reminder", "broadcast", "backup"]),
-  section("recruiting", "Recruiting rules", "agents", "How Recruiter invites, reminds and retains applicants, and what a new worker needs before they are ready.", "Everyone reads. The Owner changes.", ["applicants", "hiring", "follow-ups", "reminders", "retention", "onboarding", "requirements", "sending", "reply", "interview"]),
-  section("integrations", "Integrations", "platform", "The services Selestial works with for your company: your Google account (Drive, Calendar, Business Profile, Ads), Gmail, the texting number, and what is coming next. Connect, choose exactly what Selestial may use, or request an integration.", "Everyone reads. The Owner connects, chooses and requests.", ["integrations", "connect", "google", "drive", "docs", "sheets", "calendar", "business profile", "reviews", "ads", "local services", "leads", "conversions", "gmail", "oauth", "texting", "sms", "number", "stripe", "quickbooks", "payments", "import", "jobber", "connections", "provider"]),
-  section("ai", "AI & usage", "platform", "What AI does for the company, which features are on, and how much of this month's allowances has been used.", "Everyone reads. The Owner switches features.", ["ai", "models", "usage", "allowance", "images", "video", "generation", "chat", "cost", "tokens", "creative"]),
-  section("billing", "Plan & Usage", "platform", "Your plan, Selestial Credits, spending controls, invoices and the billing portal.", "The Owner only.", ["plan", "subscription", "invoice", "payment", "operate", "expand", "price", "credits", "usage", "top-up", "billing"], "owner"),
-  section("security", "Account security", "platform", "Your sign-in: password, devices and sessions.", "Your own account.", ["password", "two-factor", "2fa", "mfa", "sessions", "sign in", "login"]),
-  section("compliance", "Trust & compliance", "trust", "Business identity, messaging registration, consent, quiet hours, data rights and readiness.", "Everyone reads. The Owner changes.", ["legal", "identity", "ein", "consent", "quiet hours", "tcpa", "privacy", "export", "delete", "data", "readiness", "10dlc"]),
-  section("agreements", "Selestial Terms & Agreements", "trust", "Which version of Selestial's own Terms the company accepted, who, and when. Your customer and workforce agreements are under Agreements in the main menu.", "Everyone reads. The Owner accepts.", ["terms", "accept", "selestial", "platform", "versions"]),
-  section("activity", "Activity log", "trust", "A record of what changed in the company and who changed it.", "The Owner only.", ["audit", "history", "log", "events", "who changed"], "owner"),
+  section("business", "Business details", "company", "Your company name, time zone, the ZIP codes you serve and the hours customers can book.", OWNER_CHANGES, ["company", "name", "timezone", "time zone", "clock", "areas", "service area", "zip", "postal", "hours", "open", "opening", "schedule", "booking hours"]),
+  section("services", "Services & pricing", "company", "The cleaning services you offer, with a starting price and how long each one takes.", OWNER_CHANGES, ["catalog", "service", "services", "price", "pricing", "duration", "crew", "skills", "deep clean", "move out", "archive"]),
+  section("people", "People & access", "company", "Who works in Selestial with you, what each person can do, and invitations.", "Only the Owner can invite people, change roles or remove access.", ["members", "team", "staff", "roles", "owner", "manager", "office", "invite", "invitation", "remove", "access"]),
+  section("agents", "Agent controls", "agents", "What each agent may do on its own, what needs your approval, and pausing an agent.", OWNER_CHANGES, ["permissions", "approvals", "approve", "pause", "resume", "authority", "limits", "spending", "automatic", "ask me first", "ai", "ai features", "images", "video", "photo review", "document search", "chat models"]),
+  section("dispatch", "Dispatch rules", "agents", "How jobs are offered to cleaners, how replacements are found, and what a finished job needs.", OWNER_CHANGES, ["offers", "offering jobs", "replacement", "backup", "coverage", "buffer", "travel", "reminder", "arrival", "late", "no-show", "photos", "completion", "cleaner links"]),
+  section("recruiting", "Recruiting rules", "agents", "How applicants are invited and followed up with, interviews, and what new hires need before their first job.", OWNER_CHANGES, ["applicants", "hiring", "recruiting", "follow-ups", "reminders", "interview", "new hire", "onboarding", "requirements", "gmail", "hiring inbox", "sender", "reply"]),
+  section("integrations", "Connected apps", "apps", "The apps Selestial works with for you, like Google, Gmail and your texting number, whether each one is connected, and what to do next.", "Only the Owner can connect apps, choose what Selestial may use, or request a new one.", ["apps", "integrations", "connect", "connections", "google", "drive", "docs", "sheets", "calendar", "gmail", "business profile", "reviews", "google ads", "local services", "leads", "conversions", "texting", "sms", "text messages", "number", "stripe", "quickbooks", "payments", "import", "jobber"]),
+  section("billing", "Plan & Usage", "apps", "Your plan, Selestial Credits, payment details and invoices.", "Only the Owner can see billing.", ["plan", "subscription", "invoice", "invoices", "payment", "card", "operate", "expand", "price", "credits", "usage", "top-up", "billing"], "owner"),
+  section("security", "Account security", "account", "Your own sign-in: password, two-step verification and signed-in devices.", "These settings are for your own account.", ["password", "two-factor", "2fa", "mfa", "two-step", "sessions", "devices", "sign in", "login"]),
+  section("compliance", "Privacy & messaging", "account", "Your business identity for texting, customer consent, quiet hours and data requests.", OWNER_CHANGES, ["privacy", "messaging", "texting number", "identity", "ein", "consent", "quiet hours", "opt out", "do not contact", "tcpa", "data", "export", "delete", "registration"]),
+  section("agreements", "Selestial terms", "account", "The Selestial terms your company has accepted, who accepted them and when.", "Only the Owner can accept updated terms.", ["terms", "terms of service", "accept", "selestial", "platform", "versions", "legal"]),
+  section("activity", "Activity", "account", "A history of changes in your company and who made them.", "Only the Owner can see activity.", ["audit", "history", "log", "activity log", "events", "who changed", "changes"], "owner"),
+  // Reached from Agent controls, not from the menu.
+  section("ai", "AI features", "agents", "Which AI features your team can use.", "Only the Owner can switch AI features.", ["ai", "features"], "office", "agents"),
 ];
+
+/** The sections listed in the Settings menu. Pages with a parent are reached from that page. */
+export const menuSections = (list: readonly SettingsSection[]) => list.filter((row) => !row.parent);
 
 const RANK: Record<SettingsRole, number> = { office: 0, manager: 1, owner: 2 };
 
@@ -75,6 +87,12 @@ export const sectionById = (id: string) => SETTINGS_SECTIONS.find((row) => row.i
 export function sectionForPath(pathname: string): SettingsSection | undefined {
   const clean = pathname.split(/[?#]/)[0].replace(/\/+$/, "");
   return SETTINGS_SECTIONS.find((row) => clean === row.path || clean.startsWith(`${row.path}/`));
+}
+
+/** The menu entry a path belongs to: a page with a parent is shown as its parent. */
+export function menuSectionForPath(pathname: string): SettingsSection | undefined {
+  const own = sectionForPath(pathname);
+  return own?.parent ? sectionById(own.parent) : own;
 }
 
 /** Sections whose label, purpose or keywords match every word typed. An empty query matches all. */

@@ -46,8 +46,8 @@ export const startGmailConnect = ownerMutation({
   handler: async (ctx, args) => {
     const app = googleApp();
     const redirectUri = googleRedirectUri();
-    if (!app || !redirectUri) throw userError("Connecting Gmail is not set up on this deployment yet.");
-    if (!(await secretsConfigured())) throw userError("Connecting a mailbox is not set up on this deployment yet: there is no key to protect its authorization.");
+    if (!app || !redirectUri) throw userError("Connecting Gmail isn't available yet. Selestial's team needs to finish setting it up.");
+    if (!(await secretsConfigured())) throw userError("Connecting an inbox isn't available yet. Selestial's team needs to finish setting it up.");
     const now = Date.now();
     const processFrom = args.processFrom ?? now;
     if (processFrom < now - 180 * DAY) throw userError("A historical import can go back at most 180 days.");

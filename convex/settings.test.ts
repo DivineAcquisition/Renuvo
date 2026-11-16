@@ -201,7 +201,7 @@ describe("connections", () => {
       delete process.env.CALENDAR_PROVIDER;
       const result = await s.office.query(api.settings.connections, { companyId: s.companyId });
       const by = Object.fromEntries(result.connections.map((row) => [row.key, row.state]));
-      expect(by).toMatchObject({ email: "test_mode", texting: "unavailable", action_links: "configured", calendar: "unavailable", signing: "unavailable", payments: "unavailable", billing: "unavailable", hiring_inbox: "not_configured" });
+      expect(by).toMatchObject({ email: "test_mode", texting: "configured", action_links: "configured", calendar: "unavailable", signing: "unavailable", payments: "unavailable", billing: "unavailable", hiring_inbox: "not_configured" });
       expect(result.checkedLive).toBe(false);
       const body = JSON.stringify(result);
       expect(body).not.toContain("a-secret-that-must-never-be-shown");
@@ -246,7 +246,7 @@ describe("the activity log", () => {
     const theirs = await other.as.query(api.settings.activity, { companyId: other.companyId, paginationOpts: { numItems: 50, cursor: null } });
     expect(theirs.page.every((row) => row.actor === "owner-b" || row.actor === "Selestial")).toBe(true);
     for (const who of [s.manager, s.office]) expect(await refusal(who.query(api.settings.activity, { companyId: s.companyId, paginationOpts: { numItems: 3, cursor: null } }))).toBe(NOT_ALLOWED);
-    expect(Object.keys(first.page[0]).sort()).toEqual(["actor", "actorKind", "at", "id", "text", "type"]);
+    expect(Object.keys(first.page[0]).sort()).toEqual(["actor", "actorKind", "at", "described", "id", "text", "type"]);
   });
 });
 

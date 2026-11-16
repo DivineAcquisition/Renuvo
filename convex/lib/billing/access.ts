@@ -39,10 +39,10 @@ export type BillingState =
 /** Whether this deployment can charge for AI work at all, and with which rate card. */
 export function billingState(): BillingState {
   const config = autumnConfig();
-  if (!config) return { connected: false, message: "Billing is not connected on this deployment, so AI work is paused. Selestial needs to set AUTUMN_SECRET_KEY." };
+  if (!config) return { connected: false, message: "Billing isn't set up for your account yet, so AI work is paused. Selestial's team is finishing this; everything else keeps working." };
   const card = activeRateCard();
-  if (!card) return { connected: true, env: config.env, card: null, problem: "No rate card is selected (BILLING_RATE_CARD), so AI work cannot be priced." };
-  if (card.fixture && config.env === "production") return { connected: true, env: config.env, card: null, problem: "The selected rate card holds test values and cannot be used with a live billing key." };
+  if (!card) return { connected: true, env: config.env, card: null, problem: "AI prices aren't published yet, so AI work is paused. Everything else keeps working." };
+  if (card.fixture && config.env === "production") return { connected: true, env: config.env, card: null, problem: "AI prices aren't published yet, so AI work is paused. Everything else keeps working." };
   return { connected: true, env: config.env, card, problem: null };
 }
 

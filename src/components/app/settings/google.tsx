@@ -29,6 +29,19 @@ function resultWords(result: string): string {
   return "Google was not connected. Try again.";
 }
 
+/** What each kind of chosen item is, in words. */
+const KIND_WORDS: Record<string, string> = {
+  drive_source: "Drive folder Selestial reads",
+  drive_output: "Drive folder Selestial saves to",
+  calendar_sync: "Calendar for jobs and interviews",
+  calendar_busy: "Calendar for busy times",
+  business_location: "Business Profile location",
+  ads_account: "Google Ads account",
+  conversion_destination: "Conversion action",
+};
+
+const DRAFT_WORDS: Record<string, string> = { draft: "Draft", approved: "Approved", created_paused: "Created, paused", active: "Running", failed: "Couldn't be created" };
+
 const ACCESS_WORDS = { verified: "Checked with Google", unverified: "Checking with Google…", lost: "Not reachable" } as const;
 
 export function GoogleSettings() {
@@ -54,7 +67,6 @@ export function GoogleSettings() {
       <LeadsPanel companyId={companyId} owner={owner} />
       {connected && granted.has("ads") ? <AdsPanel companyId={companyId} owner={owner} /> : null}
       {connected && granted.has("conversions") ? <ConversionsPanel companyId={companyId} owner={owner} /> : null}
-      {owner ? <Setup status={status} /> : null}
     </div>
   );
 }
@@ -99,7 +111,7 @@ function Connection({ status, owner, companyId }: { status: Status; owner: boole
                 <span className="grid gap-0.5">
                   <span className="text-sm font-medium text-strong">{f.label}</span>
                   <span className="text-xs text-muted-foreground">{f.does}</span>
-                  {f.needsPlatform.length ? <span className="text-xs text-muted-foreground">Also needs Selestial setup: {f.needsPlatform.join(", ")}.</span> : null}
+                  {f.needsPlatform.some((key) => status.platform.some((p) => p.key.includes(key) && !p.configured)) ? <span className="text-xs text-muted-foreground">Part of this needs a final setup step from Selestial&apos;s team.</span> : null}
                 </span>
               </label>
               <span className={f.granted ? "text-xs font-medium text-success" : "text-xs text-muted-foreground"}>{f.granted ? "Granted" : "Off"}</span>
@@ -108,7 +120,7 @@ function Connection({ status, owner, companyId }: { status: Status; owner: boole
         </ul>
         {owner ? (
           <div className="flex flex-wrap gap-2">
-            {!status.ready ? <p className="text-sm text-muted-foreground">Connecting Google is not set up on this deployment yet. See Setup below.</p> : null}
+            {!status.ready ? <p className="text-sm text-muted-foreground">Connecting Google isn&apos;t available yet. Selestial&apos;s team needs to finish setting it up for your account.</p> : null}
             {connection?.status === "expired" ? (
               <Button type="button" variant="primary" disabled={busy || !status.ready} onClick={() => go(FEATURE_ORDER.filter((f) => status.features.find((x) => x.feature === f)?.granted || chosen.includes(f)))}>
                 Reconnect
@@ -156,7 +168,7 @@ function Resources({ status, owner, companyId, granted }: { status: Status; owne
             <li key={r.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border px-3 py-2">
               <span className="grid gap-0.5">
                 <span className="text-sm font-medium text-strong">
-                  {r.label} <span className="font-normal text-muted-foreground">· {r.kind.replace(/_/g, " ")}{r.purpose ? ` for ${r.purpose}` : ""}</span>
+                  {r.label} <span className="font-normal text-muted-foreground">· {KIND_WORDS[r.kind] ?? "Shared item"}{r.purpose ? ` for ${r.purpose}` : ""}</span>
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {ACCESS_WORDS[r.access]}
@@ -225,7 +237,7 @@ function ChooseDrive({ companyId, email }: { companyId: Id<"companies">; email?:
           Add
         </Button>
       </div>
-      {!picker ? <p className="text-xs text-muted-foreground">A pasted link works only for something Selestial already has access to; Google’s file chooser is not set up on this deployment.</p> : null}
+      {!picker ? <p className="text-xs text-muted-foreground">Google’s file picker isn’t available yet. Paste a link to a folder or file instead; it works for anything Selestial can already open.</p> : null}
       <FormError message={error} />
     </div>
   );
@@ -330,7 +342,7 @@ function DrivePanel({ companyId, manager }: { companyId: Id<"companies">; manage
             <li key={s.resourceId} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border px-3 py-2">
               <span className="grid gap-0.5">
                 <span className="text-sm font-medium text-strong">{s.label}</span>
-                <span className="text-xs text-muted-foreground">{s.files.length ? `${s.files.length} file${s.files.length === 1 ? "" : "s"} read: ${s.files.map((f) => f.name).join(", ")}` : "Not read yet."} New text is proposed as company knowledge for the Owner to confirm.</span>
+                <span className="text-xs text-muted-foreground">{s.files.length ? `${s.files.length} file${s.files.length === 1 ? "" : "s"} read: ${s.files.map((f) => f.name).join(", ")}` : "Not read yet."} New text is suggested as company knowledge for the Owner to confirm.</span>
               </span>
               {role === "owner" ? (
                 <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run(async () => { await read({ companyId, resourceId: s.resourceId }); setNote("Reading queued."); })}>
@@ -499,7 +511,7 @@ function AdsPanel({ companyId, owner }: { companyId: Id<"companies">; owner: boo
             <li key={d._id} className="grid gap-1 rounded-lg border border-border p-3 text-sm">
               <span className="font-medium text-strong">{d.name}</span>
               <span className="text-xs text-muted-foreground">
-                ${(d.dailyBudgetCents / 100).toFixed(2)} a day · {d.state.replace("_", " ")} · {d.keywords.slice(0, 5).join(", ")}
+                ${(d.dailyBudgetCents / 100).toFixed(2)} a day · {DRAFT_WORDS[d.state] ?? "Draft"} · {d.keywords.slice(0, 5).join(", ")}
                 {d.problem ? ` · ${d.problem}` : ""}
               </span>
               {owner && (d.state === "draft" || d.state === "failed") ? (
@@ -560,46 +572,12 @@ function ConversionsPanel({ companyId, owner }: { companyId: Id<"companies">; ow
         <ul className="grid gap-1 text-xs">
           {settings.recent.slice(0, 10).map((c) => (
             <li key={c._id}>
-              ${(c.valueCents / 100).toFixed(2)} · {c.status}
+              ${(c.valueCents / 100).toFixed(2)} · {({ queued: "Waiting to send", sent: "Sent to Google Ads", rejected: "Google Ads didn't accept it", skipped: "Not sent" } as Record<string, string>)[c.status] ?? "Recorded"}
               {c.reason ? ` · ${c.reason}` : ""}
             </li>
           ))}
         </ul>
         <FormError message={error} />
-      </div>
-    </Panel>
-  );
-}
-
-function Setup({ status }: { status: Status }) {
-  return (
-    <Panel title="Setup on this deployment">
-      <div className="grid gap-3 px-4 py-4 sm:px-5">
-        <p className="text-xs text-muted-foreground">Names only. Values are never shown.</p>
-        <ul className="grid gap-1 text-sm">
-          {status.platform.map((p) => (
-            <li key={p.key}>
-              <code className="text-xs">{p.key}</code> <span className="text-xs text-muted-foreground">({p.where})</span> · {p.configured ? "set" : "not set"} · <span className="text-xs text-muted-foreground">{p.unlocks}</span>
-            </li>
-          ))}
-        </ul>
-        {status.endpoints ? (
-          <ul className="grid gap-1 text-xs text-muted-foreground">
-            <li>OAuth redirect URI: <code>{status.endpoints.oauthCallback ?? "needs CONVEX_SITE_URL"}</code></li>
-            <li>Calendar notifications: <code>{status.endpoints.calendarWebhook ?? "needs CONVEX_SITE_URL"}</code></li>
-            <li>Pub/Sub push endpoint: <code>{status.endpoints.pubsubPush ?? "needs CONVEX_SITE_URL"}</code></li>
-            <li>Lead form webhook: <code>{status.endpoints.leadFormWebhook ?? "needs CONVEX_SITE_URL"}</code></li>
-          </ul>
-        ) : null}
-        {status.problems.length ? (
-          <ul className="grid gap-1 text-xs">
-            {status.problems.map((p, i) => (
-              <li key={i}>
-                {p.kind.replace(/_/g, " ")} · {p.status}: {p.error ?? ""}
-              </li>
-            ))}
-          </ul>
-        ) : null}
       </div>
     </Panel>
   );
