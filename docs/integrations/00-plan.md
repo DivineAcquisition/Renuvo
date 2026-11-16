@@ -41,13 +41,19 @@ What Selestial connects to, why, and the order it is built in. The list itself i
   or by what it does.
 - **Each card** shows the logo, where it stands (a dot and words, like an agent's state), what it does, the
   tools it gives agents as short commands (`src/lib/app/integrations.ts`, `can`), and the agents that use it.
-- **Logos** are the brands' own marks from Simple Icons (CC0), stored as paths in
-  `src/lib/app/integration-brands.ts` and drawn on a white tile so colours read the same in light and
-  dark. Simple Icons has no mark for Outlook, OneDrive, Checkr, Jobber, Housecall Pro, ZenMaid or
-  Launch27, so those show a letter in the brand's colour (Outlook and OneDrive in Microsoft blue, the
-  others grey). To use an official logo, add its file and point the entry in
-  `src/components/app/integration-mark.tsx` at it. The texting number is Selestial's own feature and uses
-  a chat glyph. Logos belong to their owners and are shown only to say which service a card is about.
+- **Logos** are the brands' own marks in their own colours, one file each in `public/integrations/`, drawn
+  on a white tile so the colours read the same in light and dark. Which file each integration uses, and
+  how it sits on the tile, is the table in `src/components/app/integration-mark.tsx`; to use a different
+  version of a logo, replace its file. Where they came from:
+  - Google (G, Ads, Maps, Drive, Calendar, Gmail), Meta, Facebook, PayPal, Square, Xero and OneDrive: the
+    SVG Logos collection (gilbarbara/logos, CC0), the current versions.
+  - Outlook: the VS Code Icons set (MIT). It is Outlook's flat 2013-style mark, not today's icon.
+  - Stripe, QuickBooks, Yelp and Indeed: Simple Icons (CC0), each in the brand's colour. These are the
+    symbols only, because the wordmarks are too wide for a tile.
+  - Jobber, Checkr, Housecall Pro, ZenMaid and Launch27: the app icon each company publishes on its own
+    website (Launch27's is a wordmark).
+  - The texting number is Selestial's own feature and uses a chat glyph.
+  - Logos belong to their owners and are shown only to say which service a card is about.
 
 ## Phases
 

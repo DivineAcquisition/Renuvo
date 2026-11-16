@@ -1,65 +1,70 @@
+import Image from "next/image";
+
 import { ChatIcon } from "@/components/icons";
-import { BRAND_MARKS, type BrandSlug } from "@/lib/app/integration-brands";
 import { cn } from "@/lib/utils";
 
-type Mark =
-  /** The brand's own mark, from Simple Icons. */
-  | { kind: "brand"; slug: BrandSlug }
-  /** A letter in the brand's colour, for a brand with no open mark. Official logo files can replace it later. */
-  | { kind: "letter"; letter: string; hex: string }
-  /** Selestial's own feature, with no outside brand. */
-  | { kind: "glyph" };
+/**
+ * How a logo sits on its tile.
+ * mark: a symbol, with room around it (most logos).
+ * wide: a wordmark, given more of the tile so it can be read.
+ * tile: an app icon that is already a tile (its own background), filling the whole tile.
+ */
+type Fit = "mark" | "wide" | "tile";
 
-/** Which mark each integration (by id, see src/lib/app/integrations.ts) shows. */
+type Mark = { kind: "file"; file: string; fit: Fit } | { kind: "glyph" };
+
+const mark = (file: string, fit: Fit = "mark"): Mark => ({ kind: "file", file, fit });
+
+/**
+ * Which logo each integration (by id, see src/lib/app/integrations.ts) shows. The files are in
+ * public/integrations, one per brand, in the brand's own colours. To use a different version of a logo,
+ * replace its file. docs/integrations/00-plan.md says where each one came from.
+ */
 const MARKS: Record<string, Mark> = {
-  stripe: { kind: "brand", slug: "stripe" },
-  square: { kind: "brand", slug: "square" },
-  "quickbooks-payments": { kind: "brand", slug: "quickbooks" },
-  paypal: { kind: "brand", slug: "paypal" },
-  "google-local-services-ads": { kind: "brand", slug: "google" },
-  "google-ads": { kind: "brand", slug: "googleads" },
-  "meta-lead-ads": { kind: "brand", slug: "meta" },
-  "google-address": { kind: "brand", slug: "googlemaps" },
-  "google-maps-travel": { kind: "brand", slug: "googlemaps" },
-  "google-drive": { kind: "brand", slug: "googledrive" },
-  "google-calendar": { kind: "brand", slug: "googlecalendar" },
-  gmail: { kind: "brand", slug: "gmail" },
-  "google-business-profile": { kind: "brand", slug: "google" },
-  outlook: { kind: "letter", letter: "O", hex: "0078D4" },
-  onedrive: { kind: "letter", letter: "OD", hex: "0364B8" },
-  yelp: { kind: "brand", slug: "yelp" },
-  "facebook-reviews": { kind: "brand", slug: "facebook" },
+  stripe: mark("stripe.svg"),
+  square: mark("square.svg"),
+  "quickbooks-payments": mark("quickbooks.svg"),
+  paypal: mark("paypal.svg"),
+  "google-local-services-ads": mark("google.svg"),
+  "google-ads": mark("google-ads.svg"),
+  "meta-lead-ads": mark("meta.svg"),
+  "google-address": mark("google-maps.svg"),
+  "google-maps-travel": mark("google-maps.svg"),
+  "google-drive": mark("google-drive.svg"),
+  "google-calendar": mark("google-calendar.svg"),
+  gmail: mark("gmail.svg"),
+  "google-business-profile": mark("google.svg"),
+  outlook: mark("outlook.svg"),
+  onedrive: mark("onedrive.svg"),
+  yelp: mark("yelp.svg"),
+  "facebook-reviews": mark("facebook.svg"),
   "texting-number": { kind: "glyph" },
-  "quickbooks-online": { kind: "brand", slug: "quickbooks" },
-  xero: { kind: "brand", slug: "xero" },
-  indeed: { kind: "brand", slug: "indeed" },
-  checkr: { kind: "letter", letter: "C", hex: "475467" },
-  jobber: { kind: "letter", letter: "J", hex: "475467" },
-  "housecall-pro": { kind: "letter", letter: "H", hex: "475467" },
-  zenmaid: { kind: "letter", letter: "Z", hex: "475467" },
-  launch27: { kind: "letter", letter: "L", hex: "475467" },
+  "quickbooks-online": mark("quickbooks.svg"),
+  xero: mark("xero.svg"),
+  indeed: mark("indeed.svg"),
+  checkr: mark("checkr.png", "tile"),
+  jobber: mark("jobber.png", "tile"),
+  "housecall-pro": mark("housecall-pro.png"),
+  zenmaid: mark("zenmaid.png"),
+  launch27: mark("launch27.png", "wide"),
 };
 
 const BOX = { sm: "size-6 rounded-md", md: "size-9 rounded-lg", lg: "size-11 rounded-xl" } as const;
 const GLYPH = { sm: "size-3.5", md: "size-5", lg: "size-6" } as const;
-const LETTER = { sm: "text-[9px]", md: "text-sm", lg: "text-base" } as const;
+const FIT: Record<Fit, string> = { mark: "size-[58%] object-contain", wide: "size-[88%] object-contain", tile: "size-full object-cover" };
 
 /**
  * An integration's logo on a white tile, so a brand's colours read the same in light and dark. Decorative:
  * the integration's name is always written beside it.
  */
 export function IntegrationMark({ id, size = "md", className }: { id: string; size?: keyof typeof BOX; className?: string }) {
-  const mark = MARKS[id];
+  const found = MARKS[id];
   return (
-    <span className={cn("flex shrink-0 items-center justify-center border border-black/10 bg-white shadow-sm", BOX[size], className)} aria-hidden data-integration-mark={id}>
-      {mark?.kind === "brand" ? (
-        <svg viewBox="0 0 24 24" className="size-[58%]" fill={`#${BRAND_MARKS[mark.slug].hex}`} focusable="false">
-          <path d={BRAND_MARKS[mark.slug].path} />
-        </svg>
-      ) : mark?.kind === "letter" ? (
-        <span className={cn("font-heading font-bold tracking-tight", LETTER[size])} style={{ color: `#${mark.hex}` }}>
-          {mark.letter}
-        </span>
+    <span className={cn("flex shrink-0 items-center justify-center overflow-hidden border border-black/10 bg-white shadow-sm", BOX[size], className)} aria-hidden data-integration-mark={id}>
+      {found?.kind === "file" ? (
+        // The files are small and fixed, so there is nothing for the image optimizer to do, and loading them
+        // at once means a logo is never blank when its card scrolls into view.
+        <Image src={`/integrations/${found.file}`} alt="" width={64} height={64} unoptimized loading="eager" className={FIT[found.fit]} />
       ) : (
         <ChatIcon className={cn("text-brand-500", GLYPH[size])} />
       )}
