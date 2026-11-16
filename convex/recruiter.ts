@@ -17,9 +17,11 @@ import { messagingProvider } from "./lib/messaging/provider";
 import { calendarProvider } from "./lib/recruiter/calendar";
 import { reminderSweep } from "./lib/recruiter/interviews";
 import { followUpSweep } from "./lib/recruiter/invitations";
+import { googleApp } from "./lib/recruiter/gmail";
 import { connectorFor } from "./lib/recruiter/mailbox";
 import { hiringModel } from "./lib/recruiter/model";
 import { redactDue } from "./lib/recruiter/retention";
+import { secretsConfigured } from "./lib/recruiter/secrets";
 import { recruiterSettingsValidator, sourceValidator, type Stage } from "./lib/recruiter/schema";
 import { DAY, recruiterSettings } from "./lib/recruiter/settings";
 import { signatureProvider } from "./lib/recruiter/signature";
@@ -86,7 +88,9 @@ export const overview = companyQuery({
       offersOut: stages.offer_sent.length,
       awaitingOnboardingHandoff: stages.accepted.length,
       inOnboarding: stages.onboarding_handoff.length,
-      inbox: mailboxes.map((row) => ({ connectionId: row._id, address: row.address, provider: row.provider, status: row.status, problem: row.problem ?? null, lastSyncAt: row.lastSyncAt ?? null, connectorBuilt: connectorFor(row.provider) !== null })),
+      inbox: mailboxes.map((row) => ({ connectionId: row._id, address: row.address, provider: row.provider, status: row.status, problem: row.problem ?? null, lastSyncAt: row.lastSyncAt ?? null, connectorBuilt: row.provider === "gmail" || connectorFor(row.provider) !== null, sendsApplicantEmail: row.provider === "gmail" && row.status === "connected" && row.canSend === true })),
+      /** Whether this deployment can connect a Gmail inbox: a Google app and a key to seal its authorization. */
+      gmailAvailable: googleApp() !== null && (await secretsConfigured()),
       inboxConnected: mailboxes.some((row) => row.status === "connected"),
       failures: { messages: failed.length, flaggedMessages: flagged.length, mailboxes: mailboxes.filter((row) => row.status !== "connected").length },
       connections: connections(),
@@ -160,6 +164,9 @@ export const connectMailbox = ownerMutation({
     processFrom: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // A Gmail inbox is connected by signing in to Google (recruiterMailbox.startGmailConnect), which is
+    // the only way Selestial gets permission to read it.
+    if (args.provider === "gmail") throw userError("Connect Gmail by signing in to Google from the Recruiting settings.");
     const address = email(args.address, "The hiring inbox");
     const now = Date.now();
     const processFrom = args.processFrom ?? now;
@@ -182,6 +189,7 @@ export const reconnectMailbox = ownerMutation({
   args: { connectionId: v.id("mailboxConnections") },
   handler: async (ctx, args) => {
     const connection = await owned(ctx, args.connectionId);
+    if (connection.provider === "gmail") throw userError("Sign in to Google again to reconnect this inbox.");
     await ctx.db.patch(connection._id, { status: "connected", problem: undefined, failures: 0 });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "mailbox.connected", actor: byMember(ctx), subject: { table: "mailboxConnections", id: connection._id }, data: { provider: connection.provider, historical: false } });
     await ctx.scheduler.runAfter(0, internal.recruiterInbox.sync, { connectionId: connection._id });
@@ -193,7 +201,13 @@ export const disconnectMailbox = ownerMutation({
   args: { connectionId: v.id("mailboxConnections") },
   handler: async (ctx, args) => {
     const connection = await owned(ctx, args.connectionId);
-    await ctx.db.patch(connection._id, { status: "disconnected", problem: undefined });
+    await ctx.db.patch(connection._id, { status: "disconnected", problem: undefined, canSend: false });
+    // The sealed authorization goes with it. Removing the access at Google is the Owner's own step there.
+    for (const credential of await ctx.db
+      .query("mailboxCredentials")
+      .withIndex("by_connection", (q) => q.eq("connectionId", connection._id))
+      .take(5))
+      await ctx.db.delete(credential._id);
     await recordEvent(ctx, { companyId: ctx.companyId, type: "mailbox.disconnected", actor: byMember(ctx), subject: { table: "mailboxConnections", id: connection._id } });
     return null;
   },

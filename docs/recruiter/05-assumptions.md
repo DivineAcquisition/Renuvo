@@ -6,6 +6,8 @@
 |---|---|---|
 | Resend accepts `POST /emails` with `from`, `to`, `reply_to`, `subject`, `text` and an `Idempotency-Key` header, and answers `{ id }` | Resend's public documentation as remembered; not checked against the live API | The send fails with a plain-words problem and the application goes to a person; nothing is sent twice |
 | Resend signs webhooks with Svix (`svix-id`, `svix-timestamp`, `svix-signature`; HMAC-SHA256 over `id.timestamp.body` with the `whsec_` secret) and events carry `type` and `data.email_id` | The same | Every webhook is refused with 401: bounces are not recorded, and nothing else changes |
+| Gmail API: `users.getProfile` gives `historyId`; `users.history.list` with `historyTypes=messageAdded` and `labelId` lists new mail and answers 404 when the start point is too old; `users.messages.get` with `format=metadata`/`full`; `users.messages.send` takes a base64url RFC 5322 `raw` | Google's public documentation as remembered; tested against a stand-in (`tests/fakeGoogle.ts`) only | Reading fails with a provider problem shown on the inbox; a 404 falls back to a dated scan, so nothing is skipped |
+| Google's token endpoint answers `invalid_grant` when an authorization was revoked or expired | The same | The inbox shows "Reconnect" instead of a provider hiccup |
 | Claude structured output with `fallbacks: "default"` on the beta endpoint | The SDK's types and the API reference in this session | The model gives no answer and the rules reader answers instead |
 
 ## Unverified job-board formats
@@ -48,12 +50,14 @@ application, applicant message, suggested candidate, promotion) with full header
 
 | Needed | Why | Status |
 |---|---|---|
-| Google OAuth app (Gmail read-only) and Microsoft Entra app (Mail.Read), plus a secure store for each company's refresh token | Reading a real hiring inbox. The owner said companies use both. | **Connectors not built.** Only the mock exists behind `MailboxConnector`. Choosing a label, folder or sender filter per company is supported in the record. |
+| Google OAuth web client with the Gmail API (scopes `gmail.readonly`, `gmail.send`, `openid`, `email`), redirect URI `https://<deployment>.convex.site/oauth/google/callback`; `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MAILBOX_TOKEN_KEY` on the deployment | Reading the hiring inbox and, when the Owner allows it, sending applicant email from it. The owner chose Gmail first on November 16. | **Gmail connector built** (`convex/lib/recruiter/gmail.ts`, `convex/recruiterMailbox.ts`), tested against a stand-in only. Not run against Google: no client exists. `gmail.readonly` is a restricted scope: before companies outside the test users can connect, Google's app verification and an annual security assessment (CASA) are needed. In Google's "testing" status, authorizations expire after about seven days. |
+| Microsoft Entra app (Mail.Read, Mail.Send) | Companies on Microsoft 365 | **Not built.** Planned after the owner screens and calendar. |
 | Resend for `mail.selestial.io`: verify the domain, create an API key, add a webhook to `https://<deployment>.convex.site/webhooks/resend` for delivered, bounced, complained and failed | Sending, and knowing about bounces. The owner chose Resend on November 16. | **Built.** Applicant email goes through the shared Resend connection (`convex/lib/email/provider.ts`, also used for member invitations), extended with a per-company sender name and Reply-To. Signed delivery/bounce webhook in `convex/http.ts`. Set `EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` (an address on the verified domain) and `RESEND_WEBHOOK_SECRET`. Tested against stand-ins only. |
 | An Anthropic API key | The owner chose Claude on November 16 to recognise and read hiring mail | **Adapter built** (`convex/lib/recruiter/claude.ts`), Claude Opus 5.5 at low effort with structured output and server-side fallback on a refusal, tested against a stand-in. Set `RECRUITER_MODEL=claude` and `ANTHROPIC_API_KEY`. Not yet run against the API. Any failure falls back to the rules reader. |
 | Google Calendar (and Microsoft) OAuth per interviewer | The owner asked for calendar integration alongside owner-entered slots | **Adapter not built.** Owner-entered slots and applicant self-scheduling work now; `CalendarProvider` is ready. |
 | An e-signature provider | The owner asked to plan for one | Interface and records only. A person records completion. |
 | Text provider (Telnyx is planned) | Reminders by text | Not connected (Dispatch's finding). Applicant texts go through the same outbox and the mock. |
+| `RECRUITER_EMAIL_FROM=noreply@mail.selestial.io` | The owner's decision: applicant email comes from noreply@mail.selestial.io under the company's name until the company connects its own inbox | Built; used only when it is on `EMAIL_FROM`'s verified domain. |
 | Convex settings: `ACTION_LINK_SECRET`, `LINK_ORIGIN` (already used by Dispatch), `EMAIL_PROVIDER`; later `RECRUITER_MODEL`, `CALENDAR_PROVIDER`, `SIGNATURE_PROVIDER` | Turning each piece on | Not set by this work. No credential was guessed or added. |
 
 ## On the shared sending policy
@@ -81,7 +85,11 @@ the product is sold.
 - Replies are matched to an application by the sender's address. A reply from a different address
   than the one on file is flagged, not matched. Because replies go to the company's own inbox, a
   disconnected inbox means replies are not seen until it is reconnected.
-- A bounce is known only when the email provider reports it.
+- A bounce is known only when the email provider reports it. Email sent from a company's Gmail has no
+  bounce webhook: a bounce arrives in that inbox as a mailer-daemon message, which Recruiter files as
+  unrelated. Reading those notices back into the application is not built.
+- Disconnecting an inbox deletes Selestial's sealed authorization; removing Selestial's access at
+  Google is the Owner's own step in their Google account.
 - A person answers applicant questions; Recruiter does not draft replies yet.
 - `applications.list` and the overview read up to a few hundred rows per stage; pagination is needed
   before large volumes.

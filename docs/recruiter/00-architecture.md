@@ -118,6 +118,31 @@ server-side fallback on a refusal. Email content goes inside `<email>` tags and 
 it is data. Any failure, refusal or unreadable answer falls back to the rules reader, so an outage never
 drops an application. It has not been run against the live API: no key was available.
 
+## The hiring inbox: Gmail
+
+An Owner connects Gmail from Settings → Recruiting (`recruiterMailbox.startGmailConnect`). The flow:
+
+1. Selestial makes a random state, keeps only its SHA-256 hash in `oauthStates` (ten minutes, single
+   use, bound to the Owner who started it) and sends the Owner to Google asking for `gmail.readonly`
+   and, unless the Owner unticks it, `gmail.send`.
+2. Google returns to `GET /oauth/google/callback` on the Convex site. The state is taken (a second use,
+   an unknown or expired state, or an Owner who is no longer the Owner connects nothing), the code is
+   exchanged, and read permission is required. The mailbox address comes from Gmail's profile, never
+   from the request.
+3. The refresh token is sealed with AES-GCM under `MAILBOX_TOKEN_KEY`, bound to the connection id, and
+   stored in `mailboxCredentials`. It is never returned by any query, never in an event, and never in the
+   company export. Disconnecting deletes it.
+
+Reading (`recruiterInbox.sync`) first scans from the start date, then follows Gmail's history from the
+last point, inside the label the Owner named. Only sender and subject are fetched until a message looks
+like hiring mail. If Google says the authorization ended, the inbox shows "Reconnect" and stops.
+
+Sending: applicant email goes from the company's Gmail when it is connected with send allowed;
+otherwise from `RECRUITER_EMAIL_FROM` (noreply@mail.selestial.io) through the shared Resend connection
+under the company's name. The choice is made when the message is planned and again at claim, and both
+paths use the same `messages` row, sending policy and settle step. A refused Gmail send marks the inbox
+expired; the message fails with a plain problem and goes to a person.
+
 ## Security and privacy
 
 - **Tenant isolation.** Every table carries `companyId`; every id from a caller goes through `owned`.
