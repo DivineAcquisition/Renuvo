@@ -67,7 +67,7 @@ export async function approveAndQueue(ctx: MutationCtx, companyId: Id<"companies
   const review = await ctx.db.get(reviewId);
   if (!review || review.companyId !== companyId) notFound();
   const location = (await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", companyId).eq("kind", "business_location")).take(50)).find((r) => r.externalId === review.location && r.access !== "lost");
-  if (!location) throw userError("This location is no longer authorized for replies. The Owner chooses locations under Settings › Google.");
+  if (!location) throw userError("This location is no longer authorized for replies. The Owner chooses locations under Settings › Integrations (Your Google account).");
   if (review.state === "publishing") throw userError("This reply is already being published.");
   const approved = text(words, "The reply", 4000);
   await ctx.db.patch(review._id, { draft: approved, approvedText: approved, approvedBy: memberId, state: "publishing", problem: undefined });

@@ -3,14 +3,16 @@
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { AgentAvatar, eyebrow } from "@/components/app/agent";
 import { useCompany } from "@/components/app/company";
 import { IntegrationMark } from "@/components/app/integration-mark";
+import { GoogleSettings } from "@/components/app/settings/google";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { messageOf } from "@/components/app/form";
-import { ArrowRight, CheckCircle2, Lock, Plug, Search, Sparkles, X } from "@/components/icons";
+import { ArrowRight, CheckCircle2, ChevronDown, Lock, Plug, Search, Sparkles, X } from "@/components/icons";
 import { mapsKey } from "@/lib/app/address";
 import { CATEGORIES, INTEGRATIONS, integrationsFor, type Integration } from "@/lib/app/integrations";
 import { AGENTS, type AgentId } from "@/lib/app/navigation";
@@ -63,7 +65,7 @@ const secondary = cn(action, "border border-border bg-card text-strong hover:bg-
  * What a person can do from the card. Built: go to where it is set up. Planned: the Owner asks for it.
  * Built in: nothing to do. The server checks the Owner again, so the button only saves a trip.
  */
-function CardAction({ integration, live, requested }: { integration: Integration; live: Live | null; requested: { requestedAt: number } | null }) {
+function CardAction({ integration, live, requested, onGoogle }: { integration: Integration; live: Live | null; requested: { requestedAt: number } | null; onGoogle: () => void }) {
   const { companyId, role } = useCompany();
   const ask = useMutation(api.integrations.request);
   const [busy, setBusy] = useState(false);
@@ -78,11 +80,19 @@ function CardAction({ integration, live, requested }: { integration: Integration
     const label = live?.state === "connected" ? "Manage" : live?.state === "in_progress" ? "See progress" : owner ? `Connect ${integration.name.replace(/^Business /, "")}` : "See setup";
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={status.href} className={live?.state === "ready" && owner ? primary : secondary}>
-          {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
-          {label}
-          <ArrowRight className="size-3.5" aria-hidden />
-        </Link>
+        {status.href === "#google" ? (
+          <button type="button" onClick={onGoogle} className={live?.state === "ready" && owner ? primary : secondary}>
+            {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
+            {live?.state === "ready" && owner ? "Connect Google" : label}
+            <ArrowRight className="size-3.5" aria-hidden />
+          </button>
+        ) : (
+          <Link href={status.href} className={live?.state === "ready" && owner ? primary : secondary}>
+            {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
+            {label}
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        )}
         <span className="text-[11px] text-muted-foreground">In {status.setUpWhere}</span>
       </div>
     );
@@ -159,7 +169,7 @@ function UsedBy({ agents, highlight }: { agents: AgentId[]; highlight: AgentId |
   );
 }
 
-function IntegrationCard({ integration, highlight, overview }: { integration: Integration; highlight: AgentId | null; overview: Overview | undefined }) {
+function IntegrationCard({ integration, highlight, overview, onGoogle }: { integration: Integration; highlight: AgentId | null; overview: Overview | undefined; onGoogle: () => void }) {
   const live = liveOf(integration, overview);
   const requested = overview?.requested.find((row) => row.integrationId === integration.id) ?? null;
   return (
@@ -175,7 +185,7 @@ function IntegrationCard({ integration, highlight, overview }: { integration: In
       <Abilities can={integration.can} />
       {integration.note ? <p className="text-xs leading-relaxed text-muted-foreground">{integration.note}</p> : null}
       <div className="mt-auto grid gap-3 border-t border-border pt-3">
-        <CardAction integration={integration} live={live} requested={requested} />
+        <CardAction integration={integration} live={live} requested={requested} onGoogle={onGoogle} />
         <UsedBy agents={integration.agents} highlight={highlight} />
       </div>
     </li>
@@ -215,9 +225,47 @@ function AgentTools({ agent, selected, onSelect }: { agent: AgentId; selected: b
   );
 }
 
-export function IntegrationsScreen() {
+/**
+ * The company's one Google connection, on this page rather than a Settings tab of its own: a row saying
+ * where it stands, opening into the full setup (which files, calendars, locations and ad accounts).
+ */
+function GoogleAccount({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const { companyId } = useCompany();
+  const status = useQuery(api.google.status, { companyId });
+  const connection = status?.connection ?? null;
+  const words = !status ? "Loading…" : connection?.status === "connected" ? `Connected as ${connection.email}` : connection?.status === "expired" ? "Reconnect needed" : "Not connected";
+  return (
+    <section id="google" className="mb-5 scroll-mt-20 rounded-2xl border border-border bg-card">
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3.5 text-left sm:px-5">
+        <IntegrationMark id="google-local-services-ads" size="lg" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-medium text-strong">Your Google account</span>
+          <span className="block truncate text-xs text-muted-foreground">One connection for Drive, Calendar, Business Profile and Ads. {words}.</span>
+        </span>
+        <span className={cn(open ? secondary : connection?.status === "connected" ? secondary : primary, "shrink-0")}>
+          {open ? "Close" : connection?.status === "connected" ? "Manage" : "Set up"}
+          <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
+        </span>
+      </button>
+      {open ? (
+        <div className="border-t border-border p-4 sm:p-5">
+          <GoogleSettings />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export function IntegrationsScreen({ embedded = false }: { embedded?: boolean }) {
   const { companyId, role } = useCompany();
   const overview = useQuery(api.integrations.overview, { companyId });
+  const params = useSearchParams();
+  // Google's sign-in comes back with ?result=…, and old Google links with ?google=1: open the panel for them.
+  const [googleOpen, setGoogleOpen] = useState(() => params.get("google") !== null || params.get("result") !== null);
+  const openGoogle = () => {
+    setGoogleOpen(true);
+    requestAnimationFrame(() => document.getElementById("google")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
   const [agent, setAgent] = useState<AgentId | null>(null);
   const [query, setQuery] = useState("");
 
@@ -234,14 +282,14 @@ export function IntegrationsScreen() {
 
   return (
     <>
-      <PageHeader title="Integrations" lead="The accounts and services Selestial works with on your behalf, what each one lets your agents do, and which agents use it." />
+      {embedded ? null : <PageHeader title="Integrations" lead="The accounts and services Selestial works with on your behalf, what each one lets your agents do, and which agents use it." />}
 
       <section className="relative mb-5 overflow-hidden rounded-2xl border border-brand-500/30 bg-[radial-gradient(120%_140%_at_0%_0%,color-mix(in_srgb,var(--color-brand-500)_9%,transparent),transparent_55%),var(--card)] p-5 sm:p-6">
         <p className={eyebrow}>Your team&rsquo;s tools</p>
         <h2 className="mt-1 font-heading text-xl tracking-tight text-strong sm:text-2xl">Give your team the tools to do the work.</h2>
         <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
           Every connection is a tool an agent can use for you. Pick an agent to see what it works with. What each agent may do with a tool is set action by action in{" "}
-          <Link href="/app/settings" className="font-medium text-brand-300 underline-offset-4 hover:underline">
+          <Link href="/app/settings/agents" className="font-medium text-brand-300 underline-offset-4 hover:underline">
             Agent permissions
           </Link>
           , and anything that moves money starts on review.
@@ -256,6 +304,8 @@ export function IntegrationsScreen() {
           {role === "owner" ? "Only you, as the Owner, can connect, disconnect or request an integration. Everyone in your company can see what is connected." : "Only the Owner can connect, disconnect or request an integration. You can see what is connected."}
         </p>
       </section>
+
+      <GoogleAccount open={googleOpen} onToggle={() => setGoogleOpen((before) => !before)} />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <label className="relative block w-full sm:max-w-xs">
@@ -301,7 +351,7 @@ export function IntegrationsScreen() {
                 <p className="mb-4 text-sm text-muted-foreground">{category.lead}</p>
                 <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {inGroup.map((integration) => (
-                    <IntegrationCard key={integration.id} integration={integration} highlight={agent} overview={overview} />
+                    <IntegrationCard key={integration.id} integration={integration} highlight={agent} overview={overview} onGoogle={openGoogle} />
                   ))}
                 </ul>
               </Panel>

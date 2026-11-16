@@ -1,5 +1,5 @@
 /**
- * Company → Integrations → Google: connecting a company's Google account, choosing what Selestial may use,
+ * Settings › Integrations › Your Google account: connecting a company's Google account, choosing what Selestial may use,
  * and disconnecting. Only the Owner connects, adds permissions, chooses resources or disconnects; anyone
  * in the company can see what is connected.
  *
@@ -35,7 +35,7 @@ import { hashToken, randomToken, secretsConfigured, unseal } from "./lib/recruit
 const STATE_LIFE = 10 * 60 * 1000;
 
 export function afterGoogle(outcome: string): string {
-  return `${appOrigin() ?? ""}/app/settings/google?result=${encodeURIComponent(outcome)}`;
+  return `${appOrigin() ?? ""}/app/settings/integrations?google=1&result=${encodeURIComponent(outcome)}#google`;
 }
 
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────────

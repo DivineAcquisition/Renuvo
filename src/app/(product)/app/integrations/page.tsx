@@ -1,9 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { IntegrationsScreen } from "@/components/app/screens/integrations";
-
-export const metadata: Metadata = { title: "Integrations" };
-
+/** Integrations lives in Settings now (the owner's decision of November 16, 2026). Old links land there. */
 export default function Page() {
-  return <IntegrationsScreen />;
+  redirect("/app/settings/integrations");
 }

@@ -1,5 +1,5 @@
 /**
- * Company → Integrations. Everyone in the company sees where each integration stands; only the Owner
+ * Settings › Integrations. Everyone in the company sees where each integration stands; only the Owner
  * starts one (the owner's decision of November 16, 2026).
  *
  * Built integrations are set up where they already live (Gmail under Recruiting rules, the texting

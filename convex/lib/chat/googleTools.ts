@@ -1,5 +1,5 @@
 /**
- * Chat's tools for Google. Each is thin: it calls the same functions Settings › Google uses, as the
+ * Chat's tools for Google. Each is thin: it calls the same functions Settings › Integrations (Your Google account) uses, as the
  * member chatting, with their role and the agent's permission as they are right now. Reads return the
  * records Selestial holds (as last read from Google, with when). Writes return the job that will carry
  * them out: a queued export, draft or reply is reported as queued or drafted, never as done.
@@ -20,7 +20,7 @@ import type { ChatTool, Outcome, ToolCtx } from "./tools";
 const ID = (description: string): Field => ({ type: "string", description, max: 64 });
 const refused = (why: string, data?: Record<string, unknown>): Outcome => ({ status: "refused", why, data });
 const say = (error: unknown, fallback: string) => (error as { data?: { message?: string } }).data?.message ?? fallback;
-const SETTINGS = { href: "/app/settings/google", label: "Open Settings › Google" };
+const SETTINGS = { href: "/app/settings/integrations?google=1#google", label: "Open Settings › Integrations" };
 const when = (at: number, tz: string) => new Intl.DateTimeFormat("en-US", { timeZone: tz, dateStyle: "medium", timeStyle: "short" }).format(new Date(at));
 
 async function paced(ctx: ToolCtx, what: string): Promise<boolean> {
@@ -44,7 +44,7 @@ export const GOOGLE_TOOLS: ChatTool[] = [
     input: { type: "object", properties: {} },
     run: async (ctx) => {
       const connection = await activeConnection(ctx, ctx.company._id);
-      if (!connection) return { status: "done", summary: "Google is not connected", data: { connected: false, note: "The Owner connects Google under Settings › Google." }, link: SETTINGS };
+      if (!connection) return { status: "done", summary: "Google is not connected", data: { connected: false, note: "The Owner connects Google under Settings › Integrations (Your Google account)." }, link: SETTINGS };
       const granted = enabledFeatures(connection.grantedScopes);
       const resources = await ctx.db.query("googleResources").withIndex("by_connection", (q) => q.eq("connectionId", connection._id)).take(100);
       const problems = [...(await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.company._id).eq("status", "failed")).order("desc").take(5)), ...(await ctx.db.query("googleJobs").withIndex("by_company_status", (q) => q.eq("companyId", ctx.company._id).eq("status", "uncertain")).order("desc").take(5))];
@@ -73,7 +73,7 @@ export const GOOGLE_TOOLS: ChatTool[] = [
       const texts = await ctx.db.query("googleDriveTexts").withIndex("by_company_resource", (q) => q.eq("companyId", ctx.company._id)).take(60);
       const filter = typeof args.contains === "string" ? args.contains.toLowerCase() : "";
       const rows = texts.filter((t) => !filter || t.name.toLowerCase().includes(filter)).slice(0, 8);
-      if (rows.length === 0) return { status: "done", summary: "No Drive documents have been read", data: { files: [], note: "The Owner chooses knowledge sources under Settings › Google." }, link: SETTINGS };
+      if (rows.length === 0) return { status: "done", summary: "No Drive documents have been read", data: { files: [], note: "The Owner chooses knowledge sources under Settings › Integrations (Your Google account)." }, link: SETTINGS };
       return { status: "done", summary: `${rows.length} Drive document${rows.length === 1 ? "" : "s"}`, data: { files: rows.map((t) => ({ name: t.name, readAt: when(t.fetchedAt, ctx.company.timezone), text: t.text.slice(0, 6000) })) } };
     },
   },
@@ -106,7 +106,7 @@ export const GOOGLE_TOOLS: ChatTool[] = [
       try {
         const connection = await requireFeature(ctx, ctx.company._id, "drive");
         const folder = (await ctx.db.query("googleResources").withIndex("by_company_kind", (q) => q.eq("companyId", ctx.company._id).eq("kind", "drive_output")).take(50)).find((r) => r.purpose === "reports" && r.access !== "lost");
-        if (!folder) return refused("No Drive folder is chosen for reports. The Owner chooses one under Settings › Google.");
+        if (!folder) return refused("No Drive folder is chosen for reports. The Owner chooses one under Settings › Integrations (Your Google account).");
         const now = Date.now();
         const jobs = await ctx.db.query("jobs").withIndex("by_company_start", (q) => q.eq("companyId", ctx.company._id).gte("startsAt", now).lt("startsAt", now + 14 * 86_400_000)).take(500);
         const tz = ctx.company.timezone;

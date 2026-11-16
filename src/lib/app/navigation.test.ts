@@ -83,8 +83,8 @@ describe("the navigation definition", () => {
     expect(AGENTS).toHaveLength(8);
     expect(SIDEBAR_SECTIONS).toEqual(["business", "departments", "persistent", "agents", "shared", "footer"]);
     expect(PERSISTENT_ITEMS.map((item) => item.label)).toEqual(["Home", "Approvals", "Inbox", "Search"]);
-    // Integrations joined Company on the owner's request of November 16, 2026; Chat leads Company the same day.
-    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Chat", "Customers & Properties", "Cleaners", "Agreements", "Finance", "Reports", "Integrations"]);
+    // Chat leads Company (November 16, 2026). Integrations moved into Settings the same day, on the owner's request.
+    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Chat", "Customers & Properties", "Cleaners", "Agreements", "Finance", "Reports"]);
     expect(FOOTER_ITEMS.map((item) => item.label)).toEqual(["Settings"]);
   });
 
