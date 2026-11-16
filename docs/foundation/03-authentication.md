@@ -108,8 +108,12 @@ things the service's API allows. The rest is in its dashboard.
 In the dashboard (cannot be done from here):
 
 1. **User & authentication.** Email: on, required, verified at sign-up by code. Password: on.
-   **Phone number: off. Username: off.** The sign-up form asks for name, email and password only; if
-   the service asks for more, the form says setup is unfinished and creates nothing.
+   **Phone number: off. Username: off.** The sign-up form asks for name, email, password and
+   agreement to the Terms and Privacy Policy only; if the service asks for more, the form says setup is
+   unfinished and creates nothing.
+   **Legal consent (Compliance): on**, with Terms `https://www.selestial.io/terms` and Privacy
+   `https://www.selestial.io/privacy`. The form sends the agreement with the account, so the service
+   records when it was given. People made with the API need `legal_accepted_at`.
 2. **Paths.** Sign-in `/login`, sign-up `/signup`, on the application's own domain.
 3. **Production only.** Add the domain and its DNS records, and set the production keys on Vercel.
    Custom email templates and removing the service's branding may need a paid plan.
@@ -124,10 +128,14 @@ Then: set the Convex and Vercel settings above, run `auth-emails.mjs --apply`, a
 
 ## State of the two instances (November 16)
 
-- **Development** (`first-opossum-325`): steps 4 and 5 done, emails installed, the dev Convex
-  deployment trusts it. **Step 1 is not done: phone number and username are still required**, so
-  creating an account stops at the form with the setup message.
-- **Production** (`clerk.selestial.io`): not touched. Nothing here has been run against it.
+- **Development** (`first-opossum-325`): ready. Steps 1, 4 and 5 done (phone number and username
+  turned off, and legal consent turned on to match production, on November 16), emails installed, and
+  the dev Convex deployment trusts it. `tests/e2e/auth.mjs` passes against it.
+- **Production** (`clerk.selestial.io`): domain, DNS, SSL and email verified. Step 1 matches the list
+  above, legal consent is on, and organizations are off. **Step 5 is not done: there is no `convex`
+  token template**, so a signed-in person is refused by the record. Create it in the dashboard (JWT
+  templates, Convex preset, named `convex`, with the claims above, lifetime 60, clock skew 5). The
+  production Convex deployment is not deployed yet and does not trust this instance yet.
 
 ## Tests
 
