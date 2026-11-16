@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { ScheduleScreen } from "@/components/app/screens/schedule";
+import { linkTo } from "@/lib/app/navigation-helpers";
 
-export const metadata: Metadata = { title: "Schedule" };
-
+/** The schedule is Dispatch › Schedule now. Old links and bookmarks land there. */
 export default function Page() {
-  return <ScheduleScreen />;
+  redirect(linkTo("dispatch.schedule") ?? "/app");
 }

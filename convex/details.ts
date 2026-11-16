@@ -11,6 +11,10 @@ import { companyQuery, type MemberAccess } from "./lib/builders";
 import { AGENT_PROFILES, departmentOf } from "./lib/departments";
 import { notAllowed } from "./lib/errors";
 import { describeEvents, type Described, type EventRef } from "./lib/eventWords";
+import { staffing, type Staffing } from "./lib/dispatch/crew";
+import { jobAssignments } from "./lib/dispatch/facts";
+import { arrivalEndsAt, jobChecklist, jobEvidence } from "./lib/dispatch/live";
+import { dispatchPolicy } from "./lib/dispatch/policy";
 import { coverRun, type RunStep } from "./lib/dispatch/run";
 import { coverKey } from "./lib/dispatch/workflow";
 import { isManager } from "./lib/roles";
@@ -46,10 +50,40 @@ export type Detail = {
     withPerson: boolean;
     /** Dispatch's work on this visit, step by step, read from the record. */
     run: RunStep[];
-    assignments: { id: Id<"assignments">; cleaner: string; status: Doc<"assignments">["status"]; respondBy: number; payCents: number; endReason: string | null }[];
+    startsAt: number;
+    endsAt: number;
+    /** Required and accepted places, counted the one way every screen counts them. */
+    staffing: Staffing;
+    assignments: {
+      id: Id<"assignments">;
+      cleanerId: Id<"cleaners">;
+      cleaner: string;
+      status: Doc<"assignments">["status"];
+      role: Doc<"assignments">["role"] | null;
+      respondBy: number;
+      payCents: number;
+      endReason: string | null;
+      endCause: Doc<"assignments">["endCause"] | null;
+      checkedInAt: number | null;
+      completion: Doc<"assignments">["completion"] | null;
+    }[];
+    /** What the crew reported and what a person decided about it. A report is never an approval. */
+    completion: {
+      reportedAt: number | null;
+      review: Doc<"jobs">["completionReview"] | null;
+      crew: { assignmentId: Id<"assignments">; cleaner: string; checkedInAt: number | null; submittedAt: number | null; incomplete: boolean | null; note: string | null }[];
+      checklist: { total: number; done: number; pending: number; skipped: { label: string; reason: string | null; by: string | null }[] };
+      photos: { before: number; after: number; issue: number; requiredBefore: number; requiredAfter: number };
+      reports: { reportId: Id<"jobReports">; kind: Doc<"jobReports">["kind"]; text: string; status: Doc<"jobReports">["status"]; by: string }[];
+    };
   };
   approval: null | { status: Doc<"approvals">["status"]; canDecide: boolean; carriesOut: boolean; note: string | null; authorizes: string | null; ifWaiting: string | null; jobId: Id<"jobs"> | null };
-  task: null | { status: Doc<"tasks">["status"]; agent: Agent };
+  task: null | {
+    status: Doc<"tasks">["status"];
+    agent: Agent;
+    /** The newest reading of a cleaner's text on a reply task, when Dispatch read one. */
+    reading: null | { readingId: Id<"replyReadings">; status: Doc<"replyReadings">["status"]; intent: Doc<"replyReadings">["intent"] | null; reader: string | null; outcome: string | null };
+  };
 };
 
 async function history(ctx: Ctx, subjectIds: string[], asOf: number): Promise<Described[]> {
@@ -76,17 +110,31 @@ async function jobDetail(ctx: Ctx, jobId: Id<"jobs">, asOf: number): Promise<Det
   const tz = ctx.company.timezone;
   const job = await owned(ctx, jobId);
   const [customer, property] = [await ctx.db.get(job.customerId), await ctx.db.get(job.propertyId)];
-  const rows = await ctx.db
-    .query("assignments")
-    .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
-    .take(50);
-  const assignments = [];
-  for (const row of rows.sort((a, b) => b.offeredAt - a.offeredAt)) {
-    assignments.push({ id: row._id, cleaner: (await ctx.db.get(row.cleanerId))?.name ?? "Unknown", status: row.status, respondBy: row.respondBy, payCents: row.payCents, endReason: row.endReason ?? null });
+  const rows = await jobAssignments(ctx, job);
+  const assignments: NonNullable<Detail["job"]>["assignments"] = [];
+  for (const row of [...rows].sort((a, b) => b.offeredAt - a.offeredAt)) {
+    assignments.push({
+      id: row._id,
+      cleanerId: row.cleanerId,
+      cleaner: (await ctx.db.get(row.cleanerId))?.name ?? "Unknown",
+      status: row.status,
+      role: row.role ?? null,
+      respondBy: row.respondBy,
+      payCents: row.payCents,
+      endReason: row.endReason ?? null,
+      endCause: row.endCause ?? null,
+      checkedInAt: row.checkIn?.at ?? null,
+      completion: row.completion ?? null,
+    });
   }
-  const accepted = assignments.find((row) => row.status === "accepted");
-  const offered = assignments.filter((row) => row.status === "offered").sort((a, b) => a.respondBy - b.respondBy)[0];
+  // Every accepted cleaner is on the crew. Whether the visit is staffed is the count against what it needs.
+  const staff = staffing(job, rows);
+  const crew = assignments.filter((row) => row.status === "accepted");
+  const crewNames = crew.map((row) => row.cleaner).join(", ");
+  const offers = assignments.filter((row) => row.status === "offered").sort((a, b) => a.respondBy - b.respondBy);
+  const places = staff.required === 1 ? "" : ` ${staff.accepted} of ${staff.required} places are accepted.`;
   const task = await taskFor(ctx, job._id);
+  const awaitingReview = job.status === "in_progress" && job.completionReportedAt !== undefined;
 
   let status: Detail["status"];
   let situation: string[];
@@ -97,53 +145,116 @@ async function jobDetail(ctx: Ctx, jobId: Id<"jobs">, asOf: number): Promise<Det
     next = { action: "Nothing further.", when: null, ifFails: null };
   } else if (job.status === "completed") {
     status = { label: "Completed", tone: "good" };
-    situation = [`The visit was marked complete${accepted ? ` by ${accepted.cleaner}'s crew` : ""}.`];
-    next = { action: "Nothing further. Verifying the visit's evidence arrives with Dispatch's next step.", when: null, ifFails: null };
+    const review = job.completionReview;
+    situation = [
+      review?.decision === "closed_without_review"
+        ? `The visit was closed without a review of the crew's evidence. The reason given: ${(review.note ?? "none recorded").replace(/[.!?]+$/, "")}.`
+        : review
+          ? `A person reviewed the crew's report and closed the visit${review.note ? `: ${review.note}` : "."}`
+          : "The visit was marked complete before completion reviews were recorded.",
+    ];
+    next = { action: "Nothing further. Closing a visit approves no payment and releases no payout.", when: null, ifFails: null };
+  } else if (awaitingReview) {
+    status = { label: "Awaiting completion review", tone: "attention" };
+    situation = ["Everyone on the crew reported the visit done. That is a report, not an approval: a person reviews it before the visit is closed."];
+    next = { action: "Review the checklist, photos and reports, then close the visit or send it back for correction.", when: null, ifFails: "The visit stays open until someone reviews it." };
   } else if (job.status === "in_progress") {
     status = { label: "In progress", tone: "good" };
-    situation = [`${accepted?.cleaner ?? "The crew"} is on this visit now.`];
-    next = { action: "Mark the visit complete when the crew finishes.", when: job.endsAt, ifFails: "If it runs late, later visits for the same cleaner may be affected." };
-  } else if (accepted) {
-    status = { label: "Accepted", tone: "good" };
-    situation = [`${accepted.cleaner} accepted this visit. Accepted means the cleaner agreed, not only that their name is on it.`];
-    next = { action: "The visit takes place.", when: job.startsAt, ifFails: "If the cleaner drops out, the visit is uncovered again and cover starts." };
-  } else if (offered) {
-    status = { label: "Awaiting acceptance", tone: "pending" };
-    situation = [`An offer is out to ${offered.cleaner}. Nobody has accepted this visit yet.`];
-    next = { action: `Wait for ${offered.cleaner}'s answer.`, when: offered.respondBy, ifFails: "With no answer in time the offer expires and the visit is offered to the next eligible cleaner, or handed to you." };
+    situation = [`${crewNames || "The crew"} ${crew.length > 1 ? "are" : "is"} on this visit now.${staff.open > 0 && staff.required > 1 ? ` It is short ${staff.open} of ${staff.required} cleaners.` : ""}`];
+    next = { action: "The crew submits the visit when it is done, and a person then reviews it.", when: job.endsAt, ifFails: "If it runs late, later visits for the same cleaner may be affected." };
+  } else if (staff.open === 0) {
+    status = { label: staff.required === 1 ? "Accepted" : `Fully staffed · ${staff.accepted} of ${staff.required}`, tone: "good" };
+    situation = [`${crewNames} accepted this visit. Accepted means the cleaner agreed, not only that their name is on it.`];
+    next = { action: "The visit takes place.", when: job.startsAt, ifFails: "If a cleaner drops out, that place is open again and cover starts." };
+  } else if (offers.length > 0) {
+    status = { label: staff.accepted > 0 ? `Partly staffed · ${staff.accepted} of ${staff.required}` : "Awaiting acceptance", tone: "pending" };
+    situation = [`${offers.length === 1 ? `An offer is out to ${offers[0].cleaner}` : `Offers are out to ${offers.map((row) => row.cleaner).join(", ")}`}.${staff.accepted > 0 ? ` ${crewNames} accepted.` : " Nobody has accepted this visit yet."}${places}`];
+    next = { action: `Wait for ${offers[0].cleaner}'s answer.`, when: offers[0].respondBy, ifFails: "With no answer in time the offer expires and the place is offered to the next eligible cleaner, or handed to you." };
   } else {
-    status = { label: "Needs coverage", tone: "attention" };
-    situation = ["No cleaner has been offered this visit, so nobody has agreed to do it."];
+    status = staff.accepted > 0 ? { label: `Partly staffed · ${staff.accepted} of ${staff.required}`, tone: "attention" } : { label: "Needs coverage", tone: "attention" };
+    situation = [staff.accepted > 0 ? `${crewNames} accepted, and ${staff.open} more ${staff.open === 1 ? "cleaner is" : "cleaners are"} needed. No offer is out for ${staff.open === 1 ? "that place" : "those places"}.` : "No cleaner has been offered this visit, so nobody has agreed to do it."];
     next = task
-      ? { action: task.status === "needs_decision" ? (task.openQuestion ?? "A person needs to decide.") : (task.nextAction ?? "Dispatch is finding a cleaner."), when: task.dueAt, ifFails: "The visit stays uncovered until a cleaner accepts." }
-      : { action: "Offer the visit to an eligible cleaner.", when: job.startsAt, ifFails: "The visit stays uncovered until a cleaner accepts." };
+      ? { action: task.status === "needs_decision" ? (task.openQuestion ?? "A person needs to decide.") : (task.nextAction ?? "Dispatch is finding a cleaner."), when: task.dueAt, ifFails: "The visit stays short until a cleaner accepts." }
+      : { action: "Offer the open place to an eligible cleaner.", when: job.startsAt, ifFails: "The visit stays short until a cleaner accepts." };
   }
   if (task?.status === "needs_decision" && job.status === "scheduled") situation.push(`Dispatch handed this to a person: ${task.openQuestion ?? "a decision is needed."}`);
 
   const address = property ? `${property.address.line1}${property.address.line2 ? `, ${property.address.line2}` : ""}, ${property.address.city}, ${property.address.region} ${property.address.postalCode}` : "Unknown";
   const price = job.priceCents === undefined ? null : `$${(job.priceCents / 100).toFixed(2)}`;
+  const arrival = job.arrivalWindowMinutes ? `Any time from ${when(job.startsAt, asOf, tz)} to ${when(arrivalEndsAt(job), asOf, tz).replace(/^.* at /, "")}` : `At ${when(job.startsAt, asOf, tz).replace(/^.* at /, "")}. No arrival window is set.`;
   const context: Fact[] = [
     { label: "Customer", value: customer?.name ?? "Unknown", ref: null },
     { label: "Property", value: address, ref: null },
+    { label: "Service", value: job.serviceType, ref: null },
     { label: "Scope", value: job.scope, ref: null },
+    { label: "Cleaners needed", value: `${staff.required} · ${staff.accepted} accepted`, ref: null },
+    { label: "Arrival", value: arrival, ref: null },
+    { label: "Must finish by", value: job.hardDeadlineAt ? when(job.hardDeadlineAt, asOf, tz) : "No deadline set", ref: null, missing: !job.hardDeadlineAt },
     ...(job.requiredSkills.length > 0 ? [{ label: "Skills needed", value: job.requiredSkills.join(", "), ref: null }] : []),
+    { label: "Crew instructions", value: job.instructions ?? "None recorded", ref: null, missing: !job.instructions },
     { label: "Access instructions", value: property?.accessInstructions ?? "None recorded", ref: null, missing: !property?.accessInstructions },
     { label: "Price", value: price ?? "No price set", ref: null, missing: !price },
     { label: "Payment", value: "Payments are not connected yet", ref: null, missing: true },
     { label: "Conversation", value: "Conversations are not built yet", ref: null, missing: true },
   ];
 
+  const items = await jobChecklist(ctx, job);
+  const evidence = await jobEvidence(ctx, job);
+  const policy = dispatchPolicy(ctx.company);
+  const reports = await ctx.db
+    .query("jobReports")
+    .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
+    .take(100);
+  const nameOf = (cleanerId: Id<"cleaners">) => assignments.find((row) => row.cleanerId === cleanerId)?.cleaner ?? "A cleaner";
+
   return {
     ref: { kind: "job", id: job._id },
     title: `${customer?.name ?? "Unknown customer"} · ${job.serviceType}`,
     subtitle: `${when(job.startsAt, asOf, tz)} to ${when(job.endsAt, asOf, tz).replace(/^.* at /, "")}`,
-    responsible: task?.withPersonSince !== undefined ? { label: "You. Dispatch is leaving this visit alone until you hand it back.", agent: null } : task ? { label: "Dispatch", agent: "dispatch" } : accepted ? { label: accepted.cleaner, agent: null } : { label: "Your team. No agent is working on this yet.", agent: null },
+    responsible:
+      task?.withPersonSince !== undefined
+        ? { label: "You. Dispatch is leaving this visit alone until you hand it back.", agent: null }
+        : awaitingReview
+          ? { label: "A person. The crew's report is waiting for review.", agent: null }
+          : task
+            ? { label: "Dispatch", agent: "dispatch" }
+            : crew.length > 0
+              ? { label: crewNames, agent: null }
+              : { label: "Your team. No agent is working on this yet.", agent: null },
     status,
     situation,
     context,
     next,
     history: await history(ctx, [job._id, ...rows.map((row) => row._id)], asOf),
-    job: { status: job.status, withPerson: task?.withPersonSince !== undefined, run: await coverRun(ctx, ctx.company, job, asOf), assignments },
+    job: {
+      status: job.status,
+      startsAt: job.startsAt,
+      endsAt: job.endsAt,
+      withPerson: task?.withPersonSince !== undefined,
+      run: await coverRun(ctx, ctx.company, job, asOf),
+      staffing: staff,
+      assignments,
+      completion: {
+        reportedAt: job.completionReportedAt ?? null,
+        review: job.completionReview ?? null,
+        /** Each accepted cleaner's own report. A visit goes to review only when every one of them has reported. */
+        crew: crew.map((row) => ({ assignmentId: row.id, cleaner: row.cleaner, checkedInAt: row.checkedInAt, submittedAt: row.completion?.submittedAt ?? null, incomplete: row.completion?.incomplete ?? null, note: row.completion?.note ?? null })),
+        checklist: {
+          total: items.length,
+          done: items.filter((item) => item.state === "done").length,
+          skipped: items.filter((item) => item.state === "skipped").map((item) => ({ label: item.label, reason: item.skipReason ?? null, by: item.byCleanerId ? nameOf(item.byCleanerId) : null })),
+          pending: items.filter((item) => item.state === "pending").length,
+        },
+        photos: {
+          before: evidence.filter((row) => row.kind === "before").length,
+          after: evidence.filter((row) => row.kind === "after").length,
+          issue: evidence.filter((row) => row.kind === "issue").length,
+          requiredBefore: policy.beforePhotosRequired,
+          requiredAfter: policy.afterPhotosRequired,
+        },
+        reports: reports.map((row) => ({ reportId: row._id, kind: row.kind, text: row.text, status: row.status, by: nameOf(row.cleanerId) })),
+      },
+    },
     approval: null,
     task: null,
   };
@@ -193,6 +304,15 @@ async function approvalDetail(ctx: Ctx, approvalId: Id<"approvals">, asOf: numbe
   };
 }
 
+async function latestReading(ctx: Ctx, taskId: Id<"tasks">): Promise<NonNullable<Detail["task"]>["reading"]> {
+  const row = await ctx.db
+    .query("replyReadings")
+    .withIndex("by_company_task", (q) => q.eq("companyId", ctx.companyId).eq("taskId", taskId))
+    .order("desc")
+    .first();
+  return row ? { readingId: row._id, status: row.status, intent: row.intent ?? null, reader: row.reader ?? null, outcome: row.outcome ?? null } : null;
+}
+
 async function taskDetail(ctx: Ctx, taskId: Id<"tasks">, asOf: number): Promise<Detail> {
   const task = await owned(ctx, taskId);
   const context: Fact[] = [{ label: "Done when", value: task.completionCondition, ref: null }];
@@ -234,7 +354,7 @@ async function taskDetail(ctx: Ctx, taskId: Id<"tasks">, asOf: number): Promise<
     history: await history(ctx, [task._id], asOf),
     job: null,
     approval: null,
-    task: { status: task.status, agent: task.agent },
+    task: { status: task.status, agent: task.agent, reading: await latestReading(ctx, task._id) },
   };
 }
 

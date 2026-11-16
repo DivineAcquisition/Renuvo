@@ -15,14 +15,14 @@ import { authorityFor } from "../authority";
 import { recordEvent, type Actor } from "../events";
 import { liveTaskByKey, openTask, setTaskState } from "../taskState";
 import { jobCoverageRequests, settleCoverage } from "./coverage";
-import { requiredCrew, staffing } from "./crew";
+import { nextRole, requiredCrew, staffing } from "./crew";
 import { DISPATCH_RULES, isStaffingGap, rankCleaners, type Candidate, type Excluded } from "./eligibility";
 import { jobAssignments, jobFacts, jobHistory, readyCleanerFacts } from "./facts";
 import { handOff } from "./handoffs";
 import { carryOutReminder } from "./live";
 import { offerProblem, placeOffer, type OfferKind } from "./offers";
 import { money, payFor } from "./pay";
-import { dispatchPolicy } from "./policy";
+import { crewPayOf, dispatchPolicy } from "./policy";
 import { dispatchSettings, type DispatchSettings } from "./settings";
 
 export const DISPATCH: Actor = { kind: "agent", agent: "dispatch" };
@@ -93,6 +93,24 @@ export async function candidatesFor(ctx: QueryCtx | MutationCtx, company: Doc<"c
   const { cleaners, facts } = await readyCleanerFacts(ctx, job, history);
   const ranked = rankCleaners(facts, await jobFacts(ctx, company, job), DISPATCH_RULES);
   return { ...ranked, cleaners, assignments, history };
+}
+
+/**
+ * The same answer for a person looking at a job that already has someone on it: a cleaner who accepted
+ * this job, or holds an open offer for it, is not someone to ask for its remaining places. They are
+ * listed with the others who cannot be asked, and the reason says which it is.
+ */
+export function withoutCrew<C extends { cleanerId: string; name: string }, E extends { cleanerId: string; name: string; code: string; reason: string }>(found: { candidates: C[]; excluded: E[]; assignments: Doc<"assignments">[] }) {
+  const held = new Map<string, "accepted" | "offered">();
+  for (const row of found.assignments) if (row.status === "accepted" || (row.status === "offered" && !held.has(row.cleanerId))) held.set(row.cleanerId, row.status);
+  const onJob = found.candidates.filter((row) => held.has(row.cleanerId));
+  return {
+    candidates: found.candidates.filter((row) => !held.has(row.cleanerId)),
+    excluded: [
+      ...onJob.map((row) => ({ cleanerId: row.cleanerId, name: row.name, code: held.get(row.cleanerId) === "accepted" ? "on_this_job" : "offer_out", reason: held.get(row.cleanerId) === "accepted" ? "has already accepted this visit" : "already has an open offer for this visit" })),
+      ...found.excluded.map((row) => ({ cleanerId: row.cleanerId, name: row.name, code: row.code as string, reason: row.reason })),
+    ],
+  };
 }
 
 /**
@@ -334,7 +352,10 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
     if (taken.has(candidate.cleanerId)) continue;
     const cleaner = cleaners.find((row) => row._id === candidate.cleanerId);
     if (!cleaner || !candidate.pay.ok) continue;
-    const payCents = candidate.pay.payCents;
+    // Offers placed earlier in this loop may have taken the lead, so the pay is worked out for the role this offer carries.
+    const pay = payFor(cleaner, job, { rule: crewPayOf(company), role: nextRole(assignments) });
+    if (!pay.ok) continue;
+    const payCents = pay.payCents;
     // The ranking and the offer check use the same rules. The check has the last word all the same.
     const problem = await offerProblem(ctx, { company, job, cleaner, respondBy, payCents, rules: DISPATCH_RULES, afterStart: lateCover }, { assignments, history });
     if (problem !== null) continue;
@@ -354,7 +375,7 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
         summary,
         reason: `${lead}${fitWords(candidate, Math.max(0, eligibleOthers))}${short}`,
         authorizes:
-          `Dispatch will offer this visit to ${cleaner.name}: ${job.scope}. Their pay is ${money(payCents)} (${candidate.pay.basis}). ` +
+          `Dispatch will offer this visit to ${cleaner.name}: ${job.scope}. Their pay is ${money(payCents)} (${pay.basis}). ` +
           `They get ${windowMinutes} minutes to answer, or until the visit starts if that is sooner. The visit is confirmed only if they accept.`,
         ifWaiting: `The visit stays without a cleaner. This proposal expires ${whenWords(decideBy, company.timezone)}, and the visit then waits for you.`,
         proposal: { kind: "offer_assignment", jobId: job._id, cleanerId: cleaner._id, payCents, respondWithinMinutes: windowMinutes },
@@ -473,7 +494,7 @@ export async function afterDecision(ctx: MutationCtx, approval: Doc<"approvals">
     // Dispatch keeps one offer out per open place. A person may already have asked someone since this was proposed.
     problem = requiredCrew(job) === 1 ? "An offer for this visit is already out to a cleaner." : "An offer is already out for every open place on this visit.";
   } else {
-    const pay = payFor(cleaner, job);
+    const pay = payFor(cleaner, job, { rule: crewPayOf(company), role: nextRole(await jobAssignments(ctx, job)) });
     if (!pay.ok) problem = `${cleaner.name} ${pay.reason}.`;
     else if (pay.payCents !== proposal.payCents) problem = `${cleaner.name}'s pay for this visit changed from ${money(proposal.payCents)} to ${money(pay.payCents)} after this was proposed.`;
     else {

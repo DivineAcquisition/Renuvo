@@ -1,9 +1,12 @@
 /**
- * The one door every outbound text goes through. Telnyx is the planned provider and is not connected
- * yet; nothing here can reach a real phone. The mock answers from the number alone, so a test can ask
- * for a delivered message, a failure, a carrier that never confirms, or a send that dies half way.
+ * The one door every outbound text goes through: Telnyx (convex/lib/messaging/telnyx.ts) or the mock.
+ * The mock answers from the number alone, so a test can ask for a delivered message, a failure, a
+ * carrier that never confirms, or a send that dies half way.
  */
-export type SendInput = { to: string; body: string; idempotencyKey: string; attempt: number };
+import { telnyxProvider } from "./telnyx";
+
+/** `from` is the company's texting number. The mock ignores it. */
+export type SendInput = { to: string; from?: string; body: string; idempotencyKey: string; attempt: number };
 
 export type SendResult =
   /** The provider took the message. `delivered` is set only when it also confirmed the handset got it. */
@@ -41,18 +44,11 @@ export const mockProvider: MessagingProvider = {
   },
 };
 
-const notBuilt = (name: string): MessagingProvider => ({
-  name,
-  async send() {
-    return { ok: false, retryable: false, problem: "The text-message connection is not built yet." };
-  },
-});
-
 /** The provider this deployment uses, from MESSAGING_PROVIDER. Null means messaging is not connected. */
 export function messagingProvider(): MessagingProvider | null {
   const name = process.env.MESSAGING_PROVIDER?.trim().toLowerCase();
   if (name === "mock") return mockProvider;
-  if (name === "telnyx") return notBuilt("telnyx");
+  if (name === "telnyx") return telnyxProvider();
   return null;
 }
 

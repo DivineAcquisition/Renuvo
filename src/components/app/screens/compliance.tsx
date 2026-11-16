@@ -7,6 +7,7 @@ import { useState } from "react";
 import { AddressField } from "@/components/app/address-field";
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
+import { TextingSetup } from "@/components/app/screens/texting-setup";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { AlertTriangle, ArrowRight, CircleCheckIcon, Download, ShieldCheck } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
@@ -240,6 +241,7 @@ const REGISTRATION: Record<string, { label: string; variant: "success" | "error"
 
 function Messaging() {
   const profile = useProfile();
+  const company = useCompany();
   return (
     <section id="messaging" className="scroll-mt-20">
       <Panel title="Messaging">
@@ -253,6 +255,7 @@ function Messaging() {
               </p>
             ) : null}
             <MessagingForm profile={profile} />
+            <TextingSetup companyName={company.name} identity={profile.identity} />
             <Registration profile={profile} />
           </div>
         )}

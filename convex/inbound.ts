@@ -1,6 +1,5 @@
 /**
- * Texts and opt-outs coming in. The provider's webhook will call these once a provider is connected;
- * there is no web route yet. Only what is needed to honour the person's choice is kept: never the whole
+ * Texts and opt-outs coming in, from Telnyx's webhook (convex/http.ts, /webhooks/telnyx). Only what is needed to honour the person's choice is kept: never the whole
  * text, at most its first 200 characters with any link taken out, and no IP or device data.
  *
  * Keywords are the whole message, trimmed, in any letter case:
@@ -8,11 +7,12 @@
  * HELP, INFO: one answer with who is texting and how to reach them.
  * START, UNSTOP, YES: undo a STOP, and only what the STOP withdrew.
  * A plain-words request to stop ("stop texting me") stops texts too, and a person checks it.
- * Anything else is not handled here.
+ * Anything else from someone on record becomes a task for a person to read. Nothing acts on its words.
  */
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
+import { startReading } from "./dispatchReplies";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { readProfile } from "./lib/compliance/profile";
 import { activeSuppressions, addSuppression, currentPermission, excerpt, liftSuppression, setPermission, withdrawChannel } from "./lib/compliance/permissions";
@@ -64,16 +64,46 @@ async function reply(ctx: MutationCtx, companyId: Id<"companies">, to: string, b
   return queueReply(ctx, { companyId, to, body, reply: kind, dedupeKey });
 }
 
+type InboundResult = { kind: InboundKind | "unknown_number" | "bad_number" | "duplicate"; replied: boolean };
+
 export const sms = internalMutation({
   args: { to: v.string(), from: v.string(), body: v.string(), receivedAt: v.number() },
-  handler: async (ctx, args): Promise<{ kind: InboundKind | "unknown_number" | "bad_number"; replied: boolean }> => {
+  handler: async (ctx, args): Promise<InboundResult> => handleSms(ctx, args),
+});
+
+/**
+ * A text from Telnyx's webhook. The same event delivered twice is recognised by its id and handled once,
+ * so a STOP is not confirmed twice and a reply does not open two tasks.
+ */
+export const telnyx = internalMutation({
+  args: { eventId: v.string(), to: v.string(), from: v.string(), body: v.string(), receivedAt: v.number() },
+  handler: async (ctx, args): Promise<InboundResult> => {
+    const seen = await ctx.db
+      .query("providerReceipts")
+      .withIndex("by_provider_event", (q) => q.eq("provider", "telnyx").eq("eventId", args.eventId))
+      .first();
+    if (seen) return { kind: "duplicate", replied: false };
+    await ctx.db.insert("providerReceipts", { provider: "telnyx", eventId: args.eventId, receivedAt: Date.now() });
+    return handleSms(ctx, args);
+  },
+});
+
+async function handleSms(ctx: MutationCtx, args: { to: string; from: string; body: string; receivedAt: number }): Promise<InboundResult> {
+  {
     const to = normalAddress("sms", args.to);
     const companyId = to ? await companyForNumber(ctx, to) : null;
     if (!companyId) return { kind: "unknown_number", replied: false };
     const from = normalAddress("sms", args.from);
     if (!from) return { kind: "bad_number", replied: false };
     const kind = classify(args.body);
-    if (kind === "ignored") return { kind, replied: false };
+    // Not a keyword. Someone on record who texts the company's number is answered by a person, and a
+    // cleaner's text is also read against their own visits (dispatchReplies.ts).
+    const ordinary = async (): Promise<InboundResult> => {
+      const known = await recipientsAt(ctx, companyId, "sms", from);
+      if (known.length > 0) await replyTask(ctx, companyId, from, known, args.body, args.receivedAt);
+      return { kind: "ignored", replied: false };
+    };
+    if (kind === "ignored") return ordinary();
 
     const profile = await readProfile(ctx, companyId);
     const sender = profile.messaging.senderName ?? (await ctx.db.get(companyId))?.name ?? "this business";
@@ -104,8 +134,8 @@ export const sms = internalMutation({
 
     if (kind === "start") {
       const stops = (await activeSuppressions(ctx, companyId, "sms", from)).filter((row) => row.reason === "stop_keyword");
-      // START means something only after a STOP. Otherwise it is an ordinary reply, and is left alone.
-      if (stops.length === 0) return { kind: "ignored", replied: false };
+      // START means something only after a STOP. Otherwise it is an ordinary reply, such as "Yes" to an offer.
+      if (stops.length === 0) return ordinary();
       for (const row of stops) await liftSuppression(ctx, row, { liftedBy: byRecipient, note: "Replied START.", actor: SYSTEM });
       for (const person of people) {
         for (const category of CATEGORIES) {
@@ -126,8 +156,46 @@ export const sms = internalMutation({
     }
     await reviewTask(ctx, companyId, from, people, suppression);
     return { kind, replied: false };
-  },
-});
+  }
+}
+
+/**
+ * One open task per number for texts a person needs to read. A later text from the same number updates
+ * the task with the newest words. Only an excerpt is kept, with any link taken out.
+ */
+async function replyTask(ctx: MutationCtx, companyId: Id<"companies">, address: string, people: RecipientRecord[], body: string, at: number) {
+  const key = `inbound.reply:${address}`;
+  const person = people.length === 1 ? people[0] : null;
+  const who = person ? person.name : `${people.length} people who share ${address}`;
+  const question = `${who} texted the company's number: "${excerpt(body) ?? ""}". Read it and act on it yourself: a text is not recorded as an answer to an offer, an ETA or a check-in. Reply by phone or from your own texting tool.`.slice(0, 1000);
+  const existing = await liveTaskByKey(ctx, companyId, key);
+  // A text from exactly one cleaner is also read against that cleaner's own visits (dispatchReplies.ts).
+  const read = async (taskId: Id<"tasks">) => {
+    // Each reading may call a model, so one number gets at most ten an hour; the task still shows every text.
+    if (person?.kind === "cleaner" && (await allow(ctx, `reply-read:${companyId}:${address}`, 10, HOUR))) await startReading(ctx, { companyId, cleanerId: person.id as Id<"cleaners">, excerpt: excerpt(body) ?? "", receivedAt: at, taskId });
+  };
+  if (existing) {
+    await setTaskState(ctx, existing, "needs_decision", { openQuestion: question, dueAt: at + HOUR, withPersonSince: existing.withPersonSince ?? Date.now() }, SYSTEM, { sameStatus: true });
+    await read(existing._id);
+    return;
+  }
+  // Rate-limited per number, so a stream of texts cannot open a stream of tasks.
+  if (!(await allow(ctx, `inbound-task:${companyId}:${address}`, 5, HOUR))) return;
+  const agent: Agent = person?.kind === "customer" ? "retention" : person?.kind === "applicant" ? "recruiter" : "dispatch";
+  const taskId = await openTask(ctx, {
+    companyId,
+    agent,
+    title: `Text from ${who}`,
+    nextAction: "Read the text and answer it",
+    dueAt: at + HOUR,
+    completionCondition: "A person read the text and dealt with it",
+    about: person ? (person.kind === "cleaner" ? { table: "cleaners", id: person.id as Id<"cleaners"> } : { table: "customers", id: person.id as Id<"customers"> }) : undefined,
+    key,
+    actor: SYSTEM,
+  });
+  await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: question, dueAt: at + HOUR, withPersonSince: Date.now() }, SYSTEM);
+  await read(taskId);
+}
 
 /** A task for a person to read a plain-words opt-out and confirm it. Opened once per number while it is open. */
 async function reviewTask(ctx: MutationCtx, companyId: Id<"companies">, address: string, people: RecipientRecord[], suppression: Doc<"suppressions">) {

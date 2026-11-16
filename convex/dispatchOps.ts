@@ -9,10 +9,11 @@ import { internalMutation } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, managerMutation, ownerMutation } from "./lib/builders";
 import { afterOfferTextRefused } from "./lib/dispatch/delivery";
-import { assignmentLinks, issueLink, linkPath, linkState, revokeLink, siteOrigin, tokenFor } from "./lib/dispatch/links";
-import { declareNoShow, jobChecklist, noCheckInKey, noShowConditions, watchJob } from "./lib/dispatch/live";
+import { assignmentLinks, issueLink, linkPath, linkState, liveLink, revokeLink, siteOrigin, tokenFor } from "./lib/dispatch/links";
+import { cannotAttend, declareNoShow, jobChecklist, noCheckInKey, noShowConditions, watchJob } from "./lib/dispatch/live";
 import { checkedPolicy, dispatchPolicy, POLICY_LIMITS } from "./lib/dispatch/policy";
-import { confirmedSms, offerSms } from "./lib/dispatch/sms";
+import { beforePhotosSms, checkInNudgeSms, confirmedSms, endedSms, offerSms, reminderSms, withdrawnSms } from "./lib/dispatch/sms";
+import { serviceKey } from "./lib/dispatch/templates";
 import { notFound, userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { messageByKey, queueMessage } from "./lib/messaging/outbox";
@@ -107,6 +108,87 @@ export const setChecklist = companyMutation({
   },
 });
 
+// ── Checklist templates ──────────────────────────────────────────────────────────────────────────
+
+/** Every service's checklist template: the version in use, and how many came before it. */
+export const checklistTemplates = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("checklistTemplates")
+      .withIndex("by_company_service_version", (q) => q.eq("companyId", ctx.companyId))
+      .take(500);
+    const latest = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) if ((latest.get(row.serviceKey)?.version ?? 0) < row.version) latest.set(row.serviceKey, row);
+    const out = [];
+    for (const row of latest.values()) {
+      out.push({ templateId: row._id, serviceType: row.serviceType, version: row.version, items: row.items, createdAt: row.createdAt, by: (await ctx.db.get(row.createdBy))?.name ?? null, retired: row.retiredAt !== undefined });
+    }
+    return out.sort((a, b) => a.serviceType.localeCompare(b.serviceType));
+  },
+});
+
+/**
+ * Saves a service's checklist as a new version. Visits created from now on start from it; visits that
+ * already exist keep the checklist they were given.
+ */
+export const setChecklistTemplate = managerMutation({
+  args: { serviceType: v.string(), items: v.array(v.object({ label: v.string(), section: v.optional(v.string()), requiresPhoto: v.optional(v.boolean()) })) },
+  handler: async (ctx, args) => {
+    const serviceType = text(args.serviceType, "The service", 80);
+    if (args.items.length === 0) throw userError("A checklist needs at least one item. To stop using one, retire it.");
+    if (args.items.length > 200) throw userError("A checklist can have up to 200 items.");
+    const items = args.items.map((item) => ({ label: text(item.label, "A checklist item", 200), section: optionalText(item.section, "The section", 80), requiresPhoto: item.requiresPhoto === true }));
+    const key = serviceKey(serviceType);
+    const latest = await ctx.db
+      .query("checklistTemplates")
+      .withIndex("by_company_service_version", (q) => q.eq("companyId", ctx.companyId).eq("serviceKey", key))
+      .order("desc")
+      .first();
+    const version = (latest?.version ?? 0) + 1;
+    const templateId = await ctx.db.insert("checklistTemplates", { companyId: ctx.companyId, serviceKey: key, serviceType, version, items, createdBy: ctx.member._id, createdAt: Date.now() });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "company.checklist_template_saved", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { serviceType, version, items: items.length } });
+    return { templateId, version };
+  },
+});
+
+/** Stops using a service's checklist for new visits. Nothing already scheduled changes. */
+export const retireChecklistTemplate = managerMutation({
+  args: { templateId: v.id("checklistTemplates") },
+  handler: async (ctx, args) => {
+    const template = await owned(ctx, args.templateId);
+    if (template.retiredAt !== undefined) return null;
+    await ctx.db.patch(template._id, { retiredAt: Date.now() });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "company.checklist_template_retired", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { serviceType: template.serviceType, version: template.version } });
+    return null;
+  },
+});
+
+// ── The texts cleaners receive ───────────────────────────────────────────────────────────────────
+
+/** Every text Dispatch sends a cleaner, worded exactly as it goes out, for an example visit. */
+export const messageSamples = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const job = { startsAt: now + 26 * HOUR, endsAt: now + 29 * HOUR, serviceType: "Standard clean", arrivalWindowMinutes: 30, requiredCrew: 2 };
+    const company = { name: ctx.company.name, timezone: ctx.company.timezone };
+    const assignment = { payCents: 9000, respondBy: now + 2 * HOUR, role: "lead" as const };
+    const property = { address: { line1: "12 Example St", city: "Austin", region: "TX", postalCode: "78701" } };
+    return [
+      { purpose: "Job offer", when: "When a cleaner is offered a visit", body: offerSms({ company, job, property, assignment, backup: false }) },
+      { purpose: "Cover needed", when: "When a place lost its cleaner and someone is asked to cover", body: offerSms({ company, job, property, assignment, backup: true }) },
+      { purpose: "Moved visit", when: "When a visit a cleaner accepted is moved and they are asked again", body: offerSms({ company, job, property, assignment, backup: false, moved: true }) },
+      { purpose: "Confirmed", when: "When a cleaner accepts", body: confirmedSms({ company, job }) },
+      { purpose: "Reminder", when: "Before the visit, at the reminder lead time", body: reminderSms({ company, job }) },
+      { purpose: "Check-in nudge", when: "When nobody has checked in after the arrival window", body: checkInNudgeSms({ company, job }) },
+      { purpose: "Before photos", when: "At check-in, when the before-photo link is on", body: beforePhotosSms({ company, count: dispatchPolicy(ctx.company).beforePhotosRequired }) },
+      { purpose: "Offer withdrawn", when: "When an open offer is withdrawn or the place is filled", body: withdrawnSms({ company, job }) },
+      { purpose: "Taken off a visit", when: "When a cleaner is no longer on a visit", body: endedSms({ company, job }) },
+    ];
+  },
+});
+
 // ── No-show ──────────────────────────────────────────────────────────────────────────────────────
 
 /** A person confirms the no-show. The record says which of the configured steps had and had not run. */
@@ -139,6 +221,53 @@ export const cleanerIsComing = managerMutation({
     const task = await liveTaskByKey(ctx, ctx.companyId, noCheckInKey(assignment._id));
     if (task) await setTaskState(ctx, task, "done", { outcome: `Reached by a person: ${note}`, closedAt: now, withPersonSince: null }, byMember(ctx));
     return null;
+  },
+});
+
+/**
+ * A person texts a cleaner who has not checked in, asking them to check in, send an ETA or say they
+ * cannot come. One text per cleaner per quarter hour at most, however often the button is pressed, so a
+ * failing number is never sent a stream of texts. The text says nothing about the cleaner being late.
+ */
+export const askCleaner = managerMutation({
+  args: { assignmentId: v.id("assignments") },
+  handler: async (ctx, args) => {
+    const assignment = await owned(ctx, args.assignmentId);
+    const job = await ctx.db.get(assignment.jobId);
+    const cleaner = await ctx.db.get(assignment.cleanerId);
+    if (!job || !cleaner) notFound();
+    if (assignment.status !== "accepted" || assignment.checkIn) throw userError("This only applies to an accepted cleaner who has not checked in.");
+    if (job.status !== "scheduled" && job.status !== "in_progress") throw userError("This visit is closed.");
+    if (!cleaner.phone) throw userError(`${cleaner.name} has no phone number on record. Add one on their record, or call them another way.`);
+    const dedupeKey = `manual_nudge:${assignment._id}:${Math.floor(Date.now() / (15 * 60_000))}`;
+    const repeated = (await messageByKey(ctx, ctx.companyId, dedupeKey)) !== null;
+    const message = await queueMessage(ctx, {
+      companyId: ctx.companyId,
+      purpose: "check_in_nudge",
+      cleaner,
+      jobId: job._id,
+      assignmentId: assignment._id,
+      link: await liveLink(ctx, assignment, "job"),
+      linkPath: "/delay",
+      body: checkInNudgeSms({ company: ctx.company, job }),
+      dedupeKey,
+      actor: byMember(ctx),
+    });
+    if (!repeated) await recordEvent(ctx, { companyId: ctx.companyId, type: "assignment.cleaner_asked", actor: byMember(ctx), subject: { table: "assignments", id: assignment._id }, data: { jobId: job._id, messageStatus: message.status } });
+    return { status: message.status, problem: message.problem ?? null, repeated };
+  },
+});
+
+/**
+ * A person records that the cleaner told them they cannot come. Their place opens and cover starts at
+ * once, exactly as when the cleaner says so through their link. This is not a no-show.
+ */
+export const recordCannotAttend = managerMutation({
+  args: { assignmentId: v.id("assignments"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const assignment = await owned(ctx, args.assignmentId);
+    if (assignment.status !== "accepted") throw userError("Only a cleaner on the visit can drop out of it.");
+    return cannotAttend(ctx, assignment._id, text(args.reason, "What the cleaner said", 500), byMember(ctx));
   },
 });
 

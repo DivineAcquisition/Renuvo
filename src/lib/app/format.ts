@@ -81,3 +81,30 @@ export function centsFrom(input: string): number | null {
   const [whole, fraction = ""] = cleaned.split(".");
   return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
 }
+
+/** The date on the company's clock, as a date field takes it: "2027-03-02". */
+export function localDate(at: number, timezone: string): string {
+  return dayKey(at, timezone);
+}
+
+/** The time on the company's clock, as a time field takes it: "14:30". */
+export function localTime(at: number, timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(at));
+}
+
+/** Midnight at the start of this instant's day on the company's clock. */
+export function localDayStart(at: number, timezone: string): number {
+  return zonedInstant(dayKey(at, timezone), "00:00", timezone) ?? at;
+}
+
+/** The start of the day `days` after (or before) the day that starts at `dayStart`, across clock changes. */
+export function addLocalDays(dayStart: number, days: number, timezone: string): number {
+  return localDayStart(dayStart + days * DAY + 12 * HOUR, timezone);
+}
+
+/** "2 h", "1 h 30 min", "45 min". */
+export function durationLabel(ms: number): string {
+  const minutes = Math.max(0, Math.round(ms / MINUTE));
+  const [hours, rest] = [Math.floor(minutes / 60), minutes % 60];
+  return hours === 0 ? `${rest} min` : rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}

@@ -9,6 +9,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { companyQuery, type MemberAccess } from "./lib/builders";
 import { AGENT_PROFILES, departmentOf, DEPARTMENTS } from "./lib/departments";
+import { staffing } from "./lib/dispatch/crew";
 import { coverRun, type RunStep } from "./lib/dispatch/run";
 import { dispatchSettings } from "./lib/dispatch/settings";
 import { coverKey, jobApprovals } from "./lib/dispatch/workflow";
@@ -31,7 +32,14 @@ export type Statement = {
   handling?: { agent: Agent; text: string };
 };
 
-export type VisitState = "completed" | "in_progress" | "accepted" | "awaiting_acceptance" | "needs_coverage" | "cancelled";
+/**
+ * accepted: every required place has an accepted cleaner. partly_staffed: some places are accepted, none
+ * of the rest has an offer out. awaiting_acceptance: places are open and at least one offer is out.
+ */
+export type VisitState = "completed" | "in_progress" | "accepted" | "partly_staffed" | "awaiting_acceptance" | "needs_coverage" | "cancelled";
+
+/** A scheduled visit that is short at least one accepted cleaner. */
+export const isUnstaffed = (state: VisitState) => state === "needs_coverage" || state === "awaiting_acceptance" || state === "partly_staffed";
 
 export type Visit = {
   jobId: Id<"jobs">;
@@ -41,8 +49,13 @@ export type Visit = {
   place: string;
   serviceType: string;
   state: VisitState;
-  /** The cleaner who accepted, or the one an offer is out to. Null when nobody has been asked. */
+  /** The first cleaner who accepted, or the one an offer is out to. Null when nobody has been asked. */
   cleaner: string | null;
+  /** Everyone who accepted. A job that needs three shows three names only when three accepted. */
+  crew: string[];
+  /** Required and accepted are separate numbers; a visit is accepted only when they are equal. */
+  requiredCrew: number;
+  acceptedCrew: number;
   /** When the open offer must be answered by. */
   respondBy: number | null;
 };
@@ -65,15 +78,19 @@ async function visitsBetween(ctx: Ctx, from: number, to: number): Promise<Visit[
       .query("assignments")
       .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
       .take(50);
-    const accepted = assignments.find((row) => row.status === "accepted");
+    const crew = assignments.filter((row) => row.status === "accepted");
+    const accepted = crew[0];
+    const staff = staffing(job, assignments);
     const offered = assignments.filter((row) => row.status === "offered").sort((a, b) => a.respondBy - b.respondBy)[0];
     const property = await ctx.db.get(job.propertyId);
     let state: VisitState;
     if (job.status === "completed" || job.status === "in_progress" || job.status === "cancelled") state = job.status;
-    else if (accepted) state = "accepted";
+    else if (staff.open === 0) state = "accepted";
     else if (offered) state = "awaiting_acceptance";
-    else state = "needs_coverage";
+    else state = staff.accepted > 0 ? "partly_staffed" : "needs_coverage";
     const holder = accepted ?? (job.status === "scheduled" ? offered : undefined);
+    const crewNames: string[] = [];
+    for (const row of crew) crewNames.push(await nameOf(row.cleanerId));
     visits.push({
       jobId: job._id,
       startsAt: job.startsAt,
@@ -83,7 +100,10 @@ async function visitsBetween(ctx: Ctx, from: number, to: number): Promise<Visit[
       serviceType: job.serviceType,
       state,
       cleaner: holder ? await nameOf(holder.cleanerId) : null,
-      respondBy: !accepted && offered && job.status === "scheduled" ? offered.respondBy : null,
+      crew: crewNames,
+      requiredCrew: staff.required,
+      acceptedCrew: staff.accepted,
+      respondBy: staff.open > 0 && offered && job.status === "scheduled" ? offered.respondBy : null,
     });
   }
   return visits;
@@ -132,7 +152,7 @@ export const today = companyQuery({
 
     const count = (state: VisitState) => visits.filter((visit) => visit.state === state).length;
     const live = visits.filter((visit) => visit.state !== "cancelled");
-    const accepted = live.filter((visit) => visit.state !== "awaiting_acceptance" && visit.state !== "needs_coverage").length;
+    const accepted = live.filter((visit) => !isUnstaffed(visit.state)).length;
     const deadlines = [...approvals.map((row) => row.decideBy), ...tasks.map((row) => row.dueAt)];
     const decisions = approvals.length + tasks.length;
 
@@ -141,13 +161,13 @@ export const today = companyQuery({
       briefing.push({ text: "No visits are scheduled today.", certainty: "confirmed", link: { kind: "view", view: "schedule_today" } });
     } else if (accepted === live.length) {
       briefing.push({
-        text: live.length === 1 ? "Today's one visit has a cleaner who accepted it." : `All ${live.length} of today's visits have a cleaner who accepted.`,
+        text: live.length === 1 ? "Today's one visit has every cleaner it needs, accepted." : `All ${live.length} of today's visits have every cleaner they need, accepted.`,
         certainty: "confirmed",
         link: { kind: "view", view: "schedule_today" },
       });
     } else {
       briefing.push({
-        text: `${accepted} of today's ${plural(live.length, "visit")} ${accepted === 1 ? "has" : "have"} a cleaner who accepted.`,
+        text: `${accepted} of today's ${plural(live.length, "visit")} ${accepted === 1 ? "has" : "have"} every cleaner needed, accepted.`,
         certainty: "confirmed",
         link: { kind: "view", view: "schedule_today" },
       });
@@ -155,23 +175,31 @@ export const today = companyQuery({
     for (const visit of visits.filter((row) => row.state === "needs_coverage").slice(0, 3)) {
       briefing.push({ text: `The ${clock(visit.startsAt, tz)} visit for ${visit.customer} has no cleaner.`, certainty: "attention", link: { kind: "job", id: visit.jobId }, handling: await handlingOf(ctx, visit.jobId) });
     }
+    for (const visit of visits.filter((row) => row.state === "partly_staffed").slice(0, 3)) {
+      briefing.push({
+        text: `The ${clock(visit.startsAt, tz)} visit for ${visit.customer} has ${visit.acceptedCrew} of ${visit.requiredCrew} cleaners accepted, and no offer out for the rest.`,
+        certainty: "attention",
+        link: { kind: "job", id: visit.jobId },
+        handling: await handlingOf(ctx, visit.jobId),
+      });
+    }
     for (const visit of visits.filter((row) => row.state === "awaiting_acceptance").slice(0, 3)) {
       briefing.push({
-        text: `The ${clock(visit.startsAt, tz)} visit for ${visit.customer} is waiting on ${visit.cleaner}'s answer${visit.respondBy ? `, due ${when(visit.respondBy, args.asOf, tz)}` : ""}.`,
+        text: `The ${clock(visit.startsAt, tz)} visit for ${visit.customer} ${visit.requiredCrew > 1 ? `has ${visit.acceptedCrew} of ${visit.requiredCrew} cleaners accepted and ` : ""}is waiting on an answer${visit.respondBy ? `, due ${when(visit.respondBy, args.asOf, tz)}` : ""}.`,
         certainty: "pending",
         link: { kind: "job", id: visit.jobId },
         handling: { agent: "dispatch", text: "Dispatch follows up when the answer is due." },
       });
     }
-    const tomorrowOpen = tomorrow.filter((row) => row.state === "needs_coverage" || row.state === "awaiting_acceptance").length;
+    const tomorrowOpen = tomorrow.filter((row) => isUnstaffed(row.state)).length;
     if (tomorrowOpen > 0) {
       briefing.push({
-        text: `Tomorrow has ${plural(tomorrowOpen, "visit")} without an accepted cleaner.`,
+        text: `Tomorrow has ${plural(tomorrowOpen, "visit")} short of an accepted cleaner.`,
         certainty: "attention",
         link: { kind: "view", view: "schedule_tomorrow" },
       });
     } else if (tomorrow.some((row) => row.state !== "cancelled")) {
-      briefing.push({ text: "Every visit tomorrow has a cleaner who accepted.", certainty: "confirmed", link: { kind: "view", view: "schedule_tomorrow" } });
+      briefing.push({ text: "Every visit tomorrow has every cleaner it needs, accepted.", certainty: "confirmed", link: { kind: "view", view: "schedule_tomorrow" } });
     }
     if (decisions > 0) {
       briefing.push({
@@ -197,7 +225,7 @@ export const today = companyQuery({
       briefing,
       indicators: {
         jobs: { total: live.length, completed: count("completed"), inProgress: count("in_progress"), upcoming: live.length - count("completed") - count("in_progress") },
-        coverage: { needing: live.length, accepted, awaiting: count("awaiting_acceptance"), uncovered: count("needs_coverage") },
+        coverage: { needing: live.length, accepted, awaiting: count("awaiting_acceptance"), partly: count("partly_staffed"), uncovered: count("needs_coverage") },
         decisions: { count: decisions, nextDeadline: deadlines.length > 0 ? Math.min(...deadlines) : null },
         // Payments are not built. The screen says so instead of showing an amount.
         payments: { state: "not_set_up" as const },
@@ -344,7 +372,7 @@ export const sidebar = companyQuery({
   handler: async (ctx, args) => {
     const { approvals, tasks } = await openDecisions(ctx);
     const ahead = await visitsBetween(ctx, args.asOf, args.asOf + dispatchSettings(ctx.company).lookAheadDays * DAY);
-    const unfilled = ahead.filter((visit) => visit.state === "needs_coverage");
+    const unfilled = ahead.filter((visit) => visit.state === "needs_coverage" || visit.state === "partly_staffed");
     const work = await agentWork(ctx, "dispatch");
     return {
       /** Approvals and handed-over tasks waiting on this person. */
@@ -474,7 +502,7 @@ export const week = companyQuery({
     const revenue = (jobs: Doc<"jobs">[]) => jobs.reduce((sum, job) => sum + (job.priceCents ?? 0), 0);
     const unpriced = thisWeek.filter((job) => job.priceCents === undefined).length;
     const upcoming = await visitsBetween(ctx, args.asOf, addLocalDays(tomorrowStart, 7, tz));
-    const gaps = upcoming.filter((visit) => visit.state === "needs_coverage" || visit.state === "awaiting_acceptance").length;
+    const gaps = upcoming.filter((visit) => isUnstaffed(visit.state)).length;
     const notSetUp = (key: string, label: string, why: string, limitation: string, kind: "count" | "cents" = "count"): Measure => ({ key, label, why, state: "not_set_up", kind, value: null, previous: null, limitation });
 
     const measures: Measure[] = [
@@ -489,7 +517,7 @@ export const week = companyQuery({
         previous: revenue(lastWeek),
         limitation: unpriced > 0 ? `${plural(unpriced, "completed visit")} ${unpriced === 1 ? "has" : "have"} no price, so ${unpriced === 1 ? "it is" : "they are"} left out.` : null,
       },
-      { key: "coverage_gaps", label: "Coverage gaps", why: "Visits in the next seven days without an accepted cleaner.", state: "measured", kind: "count", value: gaps, previous: null, limitation: null },
+      { key: "coverage_gaps", label: "Coverage gaps", why: "Visits in the next seven days short of an accepted cleaner.", state: "measured", kind: "count", value: gaps, previous: null, limitation: null },
       notSetUp("conversion", "Inquiry-to-booking conversion", "Whether sales opportunities become confirmed work.", "Arrives with the Sales agent."),
       notSetUp("cash", "Cash collected", "Money actually received.", "Payments are not connected.", "cents"),
       notSetUp("recurring", "Recurring customers", "Size and direction of the repeat customer base.", "Recurring plans arrive with Retention."),

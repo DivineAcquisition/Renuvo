@@ -33,6 +33,9 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "messages", index: "by_company_queued" },
   { table: "coverageRequests", index: "by_company_job" },
   { table: "checklistItems", index: "by_company_job" },
+  { table: "checklistTemplates", index: "by_company_service_version" },
+  { table: "textingRequests", index: "by_company_requested" },
+  { table: "replyReadings", index: "by_company_received" },
   { table: "evidence", index: "by_company_job", omit: ["storageId", "clientKey"], why: "Internal file references. The photos themselves are not in the file." },
   { table: "jobReports", index: "by_company_job" },
   { table: "toolRuns", index: "by_company_key" },
@@ -76,6 +79,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
 
 /** Company tables kept out of the export, and why. */
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
+  numberSearches: "Lists of numbers that were for sale at the moment of a search; the number the company asked for is in its texting request.",
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
   mailboxCredentials: "A sealed authorization to read and send from the company's mailbox; it opens the mailbox, so a copy must never leave. The connection itself is exported.",

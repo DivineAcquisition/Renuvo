@@ -8,7 +8,8 @@ import type { QueryCtx } from "../../_generated/server";
 import { authorityFor } from "../authority";
 import { liveTaskByKey } from "../taskState";
 import { when } from "../time";
-import { candidatesFor, coverAction, coverKey, jobApprovals } from "./workflow";
+import { staffing } from "./crew";
+import { candidatesFor, coverAction, coverKey, jobApprovals, withoutCrew } from "./workflow";
 
 /**
  * done: happened. waiting: on someone outside. needs_you: on the owner. blocked: cannot go on.
@@ -21,18 +22,25 @@ const plural = (count: number, one: string, many = `${one}s`) => `${count} ${cou
 export async function coverRun(ctx: QueryCtx, company: Doc<"companies">, job: Doc<"jobs">, asOf: number): Promise<RunStep[]> {
   if (job.status === "cancelled") return [];
   const tz = company.timezone;
-  const found = await candidatesFor(ctx, company, job);
+  const all = await candidatesFor(ctx, company, job);
+  // Someone already on this job is not a candidate for its remaining places.
+  const found = { ...all, ...withoutCrew(all) };
+  const staff = staffing(job, all.assignments);
   const name = async (row: Doc<"assignments">) => found.cleaners.find((cleaner) => cleaner._id === row.cleanerId)?.name ?? (await ctx.db.get(row.cleanerId))?.name ?? "A cleaner";
-  const accepted = found.assignments.find((row) => row.status === "accepted");
+  const crew = found.assignments.filter((row) => row.status === "accepted");
+  const crewNames: string[] = [];
+  for (const row of crew) crewNames.push(await name(row));
   const offered = found.assignments.filter((row) => row.status === "offered").sort((a, b) => a.respondBy - b.respondBy)[0];
   const ended = found.assignments.filter((row) => row.status === "declined" || row.status === "expired" || (row.status === "cancelled" && row.endCause === "released"));
   const steps: RunStep[] = [{ key: "read", label: "Read the visit", state: "done", detail: `${job.serviceType}, ${when(job.startsAt, asOf, tz)}${job.requiredSkills.length > 0 ? `; needs ${job.requiredSkills.join(", ")}` : ""}.` }];
 
   const earlier = ended.length > 0 ? ` ${plural(ended.length, "earlier offer")} ended without an acceptance.` : "";
-  if (accepted || job.status !== "scheduled") {
-    const who = accepted ? await name(accepted) : null;
-    steps.push({ key: "ask", label: "Requested acceptance", state: "done", detail: who ? `${who} was asked.${earlier}` : `The visit went ahead.${earlier}` });
-    steps.push({ key: "accept", label: "Accepted", state: who ? "done" : "todo", detail: who ? `${who} accepted. The visit is covered.` : "No acceptance is on record for this visit." });
+  // Covered means every place is accepted. One acceptance on a crew job is a step on the way, not the end.
+  if (staff.open === 0 || job.status !== "scheduled") {
+    const who = crewNames.length > 0 ? crewNames.join(", ") : null;
+    const short = staff.open > 0 ? ` It went ahead ${staff.open} short of the ${staff.required} it needed.` : "";
+    steps.push({ key: "ask", label: "Requested acceptance", state: "done", detail: who ? `${who} ${crewNames.length === 1 ? "was" : "were"} asked.${earlier}` : `The visit went ahead.${earlier}` });
+    steps.push({ key: "accept", label: "Accepted", state: who ? "done" : "todo", detail: who ? `${who} accepted.${staff.open === 0 ? (staff.required === 1 ? " The visit is covered." : ` All ${staff.required} places are accepted.`) : short}` : "No acceptance is on record for this visit." });
     return steps;
   }
 
@@ -81,6 +89,11 @@ export async function coverRun(ctx: QueryCtx, company: Doc<"companies">, job: Do
       ? { key: "ask", label: "Requested acceptance", state: "waiting", detail: `Offer out to ${await name(offered)}; answer due ${when(offered.respondBy, asOf, tz)}.${earlier}` }
       : { key: "ask", label: "Requested acceptance", state: "todo", detail: `No offer is out.${earlier}` },
   );
-  steps.push({ key: "accept", label: "Accepted", state: "todo", detail: "Not yet. The visit is not covered until a cleaner accepts." });
+  steps.push({
+    key: "accept",
+    label: "Accepted",
+    state: "todo",
+    detail: crewNames.length > 0 ? `${crewNames.join(", ")} accepted: ${staff.accepted} of ${staff.required} places. The visit is not covered until every place is accepted.` : "Not yet. The visit is not covered until a cleaner accepts.",
+  });
   return steps;
 }

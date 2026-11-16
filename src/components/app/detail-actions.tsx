@@ -7,8 +7,11 @@ import { canManage, useCompany } from "@/components/app/company";
 import { DispatchView } from "@/components/app/dispatch-view";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { HoldButton } from "@/components/app/hold-button";
+import { useNow } from "@/components/app/use-now";
+import { Modal } from "@/components/app/modal";
+import { EditVisitForm, MoveVisitForm } from "@/components/app/screens/visit-forms";
 import { Button } from "@/components/ui/button";
-import { centsFrom, zonedInstant } from "@/lib/app/format";
+import { centsFrom, clock, zonedInstant } from "@/lib/app/format";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -107,6 +110,170 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
   );
 }
 
+const REPORT_KIND: Record<string, string> = { condition: "Condition reported", addon_request: "Add-on requested", incomplete: "Work left unfinished" };
+const REPORT_STATUS: Record<string, string> = { awaiting_decision: "Waiting for a decision", acknowledged: "Acknowledged", approved: "Approved", declined: "Declined" };
+
+const PHOTO_KIND: Record<string, string> = { before: "Before", after: "After", item: "Checklist items", issue: "Issues reported" };
+
+/** The crew's photos, grouped as they were taken. Each opens full size in a new tab. */
+function Photos({ jobId }: { jobId: Id<"jobs"> }) {
+  const { companyId, timezone } = useCompany();
+  const now = useNow();
+  // The current minute goes with the request, so the signed addresses refresh before they stop working.
+  const photos = useQuery(api.dispatchViews.jobPhotos, now ? { companyId, jobId, asOf: now } : "skip");
+  if (photos === undefined) return <div className="h-16 animate-pulse rounded-lg bg-card" />;
+  if (photos.length === 0) return <p className="text-xs text-muted-foreground">No photos were added to this visit.</p>;
+  return (
+    <div className="grid gap-2.5">
+      {(["before", "after", "item", "issue"] as const).map((kind) => {
+        const group = photos.filter((photo) => photo.kind === kind);
+        if (group.length === 0) return null;
+        return (
+          <div key={kind}>
+            <p className="text-xs font-medium text-strong">
+              {PHOTO_KIND[kind]} · {group.length}
+            </p>
+            <ul className="mt-1 grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+              {group.map((photo) => (
+                <li key={photo.evidenceId}>
+                  {photo.url ? (
+                    <a href={photo.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border focus-visible:outline-2 focus-visible:outline-brand-500" title={`${photo.item ? `${photo.item} · ` : ""}${photo.by}, ${clock(photo.uploadedAt, timezone)}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={photo.url} alt={`${PHOTO_KIND[kind]} photo${photo.item ? ` for ${photo.item}` : ""} by ${photo.by}`} className="aspect-square w-full object-cover" loading="lazy" />
+                    </a>
+                  ) : (
+                    <span className="flex aspect-square items-center justify-center rounded-lg border border-dashed border-border text-[11px] text-muted-foreground">File missing</span>
+                  )}
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                    {photo.item ?? photo.by} · {clock(photo.uploadedAt, timezone)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The crew's report and a person's decision on it. Submitted is not approved: the visit closes only when
+ * a manager reviews it here, or closes it without a review and says why.
+ */
+function CompletionReview({ detail }: { detail: Detail }) {
+  const { companyId, role } = useCompany();
+  const job = detail.job!;
+  const jobId = detail.ref.id as Id<"jobs">;
+  const review = useMutation(api.jobs.reviewCompletion);
+  const override = useMutation(api.jobs.closeWithoutReview);
+  const decide = useMutation(api.dispatchOps.decideReport);
+  const { busy, error, run } = useRun();
+  const { completion } = job;
+  const manager = canManage(role);
+  const waiting = completion.crew.filter((row) => row.submittedAt === null);
+  const undecided = completion.reports.filter((row) => row.status === "awaiting_decision");
+  const short = (have: number, need: number) => (need > 0 && have < need ? ` of ${need} required` : "");
+  return (
+    <div className="grid gap-3 rounded-xl border border-border bg-muted p-3">
+      <p className="text-sm font-medium text-strong">{completion.reportedAt ? "The crew reported this visit done. Review it before it is closed." : "Completion"}</p>
+      <ul className="grid gap-1 text-sm">
+        {completion.crew.length === 0 ? <li className="text-muted-foreground">Nobody is accepted on this visit.</li> : null}
+        {completion.crew.map((row) => (
+          <li key={row.assignmentId} className="leading-relaxed">
+            <span className="font-medium text-strong">{row.cleaner}</span>{" "}
+            <span className="text-muted-foreground">
+              {row.checkedInAt === null ? "has not checked in" : row.submittedAt === null ? "checked in, has not submitted" : row.incomplete ? "submitted with work left unfinished" : "submitted as done"}
+              {row.note ? `: “${row.note}”` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <dt>Checklist</dt>
+        <dd className="text-strong">{completion.checklist.total === 0 ? "No checklist set" : `${completion.checklist.done} done · ${completion.checklist.skipped.length} skipped · ${completion.checklist.pending} not answered, of ${completion.checklist.total}`}</dd>
+        <dt>Before photos</dt>
+        <dd className="text-strong">
+          {completion.photos.before}
+          {short(completion.photos.before, completion.photos.requiredBefore)}
+        </dd>
+        <dt>After photos</dt>
+        <dd className="text-strong">
+          {completion.photos.after}
+          {short(completion.photos.after, completion.photos.requiredAfter)}
+        </dd>
+        {completion.photos.issue > 0 ? (
+          <>
+            <dt>Issue photos</dt>
+            <dd className="text-strong">{completion.photos.issue}</dd>
+          </>
+        ) : null}
+      </dl>
+      {completion.checklist.skipped.length > 0 ? (
+        <ul className="grid gap-0.5 text-xs leading-relaxed text-muted-foreground">
+          {completion.checklist.skipped.map((item) => (
+            <li key={item.label}>
+              Skipped “{item.label}”{item.by ? ` by ${item.by}` : ""}: {item.reason ?? "no reason given"}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {completion.reports.length > 0 ? (
+        <ul className="grid gap-2">
+          {completion.reports.map((report) => (
+            <li key={report.reportId} className="rounded-lg border border-border bg-card px-3 py-2 text-sm">
+              <p className="text-xs text-muted-foreground">
+                {REPORT_KIND[report.kind]} by {report.by} · {REPORT_STATUS[report.status]}
+              </p>
+              <p className="mt-0.5 leading-relaxed text-strong">{report.text}</p>
+              {report.status === "awaiting_decision" && manager ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {report.kind === "addon_request" ? (
+                    <>
+                      <Button variant="outline" size="xs" disabled={busy} onClick={() => void run(() => decide({ companyId, reportId: report.reportId, decision: "approved" }))}>
+                        Approve the request
+                      </Button>
+                      <Button variant="ghost" size="xs" disabled={busy} onClick={() => void run(() => decide({ companyId, reportId: report.reportId, decision: "declined" }))}>
+                        Decline
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" size="xs" disabled={busy} onClick={() => void run(() => decide({ companyId, reportId: report.reportId, decision: "acknowledged" }))}>
+                      Acknowledge
+                    </Button>
+                  )}
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <Photos jobId={jobId} />
+      <p className="text-xs leading-relaxed text-muted-foreground">Closing a visit approves no payment and releases no payout.</p>
+      <FormError message={error} />
+      {!manager ? (
+        <p className="text-sm text-muted-foreground">Owners and Managers review and close visits.</p>
+      ) : completion.reportedAt ? (
+        <div className="flex flex-wrap items-start gap-2">
+          <WithWords label="Close the visit" placeholder="What did you check? (optional)" confirm={undecided.length > 0 ? "Decide the reports first" : "Reviewed: close it"} required={false} variant="outline" onSubmit={(note) => review({ companyId, jobId, decision: "close", note: note || undefined })} />
+          <WithWords label="Send back for correction" placeholder="What needs correcting?" confirm="Send it back" onSubmit={(note) => review({ companyId, jobId, decision: "return", note })} />
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          <p className="text-sm text-muted-foreground">
+            {waiting.length > 0 ? `Waiting on ${waiting.map((row) => row.cleaner).join(", ")} to submit from ${waiting.length === 1 ? "their link" : "their links"}. ` : ""}
+            There is nothing to review until everyone on the crew has reported.
+          </p>
+          <div>
+            <WithWords label="Close without a review" placeholder="Why is this visit closed without a review?" confirm="Close without a review" variant="destructive-outline" onSubmit={(reason) => override({ companyId, jobId, reason })} />
+          </div>
+          <p className="text-xs text-muted-foreground">Closing without a review needs a reason and is recorded as that, never as a review.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JobActions({ detail, now }: { detail: Detail; now: number }) {
   const { companyId } = useCompany();
   const job = detail.job!;
@@ -114,12 +281,14 @@ function JobActions({ detail, now }: { detail: Detail; now: number }) {
   const answer = useMutation(api.assignments.recordAnswer);
   const release = useMutation(api.assignments.release);
   const start = useMutation(api.jobs.start);
-  const complete = useMutation(api.jobs.complete);
   const cancel = useMutation(api.jobs.cancel);
   const { busy, error, run } = useRun();
   const [offering, setOffering] = useState(false);
+  const [dialog, setDialog] = useState<"move" | "edit" | null>(null);
   const offered = job.assignments.filter((row) => row.status === "offered");
-  const accepted = job.assignments.find((row) => row.status === "accepted");
+  // Everyone who accepted is on the crew, and each can be released on their own.
+  const crew = job.assignments.filter((row) => row.status === "accepted");
+  const { staffing } = job;
   if (job.status === "completed" || job.status === "cancelled") return <p className="text-sm text-muted-foreground">This visit is closed. Nothing can be changed here.</p>;
   return (
     <div className="grid gap-3">
@@ -127,7 +296,7 @@ function JobActions({ detail, now }: { detail: Detail; now: number }) {
       {offered.map((row) => (
         <div key={row.id} className="grid gap-2">
           <p className="text-sm text-muted-foreground">
-            Record <span className="font-medium text-strong">{row.cleaner}</span>’s own answer. Cleaners do not have their own sign-in yet, so the office records it and the history says so.
+            Record <span className="font-medium text-strong">{row.cleaner}</span>’s own answer if they gave it to you directly. The history says the office recorded it.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => answer({ companyId, assignmentId: row.id, answer: "accepted" }))}>
@@ -140,36 +309,58 @@ function JobActions({ detail, now }: { detail: Detail; now: number }) {
           </div>
         </div>
       ))}
-      {accepted && job.status === "scheduled" ? (
+      {job.status === "scheduled" && crew.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => start({ companyId, jobId }))}>
-            Start the visit
-          </Button>
-          <WithWords label={`Release ${accepted.cleaner}`} placeholder="Why is the cleaner coming off this visit?" confirm="Release" onSubmit={(reason) => release({ companyId, assignmentId: accepted.id, reason })} />
-        </div>
-      ) : null}
-      {job.status === "in_progress" ? (
-        <div>
-          <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => complete({ companyId, jobId }))}>
-            Mark the visit complete
-          </Button>
-        </div>
-      ) : null}
-      {job.status === "scheduled" && !accepted ? <DispatchView jobId={jobId} now={now} canOffer /> : null}
-      {job.status === "scheduled" && !accepted ? (
-        offering ? (
-          <OfferForm jobId={jobId} now={now} />
-        ) : (
-          <div>
-            <Button variant="ghost" size="sm" onClick={() => setOffering(true)}>
-              Offer to someone else, with pay I enter
+          {staffing.open === 0 ? (
+            <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => start({ companyId, jobId }))}>
+              Start the visit
             </Button>
-          </div>
-        )
+          ) : null}
+          {crew.map((row) => (
+            <WithWords key={row.id} label={`Release ${row.cleaner}`} placeholder={`Why is ${row.cleaner} coming off this visit?`} confirm="Release" onSubmit={(reason) => release({ companyId, assignmentId: row.id, reason })} />
+          ))}
+        </div>
       ) : null}
-      <div>
+      {job.status === "in_progress" ? <CompletionReview detail={detail} /> : null}
+      {/* Staffing stays available for as long as a place is open, however many cleaners have already accepted. */}
+      {job.status === "scheduled" && staffing.open > 0 ? (
+        <>
+          {staffing.required > 1 ? (
+            <p className="text-sm font-medium text-strong">
+              {staffing.open} of {staffing.required} {staffing.open === 1 ? "place is" : "places are"} still open.
+            </p>
+          ) : null}
+          <DispatchView jobId={jobId} now={now} canOffer />
+          {offering ? (
+            <OfferForm jobId={jobId} now={now} />
+          ) : (
+            <div>
+              <Button variant="ghost" size="sm" onClick={() => setOffering(true)}>
+                Offer to someone else, with pay I enter
+              </Button>
+            </div>
+          )}
+        </>
+      ) : null}
+      <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+        {job.status === "scheduled" ? (
+          <>
+            <Button variant="outline" size="sm" onClick={() => setDialog("move")}>
+              Move the visit
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setDialog("edit")}>
+              Change details
+            </Button>
+          </>
+        ) : null}
         <WithWords label="Cancel the visit" placeholder="Why is the visit cancelled?" confirm="Cancel the visit" variant="destructive-outline" onSubmit={(reason) => cancel({ companyId, jobId, reason })} />
       </div>
+      <Modal open={dialog === "move"} onClose={() => setDialog(null)} title="Move the visit" description="You see what the move does to each cleaner before anything changes.">
+        <MoveVisitForm jobId={jobId} startsAt={job.startsAt} endsAt={job.endsAt} now={now} onDone={() => setDialog(null)} />
+      </Modal>
+      <Modal open={dialog === "edit"} onClose={() => setDialog(null)} title="Change the visit’s details">
+        <EditVisitForm jobId={jobId} onDone={() => setDialog(null)} />
+      </Modal>
     </div>
   );
 }
@@ -211,6 +402,32 @@ function ApprovalActions({ detail, now }: { detail: Detail; now: number }) {
   );
 }
 
+/** Dispatch's reading of a cleaner's text: a person applies it, with every check run again, or dismisses it. */
+function ReadingActions({ reading }: { reading: NonNullable<NonNullable<Detail["task"]>["reading"]> }) {
+  const { companyId, role } = useCompany();
+  const apply = useMutation(api.dispatchReplies.apply);
+  const dismiss = useMutation(api.dispatchReplies.dismiss);
+  const { busy, error, run } = useRun();
+  const [done, setDone] = useState<string | null>(null);
+  if (reading.status === "reading") return <p className="text-sm text-muted-foreground">Dispatch is reading the text…</p>;
+  if (!canManage(role)) return <p className="text-sm text-muted-foreground">Owners and Managers apply what Dispatch reads from a text.</p>;
+  return (
+    <div className="grid gap-2 rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
+      <p className="text-xs text-muted-foreground">Read by {reading.reader === "claude" ? "Claude" : "rule"}. Applying runs every check again, the same as the cleaner’s own link.</p>
+      <FormError message={error} />
+      {done ? <p className="text-sm text-strong">{done}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" size="sm" loading={busy} onClick={() => void run(async () => setDone((await apply({ companyId, readingId: reading.readingId })).words))}>
+          Apply it
+        </Button>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => dismiss({ companyId, readingId: reading.readingId }))}>
+          That’s not what they meant
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function TaskActions({ detail, timezone }: { detail: Detail; timezone: string }) {
   const { companyId } = useCompany();
   const taskId = detail.ref.id as Id<"tasks">;
@@ -223,9 +440,11 @@ function TaskActions({ detail, timezone }: { detail: Detail; timezone: string })
   const [time, setTime] = useState("");
   const { busy, error, run, setError } = useRun();
   const status = detail.task!.status;
+  const reading = detail.task!.reading;
   if (status === "done" || status === "cancelled") return <p className="text-sm text-muted-foreground">This task is closed.</p>;
   return (
     <div className="grid gap-3">
+      {reading && (reading.status === "proposed" || reading.status === "reading") ? <ReadingActions reading={reading} /> : null}
       {open ? (
         <form
           className="grid gap-3 rounded-xl border border-border bg-muted p-3"
