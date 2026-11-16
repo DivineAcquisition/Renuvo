@@ -45,7 +45,7 @@ export function SiteHeader({ onHome = true }: { onHome?: boolean }) {
           <Logo />
         </Link>
         <nav aria-label={onHome ? "On this page" : "Selestial"} className="hidden lg:block">
-          <NavLinks onHome={onHome} className="flex items-center gap-1" />
+          <NavLinks onHome={onHome} className="flex items-center gap-0.5 rounded-lg border border-border bg-muted p-1" />
         </nav>
         <EarlyAccessLink position="nav" size="lg" className="hidden shrink-0 lg:inline-flex">
           {NAV.cta}

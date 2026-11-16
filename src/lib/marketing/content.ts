@@ -250,15 +250,17 @@ export const EARLY_ACCESS = {
     phone: "Phone",
     website: "Website or business page",
   },
-  optional: "optional",
-  /** Its own box, unticked, and not needed to submit. It says only what is true today. */
-  smsConsent: "It’s OK to text me at this number about my assessment. Optional, and not needed to submit.",
+  /** The questions shown as a dropdown. The others are a short row of choices. */
+  dropdowns: ["businessType", "cleaners", "monthlyCleans", "bookingTool"],
+  choose: "Select one",
+  /** Its own box, unticked. Permission to text is always the person's choice, so it is never needed to submit. */
+  smsConsent: "It’s OK to text me at this number about my assessment.",
   submit: "Request My Operations Assessment",
   sending: "Sending",
   consent: "Submitting requests contact about your assessment.",
   done: { title: "Request received.", body: "We’ll be in touch about your operations assessment." },
   errors: {
-    invalid: "Answer all seven questions and check your name, company name and email, then try again. Phone and website are optional, but must be valid if you add them.",
+    invalid: "Answer all seven questions and check your name, company name, email, phone and website or business page, then try again.",
     closed: "Assessment requests are not open yet. Please check back soon.",
     failed: "That did not go through. Please try again in a moment.",
     limited: "Too many requests came from this connection. Please try again in an hour.",
