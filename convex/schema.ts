@@ -491,6 +491,8 @@ export default defineSchema({
     providerMessageId: v.optional(v.string()),
     /** Why it failed or was not sent, in words. Never a provider's raw response. */
     problem: v.optional(v.string()),
+    /** Set when the sending policy refused this text: the policy's code (convex/lib/messaging/policy.ts). */
+    refusal: v.optional(v.string()),
     queuedAt: v.number(),
     attemptedAt: v.optional(v.number()),
     sentAt: v.optional(v.number()),
