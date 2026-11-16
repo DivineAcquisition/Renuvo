@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 
 import { useCompany } from "@/components/app/company";
+import { Guard } from "@/components/app/settings/guard";
 import { Panel } from "@/components/app/shell";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,7 +24,7 @@ const MEANING: [keyof typeof STATE, string][] = [
   ["unavailable", "No adapter is built yet, so it cannot be set up."],
 ];
 
-export function Connections() {
+function ConnectionsInner() {
   const { companyId } = useCompany();
   const result = useQuery(api.settings.connections, { companyId });
   if (!result) return <Skeleton className="h-64 rounded-2xl" />;
@@ -60,5 +61,13 @@ export function Connections() {
         </dl>
       </Panel>
     </div>
+  );
+}
+
+export function Connections() {
+  return (
+    <Guard>
+      <ConnectionsInner />
+    </Guard>
   );
 }

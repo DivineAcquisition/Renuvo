@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { Guard } from "@/components/app/settings/guard";
 import { useCompany } from "@/components/app/company";
 import { messageOf } from "@/components/app/form";
 import { type BusinessDraft, draftFrom, isDirty, leavesSettings, localProblems, payloadFrom, type SavedBusiness } from "@/lib/app/settings-draft";
@@ -12,6 +13,8 @@ import { api } from "../../../../convex/_generated/api";
 type BusinessState = {
   /** The saved record, or undefined while it loads. */
   saved: SavedBusiness | undefined;
+  /** Set when the settings could not be read at all, for example because the server is behind this page. */
+  unavailable: unknown;
   canEdit: boolean;
   configured: boolean;
   draft: BusinessDraft | undefined;
@@ -41,7 +44,7 @@ export function useBusinessDraft(): BusinessState {
  * survive moving between sections. A newer saved record never replaces unsaved edits: the draft keeps
  * the revision it started from, and the page says it is out of date instead of overwriting.
  */
-export function BusinessDraftProvider({ children }: { children: React.ReactNode }) {
+function LoadedDraft({ children }: { children: React.ReactNode }) {
   const { companyId } = useCompany();
   const record = useQuery(api.settings.business, { companyId });
   const saveBusiness = useMutation(api.settings.saveBusiness);
@@ -112,6 +115,7 @@ export function BusinessDraftProvider({ children }: { children: React.ReactNode 
 
   const value: BusinessState = {
     saved,
+    unavailable: null,
     canEdit: record?.canEdit ?? false,
     configured: record?.configured ?? false,
     draft,
@@ -126,4 +130,23 @@ export function BusinessDraftProvider({ children }: { children: React.ReactNode 
     discard,
   };
   return <Context.Provider value={value}>{children}</Context.Provider>;
+}
+
+const NOTHING = () => undefined;
+
+/** Reads fail without taking the page down: the pages that need the draft say so, and the rest of Settings keeps working. */
+export function BusinessDraftProvider({ children }: { children: React.ReactNode }) {
+  return (
+    <Guard
+      fallback={(error) => (
+        <Context.Provider
+          value={{ saved: undefined, unavailable: error ?? true, canEdit: false, configured: false, draft: undefined, edit: NOTHING, dirty: false, stale: false, problems: [], saving: false, error: null, notice: null, save: async () => undefined, discard: NOTHING }}
+        >
+          {children}
+        </Context.Provider>
+      )}
+    >
+      <LoadedDraft>{children}</LoadedDraft>
+    </Guard>
+  );
 }
