@@ -20,7 +20,8 @@ The code is in `convex/lib/billing/` and `convex/billing.ts`. The Owner's screen
 | Autumn webhooks | Built: signed (Svix), deduplicated. The body only triggers a re-read from Autumn. |
 | Public pricing, FAQs, in-app comparison | Built. No credit allowance is shown because none is approved. |
 | **Verified against Autumn** | **No.** No Autumn or Stripe key exists in this environment. Every flow was verified against a stand-in that follows Autumn's documented API (`tests/fakeAutumn.ts`). |
-| **Production billing** | **Not ready.** It needs approved commercial values, Autumn and Stripe accounts, and an end-to-end sandbox run. |
+| Live Autumn catalog | **Pushed** (November 16, 2026): plans, the credit feature and agent/feature flags. Nobody can buy yet: the app's billing code is not deployed. |
+| **Production billing** | **Not ready.** The production rate card has no approved rates, and there has been no end-to-end sandbox run. The owner chose to deploy only once rates are approved. |
 
 ## Plans and what they include
 
@@ -221,8 +222,10 @@ environment (`billingAccounts.env`), so sandbox data never counts in production.
 
 ## Outstanding commercial values (not approved; nothing invented)
 
-- The Operate monthly credit allowance (`SELESTIAL_OPERATE_CREDITS`). Expand defaults to twice that
-  (`SELESTIAL_EXPAND_CREDITS` to change it).
+- ~~Monthly credit allowances~~: **approved November 16, 2026: Operate 5,000, Expand 10,000.** Pushed to
+  Autumn's live catalog that day (`SELESTIAL_OPERATE_CREDITS=5000 SELESTIAL_EXPAND_CREDITS=10000`; no
+  top-up plan, since top-ups are not approved). Read back from Autumn: `operate` $299/month with 5,000
+  credits and `expand` $499/month with 10,000, both resetting monthly, in group `selestial`.
 - Every rate on the production rate card (a new version of `2026-11`).
 - Top-up sizes and price per credit (`SELESTIAL_TOP_UP_PRICE`, `SELESTIAL_TOP_UP_UNITS`,
   `BILLING_TOP_UP_PACKS`).
