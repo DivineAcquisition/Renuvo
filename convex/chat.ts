@@ -9,10 +9,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { companyMutation, companyQuery, ownerMutation, type MemberAccess } from "./lib/builders";
+import { companyMutation, companyQuery, ownerMutation, staffMutation, type MemberAccess } from "./lib/builders";
 import { readableArtifact } from "./lib/chat/artifacts";
 import type { ContextRef } from "./lib/chat/schema";
-import { isLive, lastSeq, latestRun, monthlyRunAllowance, monthOf, ownConversation, usageRow } from "./lib/chat/state";
+import { isLive, lastSeq, latestRun, monthlyRunAllowance, monthOf, ownConversation, planOf, usageRow } from "./lib/chat/state";
 import { decideStep as decide } from "./lib/chat/steps";
 import { searchTextFor, titleFrom } from "./lib/chat/titles";
 import { describeRecord, type RecordTable } from "./lib/chat/tools";
@@ -79,7 +79,7 @@ export const resolveContext = companyQuery({
 async function checkAllowance(ctx: MutationCtx & MemberAccess) {
   const month = monthOf(Date.now());
   const row = await usageRow(ctx, ctx.companyId, month);
-  const allowance = monthlyRunAllowance();
+  const allowance = monthlyRunAllowance(ctx.company);
   if (row && row.runs >= allowance) throw userError(`This company has used this month's ${allowance} chat answers. The allowance resets at the start of next month (UTC).`, "limit");
   if (!(await allow(ctx, `chat.send:${ctx.member._id}`, SENDS_PER_WINDOW, SEND_WINDOW_MS))) throw userError("That is a lot of messages in a few minutes. Wait a moment and send again.", "limit");
   if (row) await ctx.db.patch(row._id, { runs: row.runs + 1 });
@@ -423,9 +423,9 @@ export const usage = companyQuery({
   handler: async (ctx) => {
     const now = Date.now();
     const row = await usageRow(ctx, ctx.companyId, monthOf(now));
-    const allowance = monthlyRunAllowance();
+    const allowance = monthlyRunAllowance(ctx.company);
     const date = new Date(now);
-    return { month: monthOf(now), answers: row?.runs ?? 0, allowance, tokens: row ? row.inputTokens + row.outputTokens : 0, resetsAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) };
+    return { month: monthOf(now), plan: planOf(ctx.company), answers: row?.runs ?? 0, allowance, tokens: row ? row.inputTokens + row.outputTokens : 0, resetsAt: Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) };
   },
 });
 
@@ -463,3 +463,20 @@ export const decideKnowledge = ownerMutation({
   },
 });
 
+
+// ── Plan (Selestial staff) ───────────────────────────────────────────────────────────────────────
+
+/** Selestial staff set a company's plan. It changes the company's chat allowance from the next answer on. */
+export const setCompanyPlan = staffMutation({
+  args: { companyId: v.id("companies"), plan: v.union(v.literal("growth"), v.literal("scale")), note: v.string() },
+  adminOnly: true,
+  handler: async (ctx, args) => {
+    const company = await ctx.db.get(args.companyId);
+    if (!company) notFound();
+    const note = requiredText(args.note, "The note", 500);
+    if (planOf(company) === args.plan) return null;
+    await ctx.db.patch(company._id, { plan: args.plan });
+    await recordEvent(ctx, { companyId: company._id, type: "company.plan_changed", actor: { kind: "system" }, subject: { table: "companies", id: company._id }, data: { staffId: ctx.staff._id, from: planOf(company), to: args.plan, note } });
+    return null;
+  },
+});

@@ -419,6 +419,20 @@ describe("Company Chat", () => {
     expect(mockChat.seen.at(-1)!.system).toContain("We do not clean inside ovens on standard visits.");
   });
 
+  it("gives each plan its own monthly allowance, and only Selestial staff change the plan", async () => {
+    const { t, as, companyId } = await setup();
+    expect(await as.query(api.chat.usage, { companyId })).toMatchObject({ plan: "growth", allowance: 300 });
+    expect(await refusal(as.mutation(api.chat.setCompanyPlan, { companyId, plan: "scale", note: "Upgraded" }))).toBe(NOT_FOUND);
+    const staff = { subject: "user_staff", email: "staff@selestial.example", emailVerified: true, name: "Staff" };
+    process.env.STAFF_BOOTSTRAP_EMAIL = staff.email;
+    try {
+      await t.withIdentity(staff).mutation(api.chat.setCompanyPlan, { companyId, plan: "scale", note: "Upgraded to Scale." });
+    } finally {
+      delete process.env.STAFF_BOOTSTRAP_EMAIL;
+    }
+    expect(await as.query(api.chat.usage, { companyId })).toMatchObject({ plan: "scale", allowance: 1000 });
+  });
+
   it("counts usage against a monthly allowance and refuses past it", async () => {
     const { t, as, companyId } = await setup();
     process.env.CHAT_MONTHLY_RUNS = "1";

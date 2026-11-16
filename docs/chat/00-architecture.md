@@ -141,10 +141,11 @@ files (batched), cancels approvals still waiting in that chat, and keeps the con
 
 ## Usage
 
-Each answer counts against `CHAT_MONTHLY_RUNS` per company per UTC month (default 300). Tokens are
-recorded per run and per month. The composer shows "N of M answers used this month". A per-person limit
-of 20 sends per 10 minutes protects against loops. Plan-based allowances (Growth / Scale) need the plan
-on the company record, which does not exist yet.
+Each answer counts against the company's monthly allowance (UTC month): 300 on Growth and 1,000 on
+Scale. The plan is `companies.plan`, set by Selestial staff admins; an unset plan is Growth.
+`CHAT_MONTHLY_RUNS` on the deployment overrides every plan, as an emergency cap. Tokens are recorded
+per run and per month. The composer shows "N of M answers used this month". A per-person limit of 20
+sends per 10 minutes protects against loops.
 
 ## The model
 

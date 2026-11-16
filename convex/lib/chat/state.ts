@@ -82,9 +82,23 @@ export function monthOf(at: number): string {
   return new Date(at).toISOString().slice(0, 7);
 }
 
-export function monthlyRunAllowance(): number {
+export type Plan = "growth" | "scale";
+
+/** Chat answers per company per month, by plan (the owner's decision, November 16, 2026). */
+export const CHAT_ANSWERS_PER_MONTH: Record<Plan, number> = { growth: 300, scale: 1000 };
+
+export function planOf(company: Doc<"companies">): Plan {
+  return company.plan ?? "growth";
+}
+
+/**
+ * This company's monthly allowance. CHAT_MONTHLY_RUNS on the deployment overrides every plan, for an
+ * emergency cap or a test; normally it is unset.
+ */
+export function monthlyRunAllowance(company: Doc<"companies">): number {
   const raw = Number(process.env.CHAT_MONTHLY_RUNS);
-  return Number.isInteger(raw) && raw > 0 ? raw : 300;
+  if (Number.isInteger(raw) && raw > 0) return raw;
+  return CHAT_ANSWERS_PER_MONTH[planOf(company)];
 }
 
 export async function usageRow(ctx: Ctx, companyId: Id<"companies">, month: string) {

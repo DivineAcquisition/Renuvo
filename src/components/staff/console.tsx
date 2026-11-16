@@ -758,7 +758,7 @@ function ClaimRow({ claim, canEdit }: { claim: Claim; canEdit: boolean }) {
 export function Companies() {
   const [search, setSearch] = useState("");
   const found = useQuery(api.requests.findCompanies, { search });
-  const [picked, setPicked] = useState<{ id: Id<"companies">; name: string } | null>(null);
+  const [picked, setPicked] = useState<{ id: Id<"companies">; name: string; plan: "growth" | "scale" } | null>(null);
   return (
     <>
       <PageHeader title="Companies" lead="Confirm a carrier registration after checking it with the texting provider, or suspend a company's sending. Staff see names only, never a company's records." />
@@ -781,8 +781,10 @@ export function Companies() {
   );
 }
 
-function CompanyActions({ company }: { company: { id: Id<"companies">; name: string } }) {
+function CompanyActions({ company }: { company: { id: Id<"companies">; name: string; plan: "growth" | "scale" } }) {
   const setRegistration = useMutation(api.compliance.setRegistration);
+  const setPlan = useMutation(api.chat.setCompanyPlan);
+  const [plan, setPlanChoice] = useState(company.plan);
   const setSuspended = useMutation(api.compliance.setSuspended);
   const { busy, error, run } = useRun();
   const [status, setStatus] = useState<"approved" | "rejected" | "submitted" | "not_started">("approved");
@@ -829,6 +831,17 @@ function CompanyActions({ company }: { company: { id: Id<"companies">; name: str
           Lift suspension
         </Button>
         <p className="w-full text-xs text-muted-foreground">Suspending needs a note above, and stops every message for this company until lifted.</p>
+      </div>
+      <div className="mt-5 flex flex-wrap items-end gap-2 border-t border-border pt-4">
+        <Field label="Plan" hint="Growth includes 300 chat answers a month; Scale 1,000. Admins only; needs a note above.">
+          <SelectInput value={plan} onChange={(event) => setPlanChoice(event.target.value as typeof plan)}>
+            <option value="growth">Growth</option>
+            <option value="scale">Scale</option>
+          </SelectInput>
+        </Field>
+        <Button size="sm" variant="outline" loading={busy} disabled={!note.trim() || plan === company.plan} onClick={() => void run(async () => (await setPlan({ companyId: company.id, plan, note }), setDone(`Plan set to ${plan === "scale" ? "Scale" : "Growth"}.`)))}>
+          Change plan
+        </Button>
       </div>
       {done ? <p role="status" className="mt-2 text-sm text-success-foreground">{done}</p> : null}
       <FormError message={error} />

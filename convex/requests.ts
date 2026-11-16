@@ -339,7 +339,7 @@ export const findCompanies = staffQuery({
     return rows
       .filter((row) => row.name.toLowerCase().includes(words))
       .slice(0, 10)
-      .map((row) => ({ id: row._id, name: row.name }));
+      .map((row) => ({ id: row._id, name: row.name, plan: row.plan ?? ("growth" as const) }));
   },
 });
 

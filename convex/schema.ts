@@ -182,6 +182,8 @@ export default defineSchema({
     setupKey: v.optional(v.string()),
     /** Set only by Selestial staff. While set, nothing is sent for this company. */
     suspendedAt: v.optional(v.number()),
+    /** The Selestial plan, set by Selestial staff. Absent means Growth. It sets usage allowances such as chat answers. */
+    plan: v.optional(v.union(v.literal("growth"), v.literal("scale"))),
     createdAt: v.number(),
   }).index("by_creator_setupKey", ["createdBy", "setupKey"]),
 
