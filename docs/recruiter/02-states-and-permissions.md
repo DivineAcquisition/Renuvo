@@ -67,7 +67,9 @@ onboarding_handoff`, and `withdrawn` or `closed` from any of them. Allowed chang
 
 ## When reminders stop
 
-Checked in one place, `sendProblem`, when a message is planned and again when it is claimed for
+Every applicant message also passes the shared sending policy (suspension, pause, sender setup,
+suppressions, recorded permission, quiet hours, weekly limit); see `05-assumptions.md`. Recruiter's own
+reasons are checked in one place, `sendProblem`, when a message is planned and again when it is claimed for
 sending: submitted; withdrawn; closed; do-not-contact; address bounced; role paused or closed; a person
 took over; the applicant's question is unanswered; link expired or revoked; limit reached. When the
 limit is reached or the link closes, a person is asked what to do. Silence never closes an application.

@@ -3,6 +3,7 @@ import { vi } from "vitest";
 
 import { api, internal } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import { DEFAULT_FREQUENCY, writeProfile } from "../convex/lib/compliance/profile";
 import { mockEmails } from "../convex/lib/messaging/email";
 import { mockOutbox } from "../convex/lib/messaging/provider";
 import { mockCalendar } from "../convex/lib/recruiter/calendar";
@@ -104,6 +105,14 @@ export const ANSWERS = { fullName: "Maria Lopez", email: "maria.lopez@example.te
 export async function setup() {
   const t = start();
   const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+  // A company whose sending setup is finished, so the shared policy lets its messages through. Quiet hours
+  // are off here; a test that needs them sets them. Registration approval is Selestial staff's to record,
+  // so it is written directly.
+  await t.run(async (ctx) =>
+    writeProfile(ctx, companyId, {
+      messaging: { senderName: "Alpha Cleaning", smsNumber: "+15125550100", emailFromAddress: "hiring@mail.selestial.test", registration: { status: "approved", updatedAt: Date.now(), updatedBy: "staff" }, quietHours: null, frequency: DEFAULT_FREQUENCY },
+    }),
+  );
   const needId = await as.mutation(api.hiringNeeds.create, { companyId, ...NEED });
   // Reading starts an hour before "now", so the messages a test delivers are all inside the window.
   const connectionId = await as.mutation(api.recruiter.connectMailbox, { companyId, provider: "mock", address: INBOX, processFrom: MONDAY_10AM - HOUR });

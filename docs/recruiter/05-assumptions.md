@@ -56,14 +56,25 @@ application, applicant message, suggested candidate, promotion) with full header
 | Text provider (Telnyx is planned) | Reminders by text | Not connected (Dispatch's finding). Applicant texts go through the same outbox and the mock. |
 | Convex settings: `ACTION_LINK_SECRET`, `LINK_ORIGIN` (already used by Dispatch), `EMAIL_PROVIDER`; later `RECRUITER_MODEL`, `CALENDAR_PROVIDER`, `SIGNATURE_PROVIDER` | Turning each piece on | Not set by this work. No credential was guessed or added. |
 
-## Coordination with the trust/compliance work
+## On the shared sending policy
 
-The trust session's branch (`claude/selestial-trust`) adds one sending policy for every agent: consent
-records per recipient and channel, quiet hours, weekly limits and inbound STOP handling. The owner
-decided on November 16 that Recruiter moves onto it **after that branch merges** into the working
-branch: applicant email and texts then go through its `queueMessage`, text permission becomes its
-consent record, applicants are added to its recipient lookup, and the trust register's
-`applicant-inbox` entry is updated. Until then Recruiter's own send gate (`outbox.ts`) applies.
+Since November 16, applicant email and texts pass the shared sending policy (`convex/lib/messaging/policy.ts`)
+when planned and again at the moment of sending, as well as Recruiter's own gate. Its checks apply to
+applicants: company suspended, Recruiter paused (a person can still send), sender setup unfinished,
+suppressed address, no recorded permission, quiet hours (held, then sent) and the weekly recruiting limit.
+
+What counts as permission (`convex/lib/recruiter/consent.ts`):
+
+| Channel | Permission | Recorded when |
+|---|---|---|
+| Email, recruiting | Applying for the job (source `job_application`, the owner's decision of November 16) | The application is filed, with the notification as evidence. Never over an earlier withdrawal. |
+| Text, recruiting | The applicant's own tick on the form, with the exact wording (source `applicant_form`) | They tick it; unticking withdraws it. A phone number on a resume or notification is not permission. |
+
+Asking not to be contacted withdraws both. A bounce adds the address to the shared do-not-send list.
+Inbound STOP and email unsubscribe find applicants by phone and email.
+
+**Legal review:** whether applying counts as permission to email about that application, in every place
+the product is sold.
 
 ## Known limits
 

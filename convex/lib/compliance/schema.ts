@@ -40,8 +40,11 @@ export const permissionStatusValidator = literals(PERMISSION_STATUSES);
 /**
  * How the person told the company. "import" is kept only to say where a contact came from: an imported
  * number, a payment, a resume or a booking is not consent, and the sending policy never counts it.
+ * "job_application": the person applied for a job with the company. Recruiter records it for email about
+ * that application only (category recruiting, channel email), never for texts (the owner's decision of
+ * November 16, 2026; listed for legal review in docs/recruiter/05-assumptions.md).
  */
-export const PERMISSION_SOURCES = ["web_form", "paper_form", "verbal", "text_reply", "email_reply", "onboarding", "applicant_form", "import", "staff"] as const;
+export const PERMISSION_SOURCES = ["web_form", "paper_form", "verbal", "text_reply", "email_reply", "onboarding", "applicant_form", "job_application", "import", "staff"] as const;
 export type PermissionSource = (typeof PERMISSION_SOURCES)[number];
 export const permissionSourceValidator = literals(PERMISSION_SOURCES);
 
