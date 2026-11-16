@@ -15,7 +15,7 @@ import { answerOffer } from "./lib/dispatch/assignmentState";
 import { requiredCrew } from "./lib/dispatch/crew";
 import { jobAssignments } from "./lib/dispatch/facts";
 import { handOff } from "./lib/dispatch/handoffs";
-import { linkState, liveLink, tokenFor } from "./lib/dispatch/links";
+import { assignmentLinks, linkState, liveLink, tokenFor } from "./lib/dispatch/links";
 import { arrivalEndsAt, cannotAttend, checkIn, completionGaps, EARLY_CHECK_IN_MINUTES, jobChecklist, jobEvidence, liveAssignment, reportDelay, submitCompletion } from "./lib/dispatch/live";
 import { money } from "./lib/dispatch/pay";
 import { dispatchPolicy } from "./lib/dispatch/policy";
@@ -65,7 +65,10 @@ export const offer = linkQuery({
     const base = { company: ctx.company.name, cleanerFirstName: firstName(cleaner.name), state, asOf: now };
     if (state === "accepted") {
       // The offer link itself is spent. The way into the job is the job link, which has its own life.
-      const jobLink = await liveLink(ctx, assignment, "job");
+      // Only the job link issued on acceptance is handed out here. Once a job link has been revoked or
+      // replaced (a lost phone, a link passed on), the old offer text must not lead to the new one.
+      const replaced = (await assignmentLinks(ctx, assignment)).some((row) => row.purpose === "job" && row.revokedAt !== undefined);
+      const jobLink = replaced ? null : await liveLink(ctx, assignment, "job");
       return { ...base, offer: null, jobToken: jobLink ? await tokenFor(jobLink) : null };
     }
     if (state !== "open") return { ...base, offer: null, jobToken: null };
