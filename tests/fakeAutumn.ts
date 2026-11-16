@@ -38,6 +38,8 @@ export function fakeAutumn() {
     /** Only these operations fail while `outage` is set. Empty: all of them. */
     outageOps: [] as string[],
     calls: [] as { path: string; body: Record<string, unknown>; key: string | null }[],
+    /** Balance history entries; null answers 404, as for a customer without history yet. */
+    ledger: null as unknown[] | null,
     topUpPrice: 0.01,
   };
   const grantOf = (customer: Customer) => (customer.plan ? customer.grant : 0);
@@ -173,6 +175,8 @@ export function fakeAutumn() {
       }
       case "/v1/billing.open_customer_portal":
         return json(200, { customer_id: customerId, url: "https://billing.stripe.test/portal" });
+      case "/v1/balances.list_ledger":
+        return state.ledger ? json(200, { list: state.ledger, has_more: false, next_cursor: null }) : json(404, { code: "not_found", message: "No history" });
       case "/v1/billing.setup_payment":
         return json(200, { customer_id: customerId, url: "https://checkout.stripe.test/setup" });
       default:

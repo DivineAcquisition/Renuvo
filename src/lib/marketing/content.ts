@@ -214,7 +214,7 @@ export const PRICING = {
       later: ["Marketing, Quality, Customer Care and Team Coordinator, included when released", "Customer portal, advanced workflow customization, and team and location governance, when available"],
     },
   ],
-  allowanceNote: "Monthly credit allowances will be published here once they are final.",
+  allowanceNote: "Each plan includes a monthly allowance of Selestial Credits, and Expand includes twice Operate's. Your Usage page shows your allowance, what each piece of AI work costs, and what used it.",
   services: "Bespoke implementation, migration and custom development are scoped separately.",
   faqs: [
     { q: "Which agents does each plan include?", a: "Operate includes Sales, Retention, Recruiter and Dispatch. Expand adds Marketing, Quality, Customer Care and Team Coordinator. Today Dispatch and Recruiter are working; the others are included in their plan when each is released, and no plan or purchase makes one available sooner." },

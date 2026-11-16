@@ -64,7 +64,7 @@ describe("billing", () => {
       for (const who of [manager, office]) {
         expect(await refusal(who.query(api.billing.planAndUsage, { companyId: s.companyId }))).toBe(NOT_ALLOWED);
         expect(await refusal(who.mutation(api.billing.startPlanChange, { companyId: s.companyId, plan: "expand" }))).toBe(NOT_ALLOWED);
-        expect(await refusal(who.mutation(api.billing.setSpendingControls, { companyId: s.companyId, perRunLimit: 5, autonomousMonthly: null, alertPercents: [], autoTopUp: { enabled: false } }))).toBe(NOT_ALLOWED);
+        expect(await refusal(who.mutation(api.billing.setSpendingControls, { companyId: s.companyId, maxPerExecution: null, approvalThreshold: null, autonomousMonthly: null, agentBudgets: {}, lowBalance: null, alertPercents: [], autoTopUp: { enabled: false } }))).toBe(NOT_ALLOWED);
       }
       expect(await refusal(other.as.query(api.billing.planAndUsage, { companyId: s.companyId }))).toBe(NOT_FOUND);
       expect(await refusal(other.as.mutation(api.billing.startPlanChange, { companyId: s.companyId, plan: "expand" }))).toBe(NOT_FOUND);
@@ -237,8 +237,8 @@ describe("billing", () => {
       await s.as.mutation(api.customers.create, { companyId: s.companyId, name: "Dana Customer" } as never).catch(() => undefined);
       process.env.AUTUMN_SECRET_KEY = "am_sk_live_not_a_real_key";
       expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/test values and cannot be used with a live billing key/);
-      process.env.BILLING_RATE_CARD = "2026-11";
-      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/has not been approved yet/);
+      process.env.BILLING_RATE_CARD = "no-such-card";
+      expect(await refusal(s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Hello", clientKey: key() }))).toMatch(/No rate card is selected/);
     });
   });
 
@@ -422,8 +422,8 @@ describe("billing", () => {
     it("hold back work over the per-run limit, and automatic work over the monthly budget", async () => {
       const s = await setup();
       await sync(s.t, s.companyId);
-      await s.as.mutation(api.billing.setSpendingControls, { companyId: s.companyId, perRunLimit: 20, autonomousMonthly: 1, alertPercents: [80], autoTopUp: { enabled: false } });
-      expect(await refusal(s.as.mutation(api.billing.setSpendingControls, { companyId: s.companyId, perRunLimit: null, autonomousMonthly: null, alertPercents: [80], autoTopUp: { enabled: true, credits: 500 } }))).toMatch(/not available yet/);
+      await s.as.mutation(api.billing.setSpendingControls, { companyId: s.companyId, maxPerExecution: 50, approvalThreshold: 20, autonomousMonthly: 1, agentBudgets: { chat: 1 }, lowBalance: null, alertPercents: [80], autoTopUp: { enabled: false } });
+      expect(await refusal(s.as.mutation(api.billing.setSpendingControls, { companyId: s.companyId, maxPerExecution: null, approvalThreshold: null, autonomousMonthly: null, agentBudgets: {}, lowBalance: null, alertPercents: [80], autoTopUp: { enabled: true, credits: 500 } }))).toMatch(/not available yet/);
       const results = await s.t.run(async (ctx) => {
         const { openExecution } = await import("./lib/billing/executions");
         const company = (await ctx.db.get(s.companyId))!;
@@ -431,9 +431,16 @@ describe("billing", () => {
         const auto1 = await openExecution(ctx, { company, key: "auto1", agent: "recruiter", task: "hiring_message_reading", units: 1, autonomous: true });
         await ctx.db.patch((auto1 as { executionId: Id<"aiExecutions"> }).executionId, { state: "reserved" });
         const auto2 = await openExecution(ctx, { company, key: "auto2", agent: "recruiter", task: "hiring_message_reading", units: 1, autonomous: true });
-        return { big, auto1, auto2 };
+        const huge = await openExecution(ctx, { company, key: "huge", agent: "studio", feature: "creative_studio", task: "image_generation", units: 6, autonomous: false, authorized: true });
+        const chat1 = await openExecution(ctx, { company, key: "chat1", agent: "chat", task: "chat_response_standard", units: 1, autonomous: false });
+        await ctx.db.patch((chat1 as { executionId: Id<"aiExecutions"> }).executionId, { state: "reserved" });
+        const chat2 = await openExecution(ctx, { company, key: "chat2", agent: "chat", task: "chat_response_standard", units: 1, autonomous: false });
+        return { big, auto1, auto2, huge, chat2 };
       });
+      // Above the threshold waits for the Owner; above the hard maximum nothing runs, approved or not.
       expect(results.big).toMatchObject({ ok: false, block: "needs_authorization" });
+      expect(results.huge).toMatchObject({ ok: false, block: "budget", message: expect.stringContaining("maximum") });
+      expect(results.chat2).toMatchObject({ ok: false, block: "budget", message: expect.stringContaining("monthly budget") });
       expect(results.auto1).toMatchObject({ ok: true });
       expect(results.auto2).toMatchObject({ ok: false, block: "budget" });
     });
@@ -459,6 +466,83 @@ describe("billing", () => {
       expect(agentVerdict(retired, "dispatch")).toMatchObject({ ok: false, block: "plan" });
       expect(await s.t.mutation(internal.billing.clearLegacyPlans, {})).toEqual({ cleared: 1 });
       expect(await s.t.run(async (ctx) => [(await ctx.db.get(s.companyId))!.plan ?? null, (await ctx.db.get(other.companyId))!.plan ?? null])).toEqual([null, "operate"]);
+    });
+  });
+
+  describe("the approved price list", () => {
+    it("prices exactly the published setups and refuses the rest, with the exact estimate before generating", async () => {
+      const s = await setup();
+      process.env.BILLING_RATE_CARD = "2026-11";
+      const estimate = (args: { task: "image_generation" | "image_edit" | "video_generation"; units: number; size?: string; fast?: boolean; durationSeconds?: number }) => s.as.query(api.billingUsage.estimate, { companyId: s.companyId, ...args });
+      expect(await estimate({ task: "image_generation", units: 2, size: "1024x1024" })).toMatchObject({ ok: true, credits: 40, rate: 20, rateCard: "2026-11" });
+      expect(await estimate({ task: "image_edit", units: 1, size: "1024x1024" })).toMatchObject({ ok: true, credits: 15 });
+      expect(await estimate({ task: "video_generation", units: 1, durationSeconds: 6 })).toMatchObject({ ok: true, credits: 200 });
+      expect(await estimate({ task: "video_generation", units: 1, durationSeconds: 8 })).toMatchObject({ ok: false, message: expect.stringContaining("no published credit price") });
+      expect(await estimate({ task: "image_generation", units: 1, size: "1536x1024" })).toMatchObject({ ok: false });
+      expect(await estimate({ task: "image_generation", units: 1, size: "1024x1024", fast: true })).toMatchObject({ ok: false });
+      // A live key accepts the approved production card.
+      process.env.AUTUMN_SECRET_KEY = "am_sk_live_not_a_real_key";
+      expect(await estimate({ task: "video_generation", units: 1, durationSeconds: 6 })).toMatchObject({ ok: true, credits: 200 });
+    });
+
+    it("charges a premium-model answer at its own rate", async () => {
+      const s = await setup();
+      process.env.BILLING_RATE_CARD = "2026-11";
+      process.env.ANTHROPIC_API_KEY = "test";
+      mockChat.script = [{ text: "A careful answer." }];
+      await s.as.mutation(api.chat.send, { companyId: s.companyId, text: "Plan next week.", clientKey: key(), model: "claude-opus" });
+      await settle(s.t);
+      expect((await executions(s.t))[0]).toMatchObject({ task: "chat_response_advanced", charged: 5, rateCardVersion: "2026-11" });
+      delete process.env.ANTHROPIC_API_KEY;
+    });
+  });
+
+  describe("the Usage page", () => {
+    it("answers how much, what used it, and what it delivered, from Autumn's balance and the execution records", async () => {
+      const s = await setup();
+      billing.seed(s.companyId, { plan: "operate", grant: 5000 });
+      mockChat.script = [{ text: "One." }, { text: "Two." }];
+      await ask(s.t, s.as, s.companyId, "First");
+      await ask(s.t, s.as, s.companyId, "Second");
+      await sync(s.t, s.companyId);
+      const view = await s.as.query(api.billingUsage.usage, { companyId: s.companyId });
+      if (!view.connected) throw new Error("not connected");
+      expect(view.overview).toMatchObject({ updating: false, available: 4998, usedThisCycle: 2, reserved: 0, monthly: { granted: 5000, remaining: 4998 }, zero: false });
+      expect(view.byAgent.find((row) => row.key === "chat")).toMatchObject({ units: 2, credits: 2, share: 100 });
+      expect(view.byAgent.map((row) => row.key)).toEqual(expect.arrayContaining(["chat", "recruiter", "dispatch"]));
+      expect(view.byTask.find((row) => row.key === "chat_response_standard")).toMatchObject({ units: 2, credits: 2 });
+      expect(view.delivered).toEqual([expect.objectContaining({ agent: "Company Chat", units: 2, credits: 2, link: expect.objectContaining({ path: expect.stringMatching(/^\/app\/chat\//) }) })]);
+      expect(view.series.reduce((sum, day) => sum + day.total, 0)).toBe(2);
+      // No forecast without real history.
+      expect(view.forecast).toBeNull();
+      expect(view.activity).toHaveLength(2);
+      expect(view.activity[0]).toMatchObject({ agent: "Company Chat", origin: "From Company Chat", action: "Chat response", status: "Completed", credits: 1, initiatedBy: "owner-a" });
+      const filtered = await s.as.query(api.billingUsage.usage, { companyId: s.companyId, status: "Failed" });
+      expect(filtered.connected && filtered.activity).toEqual([]);
+      const detail = (await s.as.query(api.billingUsage.execution, { companyId: s.companyId, executionId: view.activity[0].id }))!;
+      expect(detail).toMatchObject({ estimate: 1, final: 1, rateCard: "fixture-2026-11", explanation: null });
+      expect(detail.history.map((step) => step.kind)).toEqual(["estimated", "held", "completed", "charged"]);
+      expect(view.communication).toMatchObject({ sms: { total: 0 }, email: { total: 0 }, voice: null });
+      expect(view.priceList?.free.join(" ")).toMatch(/cleaner text-message links/);
+    });
+
+    it("says 'Updating usage' instead of an unverified zero, and keeps spending details to the Owner", async () => {
+      const s = await setup();
+      const view = await s.as.query(api.billingUsage.usage, { companyId: s.companyId });
+      expect(view.connected && view.overview).toMatchObject({ updating: true, available: null, zero: false });
+      const manager = await addMember(s.t, s.as, s.companyId, "mgr", "manager");
+      expect(await refusal(manager.query(api.billingUsage.usage, { companyId: s.companyId }))).toBe(NOT_ALLOWED);
+      const other = await company(s.t, "owner-b", "Beta Cleaning");
+      expect(await refusal(other.as.query(api.billingUsage.usage, { companyId: s.companyId }))).toBe(NOT_FOUND);
+    });
+
+    it("keeps balance changes apart from usage, from Autumn's ledger", async () => {
+      const s = await setup();
+      billing.state.ledger = [{ id: "led_1", occurred_at: NOW - 1000, why: { type: "plan_change", action: "manual_topup" }, before: { remaining: 100 }, after: { remaining: 600 } }, { id: "led_2", occurred_at: NOW - 5000, why: { type: "reset" }, before: { remaining: 3 }, after: { remaining: 5000 } }];
+      await sync(s.t, s.companyId);
+      const view = await s.as.query(api.billingUsage.usage, { companyId: s.companyId });
+      expect(view.connected && view.ledger).toEqual([expect.objectContaining({ label: "Credits purchased", change: 500, after: 600 }), expect.objectContaining({ label: "Monthly credits renewed", change: 4997 })]);
+      expect(view.connected && view.activity).toEqual([]);
     });
   });
 });

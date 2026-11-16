@@ -188,3 +188,10 @@ export function setupPayment(customerId: string, successUrl: string) {
 export function listInvoices(customerId: string) {
   return call<{ list: RawInvoice[]; next_cursor: string | null }>("/v1/invoices.list", { customer_id: customerId, limit: 24 });
 }
+
+export type RawLedgerEntry = { id: string; occurred_at: number; why: { type: string; action?: string; source?: string } | null; before: { remaining: number } | null; after: { remaining: number } | null };
+
+/** Balance changes other than usage: monthly resets, top-ups, plan changes and adjustments. */
+export function listLedger(customerId: string) {
+  return call<{ list: RawLedgerEntry[] }>("/v1/balances.list_ledger", { customer_id: customerId, feature_id: AUTUMN.credits, types: ["top_ups", "resets", "plan_changes", "adjustments"], limit: 30 });
+}

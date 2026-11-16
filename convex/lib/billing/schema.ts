@@ -26,8 +26,16 @@ export const SETTLEMENTS = ["none", "pending_confirm", "pending_release", "confi
 export type Settlement = (typeof SETTLEMENTS)[number];
 
 export const spendingControlsValidator = v.object({
-  /** At most this many credits for one piece of work without someone authorizing it. Unset: no limit. */
+  /** Retired name of approvalThreshold, kept so older rows still read. */
   perRunLimit: v.optional(v.number()),
+  /** Work estimated above this waits for the Owner (an alert to act, not a ceiling). Unset: none. */
+  approvalThreshold: v.optional(v.number()),
+  /** A hard ceiling: no single piece of work may hold more. Unset: none. */
+  maxPerExecution: v.optional(v.number()),
+  /** Monthly credit budget per agent, a hard limit. Missing agents: no budget. */
+  agentBudgets: v.optional(v.record(v.string(), v.number())),
+  /** Tell the Owner when available credits fall below this. Unset: no low-balance alert. */
+  lowBalance: v.optional(v.number()),
   /** Credits that work no person asked for (inbox reading, scheduled work) may use in a billing period. Unset: no limit. */
   autonomousMonthly: v.optional(v.number()),
   /** Percentages of the included allowance at which the Owner is told. */
@@ -67,7 +75,9 @@ export const billingTables = {
     controls: spendingControlsValidator,
     /** The alert thresholds already sent for the current period. */
     alertsSent: v.object({ period: v.string(), percents: v.array(v.number()) }),
-    notices: v.array(v.object({ kind: v.union(v.literal("zero_balance"), v.literal("usage_alert"), v.literal("billing_unavailable"), v.literal("past_due")), at: v.number(), text: v.string() })),
+    notices: v.array(v.object({ kind: v.union(v.literal("zero_balance"), v.literal("usage_alert"), v.literal("billing_unavailable"), v.literal("past_due"), v.literal("low_balance")), at: v.number(), text: v.string() })),
+    /** Balance changes other than usage, as Autumn's ledger lists them: monthly grants, top-ups, plan changes, adjustments. */
+    ledger: v.optional(v.array(v.object({ id: v.string(), at: v.number(), kind: v.string(), label: v.string(), change: v.union(v.number(), v.null()), after: v.union(v.number(), v.null()) }))),
     /** Recent invoices as Autumn lists them. Amounts in cents. */
     invoices: v.array(v.object({ id: v.string(), status: v.string(), cents: v.number(), currency: v.string(), createdAt: v.number(), url: v.union(v.string(), v.null()) })),
     syncedAt: v.number(),
@@ -110,6 +120,14 @@ export const billingTables = {
     nextSettleAt: v.optional(v.number()),
     settleProblem: v.optional(v.string()),
     source: v.optional(v.object({ table: v.string(), id: v.string() })),
+    /** How the work started: from Company Chat, by a person in the app, or by itself (inbox reading, schedules). */
+    origin: v.optional(v.union(v.literal("chat"), v.literal("member"), v.literal("automatic"))),
+    /** Where the work's output can be opened, subject to the viewer's permissions. */
+    link: v.optional(v.object({ label: v.string(), path: v.string() })),
+    /** The media setup it was priced for. */
+    variant: v.optional(v.object({ size: v.optional(v.string()), fast: v.optional(v.boolean()), durationSeconds: v.optional(v.number()) })),
+    /** Every step of its charge, in order: opened, held, confirmed, released, and why. */
+    history: v.optional(v.array(v.object({ at: v.number(), kind: v.string(), credits: v.optional(v.number()), note: v.optional(v.string()) }))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

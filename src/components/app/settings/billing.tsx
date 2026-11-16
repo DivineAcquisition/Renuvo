@@ -1,10 +1,13 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { UsageDashboard } from "@/components/app/billing/usage";
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, TextInput, useRun } from "@/components/app/form";
+import { FormError, useRun } from "@/components/app/form";
 import { Guard } from "@/components/app/settings/guard";
 import { Panel } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
@@ -21,8 +24,31 @@ const day = (at: number | null | undefined) => (at ? new Date(at).toLocaleDateSt
 const n = (value: number) => value.toLocaleString("en-US");
 
 /** Settings → Plan & Usage. Only the Owner reaches the query: for anyone else it is skipped, never sent. */
+type Tab = "plan" | "usage" | "billing";
+const tabOf = (params: URLSearchParams | null): Tab => {
+  const value = params?.get("tab");
+  return value === "plan" || value === "billing" ? value : "usage";
+};
+function useTab(): Tab {
+  return tabOf(useSearchParams());
+}
+
+function Tabs() {
+  const tab = useTab();
+  return (
+    <nav aria-label="Plan & Usage" className="flex gap-1 border-b border-border">
+      {(["plan", "usage", "billing"] as const).map((id) => (
+        <Link key={id} href={`/app/settings/billing?tab=${id}`} aria-current={tab === id ? "page" : undefined} className={`-mb-px border-b-2 px-3 py-2 text-sm ${tab === id ? "border-brand-500 font-medium text-strong" : "border-transparent text-muted-foreground hover:text-strong"}`}>
+          {id === "plan" ? "Plan" : id === "usage" ? "Usage" : "Billing"}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 function PlanUsageInner() {
   const { companyId, role } = useCompany();
+  const params = useSearchParams();
   const data = useQuery(api.billing.planAndUsage, role === "owner" ? { companyId } : "skip");
   if (role !== "owner") return <OwnerOnly what="Plan & Usage" />;
   if (!data) return <Skeleton className="h-96 rounded-2xl" />;
@@ -36,7 +62,7 @@ function PlanUsageInner() {
       ) : (
         <ConnectedView data={data} />
       )}
-      <Comparison catalog={data.catalog} current={data.plan} canBuy={data.connected && !!data.account} />
+      {!data.connected || tabOf(params) === "plan" ? <Comparison catalog={data.catalog} current={data.plan} canBuy={data.connected && !!data.account} /> : null}
     </div>
   );
 }
@@ -47,6 +73,7 @@ function ConnectedView({ data }: { data: Connected }) {
   const { busy, error, run } = useRun();
   const [intentId, setIntentId] = useState<Id<"billingIntents"> | null>(data.pendingIntent);
   const account = data.account;
+  const tab = useTab();
   useEffect(() => {
     // Back from Stripe or the billing portal: read Autumn's record again.
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("billing") === "returned") void refresh({ companyId }).catch(() => undefined);
@@ -64,12 +91,16 @@ function ConnectedView({ data }: { data: Connected }) {
           ))}
         </ul>
       ) : null}
+      <Tabs />
       {intentId ? <IntentDialog intentId={intentId} onClose={() => setIntentId(null)} /> : null}
-      <CurrentPlan data={data} onIntent={setIntentId} />
-      <Credits data={data} onIntent={setIntentId} />
-      {account ? <SpendingControls controls={account.controls} /> : null}
-      <Billing data={data} onIntent={setIntentId} />
-      <RateCard data={data} />
+      {tab === "plan" ? <CurrentPlan data={data} onIntent={setIntentId} /> : null}
+      {tab === "usage" ? <UsageDashboard /> : null}
+      {tab === "billing" ? (
+        <>
+          <TopUps data={data} onIntent={setIntentId} />
+          <Billing data={data} onIntent={setIntentId} />
+        </>
+      ) : null}
       <div className="flex items-center gap-3">
         <Button size="sm" variant="outline" loading={busy} onClick={() => void run(() => refresh({ companyId }))}>
           Check with billing again
@@ -145,128 +176,32 @@ function CurrentPlan({ data, onIntent }: { data: Connected; onIntent: (id: Id<"b
   );
 }
 
-function Credits({ data, onIntent }: { data: Connected; onIntent: (id: Id<"billingIntents">) => void }) {
+/** Buying credits. A top-up adds credits only: it never changes the plan or unlocks an agent. */
+function TopUps({ data, onIntent }: { data: Connected; onIntent: (id: Id<"billingIntents">) => void }) {
   const { companyId } = useCompany();
   const topUp = useMutation(api.billing.startTopUp);
   const { busy, error, run } = useRun();
-  const credits = data.account?.credits;
   return (
-    <Panel title="Selestial Credits">
-      {!credits ? (
-        <p className="text-sm text-muted-foreground">No credit balance yet. Monthly credits come with a plan.</p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Stat label="Available" value={n(credits.remaining)} />
-          <Stat label="Held for work in progress" value={n(data.account?.reserved ?? 0)} />
-          <Stat label="Included this month" value={`${n(credits.included.remaining)} of ${n(credits.included.granted)}`} hint={`Resets ${day(credits.nextResetAt)}. Unused credits do not roll over.`} />
-          <Stat label="Purchased" value={n(credits.purchased.remaining)} hint={credits.purchased.expiresAt ? `First expiry ${day(credits.purchased.expiresAt)}` : "No expiry date"} />
-        </div>
-      )}
-      <p className="mt-3 text-xs text-muted-foreground">
-        Credits pay for AI work, such as a Chat answer or a hiring email read by AI. Viewing records, opening or answering cleaner links, status changes and scheduled reminders use none. Texts and calls are measured separately and are not paid with credits. {data.topUps.consumption}
-      </p>
-      <div className="mt-4">
-        <h3 className="text-sm font-semibold text-strong">Top-ups</h3>
+    <section id="top-ups" className="scroll-mt-24">
+      <Panel title="Buy credits">
         {data.topUps.packs.length === 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground">Top-ups are not on sale yet.</p>
+          <p className="text-sm text-muted-foreground">Top-ups are not on sale yet. Until they are, credits come with the plan each month.</p>
         ) : (
           <>
-            <p className="mt-1 text-xs text-muted-foreground">{data.topUps.validity} A top-up adds credits only: it never unlocks an agent or a feature. The price is shown before you pay. Nothing is bought automatically.</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <p className="text-sm text-muted-foreground">{data.topUps.validity} {data.topUps.consumption}</p>
+            <p className="mt-1 text-xs text-muted-foreground">A top-up adds credits only: it never unlocks an agent or a feature. The exact price is shown before you pay. Nothing is bought automatically.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
               {data.topUps.packs.map((pack) => (
                 <Button key={pack} size="sm" variant="outline" loading={busy} disabled={!data.account?.plan} onClick={() => void run(async () => onIntent(await topUp({ companyId, credits: pack })))}>
-                  Add {n(pack)} credits
+                  Add {pack.toLocaleString("en-US")} credits
                 </Button>
               ))}
             </div>
           </>
         )}
-      </div>
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div>
-          <h3 className="text-sm font-semibold text-strong">Used this period</h3>
-          {data.usage.length === 0 ? (
-            <p className="mt-1 text-sm text-muted-foreground">No credits used yet.</p>
-          ) : (
-            <table className="mt-1 w-full text-sm">
-              <tbody>
-                {data.usage.map((row) => (
-                  <tr key={`${row.agent}:${row.task}`} className="border-b border-border last:border-0">
-                    <td className="py-1.5 text-strong">{row.agent}</td>
-                    <td className="py-1.5 text-muted-foreground">{row.label}</td>
-                    <td className="py-1.5 text-right tabular-nums text-muted-foreground">{n(row.units)}</td>
-                    <td className="py-1.5 text-right tabular-nums text-strong">{n(row.credits)} cr</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-strong">Recent AI work</h3>
-          {data.recent.length === 0 ? (
-            <p className="mt-1 text-sm text-muted-foreground">Nothing yet.</p>
-          ) : (
-            <ul className="mt-1 grid gap-1 text-sm">
-              {data.recent.slice(0, 12).map((row) => (
-                <li key={row.id} className="flex flex-wrap justify-between gap-2 border-b border-border py-1 last:border-0">
-                  <span className="text-strong">
-                    {row.agent}: {row.task}
-                    <span className="text-xs text-muted-foreground"> · {new Date(row.at).toLocaleString()} · rates {row.rateCard}</span>
-                  </span>
-                  <span className="tabular-nums text-muted-foreground">{row.block ?? (row.state === "completed" ? `${n(row.credits)} cr` : row.state === "reserved" || row.state === "reserving" ? `${n(row.credits)} cr held` : "no charge")}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-      <FormError message={error} />
-    </Panel>
-  );
-}
-
-function SpendingControls({ controls }: { controls: NonNullable<Connected["account"]>["controls"] }) {
-  const { companyId } = useCompany();
-  const save = useMutation(api.billing.setSpendingControls);
-  const { busy, error, run } = useRun();
-  const [perRun, setPerRun] = useState(controls.perRunLimit?.toString() ?? "");
-  const [monthly, setMonthly] = useState(controls.autonomousMonthly?.toString() ?? "");
-  const [alerts, setAlerts] = useState(controls.alertPercents.join(", "));
-  const [saved, setSaved] = useState(false);
-  const number = (value: string) => (value.trim() ? Number(value) : null);
-  return (
-    <Panel title="Spending controls">
-      <form
-        className="grid gap-3 sm:grid-cols-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          setSaved(false);
-          void run(async () => {
-            await save({ companyId, perRunLimit: number(perRun), autonomousMonthly: number(monthly), alertPercents: alerts.split(",").map((value) => Number(value.trim())).filter((value) => value > 0), autoTopUp: { enabled: false } });
-            setSaved(true);
-          });
-        }}
-      >
-        <Field label="Limit for one piece of work (credits)" hint="Bigger work waits for the Owner. Empty: no limit.">
-          <TextInput inputMode="numeric" value={perRun} onChange={(event) => setPerRun(event.target.value)} />
-        </Field>
-        <Field label="Monthly budget for automatic work (credits)" hint="Work no one asked for, such as reading the hiring inbox. Empty: no limit.">
-          <TextInput inputMode="numeric" value={monthly} onChange={(event) => setMonthly(event.target.value)} />
-        </Field>
-        <Field label="Usage alerts (% of included credits)" hint="For example 50, 80, 100.">
-          <TextInput value={alerts} onChange={(event) => setAlerts(event.target.value)} />
-        </Field>
-        <p className="text-xs text-muted-foreground sm:col-span-3">Automatic top-ups are off and are not available yet. Credits are never bought without you.</p>
-        <div className="flex items-center gap-2 sm:col-span-3">
-          <Button type="submit" size="sm" variant="primary" loading={busy}>
-            Save controls
-          </Button>
-          {saved ? <span className="text-xs text-muted-foreground">Saved.</span> : null}
-        </div>
-      </form>
-      <FormError message={error} />
-    </Panel>
+        <FormError message={error} />
+      </Panel>
+    </section>
   );
 }
 
@@ -309,29 +244,6 @@ function Billing({ data, onIntent }: { data: Connected; onIntent: (id: Id<"billi
         </ul>
       )}
       <FormError message={error} />
-    </Panel>
-  );
-}
-
-function RateCard({ data }: { data: Connected }) {
-  if (!data.rateCard) return null;
-  return (
-    <Panel title="What uses credits">
-      <p className="mb-2 text-xs text-muted-foreground">
-        Rates {data.rateCard.version}
-        {data.rateCard.fixture ? " (test values for the sandbox, not prices)" : ""}. Each item is charged once, when it is completed, whatever it took inside. Work already done is never repriced.
-      </p>
-      <ul className="grid gap-1 text-sm">
-        {data.rateCard.rates.map((row) => (
-          <li key={row.task} className="flex justify-between gap-3 border-b border-border py-1 last:border-0">
-            <span>
-              <span className="text-strong">{row.label}</span>
-              <span className="block text-xs text-muted-foreground">{row.unit}</span>
-            </span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">{!row.available ? "Not available yet" : row.credits === null ? "Not priced yet" : `${n(row.credits)} cr`}</span>
-          </li>
-        ))}
-      </ul>
     </Panel>
   );
 }
@@ -452,15 +364,6 @@ function IntentDialog({ intentId, onClose }: { intentId: Id<"billingIntents">; o
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-lg font-semibold text-strong tabular-nums">{value}</p>
-      {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
 
 export function OwnerOnly({ what }: { what: string }) {
   return (

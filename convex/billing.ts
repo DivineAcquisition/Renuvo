@@ -14,7 +14,7 @@ import { internalAction, internalMutation, internalQuery, type MutationCtx, type
 import { accountFor, agentVerdict, billingState, BLOCK_WORDS, customerIdFor, featureVerdict, verifiedPlan } from "./lib/billing/access";
 import { attach, attachBody, finalizeLock, openPortal, previewAttach, setupPayment, updateSubscription, type RawInvoice } from "./lib/billing/autumn";
 import { AGENT_CATALOG, AGENT_IDS, agentReleased, AUTUMN, BOTH_PLANS_INCLUDE, lostOnChange, PLAN_FEATURES, PLAN_IDS, planIncludesAgent, planIncludesFeature, PLANS, type PlanFeature } from "./lib/billing/catalog";
-import { HOLD_MS } from "./lib/billing/executions";
+import { HOLD_MS, noteExecution } from "./lib/billing/executions";
 import type { Projection } from "./lib/billing/projection";
 import { TASKS } from "./lib/billing/rateCards";
 import { reserveExecution, syncAccount } from "./lib/billing/reserve";
@@ -92,11 +92,15 @@ export const lockAnswered = internalMutation({
     if (!execution) return;
     const now = Date.now();
     if (args.outcome === "reserved") {
-      if (execution.state === "reserving") await ctx.db.patch(execution._id, { state: "reserved", updatedAt: now });
+      if (execution.state === "reserving") {
+        await ctx.db.patch(execution._id, { state: "reserved", updatedAt: now });
+        await noteExecution(ctx, execution._id, { kind: "held", credits: execution.credits, note: "Autumn held the credits for this work." });
+      }
       return;
     }
     // A hold that may have been made was released by the caller, or returns itself at its expiry.
     await ctx.db.patch(execution._id, { state: args.outcome, block: args.block, message: args.message, settlement: execution.lockId && args.outcome === "paused" ? "released" : execution.settlement, charged: 0, updatedAt: now });
+    await noteExecution(ctx, execution._id, { kind: args.outcome === "denied" ? "not_started" : "paused", credits: 0, note: args.message });
     const account = await accountFor(ctx, execution.companyId, execution.env);
     if (!account) return;
     if (args.block === "credits" && (args.remaining ?? 0) <= 0) {
@@ -152,12 +156,15 @@ export const settleAnswered = internalMutation({
     const now = Date.now();
     if ((args.answer === "ok" && args.success !== false) || args.answer === "replayed") {
       await ctx.db.patch(row._id, { settlement: confirming ? "confirmed" : "released", nextSettleAt: undefined, settleProblem: undefined, updatedAt: now });
+      await noteExecution(ctx, row._id, confirming ? { kind: "charged", credits: row.charged ?? 0, note: "Autumn confirmed the charge." } : { kind: "released", credits: 0, note: "Autumn returned the held credits." });
     } else if (args.answer === "degraded") {
       // Autumn accepted it without verifying. Not retried (a retry would only be a replay); listed for reconciliation.
       await ctx.db.patch(row._id, { settlement: "unverified", nextSettleAt: undefined, settleProblem: "Autumn accepted this while degraded and did not verify it.", updatedAt: now });
+      await noteExecution(ctx, row._id, { kind: "unverified", note: "Billing was degraded when this settled; it is listed for reconciliation." });
     } else if (args.answer === "refused" || (args.answer === "ok" && args.success === false)) {
       // The lock is gone: it expired, so the credits already went back. Work that completed stays done and is recorded as not billed.
       await ctx.db.patch(row._id, { settlement: confirming ? "unbilled" : "released", nextSettleAt: undefined, settleProblem: args.problem ?? "Autumn no longer had this hold.", updatedAt: now });
+      await noteExecution(ctx, row._id, confirming ? { kind: "not_charged", credits: 0, note: "The work finished after its hold expired, so it was not charged." } : { kind: "released", credits: 0, note: "The hold had already expired and its credits went back." });
     } else {
       const attempts = row.settleAttempts + 1;
       if (attempts > BACKOFF.length) await ctx.db.patch(row._id, { settlement: "unverified", settleAttempts: attempts, nextSettleAt: undefined, settleProblem: args.problem ?? "Autumn could not be reached.", updatedAt: now });
@@ -191,7 +198,10 @@ export const sweep = internalMutation({
       .query("aiExecutions")
       .withIndex("by_state_updated", (q) => q.eq("state", "reserved").lt("updatedAt", now - 5 * MINUTE))
       .take(100)) {
-      if ((row.lockExpiresAt ?? 0) < now) await ctx.db.patch(row._id, { state: "expired", settlement: "released", charged: 0, settleProblem: "The work did not finish before its hold expired; the credits went back.", updatedAt: now });
+      if ((row.lockExpiresAt ?? 0) < now) {
+        await ctx.db.patch(row._id, { state: "expired", settlement: "released", charged: 0, settleProblem: "The work did not finish before its hold expired; the credits went back.", updatedAt: now });
+        await noteExecution(ctx, row._id, { kind: "expired", credits: 0, note: "The work never reported back, so the hold expired and its credits went back." });
+      }
     }
     for (const row of await ctx.db
       .query("aiExecutions")
@@ -205,13 +215,14 @@ export const sweep = internalMutation({
 // ── Keeping Selestial's copy of Autumn's record ──────────────────────────────────────────────────
 
 export const storeAccount = internalMutation({
-  args: { companyId: v.id("companies"), env: envValidator, customerId: v.string(), projection: v.string(), invoices: v.string() },
+  args: { companyId: v.id("companies"), env: envValidator, customerId: v.string(), projection: v.string(), invoices: v.string(), ledger: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const projection = JSON.parse(args.projection) as Projection;
     const invoices = (JSON.parse(args.invoices) as RawInvoice[]).slice(0, 24).map((row) => ({ id: row.id, status: row.status, cents: Math.round(Number(row.total) * 100), currency: row.currency, createdAt: row.created_at, url: row.hosted_invoice_url ?? null }));
     const now = Date.now();
     let account = await accountFor(ctx, args.companyId, args.env);
-    const fields = { plan: projection.plan, subscription: projection.subscription, credits: projection.credits, syncedAt: now, syncProblem: undefined, ...(invoices.length ? { invoices } : {}) };
+    const ledger = args.ledger ? (JSON.parse(args.ledger) as Doc<"billingAccounts">["ledger"]) : undefined;
+    const fields = { plan: projection.plan, subscription: projection.subscription, credits: projection.credits, syncedAt: now, syncProblem: undefined, ...(invoices.length ? { invoices } : {}), ...(ledger ? { ledger } : {}) };
     if (account) await ctx.db.patch(account._id, fields);
     else {
       const id = await ctx.db.insert("billingAccounts", { companyId: args.companyId, env: args.env, customerId: args.customerId, controls: DEFAULT_CONTROLS, alertsSent: { period: "", percents: [] }, notices: [], invoices, ...fields });
@@ -224,6 +235,8 @@ export const storeAccount = internalMutation({
       await ctx.db.patch(company._id, { plan: projection.plan ?? undefined });
       await recordEvent(ctx, { companyId: company._id, type: "company.plan_changed", actor: { kind: "system" }, subject: { table: "companies", id: company._id }, data: { from: verifiedPlan(company), to: projection.plan, source: "autumn" } });
     }
+    const low = account.controls.lowBalance;
+    if (low !== undefined && projection.credits && projection.credits.remaining > 0 && projection.credits.remaining < low) await notify(ctx, account, "low_balance", `Fewer than ${low.toLocaleString("en-US")} credits are left. AI work pauses at zero; buy a top-up or wait for the monthly reset.`);
     if (projection.subscription.pastDue) await notify(ctx, account, "past_due", "The last payment for this plan did not go through. Update the payment method in Plan & Usage to keep the plan.");
     await usageAlerts(ctx, account);
   },
@@ -496,8 +509,17 @@ const PROBLEMS_PER_MONTH = 31 * 24 * 60 * MINUTE;
 
 export const setSpendingControls = ownerMutation({
   args: {
-    perRunLimit: v.union(v.number(), v.null()),
+    /** Hard: no single piece of work holds more. */
+    maxPerExecution: v.union(v.number(), v.null()),
+    /** Soft: work above it waits for the Owner. */
+    approvalThreshold: v.union(v.number(), v.null()),
+    /** Hard: monthly credits for work no one asked for. */
     autonomousMonthly: v.union(v.number(), v.null()),
+    /** Hard: monthly credits per agent ("chat", "studio" or an agent id). */
+    agentBudgets: v.record(v.string(), v.number()),
+    /** Alert only: tell the Owner when available credits fall below this. */
+    lowBalance: v.union(v.number(), v.null()),
+    /** Alert only: percentages of the monthly allowance. */
     alertPercents: v.array(v.number()),
     autoTopUp: v.object({ enabled: v.boolean(), credits: v.optional(v.number()), maxPerMonth: v.optional(v.number()) }),
   },
@@ -512,9 +534,17 @@ export const setSpendingControls = ownerMutation({
     };
     const alerts = [...new Set(args.alertPercents)].sort((a, b) => a - b);
     if (alerts.length > 5 || alerts.some((value) => !Number.isInteger(value) || value < 1 || value > 100)) throw userError("Alerts are up to five percentages between 1 and 100.");
-    if (args.autoTopUp.enabled) throw userError("Automatic top-ups are not available yet. Buy top-ups yourself when you need them.");
-    await ctx.db.patch(account._id, { controls: { perRunLimit: whole(args.perRunLimit, "The limit for one piece of work"), autonomousMonthly: whole(args.autonomousMonthly, "The monthly budget"), alertPercents: alerts, autoTopUp: { enabled: false } } });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "billing.controls_changed", actor: byMember(ctx), subject: { table: "billingAccounts", id: account._id }, data: { perRunLimit: args.perRunLimit, autonomousMonthly: args.autonomousMonthly } });
+    if (args.autoTopUp.enabled) throw userError("Automatic top-ups are not available yet: top-ups are not on sale. Nothing is ever bought without you.");
+    const budgets: Record<string, number> = {};
+    for (const [agent, value] of Object.entries(args.agentBudgets)) {
+      if (agent !== "chat" && agent !== "studio" && !(AGENT_IDS as readonly string[]).includes(agent)) throw userError("That agent is not known.");
+      budgets[agent] = whole(value, `The budget for ${agentName(agent as Doc<"aiExecutions">["agent"])}`)!;
+    }
+    const maxPerExecution = whole(args.maxPerExecution, "The maximum for one piece of work");
+    const approvalThreshold = whole(args.approvalThreshold, "The approval threshold");
+    if (maxPerExecution !== undefined && approvalThreshold !== undefined && approvalThreshold > maxPerExecution) throw userError("The approval threshold must not be above the maximum for one piece of work.");
+    await ctx.db.patch(account._id, { controls: { maxPerExecution, approvalThreshold, autonomousMonthly: whole(args.autonomousMonthly, "The monthly budget"), agentBudgets: budgets, lowBalance: whole(args.lowBalance, "The low-balance alert"), alertPercents: alerts, autoTopUp: { enabled: false, maxPerMonth: args.autoTopUp.maxPerMonth } } });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "billing.controls_changed", actor: byMember(ctx), subject: { table: "billingAccounts", id: account._id }, data: { maxPerExecution: args.maxPerExecution, approvalThreshold: args.approvalThreshold, autonomousMonthly: args.autonomousMonthly, lowBalance: args.lowBalance } });
     return null;
   },
 });
@@ -624,5 +654,5 @@ export const planAndUsage = ownerQuery({
 const TASKS_LIST = Object.keys(TASKS) as (keyof typeof TASKS)[];
 
 function agentName(agent: Doc<"aiExecutions">["agent"]): string {
-  return agent === "chat" ? "Company Chat" : agent === "studio" ? "Creative Studio" : AGENT_CATALOG[agent].name;
+  return agent === "chat" ? "Company Chat" : agent === "studio" ? "Marketing · Creative Studio" : AGENT_CATALOG[agent].name;
 }

@@ -16,7 +16,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { autumnConfig, type AutumnEnv } from "./autumn";
 import { AGENT_CATALOG, agentReleased, PLAN_FEATURES, planIncludesAgent, planIncludesFeature, PLANS, type AgentId, type PlanFeature, type PlanId } from "./catalog";
-import { activeRateCard, priceOf, TASKS, type RateCard, type Task } from "./rateCards";
+import { activeRateCard, priceOf, TASKS, withinSpec, type RateCard, type Task, type Variant } from "./rateCards";
 import type { Block } from "./schema";
 
 export type Verdict = { ok: true } | { ok: false; block: Block; message: string };
@@ -74,13 +74,14 @@ export function featureVerdict(company: Pick<Doc<"companies">, "plan">, feature:
 }
 
 /** Whether a task can be priced right now, and at what. */
-export function pricing(task: Task, units: number): { ok: true; card: RateCard; env: AutumnEnv; rate: number; credits: number } | { ok: false; block: Block; message: string } {
+export function pricing(task: Task, units: number, variant: Variant = {}): { ok: true; card: RateCard; env: AutumnEnv; rate: number; credits: number } | { ok: false; block: Block; message: string } {
   const state = billingState();
   if (!state.connected) return no("not_connected", state.message) as { ok: false; block: Block; message: string };
   if (!state.card) return no("not_approved", state.problem ?? "AI work cannot be priced yet.") as { ok: false; block: Block; message: string };
   if (!TASKS[task].available) return no("not_released", `${TASKS[task].label} is not available yet.`) as { ok: false; block: Block; message: string };
-  const credits = priceOf(state.card, task, units);
-  const rate = priceOf(state.card, task, 1);
+  if (!withinSpec(state.card, task, variant)) return no("not_approved", `${state.card.specs?.[task]?.describe ?? "This setup"} Other settings have no published credit price yet, so this cannot run.`) as { ok: false; block: Block; message: string };
+  const credits = priceOf(state.card, task, units, variant);
+  const rate = priceOf(state.card, task, 1, variant);
   if (credits === null || rate === null) return no("not_approved", `The credit price for ${TASKS[task].label.toLowerCase()} has not been approved yet, so it cannot run.`) as { ok: false; block: Block; message: string };
   return { ok: true, card: state.card, env: state.env, rate, credits };
 }

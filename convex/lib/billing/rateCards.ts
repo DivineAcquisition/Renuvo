@@ -80,16 +80,24 @@ export const TASKS: Record<Task, { label: string; unit: string; available: boole
   },
 };
 
+/** The exact setup a media rate covers. Work outside it has no published price, so it cannot run. */
+export type Spec = { sizes?: readonly string[]; durations?: readonly number[]; fastAllowed?: boolean; describe: string };
+
 export type RateCard = {
   version: string;
   /** Only for Autumn's sandbox. Refused with a live key. */
   fixture: boolean;
   /** Credits per unit. Null means not approved: that work cannot be charged, so it cannot run. */
   rates: Record<Task, number | null>;
+  /** For media, what the rate covers. Absent: every setup Creative Studio offers. */
+  specs?: Partial<Record<Task, Spec>>;
+  /** Shown as "starting at" until an exact estimate is made for the chosen setup. */
+  startingAt?: Partial<Record<Task, boolean>>;
   note: string;
 };
 
-const unapproved = Object.fromEntries(TASK_IDS.map((task) => [task, null])) as Record<Task, null>;
+/** The setup of one piece of media work, for pricing it exactly. */
+export type Variant = { size?: string; fast?: boolean; durationSeconds?: number };
 
 export const RATE_CARDS: readonly RateCard[] = [
   {
@@ -114,8 +122,27 @@ export const RATE_CARDS: readonly RateCard[] = [
   {
     version: "2026-11",
     fixture: false,
-    note: "The production card. Rates are not approved yet.",
-    rates: unapproved,
+    note: "The production card, approved by the owner on November 16, 2026. Never in force with other values.",
+    rates: {
+      chat_response_standard: 1,
+      chat_response_advanced: 5,
+      hiring_message_reading: 1,
+      image_generation: 20,
+      image_edit: 15,
+      video_generation: 200,
+      applicant_evaluation: null,
+      follow_up_draft: null,
+      dispatch_exception_analysis: null,
+      retention_assessment: null,
+      agreement_draft: null,
+      campaign_generation: null,
+    },
+    specs: {
+      image_generation: { sizes: ["1024x1024"], fastAllowed: false, describe: "Standard quality, 1024 × 1024, one image per charge." },
+      image_edit: { sizes: ["1024x1024"], describe: "Standard quality, 1024 × 1024, one edited image per charge." },
+      video_generation: { durations: [6], describe: "One 6-second clip at the standard resolution with the model's default audio. Other lengths have no published price yet." },
+    },
+    startingAt: { video_generation: true },
   },
 ];
 
@@ -127,9 +154,21 @@ export function activeRateCard(): RateCard | null {
   return rateCard(process.env.BILLING_RATE_CARD);
 }
 
-/** Credits for `units` of a task on a card, or null when the card has no approved rate for it. */
-export function priceOf(card: RateCard, task: Task, units: number): number | null {
+/** Whether a media setup is inside what the card's rate covers. */
+export function withinSpec(card: RateCard, task: Task, variant: Variant = {}): boolean {
+  const spec = card.specs?.[task];
+  if (!spec) return true;
+  if (spec.sizes && variant.size !== undefined && !spec.sizes.includes(variant.size)) return false;
+  if (spec.sizes && variant.size === undefined && !spec.sizes.includes("1024x1024")) return false;
+  if (spec.fastAllowed === false && variant.fast) return false;
+  if (spec.durations && !spec.durations.includes(variant.durationSeconds ?? 6)) return false;
+  return true;
+}
+
+/** Credits for `units` of a task on a card, or null when the card has no approved rate for it (or for this setup). */
+export function priceOf(card: RateCard, task: Task, units: number, variant: Variant = {}): number | null {
   const rate = card.rates[task];
   if (rate === null || !Number.isFinite(rate) || rate < 0 || !Number.isInteger(units) || units < 1) return null;
+  if (!withinSpec(card, task, variant)) return null;
   return rate * units;
 }

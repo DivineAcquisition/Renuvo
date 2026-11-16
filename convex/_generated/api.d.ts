@@ -21,6 +21,7 @@ import type * as approvals from "../approvals.js";
 import type * as assignments from "../assignments.js";
 import type * as availability from "../availability.js";
 import type * as billing from "../billing.js";
+import type * as billingUsage from "../billingUsage.js";
 import type * as chat from "../chat.js";
 import type * as chatArtifacts from "../chatArtifacts.js";
 import type * as chatRuns from "../chatRuns.js";
@@ -267,6 +268,7 @@ declare const fullApi: ApiFromModules<{
   assignments: typeof assignments;
   availability: typeof availability;
   billing: typeof billing;
+  billingUsage: typeof billingUsage;
   chat: typeof chat;
   chatArtifacts: typeof chatArtifacts;
   chatRuns: typeof chatRuns;

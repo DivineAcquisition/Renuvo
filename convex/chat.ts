@@ -123,6 +123,8 @@ async function startRun(ctx: MutationCtx & MemberAccess, conversation: Doc<"conv
     autonomous: false,
     memberId: ctx.member._id,
     source: { table: "chatMessages", id: userMessageId },
+    origin: "chat",
+    link: { label: "Chat conversation", path: `/app/chat/${conversation._id}` },
   });
   if (!opened.ok) throw userError(opened.message, "limit");
   const seq = (await lastSeq(ctx, conversation)) + 1;

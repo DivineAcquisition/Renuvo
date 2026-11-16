@@ -96,7 +96,7 @@ the rate per unit, so completed work is never repriced.
 | Card | Use |
 |---|---|
 | `fixture-2026-11` | Test values for Autumn's sandbox. Refused with a live key. Labelled "test values, not prices" in the interface. |
-| `2026-11` | The production card. **Every rate is unapproved (null), so nothing can run in production until rates are supplied.** |
+| `2026-11` | The production card, **approved November 16, 2026**: standard Chat answer 1, premium-model Chat answer 5, hiring email read by AI 1, generated image 20 (standard quality, 1024 × 1024), edited image 15 (1024 × 1024), generated video from 200 (exactly 200 for a 6-second clip at standard resolution and default audio; other lengths have no published price and cannot run). Shown to the Owner in Usage → "What costs credits?", not on the public site. |
 
 Tasks wired today: `chat_response_standard`, `chat_response_advanced` (models in the "Higher cost" class),
 `hiring_message_reading`, `image_generation`, `image_edit`, `video_generation`.
@@ -160,6 +160,35 @@ documented REST API directly (version 2.6.0) and classifies every answer:
 
 During an outage, everything that does not use AI keeps working, because tenant isolation and roles never
 call Autumn. New paid work needs a verified hold.
+
+## The Plan & Usage page
+
+Settings → Plan & Usage has three tabs. The credit indicator in Company Chat links the Owner to Usage.
+
+- **Plan:** the current plan, renewal and pending changes, upgrade, downgrade and cancel, and the comparison
+  of the two plans.
+- **Usage** (`src/components/app/billing/usage.tsx`, data from `convex/billingUsage.ts`):
+  1. **Overview:** available, used this cycle, reserved for running work, and the next reset with the monthly
+     allowance. Monthly credits have a progress bar; purchased credits are kept separate. Buy credits and
+     Manage spending come first, Change plan second.
+  2. **Usage over time:** a daily chart, current cycle by default, with previous cycles, custom dates, a
+     breakdown by agent or by action, an optional comparison line, and a table view. A forecast appears only
+     with at least 7 days of the cycle and 14 days of use, marked "Estimate".
+  3. **Where credits went:** by agent and by action, with completed units, credits and share. Company Chat is
+     listed; agent work asked for in Chat counts once, under the agent, with Chat as its origin.
+  4. **Work delivered:** real completed counts, each linking to its work.
+  5. **Activity and credit history:** a searchable, filterable table of AI work (opening a row shows the
+     estimate and final charge, the rate card, every step of the charge and why it changed). Balance history
+     (monthly renewals, purchases, adjustments) is a separate view, from Autumn's ledger.
+  6. **Spending controls:** a hard maximum per piece of work, an approval threshold, a monthly budget for
+     automatic work, budgets per agent, a low-balance alert and usage alerts. Alerts only notify; hard limits
+     pause that kind of AI work and nothing else. Automatic top-ups stay off and are not available.
+  7. **What costs credits?:** the published rates, with model and setup for media, and what is free.
+  8. **Texts, email and calls:** counts in their own units, never in credits.
+- **Billing:** buy credits (when top-ups are on sale), the payment method, the billing portal and invoices.
+
+While the copy of Autumn's balance is missing, failed to refresh or is older than 15 minutes, the page shows
+"Updating usage" instead of a number. Company-wide spending details are the Owner's only.
 
 ## Plan changes, top-ups, cancellation
 
@@ -226,7 +255,7 @@ environment (`billingAccounts.env`), so sandbox data never counts in production.
   Autumn's live catalog that day (`SELESTIAL_OPERATE_CREDITS=5000 SELESTIAL_EXPAND_CREDITS=10000`; no
   top-up plan, since top-ups are not approved). Read back from Autumn: `operate` $299/month with 5,000
   credits and `expand` $499/month with 10,000, both resetting monthly, in group `selestial`.
-- Every rate on the production rate card (a new version of `2026-11`).
+- ~~Production rates~~: approved November 16, 2026 (see the rate card above). Still unpriced: video lengths other than 6 seconds, image sizes other than 1024 × 1024, the fast image model, and the tasks not built yet.
 - Top-up sizes and price per credit (`SELESTIAL_TOP_UP_PRICE`, `SELESTIAL_TOP_UP_UNITS`,
   `BILLING_TOP_UP_PACKS`).
 - Whether purchased credits should ever expire. Autumn documents no expiry for one-off top-ups.

@@ -18,7 +18,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { accountFor, agentVerdict, featureVerdict, pricing, verifiedPlan } from "./access";
 import type { AgentId, PlanFeature } from "./catalog";
-import type { Task } from "./rateCards";
+import type { Task, Variant } from "./rateCards";
 import type { Block } from "./schema";
 
 const MINUTE = 60_000;
@@ -54,9 +54,15 @@ export async function openExecution(
     units: number;
     autonomous: boolean;
     memberId?: Id<"members">;
-    /** An Owner already approved going over the per-run limit for this exact work. */
+    /** An Owner already approved going over the approval threshold for this exact work. */
     authorized?: boolean;
     source?: { table: string; id: string };
+    /** How it started. Defaults to "automatic" for autonomous work and "member" otherwise. */
+    origin?: "chat" | "member" | "automatic";
+    /** Where its output can be opened. */
+    link?: { label: string; path: string };
+    /** The media setup, so the price matches exactly what will be made. */
+    variant?: Variant;
   },
 ): Promise<Opened> {
   const existing = await ctx.db
@@ -65,7 +71,7 @@ export async function openExecution(
     .first();
   if (existing) return existing.block ? { ok: false, block: existing.block, message: existing.message ?? "" } : { ok: true, executionId: existing._id, credits: existing.credits, repeated: true };
 
-  const price = pricing(input.task, input.units);
+  const price = pricing(input.task, input.units, input.variant);
   if (!price.ok) return price;
   const account = await accountFor(ctx, input.company._id, price.env);
   // Before the first sync there is no copy of Autumn's record yet: the reservation fetches it and decides.
@@ -76,8 +82,18 @@ export async function openExecution(
   if (input.agent === "chat" && knowsPlan && verifiedPlan(input.company) === null) return { ok: false, block: "plan", message: "Company Chat needs an active Operate or Expand plan." };
 
   const controls = account?.controls;
-  if (controls?.perRunLimit !== undefined && price.credits > controls.perRunLimit && !input.authorized) {
-    return { ok: false, block: "needs_authorization", message: `This needs ${price.credits} credits, more than the ${controls.perRunLimit}-credit limit for one piece of work. The Owner can approve it or raise the limit in Plan & Usage.` };
+  // Hard limits first: nothing over them runs, approved or not.
+  if (controls?.maxPerExecution !== undefined && price.credits > controls.maxPerExecution) {
+    return { ok: false, block: "budget", message: `This needs ${price.credits} credits, more than the ${controls.maxPerExecution}-credit maximum for one piece of work. Nothing was started. The Owner can raise the maximum in Plan & Usage.` };
+  }
+  const threshold = controls?.approvalThreshold ?? controls?.perRunLimit;
+  if (threshold !== undefined && price.credits > threshold && !input.authorized) {
+    return { ok: false, block: "needs_authorization", message: `This needs ${price.credits} credits, above the ${threshold}-credit approval threshold. The Owner can raise the threshold in Plan & Usage.` };
+  }
+  const budget = controls?.agentBudgets?.[input.agent];
+  if (budget !== undefined) {
+    const spent = await monthSpend(ctx, input.company._id, Date.now(), (row) => row.agent === input.agent);
+    if (spent + price.credits > budget) return { ok: false, block: "budget", message: `This agent has used ${spent} of its ${budget}-credit monthly budget. Its AI work is paused until next month or until the Owner raises the budget; everything else keeps working.` };
   }
   if (input.autonomous && controls?.autonomousMonthly !== undefined) {
     const spent = await autonomousSpend(ctx, input.company._id, Date.now());
@@ -103,21 +119,37 @@ export async function openExecution(
     settlement: "none",
     settleAttempts: 0,
     source: input.source,
+    origin: input.origin ?? (input.autonomous ? "automatic" : "member"),
+    link: input.link,
+    variant: input.variant,
+    history: [{ at: now, kind: "estimated", credits: price.credits, note: `${input.units} × ${price.rate} credits on rate card ${price.card.version}` }],
     createdAt: now,
     updatedAt: now,
   });
   return { ok: true, executionId, credits: price.credits, repeated: false };
 }
 
-/** Credits held or charged this calendar month (UTC) for autonomous work. */
-export async function autonomousSpend(ctx: MutationCtx, companyId: Id<"companies">, now: number): Promise<number> {
+/** Adds one step to an execution's charge history. */
+export async function noteExecution(ctx: MutationCtx, executionId: Id<"aiExecutions">, step: { kind: string; credits?: number; note?: string }): Promise<void> {
+  const row = await ctx.db.get(executionId);
+  if (!row) return;
+  await ctx.db.patch(executionId, { history: [...(row.history ?? []), { at: Date.now(), ...step }].slice(-20) });
+}
+
+/** Credits held or charged this calendar month (UTC) by the executions `which` selects. */
+export async function monthSpend(ctx: MutationCtx, companyId: Id<"companies">, now: number, which: (row: Doc<"aiExecutions">) => boolean): Promise<number> {
   const date = new Date(now);
   const monthStart = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
   const rows = await ctx.db
     .query("aiExecutions")
     .withIndex("by_company_created", (q) => q.eq("companyId", companyId).gte("createdAt", monthStart))
     .take(5000);
-  return rows.filter((row) => row.autonomous).reduce((sum, row) => sum + (row.state === "completed" ? (row.charged ?? 0) : row.state === "reserved" || row.state === "reserving" ? row.credits : 0), 0);
+  return rows.filter(which).reduce((sum, row) => sum + (row.state === "completed" ? (row.charged ?? 0) : row.state === "reserved" || row.state === "reserving" ? row.credits : 0), 0);
+}
+
+/** Credits held or charged this calendar month (UTC) for autonomous work. */
+export function autonomousSpend(ctx: MutationCtx, companyId: Id<"companies">, now: number): Promise<number> {
+  return monthSpend(ctx, companyId, now, (row) => row.autonomous);
 }
 
 /**
@@ -133,13 +165,16 @@ export async function finishExecution(ctx: MutationCtx, executionId: Id<"aiExecu
     const completed = "completedUnits" in outcome && execution.state === "reserved" ? Math.max(0, Math.min(execution.units, Math.floor(outcome.completedUnits))) : 0;
     if (completed > 0) {
       await ctx.db.patch(executionId, { state: "completed", completedUnits: completed, charged: completed * execution.rate, settlement: "pending_confirm", nextSettleAt: now, updatedAt: now });
+      await noteExecution(ctx, executionId, { kind: "completed", credits: completed * execution.rate, note: completed < execution.units ? `${completed} of ${execution.units} units completed; only those are charged and the rest is released.` : undefined });
     } else {
       await ctx.db.patch(executionId, { state: "ended" in outcome ? outcome.ended : "failed", completedUnits: 0, charged: 0, settlement: execution.lockId ? "pending_release" : "none", nextSettleAt: now, updatedAt: now });
+      await noteExecution(ctx, executionId, { kind: "ended" in outcome ? outcome.ended : "failed", credits: 0, note: "Nothing was completed, so the hold is released and nothing is charged." });
     }
     if (execution.lockId) await ctx.scheduler.runAfter(0, internal.billing.settle, { executionId });
     return;
   }
   if (execution.state === "pending") {
     await ctx.db.patch(executionId, { state: "ended" in outcome ? outcome.ended : "failed", charged: 0, updatedAt: now });
+    await noteExecution(ctx, executionId, { kind: "ended" in outcome ? outcome.ended : "failed", credits: 0, note: "Ended before any credits were held." });
   }
 }

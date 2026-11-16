@@ -421,6 +421,13 @@ function Generator({ assets, allowance }: { assets: Asset[]; allowance: { images
   const editable = assets.filter((asset) => asset.kind !== "video" && !asset.realWork);
   const isVideo = kind === "video_generate";
   const off = isVideo ? !allowance.videoGeneration : !allowance.imageGeneration;
+  // The exact credits for this exact setup, before anything is generated.
+  const estimate = useQuery(api.billingUsage.estimate, {
+    companyId,
+    task: isVideo ? "video_generation" : kind === "image_edit" ? "image_edit" : "image_generation",
+    units: isVideo || kind === "image_edit" ? 1 : count,
+    ...(isVideo ? { durationSeconds: duration } : { size, fast: kind === "image_generate" ? fast : undefined }),
+  });
   return (
     <Panel title="Generate an illustration or a promotional video">
       <form
@@ -519,9 +526,14 @@ function Generator({ assets, allowance }: { assets: Asset[]; allowance: { images
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="gradient" loading={busy} disabled={!prompt.trim() || !allowance.canSpend || off || (kind === "image_edit" && !source)}>
+          <Button type="submit" variant="gradient" loading={busy} disabled={!prompt.trim() || !allowance.canSpend || off || (kind === "image_edit" && !source) || estimate?.ok === false}>
             <Sparkles className="size-4" aria-hidden /> Generate
           </Button>
+          {estimate ? (
+            <span role="status" className={cn("text-xs font-medium", estimate.ok ? "text-strong" : "text-warning-foreground")}>
+              {estimate.ok ? `Uses exactly ${estimate.credits.toLocaleString("en-US")} Selestial Credits.` : estimate.message}
+            </span>
+          ) : null}
           <span className="text-xs text-muted-foreground">
             {isVideo ? `Uses 1 of ${allowance.videos.limit} videos this month.` : `Uses ${kind === "image_edit" ? 1 : count} of ${allowance.images.limit} images this month.`}
           </span>

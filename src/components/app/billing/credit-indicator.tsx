@@ -17,17 +17,20 @@ export function CreditIndicator({ className }: { className?: string }) {
   const credits = useQuery(api.billing.creditIndicator, { companyId });
   if (!credits) return null;
   const where = role === "owner" ? (
-    <Link href="/app/settings/billing" className="underline underline-offset-2">
+    <Link href="/app/settings/billing?tab=usage" className="underline underline-offset-2">
       Plan &amp; Usage
     </Link>
   ) : (
     "the Owner"
   );
   if (credits.state === "ok") {
-    return (
-      <span className={cn("tabular-nums", credits.low && "text-warning-foreground", className)}>
-        {credits.available?.toLocaleString("en-US")} credits left{credits.reserved > 0 ? `, ${credits.reserved.toLocaleString("en-US")} held for work in progress` : ""}.
-      </span>
+    const words = `${credits.available?.toLocaleString("en-US")} credits left${credits.reserved > 0 ? `, ${credits.reserved.toLocaleString("en-US")} held for work in progress` : ""}.`;
+    return role === "owner" ? (
+      <Link href="/app/settings/billing?tab=usage" className={cn("tabular-nums underline-offset-2 hover:underline", credits.low && "text-warning-foreground", className)}>
+        {words}
+      </Link>
+    ) : (
+      <span className={cn("tabular-nums", credits.low && "text-warning-foreground", className)}>{words}</span>
     );
   }
   if (credits.state === "unknown") return <span className={className}>{credits.message}</span>;

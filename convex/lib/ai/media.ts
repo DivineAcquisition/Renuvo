@@ -133,7 +133,7 @@ export async function queueGeneration(
     createdAt: now,
   });
   // Paid with Selestial Credits, per image or video delivered. Refused here, nothing is queued.
-  const opened = await openExecution(ctx, { company: input.company, key: `media:${jobId}`, agent: "studio", feature: "creative_studio", task: input.kind === "video_generate" ? "video_generation" : input.kind === "image_edit" ? "image_edit" : "image_generation", units: want.images + want.videos, autonomous: false, memberId: input.member._id, source: { table: "mediaJobs", id: jobId } });
+  const opened = await openExecution(ctx, { company: input.company, key: `media:${jobId}`, agent: "studio", feature: "creative_studio", task: input.kind === "video_generate" ? "video_generation" : input.kind === "image_edit" ? "image_edit" : "image_generation", units: want.images + want.videos, autonomous: false, memberId: input.member._id, source: { table: "mediaJobs", id: jobId }, origin: "member", link: { label: "Creative Studio", path: "/app/agents/marketing/content-creative" }, variant: input.kind === "video_generate" ? { durationSeconds: params.durationSeconds ?? 6 } : { size: params.size ?? "1024x1024", fast: params.fast === true } });
   if (!opened.ok) throw userError(opened.message, "limit");
   await ctx.db.patch(jobId, { executionId: opened.executionId });
   await recordEvent(ctx, { companyId: input.company._id, type: "media_job.queued", actor: { kind: "member", memberId: input.member._id }, subject: { table: "mediaJobs", id: jobId }, data: { kind: input.kind, model: resolved.model.model } });

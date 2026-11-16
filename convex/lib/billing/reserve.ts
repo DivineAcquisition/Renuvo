@@ -11,7 +11,7 @@
 import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { ActionCtx } from "../../_generated/server";
-import { finalizeLock, getOrCreateCustomer, lockCredits } from "./autumn";
+import { finalizeLock, getOrCreateCustomer, listLedger, lockCredits, type RawLedgerEntry } from "./autumn";
 import type { Block } from "./schema";
 import { projectCustomer } from "./projection";
 
@@ -30,8 +30,31 @@ export async function syncAccount(ctx: ActionCtx, companyId: Id<"companies">): P
     return false;
   }
   const projection = projectCustomer(answer.data, Date.now());
-  await ctx.runMutation(internal.billing.storeAccount, { companyId, env: target.env, customerId: target.customerId, projection: JSON.stringify(projection), invoices: JSON.stringify(answer.data.invoices ?? []) });
+  // Balance history is optional: Autumn is still rolling it out, so its absence never fails a sync.
+  const history = await listLedger(target.customerId);
+  const ledger = history.kind === "ok" ? JSON.stringify((history.data.list ?? []).map(ledgerRow)) : undefined;
+  await ctx.runMutation(internal.billing.storeAccount, { companyId, env: target.env, customerId: target.customerId, projection: JSON.stringify(projection), invoices: JSON.stringify(answer.data.invoices ?? []), ledger });
   return true;
+}
+
+const LEDGER_WORDS: Record<string, string> = {
+  reset: "Monthly credits renewed",
+  plan_change: "Plan change",
+  update: "Balance updated",
+  adjustment: "Adjustment",
+  delete: "Balance removed",
+  recalculate: "Balance recalculated",
+  missing_history: "Some history is missing here",
+  history_started: "History begins",
+};
+
+function ledgerRow(entry: RawLedgerEntry) {
+  const type = entry.why?.type ?? "unknown";
+  const action = entry.why?.action ?? entry.why?.source ?? null;
+  const label = action === "manual_topup" ? "Credits purchased" : action === "auto_topup" ? "Automatic top-up" : (LEDGER_WORDS[type] ?? type.replace(/_/g, " "));
+  const before = entry.before?.remaining;
+  const after = entry.after?.remaining;
+  return { id: String(entry.id).slice(0, 100), at: Number(entry.occurred_at) || 0, kind: type.slice(0, 40), label, change: typeof before === "number" && typeof after === "number" ? after - before : null, after: typeof after === "number" ? after : null };
 }
 
 export async function reserveExecution(ctx: ActionCtx, executionId: Id<"aiExecutions">): Promise<Reserved> {
