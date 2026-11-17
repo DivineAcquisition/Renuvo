@@ -127,7 +127,9 @@ export const saveDefinition = ownerMutation({
       updatedAt: Date.now(),
     };
     if (current) {
-      await ctx.db.patch(current._id, fields);
+      // New words for an acknowledgment need a new agreement, including from cleaners who agreed before words were stored.
+      const wordsChanged = args.kind === "acknowledgment" && (fields.description ?? "").trim() !== (current.description ?? "").trim();
+      await ctx.db.patch(current._id, wordsChanged ? { ...fields, wordsChangedAt: fields.updatedAt } : fields);
       await recordEvent(ctx, { companyId: ctx.companyId, type: "requirement.changed", actor: byMember(ctx), subject: { table: "requirementDefinitions", id: current._id }, data: { key } });
       return key;
     }

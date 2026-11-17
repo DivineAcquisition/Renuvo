@@ -219,6 +219,33 @@ describe("Cleaners: performance, coaching and check-ins", () => {
     expect(attention.find((row) => row.cleanerId === s.cleaners.Rosa && row.kind === "wants_to_stop")).toBeTruthy();
   });
 
+  it("waits with routine reminders while the cleaner's own question to the office is unanswered", async () => {
+    const s = await setup(["Lena"]);
+    // Ready, with weekly hours not confirmed for 40 days: Dispatch would ask her to confirm them.
+    await s.t.run(async (ctx) => ctx.db.patch(s.cleaners.Lena, { createdAt: NOW - 60 * DAY, availabilityConfirmedAt: NOW - 40 * DAY }));
+    await s.as.mutation(api.permissions.set, { companyId: s.companyId, action: "dispatch.availability_check_in", level: "execute" });
+    const token = await portalToken(s, s.cleaners.Lena);
+    await s.t.mutation(api.portal.askForHelp, { token, text: "Do I need my own vacuum for commercial jobs?" });
+    const hoursReminders = () => mockOutbox.filter((item) => item.body.includes("confirm the days and hours you can work")).length;
+    // Past the window that the portal invitation itself started, so only the open question can hold the reminder back.
+    for (let i = 0; i < 2; i += 1) {
+      vi.setSystemTime(Date.now() + 49 * HOUR);
+      await s.t.mutation(internal.cleanerFollowUps.sweep, {});
+      await settle(s);
+    }
+    // Their question comes first: nothing routine goes to them while it waits for a person, and nothing is handed over as unanswered.
+    expect(hoursReminders()).toBe(0);
+    const rows = await s.as.query(api.cleanerFollowUps.forCleaner, { companyId: s.companyId, cleanerId: s.cleaners.Lena });
+    expect(rows.every((item) => item.status !== "stopped" && item.attempt === 0)).toBe(true);
+    const help = (await s.as.query(api.tasks.list, { companyId: s.companyId, status: "open", agent: "recruiter" })).find((task) => task.title === "Lena asked for help")!;
+    await s.as.mutation(api.tasks.complete, { companyId: s.companyId, taskId: help._id, outcome: "Replied by text: the company brings the machines." });
+    vi.setSystemTime(Date.now() + 49 * HOUR);
+    await s.t.mutation(internal.cleanerFollowUps.sweep, {});
+    await settle(s);
+    // Once a person has answered, the routine reminder goes as usual.
+    expect(hoursReminders()).toBe(1);
+  });
+
   it("hands unanswered check-ins to a person and leaves the cleaner exactly as they were", async () => {
     const s = await setup(["Lena"]);
     await s.t.run(async (ctx) => ctx.db.patch(s.cleaners.Lena, { createdAt: NOW - 40 * DAY, availabilityConfirmedAt: NOW - DAY }));
