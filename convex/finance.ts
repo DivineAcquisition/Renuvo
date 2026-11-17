@@ -626,11 +626,25 @@ export const invoiceSources = ownerQuery({
   },
 });
 
+/**
+ * The company's active services, by the id its visits carry (`serviceSnapshot.serviceId`): the Services &
+ * Pricing catalog's key once the company moved to it (a moved service keeps its Settings id as its key),
+ * otherwise Settings' own list. Taxed services are chosen from these.
+ */
+async function companyServices(ctx: QueryCtx & { companyId: Id<"companies">; company: Doc<"companies"> }): Promise<{ id: string; name: string }[]> {
+  if (ctx.company.servicesMigratedAt === undefined) return businessSettingsOf(ctx.company).services.filter((s) => s.status === "active").map((s) => ({ id: s.id, name: s.name }));
+  const rows = await ctx.db
+    .query("services")
+    .withIndex("by_company_key", (q) => q.eq("companyId", ctx.companyId))
+    .take(500);
+  return rows.filter((s) => s.status === "active" && s.publishedVersion !== undefined).map((s) => ({ id: s.key, name: s.name }));
+}
+
 export const settings = ownerQuery({
   args: {},
   handler: async (ctx) => {
     requireFinance(ctx, "read");
-    const services = businessSettingsOf(ctx.company).services.filter((s) => s.status === "active").map((s) => ({ id: s.id, name: s.name, startingPriceCents: s.startingPriceCents ?? null }));
+    const services = await companyServices(ctx);
     const cleaners = await ctx.db
       .query("cleaners")
       .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "ready"))
@@ -666,7 +680,7 @@ export const saveSettings = ownerMutation({
     if (label.length > 40) throw userError("Keep the tax name under 40 characters.");
     const note = args.invoiceNote?.trim() || undefined;
     if (note && note.length > 500) throw userError("Keep the invoice note under 500 characters.");
-    const serviceIds = new Set(businessSettingsOf(ctx.company).services.filter((s) => s.status === "active").map((s) => s.id));
+    const serviceIds = new Set((await companyServices(ctx)).map((s) => s.id));
     const taxable = [...new Set(args.taxableServiceIds)].filter((id) => serviceIds.has(id));
     const fields = {
       taxRateBps: args.taxRateBps ?? undefined,

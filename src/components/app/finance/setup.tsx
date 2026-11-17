@@ -294,7 +294,7 @@ function InvoiceSettings({ data }: { data: Settings }) {
                 );
               })}
             </div>
-            <span className="text-xs text-muted-foreground">From Settings › Services &amp; pricing. You can still change each line on a draft.</span>
+            <span className="text-xs text-muted-foreground">Your published services from Services &amp; Pricing. You can still change each line on a draft.</span>
           </fieldset>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2">

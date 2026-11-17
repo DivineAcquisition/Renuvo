@@ -189,6 +189,15 @@ earnings statement. Workers supplied by a subcontractor company are explained ra
 pay. Loading both Finance's and Cleaners' Chat tools exposed an import cycle (a tool set importing a value back
 from the tool registry); the shared date helper moved to `convex/lib/chat/localDay.ts`.
 
+### Fitting with Services & Pricing
+
+Main's Services & Pricing (#93) moves services from Settings into a catalog and stops reading Settings' list
+once a company has moved. Finance's taxed services (Payments setup) and the tax on a visit's invoice line
+now read the catalog's published, active services by their key, which is the id visits carry (a moved
+service keeps its Settings id). Tested in `finance.test.ts`: only published, active catalog services are
+offered, an archived one is dropped on save, and a visit made from a taxed catalog service is taxed.
+With both merges: 74 test files, 843 passed, 19 skipped; typecheck, lint and build pass.
+
 ## Not verified
 
 - A real Stripe test charge with a tip (the fake Stripe transport covers the amounts and states).

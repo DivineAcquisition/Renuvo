@@ -410,3 +410,28 @@ describe("the overview", () => {
 });
 
 void internal;
+
+describe("services from the Services & Pricing catalog", () => {
+  it("lists the catalog's published services once the company moved to it, and taxes a visit made from one", async () => {
+    const t = start();
+    const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+    await t.run(async (ctx) => {
+      const base = { companyId, category: "residential" as const, latestVersion: 1, origin: "manual" as const, createdBy: { kind: "system" as const }, createdAt: NOW, updatedAt: NOW };
+      await ctx.db.insert("services", { ...base, key: "deep-clean", name: "Deep clean", status: "active", publishedVersion: 1, publishedAt: NOW });
+      await ctx.db.insert("services", { ...base, key: "never-published", name: "Draft idea", status: "draft" });
+      await ctx.db.insert("services", { ...base, key: "old", name: "Old service", status: "archived", publishedVersion: 1, publishedAt: NOW });
+      await ctx.db.patch(companyId, { servicesMigratedAt: NOW });
+    });
+    const settings = await as.query(api.finance.settings, { companyId });
+    expect(settings.services).toEqual([{ id: "deep-clean", name: "Deep clean" }]);
+    await as.mutation(api.finance.saveSettings, { companyId, revision: settings.settings.revision, taxRateBps: 825, taxLabel: "Sales tax", taxableServiceIds: ["deep-clean", "old"], paymentTermsDays: 7, allowPartialPayments: false, invoiceNote: null, invoicePrefix: "INV" });
+    expect((await as.query(api.finance.settings, { companyId })).settings.taxableServiceIds).toEqual(["deep-clean"]);
+    const place = await dispatchPlace(as, companyId);
+    const jobId = await dispatchJob(as, companyId, place, { priceCents: 20000 });
+    await t.run(async (ctx) => ctx.db.patch(jobId, { status: "completed", serviceSnapshot: { serviceId: "deep-clean", name: "Deep clean", scope: "x", durationMinutes: 180, defaultCrew: 1, skills: [], capturedAt: NOW } }));
+    const { invoiceId } = await as.mutation(api.finance.createInvoice, { companyId, jobId });
+    const invoice = await t.run(async (ctx) => ctx.db.get(invoiceId));
+    expect(invoice!.lines[0]).toMatchObject({ taxable: true, serviceId: "deep-clean" });
+    expect(invoice!.totals.taxCents).toBe(1650);
+  });
+});
