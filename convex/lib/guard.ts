@@ -34,7 +34,11 @@ export function guardViolations(files: GuardFile[]): string[] {
  * The files that may register a `publicQuery`: a read with no sign-in at all. Each one is reviewed to
  * return only public-suitable fields. A new file needs a reason to be added here.
  */
-export const PUBLIC_QUERY_FILES = ["convex/trust.ts"] as const;
+export const PUBLIC_QUERY_FILES = [
+  "convex/trust.ts",
+  // A published booking form is public by definition: its questions, the company's name and the services it lists. Nothing else.
+  "convex/salesFormPages.ts",
+] as const;
 
 /** A `publicQuery` anywhere except the reviewed files is a violation. */
 export function publicQueryViolations(files: GuardFile[]): string[] {

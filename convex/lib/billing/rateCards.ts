@@ -14,7 +14,7 @@
  * happen in production.
  */
 
-export const TASK_IDS = ["chat_response_standard", "chat_response_advanced", "hiring_message_reading", "image_generation", "image_edit", "video_generation", "applicant_evaluation", "follow_up_draft", "dispatch_exception_analysis", "retention_assessment", "agreement_draft", "campaign_generation", "research_brief"] as const;
+export const TASK_IDS = ["chat_response_standard", "chat_response_advanced", "hiring_message_reading", "image_generation", "image_edit", "video_generation", "applicant_evaluation", "follow_up_draft", "dispatch_exception_analysis", "retention_assessment", "agreement_draft", "campaign_generation", "research_brief", "sales_message_reading"] as const;
 export type Task = (typeof TASK_IDS)[number];
 
 export const TASKS: Record<Task, { label: string; unit: string; available: boolean }> = {
@@ -83,6 +83,11 @@ export const TASKS: Record<Task, { label: string; unit: string; available: boole
     unit: "One research brief for Services & Pricing: up to 5 web searches and one written brief with its sources. A brief that finds nothing usable is still one unit; one that fails to finish is not charged.",
     available: true,
   },
+  sales_message_reading: {
+    label: "Sales message read by AI",
+    unit: "One customer message read and one reply worded by the AI reader for Sales. Messages the reader is not used for (read by the company's rules, or never answered) are not charged.",
+    available: true,
+  },
 };
 
 /** The exact setup a media rate covers. Work outside it has no published price, so it cannot run. */
@@ -123,6 +128,7 @@ export const RATE_CARDS: readonly RateCard[] = [
       agreement_draft: 5,
       campaign_generation: 20,
       research_brief: 5,
+      sales_message_reading: 1,
     },
   },
   {
@@ -144,6 +150,8 @@ export const RATE_CARDS: readonly RateCard[] = [
       campaign_generation: null,
       /** Research briefs did not exist when this card was approved. Under this card they have no rate, so they cannot run. */
       research_brief: null,
+      /** Sales did not exist when this card was approved, so its AI reading has no rate here and the company's rules read instead. */
+      sales_message_reading: null,
     },
     specs: {
       image_generation: { sizes: ["1024x1024"], fastAllowed: false, describe: "Standard quality, 1024 × 1024, one image per charge." },
@@ -170,6 +178,8 @@ export const RATE_CARDS: readonly RateCard[] = [
       agreement_draft: null,
       campaign_generation: null,
       research_brief: 10,
+      /** Not approved on this card either: until a card gives it a rate, Sales reads by rule and charges nothing. */
+      sales_message_reading: null,
     },
     specs: {
       image_generation: { sizes: ["1024x1024"], fastAllowed: false, describe: "Standard quality, 1024 × 1024, one image per charge." },

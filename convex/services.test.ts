@@ -230,7 +230,9 @@ describe("Services & Pricing", () => {
       const change = await as.query(api.services.change, { companyId, changeId });
       const dispatch = change.agentNotes.find((note) => note.agent === "dispatch");
       expect(dispatch).toMatchObject({ status: "concern", suggestion: { field: "team.crewSize", value: 3 } });
-      expect(change.agentNotes.find((note) => note.agent === "sales")?.status).toBe("unavailable");
+      // Sales reads the spec for what a customer must answer before it can quote. A fixed price needs only where the property is.
+      expect(change.agentNotes.find((note) => note.agent === "sales")).toMatchObject({ status: "ok", title: "Sales can quote this from answers" });
+      expect(change.agentNotes.find((note) => note.agent === "retention")?.status).toBe("unavailable");
       await as.mutation(api.services.applySuggestion, { companyId, serviceId, field: "team.crewSize", value: 3 });
       expect((await as.query(api.services.change, { companyId, changeId })).state).toBe("returned");
       expect((await as.query(api.services.service, { companyId, serviceId })).draft?.spec.team.crewSize).toBe(3);

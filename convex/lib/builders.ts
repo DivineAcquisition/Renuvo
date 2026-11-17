@@ -18,6 +18,7 @@ import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type Ap
 import { invitationForToken } from "./invitations";
 import { invoiceForToken } from "./finance/payLinks";
 import { linkForStatementToken } from "./finance/statementLinks";
+import { quoteForToken } from "./sales/links";
 import { notePortalAction, portalLinkForToken, portalLinkState, type PortalAction, type PortalLinkState } from "./cleaners/portal";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
@@ -384,6 +385,58 @@ export function payMutation<V extends AnyValidators, R>(def: {
       const { pay } = await payAccess(ctx, token);
       if (!pay) notFound();
       return def.handler({ ...ctx, invoice: pay.invoice, company: pay.company, companyId: pay.company._id }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+// ── Quote links: a customer reading one quote, and answering it, without signing in ─────────────
+
+export type QuoteAccess = {
+  /** The quote the token names and its company, or null when the token names nothing. */
+  quote: { quote: Doc<"salesQuotes">; company: Doc<"companies"> } | null;
+};
+
+async function quoteAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<QuoteAccess> {
+  const quote = await quoteForToken(ctx, token);
+  const company = quote ? await ctx.db.get(quote.companyId) : null;
+  return { quote: quote && company ? { quote, company } : null };
+}
+
+/**
+ * A read through a quote link. The token is the only authorization and everything shown must hang off
+ * `ctx.quote`. A wrong signature, an unknown id, a quote never sent and a deployment with no secret all
+ * arrive as null, so the page cannot tell them apart. Opening the link changes nothing: it is not
+ * recorded as "viewed", because a phone or a mail scanner previewing it is not the customer reading it.
+ */
+export function quoteQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & QuoteAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await quoteAccess(ctx, token)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/**
+ * One action through a quote link: accept, decline or ask. Refused unless the token names a quote. The
+ * handler must still check the quote itself: the link says who may ask, the record says whether the
+ * quote is still open and which version is the one on offer.
+ */
+export function quoteMutation<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: MutationCtx & { quote: Doc<"salesQuotes">; company: Doc<"companies">; companyId: Id<"companies"> }, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const access = await quoteAccess(ctx, token);
+      if (!access.quote) notFound();
+      return def.handler({ ...ctx, quote: access.quote.quote, company: access.quote.company, companyId: access.quote.company._id }, rest as ObjectType<V>);
     },
   } as any);
 }

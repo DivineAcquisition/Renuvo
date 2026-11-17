@@ -11,6 +11,7 @@ import { requestApproval } from "./lib/approvalQueue";
 import { managerMutation, managerQuery } from "./lib/builders";
 import { afterDecision, afterExpiry, type CarriedOut } from "./lib/dispatch/workflow";
 import { afterRecruiterDecision, afterRecruiterExpiry, isRecruiterProposal } from "./lib/recruiter/approvals";
+import { afterSalesDecision, afterSalesExpiry, isSalesProposal } from "./lib/sales/approvals";
 import { afterFollowUpDecision, afterFollowUpExpiry } from "./lib/cleaners/followUps";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
@@ -79,6 +80,7 @@ export const decide = managerMutation({
       return { carriedOut };
     }
     if (isRecruiterProposal(approval)) return { carriedOut: await afterRecruiterDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
+    if (isSalesProposal(approval)) return { carriedOut: await afterSalesDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
     return { carriedOut: await afterDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
   },
 });
@@ -96,6 +98,7 @@ export const expireDue = internalMutation({
       await recordEvent(ctx, { companyId: approval.companyId, type: "approval.expired", actor: { kind: "system" }, subject: { table: "approvals", id: approval._id }, data: { action: approval.action } });
       if (approval.proposal?.kind === "send_cleaner_follow_up") await afterFollowUpExpiry(ctx, { ...approval, status: "expired" });
       else if (isRecruiterProposal(approval)) await afterRecruiterExpiry(ctx, { ...approval, status: "expired" });
+      else if (isSalesProposal(approval)) await afterSalesExpiry(ctx, { ...approval, status: "expired" });
       else await afterExpiry(ctx, { ...approval, status: "expired" });
     }
     return due.length;

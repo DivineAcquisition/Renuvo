@@ -271,6 +271,15 @@ async function aboutContext(ctx: Ctx, about: Doc<"tasks">["about"], asOf: number
   if (!doc || doc.companyId !== ctx.companyId) return [];
   if (about.table === "customers") return [{ label: "Customer", value: (doc as Doc<"customers">).name, ref: null }];
   if (about.table === "cleaners") return [{ label: "Cleaner", value: (doc as Doc<"cleaners">).name, ref: null }];
+  if (about.table === "salesOpportunities") {
+    const opportunity = doc as Doc<"salesOpportunities">;
+    const customer = await ctx.db.get(opportunity.customerId);
+    return [
+      { label: "Prospect", value: customer?.name ?? "Unknown", ref: null },
+      { label: "Stage", value: opportunity.stage.replace(/_/g, " "), ref: null },
+    ];
+  }
+  if (about.table !== "properties") return [];
   const property = doc as Doc<"properties">;
   return [{ label: "Property", value: property.label ?? property.address.line1, ref: null }];
 }
@@ -500,6 +509,11 @@ export const week = companyQuery({
         .withIndex("by_company_status_start", (q) => q.eq("companyId", ctx.companyId).eq("status", "completed").gte("startsAt", from).lt("startsAt", to))
         .take(1000);
     const [thisWeek, lastWeek] = [await completedBetween(thisFrom, tomorrowStart), await completedBetween(lastFrom, thisFrom)];
+    const inquiriesBetween = async (from: number, to: number) =>
+      ctx.db
+        .query("salesOpportunities")
+        .withIndex("by_company_created", (q) => q.eq("companyId", ctx.companyId).gte("createdAt", from).lt("createdAt", to))
+        .take(1000);
     const revenue = (jobs: Doc<"jobs">[]) => jobs.reduce((sum, job) => sum + (job.priceCents ?? 0), 0);
     const unpriced = thisWeek.filter((job) => job.priceCents === undefined).length;
     const upcoming = await visitsBetween(ctx, args.asOf, addLocalDays(tomorrowStart, 7, tz));
@@ -519,7 +533,16 @@ export const week = companyQuery({
         limitation: unpriced > 0 ? `${plural(unpriced, "completed visit")} ${unpriced === 1 ? "has" : "have"} no price, so ${unpriced === 1 ? "it is" : "they are"} left out.` : null,
       },
       { key: "coverage_gaps", label: "Coverage gaps", why: "Visits in the next seven days short of an accepted cleaner.", state: "measured", kind: "count", value: gaps, previous: null, limitation: null },
-      notSetUp("conversion", "Inquiry-to-booking conversion", "Whether sales opportunities become confirmed work.", "Arrives with the Sales agent."),
+      {
+        key: "conversion",
+        label: "Inquiries booked",
+        why: "Inquiries received in the period that became a confirmed booking. A booking is a job on the schedule, not a quote sent or accepted.",
+        state: "measured",
+        kind: "count",
+        value: (await inquiriesBetween(thisFrom, tomorrowStart)).filter((row) => row.stage === "won").length,
+        previous: (await inquiriesBetween(lastFrom, thisFrom)).filter((row) => row.stage === "won").length,
+        limitation: `Out of ${plural((await inquiriesBetween(thisFrom, tomorrowStart)).length, "inquiry", "inquiries")} received. An inquiry still open may yet book.`,
+      },
       notSetUp("cash", "Cash collected", "Money actually received.", "Payments are not connected.", "cents"),
       notSetUp("recurring", "Recurring customers", "Size and direction of the repeat customer base.", "Recurring plans arrive with Retention."),
       notSetUp("issues", "Customer issues unresolved", "Service problems that could damage retention.", "Service issues arrive with Retention."),

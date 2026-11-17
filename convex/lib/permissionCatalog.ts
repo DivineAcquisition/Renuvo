@@ -57,6 +57,7 @@ export const ACTIONS: readonly ActionDef[] = [
   action("sales.discount_in_band", "sales", "Discount inside the allowed band", "execute_and_report", { money: true }),
   action("sales.draft_ad_campaign", "sales", "Draft a Google Ads campaign (costs nothing; the Owner approves and turns it on)", "execute", { outsider: false }),
   action("sales.discount_out_of_band", "sales", "Discount outside the band, custom or commercial price", "propose", { ceiling: "propose", money: true }),
+  action("sales.confirm_booking", "sales", "Confirm a booking once every required step is done and capacity is verified", "execute_and_report"),
 
   action("retention.request_feedback", "retention", "Request feedback, invite a review, send reminders", "execute"),
   action("retention.offer_recurring_plan", "retention", "Offer a recurring plan at the standard price", "execute"),

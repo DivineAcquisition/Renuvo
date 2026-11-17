@@ -125,7 +125,7 @@ describe("the Overview", () => {
     const dispatch = team.agents.find((row) => row.agent === "dispatch")!;
     expect(dispatch).toMatchObject({ state: "clear", department: { id: "operations" } });
     expect(dispatch.recentOutcomes[0].outcome).toContain("Rosa");
-    expect(team.agents.filter((row) => row.state === "not_built").map((row) => row.agent)).toEqual(["sales", "retention"]);
+    expect(team.agents.filter((row) => row.state === "not_built").map((row) => row.agent)).toEqual(["retention"]);
   });
 
   it("says who is on an uncovered visit today, and stops the run where nobody can be asked", async () => {
@@ -166,7 +166,9 @@ describe("the Overview", () => {
     expect(measure("completed_visits")).toMatchObject({ state: "measured", value: 1, previous: 0 });
     expect(measure("completed_revenue")).toMatchObject({ state: "measured", kind: "cents", value: 16000, limitation: null });
     expect(measure("coverage_gaps")).toMatchObject({ value: 0 });
-    for (const key of ["conversion", "cash", "recurring", "issues"]) expect(measure(key)).toMatchObject({ state: "not_set_up", value: null });
+    // Sales counts bookings from its own record: none here, out of no inquiries. It is a count, never a guess.
+    expect(measure("conversion")).toMatchObject({ state: "measured", value: 0, previous: 0 });
+    for (const key of ["cash", "recurring", "issues"]) expect(measure(key)).toMatchObject({ state: "not_set_up", value: null });
   });
 
   it("keeps approvals to Owners and Managers, and another company out entirely", async () => {

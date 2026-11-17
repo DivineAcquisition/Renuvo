@@ -241,7 +241,7 @@ export const servicesTables = {
     totalCents: v.union(v.number(), v.null()),
     per: v.string(),
     lines: v.array(lineValidator),
-    purpose: v.union(v.literal("visit"), v.literal("chat"), v.literal("studio")),
+    purpose: v.union(v.literal("visit"), v.literal("chat"), v.literal("studio"), v.literal("sales")),
     jobId: v.optional(v.id("jobs")),
     createdBy: actorValidator,
     createdAt: v.number(),

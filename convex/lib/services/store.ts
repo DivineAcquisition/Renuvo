@@ -534,7 +534,7 @@ export async function specialistNotes(ctx: QueryCtx, company: Doc<"companies">, 
         : { agent: "recruiter", status: "concern", title: "Recruiter: not enough ready cleaners yet", detail: `${skilled.length} ready cleaner${skilled.length === 1 ? "" : "s"} meet${skilled.length === 1 ? "s" : ""} the requirements for a crew of ${spec.team.crewSize}. ${matching.length ? `${matching.length} open hiring need${matching.length === 1 ? "" : "s"} cover${matching.length === 1 ? "s" : ""} these skills.` : "No open hiring need covers these skills."}` },
     );
   }
-  notes.push({ agent: "sales", status: "unavailable", title: "Sales has not reviewed this", detail: "Sales is not released yet, so nobody checked quoting friction. It will contribute when it is." });
+  notes.push(salesNote(spec));
   notes.push({ agent: "retention", status: "unavailable", title: "Retention has not reviewed this", detail: "Retention is not released yet, so no recurring offer was checked against customer patterns." });
   return notes;
 }
@@ -545,4 +545,25 @@ export function submissionProblems(spec: Spec): string[] {
 
 export function emptySpecFor(category: Spec["category"]): Spec {
   return blankSpec(category);
+}
+
+/**
+ * Sales's check of a service: can it be quoted from a customer's answers, and how many does it take? Worked
+ * out from the spec itself, the same way Sales works out what to ask (convex/lib/sales/facts.ts).
+ */
+export function salesNote(spec: Spec): AgentNote {
+  if (spec.pricing.method === "custom_quote") return { agent: "sales", status: "concern", title: "Sales: this is always a custom quote", detail: "The pricing method is a custom quote, so Sales cannot price it from answers. Every request for it goes to a person." };
+  const asks: string[] = ["postal code"];
+  const p = spec.pricing;
+  if (p.method === "size_bands" || p.method === "per_area") asks.push("size");
+  if (p.method === "bed_bath") asks.push("bedrooms", "bathrooms");
+  if (p.method === "per_unit") asks.push(`number of ${p.unitWord}s`);
+  if (spec.str?.enabled) asks.push("beds to make");
+  if (spec.modifiers.condition.enabled && spec.modifiers.condition.levels.length > 1) asks.push("condition");
+  if (spec.modifiers.recurring.enabled && spec.modifiers.recurring.options.length > 0 && p.method !== "recurring_package") asks.push("how often");
+  const required = spec.questions.filter((question) => question.required);
+  for (const question of required) asks.push(question.label.replace(/\?$/, "").toLowerCase());
+  const walkthrough = spec.walkthroughNotes.length > 0 || spec.questions.some((question) => question.walkthroughIf !== null) || spec.modifiers.condition.levels.some((level) => level.requiresWalkthrough);
+  if (asks.length > 7) return { agent: "sales", status: "concern", title: "Sales: a lot to ask before a price", detail: `A customer has to answer ${asks.length} things before Sales can quote this: ${asks.join(", ")}. Fewer required questions means fewer inquiries that stall.` };
+  return { agent: "sales", status: "ok", title: "Sales can quote this from answers", detail: `Sales asks for ${asks.join(", ")}, then quotes from this version.${walkthrough ? " Answers the service marks for a walkthrough go to a person instead." : ""}` };
 }

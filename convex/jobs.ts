@@ -14,16 +14,12 @@ import { endAssignment } from "./lib/dispatch/assignmentState";
 import { coverageOf, requiredCrew, staffing, type Coverage } from "./lib/dispatch/crew";
 import { reviewKey } from "./lib/dispatch/live";
 import { commitMove, planMove } from "./lib/dispatch/reschedule";
-import { applyTemplate } from "./lib/dispatch/templates";
+import { checkedArrival, checkedCrew, createJob, span, type NewJob } from "./lib/dispatch/createJob";
 import { coverJob } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
-import { businessSettingsOf, checkArea, checkHours, findService } from "./lib/settings/business";
-import type { Quote, QuoteInput } from "./lib/services/engine";
-import { quote as runQuote, saveQuote, visitInput, visitScope } from "./lib/services/operations";
+import { businessSettingsOf, checkArea, checkHours } from "./lib/settings/business";
 import { quoteInputValidator } from "./lib/services/schema";
-import { publishedByKey } from "./lib/services/store";
-import { formatCents } from "./lib/services/words";
 import { ACTIVE_ASSIGNMENT, assertChange, JOB_CHANGES, jobStatusValidator, type JobStatus } from "./lib/statuses";
 import { liveTaskByKey, setTaskState } from "./lib/taskState";
 import { cents, instant, optionalText, tags, text } from "./lib/text";
@@ -35,30 +31,6 @@ async function assignmentsOf(ctx: (QueryCtx | MutationCtx) & MemberAccess, job: 
     .query("assignments")
     .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
     .take(100);
-}
-
-function span(startsAt: number, endsAt: number) {
-  const start = instant(startsAt, "The start time");
-  const end = instant(endsAt, "The end time");
-  if (start >= end) throw userError("A job must start before it ends.");
-  if (end - start > 24 * 60 * 60 * 1000) throw userError("A job cannot be longer than a day.");
-  return { startsAt: start, endsAt: end };
-}
-
-function checkedCrew(crew: number): number {
-  if (!Number.isInteger(crew) || crew < 1 || crew > 12) throw userError("A job needs a whole number of cleaners, from 1 to 12.");
-  return crew;
-}
-
-function checkedArrival(minutes: number): number {
-  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 12 * 60) throw userError("The arrival window must be a whole number of minutes, up to 12 hours.");
-  return minutes;
-}
-
-function deadlineFor(at: number, endsAt: number): number {
-  const deadline = instant(at, "The deadline");
-  if (deadline < endsAt) throw userError("The service must be finished by a time at or after the visit's end.");
-  return deadline;
 }
 
 export const list = companyQuery({
@@ -114,90 +86,7 @@ export const create = companyMutation({
     hardDeadlineAt: v.optional(v.number()),
     instructions: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const customer = await owned(ctx, args.customerId);
-    const settings = businessSettingsOf(ctx.company);
-    // The one catalog is Services & Pricing. Until a company's Settings services are copied there, the old list still serves.
-    const catalog = args.serviceId === undefined ? null : await publishedByKey(ctx, ctx.companyId, args.serviceId);
-    const legacy = args.serviceId === undefined || catalog || ctx.company.servicesMigratedAt !== undefined ? null : findService(settings, args.serviceId);
-    if (args.serviceId !== undefined) {
-      if (!catalog && !legacy) throw userError("That service is not in the company's catalog, or it has no published version.");
-      const status = catalog?.service.status ?? legacy?.status;
-      if (status === "archived") throw userError(`"${catalog?.service.name ?? legacy?.name}" is archived, so new visits cannot use it. Choose an active service.`);
-    }
-    const spec = catalog?.version.spec ?? null;
-    const service = legacy ? { name: legacy.name, scope: legacy.scope, defaultCrew: legacy.defaultCrew, skills: legacy.skills, startingPriceCents: legacy.startingPriceCents } : spec ? { name: spec.name, scope: visitScope(spec), defaultCrew: spec.team.crewSize, skills: spec.team.skills, startingPriceCents: undefined } : null;
-    const serviceType = args.serviceType ?? service?.name;
-    const scope = args.scope ?? service?.scope;
-    if (serviceType === undefined || scope === undefined) throw userError("Choose a service, or enter the service type and scope.");
-    if (args.quoteInput && !spec) throw userError("Only a service from Services & Pricing can be priced from answers.");
-    const crew = checkedCrew(args.requiredCrew ?? args.quoteInput?.crewSize ?? service?.defaultCrew ?? 1);
-    const arrival = checkedArrival(args.arrivalWindowMinutes ?? spec?.team.arrivalWindowMinutes ?? 0);
-    const property = await owned(ctx, args.propertyId);
-    if (property.customerId !== customer._id) throw userError("That property belongs to a different customer.");
-    const times = span(args.startsAt, args.endsAt);
-    // The company's own rules for where and when it works. Empty rules restrict nothing.
-    checkArea(settings, property.address.postalCode);
-    checkHours(settings, times, ctx.company.timezone);
-    // The price: a person's typed price wins and is recorded as theirs; otherwise the engine prices the published version.
-    let priced: { input: QuoteInput; result: Quote } | null = null;
-    if (spec && args.priceCents === undefined) {
-      const input = await visitInput(ctx, ctx.company, spec, (args.quoteInput ?? {}) as QuoteInput, times.startsAt);
-      const result = runQuote(spec, input);
-      if (args.quoteInput || result.outcome === "firm" || result.outcome === "estimate") {
-        if (result.outcome === "incomplete") throw userError(`This price needs: ${result.missing.join(", ")}. Answer them, or type a price.`);
-        if (result.outcome === "walkthrough" || result.totalCents === null) throw userError(`${result.reasons.join(" ")} Type the price agreed after the walkthrough instead.`);
-        if (args.expectedTotalCents !== undefined && args.expectedTotalCents !== result.totalCents) throw userError(`The price is now ${formatCents(result.totalCents)}, not the ${formatCents(args.expectedTotalCents)} you saw. Review it before booking.`);
-        priced = { input, result };
-      }
-    }
-    const price = args.priceCents ?? priced?.result.totalCents ?? service?.startingPriceCents;
-    const priceSource = args.priceCents !== undefined ? ("manual" as const) : priced ? ("quote" as const) : ("none" as const);
-    const jobId = await ctx.db.insert("jobs", {
-      companyId: ctx.companyId,
-      customerId: customer._id,
-      propertyId: property._id,
-      serviceType: text(serviceType, "Service type", 80),
-      scope: text(scope, "Scope", 2000),
-      requiredSkills: tags(args.requiredSkills ?? service?.skills ?? [], "Required skills"),
-      // What the template said when this visit was made. Editing or archiving it later leaves this alone.
-      ...(legacy
-        ? { serviceSnapshot: { serviceId: legacy.id, name: legacy.name, scope: legacy.scope, durationMinutes: legacy.durationMinutes, defaultCrew: legacy.defaultCrew, skills: legacy.skills, ...(legacy.startingPriceCents !== undefined ? { startingPriceCents: legacy.startingPriceCents } : {}), capturedAt: Date.now() } }
-        : catalog && spec
-          ? {
-              serviceSnapshot: {
-                serviceId: catalog.service.key,
-                name: spec.name,
-                scope: visitScope(spec),
-                durationMinutes: priced?.result.time.elapsedMinutes ?? Math.max(15, Math.round((times.endsAt - times.startsAt) / 60_000)),
-                defaultCrew: spec.team.crewSize,
-                skills: spec.team.skills,
-                capturedAt: Date.now(),
-                versionId: catalog.version._id,
-                version: catalog.version.version,
-                priceSource,
-              },
-            }
-          : {}),
-      priceCents: price === undefined ? undefined : cents(price, "The price"),
-      ...times,
-      status: "scheduled",
-      ...(crew > 1 ? { requiredCrew: crew } : {}),
-      ...(arrival > 0 ? { arrivalWindowMinutes: arrival } : {}),
-      ...(args.hardDeadlineAt !== undefined ? { hardDeadlineAt: deadlineFor(args.hardDeadlineAt, args.endsAt) } : {}),
-      ...(args.instructions?.trim() ? { instructions: text(args.instructions, "Instructions", 4000) } : {}),
-      createdAt: Date.now(),
-    });
-    if (catalog && priced) {
-      const quoteId = await saveQuote(ctx, { companyId: ctx.companyId, service: catalog.service, version: catalog.version, quoteInput: priced.input, result: priced.result, purpose: "visit", actor: byMember(ctx), jobId });
-      const job = (await ctx.db.get(jobId))!;
-      await ctx.db.patch(jobId, { serviceSnapshot: { ...job.serviceSnapshot!, quoteId } });
-    }
-    const template = await applyTemplate(ctx, (await ctx.db.get(jobId))!);
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: byMember(ctx), subject: { table: "jobs", id: jobId }, data: template ? { checklistVersion: template.version } : undefined });
-    await coverJob(ctx, jobId);
-    return jobId;
-  },
+  handler: async (ctx, args) => createJob(ctx, ctx.company, byMember(ctx), args as NewJob),
 });
 
 /**

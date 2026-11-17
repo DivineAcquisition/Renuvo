@@ -20,6 +20,7 @@ import { normalAddress, recipientsAt, type RecipientRecord } from "./lib/complia
 import { CATEGORIES, categoryValidator, type Recipient } from "./lib/compliance/schema";
 import type { Actor } from "./lib/events";
 import { queueReply } from "./lib/messaging/outbox";
+import { salesInboundSms, salesOptedOut } from "./lib/sales/inbound";
 import { allow } from "./lib/rateLimit";
 import type { Agent } from "./lib/statuses";
 import { liveTaskByKey, openTask, setTaskState } from "./lib/taskState";
@@ -84,11 +85,11 @@ export const telnyx = internalMutation({
       .first();
     if (seen) return { kind: "duplicate", replied: false };
     await ctx.db.insert("providerReceipts", { provider: "telnyx", eventId: args.eventId, receivedAt: Date.now() });
-    return handleSms(ctx, args);
+    return handleSms(ctx, { ...args, providerId: `telnyx:${args.eventId}` });
   },
 });
 
-async function handleSms(ctx: MutationCtx, args: { to: string; from: string; body: string; receivedAt: number }): Promise<InboundResult> {
+async function handleSms(ctx: MutationCtx, args: { to: string; from: string; body: string; receivedAt: number; providerId?: string }): Promise<InboundResult> {
   {
     const to = normalAddress("sms", args.to);
     const companyId = to ? await companyForNumber(ctx, to) : null;
@@ -100,6 +101,9 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
     // cleaner's text is also read against their own visits (dispatchReplies.ts).
     const ordinary = async (): Promise<InboundResult> => {
       const known = await recipientsAt(ctx, companyId, "sms", from);
+      // A prospect's reply, or a first text asking about service, is Sales's conversation (convex/lib/sales/inbound.ts).
+      // Everything else goes where it always went: a task for a person.
+      if (await salesInboundSms(ctx, { companyId, from, body: args.body, receivedAt: args.receivedAt, known, providerId: args.providerId })) return { kind: "ignored", replied: false };
       if (known.length > 0) await replyTask(ctx, companyId, from, known, args.body, args.receivedAt);
       return { kind: "ignored", replied: false };
     };
@@ -117,6 +121,7 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
         await withdrawChannel(ctx, { companyId, recipient: asRecipient(person), channel: "sms", source: "text_reply", recordedBy: byRecipient, stopKeyword: true, evidence: "Replied STOP.", actor: SYSTEM, at });
       }
       // One confirmation per STOP that started a suppression. A second STOP while it stands gets no new answer.
+      await salesOptedOut(ctx, companyId, people);
       let replied = false;
       if (created) {
         const message = await reply(ctx, companyId, from, `You will no longer receive texts from ${sender}. Reply START to resubscribe.`, "stop", `reply:stop:${suppression._id}`);
@@ -154,6 +159,7 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
     for (const person of people) {
       await withdrawChannel(ctx, { companyId, recipient: asRecipient(person), channel: "sms", source: "text_reply", recordedBy: byRecipient, evidence: "Asked in their own words to stop texts.", actor: SYSTEM, at });
     }
+    await salesOptedOut(ctx, companyId, people);
     await reviewTask(ctx, companyId, from, people, suppression);
     return { kind, replied: false };
   }

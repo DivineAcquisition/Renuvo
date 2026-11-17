@@ -127,6 +127,18 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "expenseReceipts", index: "by_company_sha", omit: ["storageId"], why: "An internal file reference; the receipt files themselves are not in the export. What was read from each is." },
   { table: "expenseRules", index: "by_company" },
   { table: "expenseImports", index: "by_company_created" },
+  // Sales (convex/lib/sales/schema.ts): opportunities, conversations, what Sales prepared and did, quotes, reminders, forms and holds.
+  { table: "salesOpportunities", index: "by_company_created" },
+  { table: "salesMessages", index: "by_company_opportunity" },
+  { table: "salesActions", index: "by_company_created" },
+  { table: "salesRuns", index: "by_company_opportunity" },
+  { table: "salesQuotes", index: "by_company_opportunity", omit: ["publicId"], why: "Half of a customer's quote link." },
+  { table: "salesQuoteVersions", index: "by_company_quote_version" },
+  { table: "salesFollowUps", index: "by_company_opportunity" },
+  { table: "salesForms", index: "by_company_status" },
+  { table: "salesFormSubmissions", index: "by_company_form" },
+  { table: "salesHolds", index: "by_company_start" },
+  { table: "salesBatches", index: "by_company_status" },
   // Cleaners (convex/lib/cleaners/schema.ts). The export is the Owner's, so pay and personnel records are included.
   { table: "subcontractors", index: "by_company_status" },
   { table: "workerAffiliations", index: "by_company_cleaner" },

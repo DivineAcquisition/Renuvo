@@ -3,6 +3,7 @@
  * `recompute`, which adds the invoice up again from its rows, so the totals can never drift from the
  * records they summarize.
  */
+import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { totalsFor } from "./money";
@@ -56,6 +57,8 @@ export async function recompute(ctx: MutationCtx, invoiceId: Id<"invoices">): Pr
     paidAt = undefined;
   }
   await ctx.db.patch(invoiceId, { totals, status, paidAt, updatedAt: now });
+  // When the money on an invoice changes, a booking waiting on its deposit is looked at again (convex/salesBookings.ts).
+  if (totals.paidCents !== invoice.totals.paidCents || totals.refundedCents !== invoice.totals.refundedCents || status !== invoice.status) await ctx.scheduler.runAfter(0, internal.salesBookings.invoiceChanged, { invoiceId });
   return (await ctx.db.get(invoiceId))!;
 }
 

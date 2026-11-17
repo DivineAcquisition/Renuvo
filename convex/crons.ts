@@ -39,6 +39,8 @@ crons.interval("recruiter removes applicant details past retention", { hours: 24
 
 // Company Chat: a response whose worker stopped reporting is closed honestly instead of spinning forever.
 crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.chatRuns.sweep, {});
+// Sales: runs that never finished, overdue next steps, expired quotes and holds, and reminders whose timer was lost.
+crons.interval("sales picks up what a missed trigger left", { minutes: 5 }, internal.salesAgent.sweep, {});
 
 // Agreements: signing requests past their expiry are closed, renewal dates open a task for a person (never a renewal), and abandoned uploads are removed.
 crons.interval("expire agreement signing requests", { minutes: 30 }, internal.agreementSigning.sweep, {});

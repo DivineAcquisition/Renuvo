@@ -21,6 +21,7 @@ import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
+import { salesSettingsValidator, salesTables } from "./lib/sales/schema";
 import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
@@ -80,6 +81,7 @@ export const aboutValidator = v.union(
   v.object({ table: v.literal("hiringNeeds"), id: v.id("hiringNeeds") }),
   v.object({ table: v.literal("applications"), id: v.id("applications") }),
   v.object({ table: v.literal("mailboxConnections"), id: v.id("mailboxConnections") }),
+  v.object({ table: v.literal("salesOpportunities"), id: v.id("salesOpportunities") }),
 );
 
 /**
@@ -109,6 +111,11 @@ export const proposalValidator = v.union(
   // Cleaners workspace (convex/lib/cleaners/followUps.ts carries it out).
   /** Send one routine follow-up to a cleaner. It is checked again, in full, when approved. */
   v.object({ kind: v.literal("send_cleaner_follow_up"), followUpId: v.id("followUps") }),
+  // Sales (convex/lib/sales/approvals.ts carries these out).
+  /** Send one message Sales prepared, as written, if the conversation has not moved on since. */
+  v.object({ kind: v.literal("sales_action"), actionId: v.id("salesActions") }),
+  /** Let a quote go to the customer: this exact version at this exact total. */
+  v.object({ kind: v.literal("sales_quote"), quoteId: v.id("salesQuotes"), version: v.number(), totalCents: v.number() }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -215,6 +222,8 @@ export default defineSchema({
     dispatch: v.optional(dispatchSettingsValidator),
     dispatchPolicy: v.optional(dispatchPolicyValidator),
     recruiter: v.optional(recruiterSettingsValidator),
+    /** The Sales Playbook: voice, what it handles, approved answers, follow-up timing, discount band, booking steps (convex/lib/sales/settings.ts). */
+    sales: v.optional(salesSettingsValidator),
     /** How the Cleaners workspace works for this company: follow-up rules and who decides personnel requests. */
     cleaners: v.optional(cleanersSettingsValidator),
     /** Where the company works, when appointments may be, and its services (convex/lib/settings/business.ts). */
@@ -414,6 +423,8 @@ export default defineSchema({
     completionReturns: v.optional(v.number()),
     /** The checklist template version this visit's checklist was copied from, if any. */
     checklistTemplate: v.optional(v.object({ templateId: v.id("checklistTemplates"), version: v.number() })),
+    /** Set when Sales made this job from an accepted quote: the opportunity, the quote and the exact version the customer accepted. */
+    sales: v.optional(v.object({ opportunityId: v.id("salesOpportunities"), quoteId: v.id("salesQuotes"), quoteVersion: v.number() })),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
@@ -579,6 +590,11 @@ export default defineSchema({
       v.literal("availability_check"),
       v.literal("idle_check_in"),
       v.literal("verification_code"),
+      // Sales, to a person who asked about service (convex/lib/sales/outbox.ts).
+      v.literal("sales_reply"),
+      v.literal("sales_quote"),
+      v.literal("sales_follow_up"),
+      v.literal("sales_booking"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -593,6 +609,9 @@ export default defineSchema({
     /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
     customerId: v.optional(v.id("customers")),
     invoiceId: v.optional(v.id("invoices")),
+    /** Sales messages: the opportunity, and the quote whose link the message carries as "{link}". */
+    opportunityId: v.optional(v.id("salesOpportunities")),
+    salesQuoteId: v.optional(v.id("salesQuotes")),
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
     linkId: v.optional(v.id("actionLinks")),
@@ -625,6 +644,7 @@ export default defineSchema({
     .index("by_company_queued", ["companyId", "queuedAt"])
     .index("by_company_application", ["companyId", "applicationId"])
     .index("by_company_invoice", ["companyId", "invoiceId"])
+    .index("by_company_opportunity", ["companyId", "opportunityId", "queuedAt"])
     .index("by_company_cleaner", ["companyId", "cleanerId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
@@ -803,6 +823,8 @@ export default defineSchema({
   ...billingTables,
   // Services & Pricing (convex/lib/services/schema.ts).
   ...servicesTables,
+  // ── Sales: opportunities, conversations, quotes, follow-ups, forms and holds (convex/lib/sales/schema.ts) ─
+  ...salesTables,
 
   // ── Finance: the cleaning company's own money, never Selestial's subscription (convex/lib/finance) ─
   ...financeTables,
