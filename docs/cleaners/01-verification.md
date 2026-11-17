@@ -58,3 +58,55 @@ The whole suite, type check and lint pass.
 
 **Not yet:** Performance is marked not built until Phase 4. Portal invitations, requirement review, crews and
 follow-ups arrive in Phases 2 to 4.
+
+## Phase 2: onboarding, documents, portal, links, reminders, Recruiter handoff
+
+**Works end to end (functions, tests and screens):**
+
+- **The checklist** (`/app/cleaners/onboarding`): the Owner adds, changes and removes requirements, chooses
+  who each applies to, what an unmet one holds up (work, payment, or nothing), who reviews it, its validity,
+  whether the cleaner does it from their portal, the services it is for and, for equipment, who provides
+  it. It starts from Selestial's suggestion and becomes the company's own on the first change. A new
+  requirement holds up nobody until it is given to them, from the checklist or from a profile.
+- **Review** on the profile: accept (with the document's own expiry if it has one), ask for changes (the
+  cleaner reads the note), waive with a reason, reopen, or add a file handed in at the office. Each follows
+  the template's reviewer; files open only for that reviewer. A paper agreement is accepted with a note
+  saying how it was signed; a signed agreement in Agreements counts by itself; sent is not signed. Weekly
+  hours and areas are read from the record and never ticked. Accepted items expire on their date (hourly).
+- **The portal** (`/c/portal/<token>`), phone first: next steps and progress, next job, jobs (an offer shows
+  the area; the street and the job page appear only for accepted work that is still theirs), weekly hours
+  and time away (with the accepted jobs it touches handed to a person, never dropped), onboarding steps
+  (confirm contact and agree to work texts in their own action, acknowledge policies, send photos or PDFs),
+  ask the office, shared feedback, and pay behind a one-time code.
+- **Links:** signed, scoped, expiring and revocable; opening one changes nothing and is not recorded; a task
+  link opens only its step; ending an engagement ends access (the company's default) and keeps the record.
+  One live portal link per cleaner; a second invitation within minutes finds the first; a failed or refused
+  send is explained and the link can be copied to send by hand.
+- **Codes:** six digits, ten minutes, five tries, three sends per fifteen minutes; only a hash is stored and
+  the code travels in the send itself, never in the stored message.
+- **Reminders:** Recruiter reminds about onboarding, Dispatch about unconfirmed hours. One open follow-up per
+  person and topic; the first waits a day after the person was added; the agent's permission applies
+  (Propose puts it in Approvals); one routine message per reminder window per person across workspaces; each
+  message is checked again as it goes; after the company's limit a person is asked to reach out, and nothing
+  about the cleaner changes. The profile and the attention list say what Selestial is doing and what became
+  of each message: prepared, sent, delivered and acted on are shown apart.
+- **Recruiter handoff:** an accepted hire gets the same record and checklist. A returning worker (same email
+  or phone) keeps their record and history; a rehire restriction is put in front of the person completing
+  the handoff. Recording a step in Recruiter's queue records it on the cleaner under the same reviewer rule.
+
+**Tests:** `convex/cleanersOnboarding.test.ts`: template rules; reviewer roles and Office seeing state but no
+files; expiry and readiness; the full invited-cleaner journey to ready; expired, revoked, wrong and
+out-of-scope links; ended engagement; duplicate invitations; failed delivery; codes never stored; reminders
+asking first, never duplicating, rechecked at send time, handed to a person after the limit. Recruiter's
+hiring test was updated for the shared checklist and the reviewer rule.
+
+**Visually inspected:** the portal home, steps, hours and pay (390 wide); the owner's onboarding review with
+"What Selestial is doing" and portal messages; the directory header actions.
+
+**Found and fixed while inspecting:** queries keyed to the current minute dropped to their loading state each
+minute, which reset the portal's code entry and would have flashed the directory; they now keep the last
+answer while the next loads (`src/lib/app/stable-query.ts`). Steps the office records no longer show the
+cleaner "To do".
+
+**Not verified here:** a real text or email provider (the mock was used), a real phone camera upload, and
+signing through a provider (none is connected in Selestial).

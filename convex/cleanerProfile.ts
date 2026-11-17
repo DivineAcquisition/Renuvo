@@ -343,3 +343,17 @@ export const setPhoto = managerMutation({
     return null;
   },
 });
+
+/** A person confirms a skill the cleaner said they have, or does not. Only confirmed skills reach Dispatch. */
+export const decideSkill = managerMutation({
+  args: { claimId: v.id("skillClaims"), confirm: v.boolean() },
+  handler: async (ctx, args) => {
+    const claim = await owned(ctx, args.claimId);
+    if (claim.status !== "claimed") throw userError("This was already decided.");
+    const cleaner = await owned(ctx, claim.cleanerId);
+    await ctx.db.patch(claim._id, { status: args.confirm ? "confirmed" : "declined", decidedBy: ctx.member._id, decidedAt: Date.now() });
+    if (args.confirm && !cleaner.skills.includes(claim.skill)) await ctx.db.patch(cleaner._id, { skills: [...cleaner.skills, claim.skill], updatedAt: Date.now() });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: args.confirm ? "cleaner.skill_confirmed" : "cleaner.skill_declined", actor: byMember(ctx), subject: { table: "cleaners", id: cleaner._id }, data: { skill: claim.skill } });
+    return null;
+  },
+});

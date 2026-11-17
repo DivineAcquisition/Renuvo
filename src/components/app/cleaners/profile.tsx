@@ -6,6 +6,8 @@
  * viewer's role allows. Each section reads the shared records; none keeps a copy.
  */
 import { useMutation, useQuery } from "convex/react";
+
+import { useStableQuery } from "@/lib/app/stable-query";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -25,6 +27,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Avatar, Chips, EFFECT_WORDS, ENGAGEMENT_WORDS, Progress, ReadinessLine, RequirementBadge, StatusBadge, type EngagementStatus } from "./bits";
+import { FollowUpsCard, PortalAccessCard, RequirementActions, SkillClaims } from "./onboarding-review";
 import { profilePath, SECTIONS, type SectionId } from "./state";
 
 export type Profile = FunctionReturnType<typeof api.cleanerProfile.profile>;
@@ -40,7 +43,7 @@ const minuteWords = (minute: number) => {
 export function useProfile(cleanerId: string | null) {
   const { companyId } = useCompany();
   const now = useNow();
-  return useQuery(api.cleanerProfile.profile, cleanerId && now ? { companyId, cleanerId: cleanerId as Id<"cleaners">, asOf: now } : "skip");
+  return useStableQuery(api.cleanerProfile.profile, cleanerId && now ? { companyId, cleanerId: cleanerId as Id<"cleaners">, asOf: now } : "skip");
 }
 
 // ── Header ─────────────────────────────────────────────────────────────────────────────────────────
@@ -430,6 +433,12 @@ function AttentionList({ profile, onSection }: { profile: Profile; onSection?: (
             {item.title}
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
+          {item.selestial ? (
+            <p className="mt-1 flex items-start gap-1.5 text-xs text-strong">
+              <Sparkles className="mt-0.5 size-3.5 shrink-0 text-brand-300" aria-hidden />
+              {item.selestial}
+            </p>
+          ) : null}
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {item.evidence
               .filter((row) => row.jobId)
@@ -491,6 +500,7 @@ export function OverviewSection({ profile, onSection }: { profile: Profile; onSe
         </Card>
       </div>
       <div className="grid content-start gap-4">
+        <FollowUpsCard profile={profile} />
         <Card title="Details">
           <div className="grid gap-3">
             <Fact icon={MessageSquareText} label="Mobile">{profile.phone ?? <span className="text-muted-foreground">Not on file</span>}</Fact>
@@ -687,6 +697,8 @@ export function OnboardingSection({ profile }: { profile: Profile }) {
   return (
     <div className="grid gap-4">
       <ReadinessCard profile={profile} />
+      <FollowUpsCard profile={profile} />
+      <PortalAccessCard profile={profile} />
       {GROUPS.map((effect) => {
         const rows = profile.requirements.filter((row) => row.effect === effect);
         if (rows.length === 0) return null;
@@ -712,6 +724,7 @@ export function OnboardingSection({ profile }: { profile: Profile }) {
                     </p>
                     {row.reviewNote ? <p className="mt-1 ml-6 rounded-lg bg-muted/50 px-2 py-1 text-xs text-strong">Review note: {row.reviewNote}</p> : null}
                     {row.waiverReason ? <p className="mt-1 ml-6 rounded-lg bg-muted/50 px-2 py-1 text-xs text-strong">Waived: {row.waiverReason}</p> : null}
+                    <RequirementActions profile={profile} row={row} />
                   </div>
                   <RequirementBadge state={row.state} />
                 </li>
@@ -742,6 +755,9 @@ export function SkillsSection({ profile }: { profile: Profile }) {
   const equipment = profile.requirements.filter((row) => row.kind === "equipment");
   return (
     <div className="grid gap-4 @3xl:grid-cols-2">
+      <div className="@3xl:col-span-2">
+        <SkillClaims profile={profile} />
+      </div>
       <Card title="Confirmed skills">
         {profile.skills.length > 0 ? <Chips items={profile.skills} max={30} tone="brand" label="Skills" /> : <p className="text-sm text-muted-foreground">None confirmed. Jobs that need a skill are not offered to them.</p>}
         <p className="mt-3 text-xs text-muted-foreground">Dispatch matches a job&apos;s required skills against these confirmed skills only.</p>
@@ -789,7 +805,7 @@ export function SkillsSection({ profile }: { profile: Profile }) {
 export function PaySection({ profile }: { profile: Profile }) {
   const { companyId, timezone } = useCompany();
   const now = useNow();
-  const pay = useQuery(api.cleanerPay.summary, profile.viewer.owner && now ? { companyId, cleanerId: profile.cleanerId, asOf: now } : "skip");
+  const pay = useStableQuery(api.cleanerPay.summary, profile.viewer.owner && now ? { companyId, cleanerId: profile.cleanerId, asOf: now } : "skip");
   if (!profile.viewer.owner) {
     return <p className="rounded-2xl border border-dashed border-border bg-card px-5 py-10 text-center text-sm text-muted-foreground">Pay is shown to the Owner only.</p>;
   }

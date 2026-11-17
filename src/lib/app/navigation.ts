@@ -226,6 +226,7 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 export const CLEANER_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/cleaners/[id]/[[...section]]`, label: "Cleaner", purpose: "One person's profile, each section at its own address: overview, availability and jobs, onboarding and documents, skills and equipment, performance and coaching, pay, and activity." },
   { path: `${APP_ROOT}/cleaners/import`, label: "Import cleaners", purpose: "Bring in a list, with every row reviewed for duplicates before anything is written." },
+  { path: `${APP_ROOT}/cleaners/onboarding`, label: "Onboarding checklist", purpose: "What each kind of worker needs, what an unmet item holds up, who reviews it and how long it stays valid." },
 ];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */

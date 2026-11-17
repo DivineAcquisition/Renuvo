@@ -10,10 +10,11 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { canManage, useCompany } from "@/components/app/company";
+import { useStableQuery } from "@/lib/app/stable-query";
 import { useDetail } from "@/components/app/detail-panel";
 import { PageHeader } from "@/components/app/shell";
 import { useNow } from "@/components/app/use-now";
-import { CalendarIcon, Check, ChevronDown, Clock, FunnelIcon, LayoutGrid, Plus, Search, TableIcon, TriangleAlert, Upload, Users, X } from "@/components/icons";
+import { CalendarIcon, Check, ChevronDown, ClipboardList, Clock, FunnelIcon, LayoutGrid, MessageSquareText, Plus, Search, Sparkles, TableIcon, TriangleAlert, Upload, Users, X } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clock, dayName, localDate, zonedInstant } from "@/lib/app/format";
@@ -25,6 +26,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { AddCleanerDialog } from "./add";
 import { Avatar, Chips, ENGAGEMENT_SHORT, Progress, ReadinessLine, StatusBadge, STATUS_WORDS, type EngagementStatus } from "./bits";
 import { CleanerDrawer } from "./drawer";
+import { InviteManyDialog } from "./onboarding-review";
 import { CLEANERS_PATH, useDirectoryState, type DirectoryState } from "./state";
 
 export type Directory = FunctionReturnType<typeof api.workforce.directory>;
@@ -128,6 +130,12 @@ function AttentionPanel({ items, rows, onOpen }: { items: Attention[]; rows: Row
                     </span>
                   </p>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{item.detail}</p>
+                  {item.selestial ? (
+                    <p className="mt-1 flex items-start gap-1.5 text-xs text-strong">
+                      <Sparkles className="mt-0.5 size-3.5 shrink-0 text-brand-300" aria-hidden />
+                      {item.selestial}
+                    </p>
+                  ) : null}
                   {item.evidence.some((row) => row.jobId) ? (
                     <p className="mt-1.5 flex flex-wrap gap-1.5">
                       {item.evidence
@@ -402,7 +410,8 @@ export function CleanersScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [availOpen, setAvailOpen] = useState(false);
   const [adding, setAdding] = useState(false);
-  const data = useQuery(api.workforce.directory, now ? { companyId, asOf: now, includeEnded: state.ended === "1" } : "skip");
+  const [inviting, setInviting] = useState(false);
+  const data = useStableQuery(api.workforce.directory, now ? { companyId, asOf: now, includeEnded: state.ended === "1" } : "skip");
   const avail = parseAvail(state.avail);
   const slot = avail ? { from: zonedInstant(avail.date, avail.from, timezone), to: zonedInstant(avail.date, avail.to, timezone) } : null;
   const free = useQuery(api.workforce.availableIn, slot?.from && slot.to && slot.to > slot.from ? { companyId, from: slot.from, to: slot.to } : "skip");
@@ -436,9 +445,17 @@ export function CleanersScreen() {
         actions={
           manager ? (
             <>
+              <Button variant="ghost" size="sm" render={<Link href={`${CLEANERS_PATH}/onboarding`} />}>
+                <ClipboardList aria-hidden />
+                Onboarding checklist
+              </Button>
               <Button variant="outline" size="sm" render={<Link href={`${CLEANERS_PATH}/import`} />}>
                 <Upload aria-hidden />
                 Import cleaners
+              </Button>
+              <Button variant="outline" size="sm" disabled={!data} onClick={() => setInviting(true)}>
+                <MessageSquareText aria-hidden />
+                Invite to portal
               </Button>
               <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
                 <Plus aria-hidden />
@@ -579,6 +596,7 @@ export function CleanersScreen() {
         </div>
       )}
 
+      {inviting && data ? <InviteManyDialog people={data.rows.map((row) => ({ cleanerId: row.cleanerId, name: row.name, status: row.status, hasPhone: row.hasPhone }))} onClose={() => setInviting(false)} /> : null}
       {adding ? <AddCleanerDialog onClose={() => setAdding(false)} onAdded={(cleanerId) => { setAdding(false); open(cleanerId); }} /> : null}
       <CleanerDrawer cleanerId={state.cleaner ?? null} section={state.section} onClose={() => update({ cleaner: undefined, section: undefined }, "replace")} onSection={(section) => update({ section })} />
     </>

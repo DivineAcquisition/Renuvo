@@ -24,9 +24,18 @@ import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { isOwner } from "./lib/roles";
 import { tags } from "./lib/text";
+import { clock, dayName } from "./lib/time";
 import { addLocalDays, startOfLocalDay } from "./lib/time";
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+
+/** One line about an open follow-up, for an attention item. */
+function followUpWords(row: Doc<"followUps">, timezone: string): string {
+  const agent = row.agent === "recruiter" ? "Recruiter" : "Dispatch";
+  if (row.status === "awaiting_approval") return `${agent} prepared a reminder. It waits for your approval.`;
+  if (row.status === "sent" && row.lastSentAt) return `${agent} sent reminder ${row.attempt} on ${dayName(row.lastSentAt, timezone)}. The next check is ${dayName(row.dueAt, timezone)}.`;
+  return `${agent} will send a reminder ${dayName(row.dueAt, timezone)} at ${clock(row.dueAt, timezone)}, if it is still needed then.`;
+}
 
 /** What each overview number counts, shown beside it. */
 export const OVERVIEW_DEFINITIONS = {
@@ -76,6 +85,15 @@ export const directory = companyQuery({
       .take(200);
     const subName = new Map(subcontractors.map((row) => [row._id as string, row.name]));
 
+    // What Selestial is already doing, so an attention item says it instead of leaving the owner to guess.
+    const followUps = new Map<string, Doc<"followUps">[]>();
+    for (const status of ["scheduled", "awaiting_approval", "sent"] as const) {
+      const open = await ctx.db
+        .query("followUps")
+        .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", status))
+        .take(1000);
+      for (const row of open) followUps.set(row.cleanerId, [...(followUps.get(row.cleanerId) ?? []), row]);
+    }
     const attention: AttentionItem[] = [];
     const rows = [];
     for (const cleaner of cleaners) {
@@ -95,6 +113,11 @@ export const directory = companyQuery({
         settings,
         viewerIsOwner: isOwner(ctx.role),
       });
+      for (const item of items) {
+        const topic = item.kind === "missing_requirements" ? "onboarding" : item.kind === "availability_unconfirmed" ? "availability" : null;
+        const row = topic ? followUps.get(cleaner._id)?.find((entry) => entry.topic === topic) : undefined;
+        if (row) item.selestial = followUpWords(row, tz);
+      }
       attention.push(...items);
       const next = held.find((row) => row.status === "accepted" && row.endsAt > now) ?? null;
       const offered = held.filter((row) => row.status === "offered" && row.startsAt > now).length;
