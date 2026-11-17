@@ -68,6 +68,13 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("billingAccounts"), id: v.id("billingAccounts") }),
   v.object({ table: v.literal("aiExecutions"), id: v.id("aiExecutions") }),
   v.object({ table: v.literal("billingIntents"), id: v.id("billingIntents") }),
+  // Finance: the company's own money (convex/lib/finance/schema.ts).
+  v.object({ table: v.literal("invoices"), id: v.id("invoices") }),
+  v.object({ table: v.literal("payments"), id: v.id("payments") }),
+  v.object({ table: v.literal("refunds"), id: v.id("refunds") }),
+  v.object({ table: v.literal("invoiceCredits"), id: v.id("invoiceCredits") }),
+  v.object({ table: v.literal("stripeAccounts"), id: v.id("stripeAccounts") }),
+  v.object({ table: v.literal("financeSettings"), id: v.id("financeSettings") }),
 );
 export type Subject = typeof subjectValidator.type;
 

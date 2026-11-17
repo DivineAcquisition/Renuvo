@@ -10,6 +10,7 @@ import { aiTables } from "./lib/ai/schema";
 import { billingTables } from "./lib/billing/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
+import { financeTables } from "./lib/finance/schema";
 import { trustTables } from "./lib/trust/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
@@ -727,6 +728,9 @@ export default defineSchema({
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,
   ...billingTables,
+
+  // ── Finance: the cleaning company's own money, never Selestial's subscription (convex/lib/finance) ─
+  ...financeTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

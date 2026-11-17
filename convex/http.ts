@@ -26,6 +26,7 @@ import { verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
 import { parseEvent, signingProvider, verifyBody } from "./lib/agreements/signing";
 import { photoRequestValid } from "./lib/dispatch/photoLinks";
 import { telnyxEvent, verifyTelnyx } from "./lib/messaging/telnyx";
+import { parseEvent as parseStripeEvent, verifyStripeSignature } from "./lib/finance/stripe";
 
 const http = httpRouter();
 
@@ -69,6 +70,28 @@ http.route({
       }
       const customerId = typeof parsed.data?.customer_id === "string" ? parsed.data.customer_id : undefined;
       await ctx.runMutation(internal.billing.webhookReceived, { deliveryId: request.headers.get("svix-id")!, type: typeof parsed.type === "string" ? parsed.type : "unknown", customerId });
+    },
+  }),
+});
+
+/**
+ * Stripe Connect: events from the cleaning companies' own Stripe accounts (Finance). The event only says
+ * which object changed; financeStripe reads the object back from Stripe, so an event can never set a
+ * payment's state by what it claims, and the same event delivered twice changes nothing.
+ */
+http.route({
+  path: "/webhooks/stripe",
+  method: "POST",
+  handler: providerWebhook({
+    verify: async (request, body) => {
+      const secret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET?.trim();
+      if (!secret) return false;
+      return verifyStripeSignature({ secret, header: request.headers.get("stripe-signature"), body, now: Date.now() });
+    },
+    handler: async (ctx, body) => {
+      const event = parseStripeEvent(body);
+      if (!event) return;
+      await ctx.runMutation(internal.financeStripe.webhookReceived, { event });
     },
   }),
 });

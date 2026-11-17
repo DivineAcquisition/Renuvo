@@ -101,6 +101,13 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "googleAdsSnapshots", index: "by_company_account" },
   { table: "googleDriveTexts", index: "by_company_resource" },
   { table: "googleSettings", index: "by_company" },
+  // Finance: the company's own money (convex/lib/finance/schema.ts).
+  { table: "financeSettings", index: "by_company" },
+  { table: "stripeAccounts", index: "by_company", omit: ["onboarding"], why: "A single-use Stripe onboarding link." },
+  { table: "invoices", index: "by_company_created", omit: ["publicId"], why: "Half of a pay link." },
+  { table: "payments", index: "by_company_invoice", omit: ["stripe.clientSecret"], why: "Lets a browser finish an unfinished card payment." },
+  { table: "refunds", index: "by_company_invoice" },
+  { table: "invoiceCredits", index: "by_company_invoice" },
 ];
 
 /** Company tables kept out of the export, and why. */
@@ -132,6 +139,11 @@ export const COMPANY_OMIT = ["setupKey"] as const;
 /** Removes the named fields from a row. */
 export function without(row: Record<string, unknown>, omit: readonly string[] = []): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(row)) if (!omit.includes(name)) out[name] = value;
+  for (const [name, value] of Object.entries(row)) {
+    if (omit.includes(name)) continue;
+    // "stripe.clientSecret" leaves out one field inside an object and keeps the rest of it.
+    const inner = omit.filter((path) => path.startsWith(`${name}.`)).map((path) => path.slice(name.length + 1));
+    out[name] = inner.length && value && typeof value === "object" && !Array.isArray(value) ? without(value as Record<string, unknown>, inner) : value;
+  }
   return out;
 }

@@ -176,9 +176,9 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     section: "shared",
     purpose: "The cleaning company's own money: customer payments, balances, cleaner pay. Not Selestial's subscription.",
     path: `${APP_ROOT}/finance`,
-    availability: PLANNED,
+    availability: LIVE,
     minimumRole: "owner",
-    accessNote: "The Owner only, by the owner's decision on November 15, 2026.",
+    accessNote: "The Owner only, by the owner's decision on November 15, 2026. Invoices, payments, credits and refunds are built; Expenses, Team Pay and Profitability are shown as not built yet.",
   },
   {
     id: "reports",
@@ -220,6 +220,11 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
   { path: `${APP_ROOT}/agreements/archive`, label: "Archive", purpose: "Agreements set aside. They are kept, not deleted." },
   { path: `${APP_ROOT}/agreements/new`, label: "New agreement", purpose: "Build with Selestial, use a template, or upload an agreement." },
   { path: `${APP_ROOT}/agreements/[id]`, label: "Agreement", purpose: "One agreement: its document, parties, terms, versions, review and signatures, and activity." },
+];
+
+/** Pages inside Finance, reached from it. They have no sidebar entry of their own. */
+export const FINANCE_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account and its invoice settings: tax, terms, numbering." },
 ];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */

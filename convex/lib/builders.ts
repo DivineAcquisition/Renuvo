@@ -16,6 +16,7 @@ import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkStat
 import { notAllowed, notFound, userError } from "./errors";
 import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
 import { invitationForToken } from "./invitations";
+import { invoiceForToken } from "./finance/payLinks";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -334,6 +335,53 @@ export function linkMutation<V extends AnyValidators, R>(def: {
       const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
       await noteLinkAction(ctx, access.link, def.action);
       return result;
+    },
+  } as any);
+}
+
+// ── Pay links: a customer viewing and paying one invoice without signing in ─────────────────────
+
+export type PayAccess = {
+  /** The invoice the token names and its company, or null when the token names nothing. */
+  pay: { invoice: Doc<"invoices">; company: Doc<"companies"> } | null;
+};
+
+async function payAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PayAccess> {
+  const invoice = await invoiceForToken(ctx, token);
+  const company = invoice ? await ctx.db.get(invoice.companyId) : null;
+  return { pay: invoice && company ? { invoice, company } : null };
+}
+
+/**
+ * A read through a pay link. The token is the only authorization and everything shown must hang off
+ * `ctx.pay`. A wrong signature, an unknown id, a draft and a deployment with no secret all arrive as
+ * null, so the page cannot tell them apart. Opening the link changes nothing.
+ */
+export function payQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & PayAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await payAccess(ctx, token)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/** One action through a pay link. Refused unless the token names an invoice that is still open. */
+export function payMutation<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: MutationCtx & { invoice: Doc<"invoices">; company: Doc<"companies">; companyId: Id<"companies"> }, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const { pay } = await payAccess(ctx, token);
+      if (!pay) notFound();
+      return def.handler({ ...ctx, invoice: pay.invoice, company: pay.company, companyId: pay.company._id }, rest as ObjectType<V>);
     },
   } as any);
 }

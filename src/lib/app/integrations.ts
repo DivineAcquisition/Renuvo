@@ -54,7 +54,7 @@ const planned = (phase: number): IntegrationStatus => ({ kind: "planned", phase 
 
 export const INTEGRATIONS: readonly Integration[] = [
   // Payments
-  { id: "stripe", name: "Stripe", category: "payments", does: "Charge customers by card or bank transfer for visits and invoices, with saved cards for recurring service.", can: ["charge cards", "save cards", "send invoices", "issue refunds"], agents: ["sales", "retention"], status: planned(4), note: "Your own Stripe account, connected through Stripe Connect." },
+  { id: "stripe", name: "Stripe", category: "payments", does: "Customers pay your invoices by card or bank on your pay links, and you refund from Finance. The money goes to your own Stripe account; Selestial takes no fee.", can: ["take card payments", "take bank payments", "issue refunds"], agents: [], status: { kind: "available", href: "/app/finance/setup", setUpWhere: "Finance › Payments setup" }, note: "Your own Stripe account, connected through Stripe Connect. Saved cards come later." },
   { id: "square", name: "Square", category: "payments", does: "Take cards in person or online, send invoices and use tap to pay, through your Square account.", can: ["take cards", "send invoices", "tap to pay"], agents: ["sales", "retention"], status: planned(4) },
   { id: "quickbooks-payments", name: "QuickBooks Payments", category: "payments", does: "Collect card and bank payments that land straight in QuickBooks.", can: ["take cards", "take bank payments", "post to QuickBooks"], agents: ["retention"], status: planned(4) },
   { id: "paypal", name: "PayPal and Venmo", category: "payments", does: "Let customers pay an invoice with PayPal or Venmo.", can: ["request payment", "take PayPal", "take Venmo"], agents: ["retention"], status: planned(4) },

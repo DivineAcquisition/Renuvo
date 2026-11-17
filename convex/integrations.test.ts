@@ -20,7 +20,7 @@ describe("Integrations", () => {
     // Every built integration on the page is one the server treats as built, and the reverse.
     const built = INTEGRATIONS.filter((row) => row.status.kind !== "planned").map((row) => row.id).sort();
     expect([...BUILT].sort()).toEqual(built);
-    for (const row of INTEGRATIONS) if (row.status.kind === "available") expect(row.status.href).toMatch(/^(\/app\/settings\/|#google$)/);
+    for (const row of INTEGRATIONS) if (row.status.kind === "available") expect(row.status.href).toMatch(/^(\/app\/settings\/|\/app\/finance\/setup$|#google$)/);
   });
 
   it("lets the Owner request a planned integration once, and nobody else", async () => {
@@ -28,10 +28,10 @@ describe("Integrations", () => {
     const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
     const office = await addMember(t, as, companyId, "office-a", "office");
 
-    const first = await as.mutation(api.integrations.request, { companyId, integrationId: "stripe" });
+    const first = await as.mutation(api.integrations.request, { companyId, integrationId: "square" });
     expect(first.repeated).toBe(false);
-    expect(await as.mutation(api.integrations.request, { companyId, integrationId: "stripe" })).toMatchObject({ repeated: true, requestedAt: first.requestedAt });
-    expect((await office.query(api.integrations.overview, { companyId })).requested).toEqual([{ integrationId: "stripe", requestedAt: first.requestedAt }]);
+    expect(await as.mutation(api.integrations.request, { companyId, integrationId: "square" })).toMatchObject({ repeated: true, requestedAt: first.requestedAt });
+    expect((await office.query(api.integrations.overview, { companyId })).requested).toEqual([{ integrationId: "square", requestedAt: first.requestedAt }]);
 
     expect(await refusal(office.mutation(api.integrations.request, { companyId, integrationId: "square" }))).toBe(NOT_ALLOWED);
     expect(await refusal(as.mutation(api.integrations.request, { companyId, integrationId: "not-a-real-one" }))).toBe(NOT_FOUND);

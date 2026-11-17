@@ -14,6 +14,10 @@ crons.interval("dispatch looks for uncovered visits", { minutes: 15 }, internal.
 // The day of service: reminders that are due, arrivals that are overdue, visits running over.
 crons.interval("dispatch watches the day of service", { minutes: 5 }, internal.dispatchOps.monitor, {});
 
+// Finance: card payments and refunds still in flight are read back from Stripe when its notification is late,
+// and payments a customer started and abandoned are stopped. Nothing is ever charged or refunded again here.
+crons.interval("finance reconciles payments with Stripe", { minutes: 10 }, internal.financeStripe.reconcile, {});
+
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});
 
