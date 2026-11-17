@@ -14,7 +14,7 @@
  * happen in production.
  */
 
-export const TASK_IDS = ["chat_response_standard", "chat_response_advanced", "hiring_message_reading", "image_generation", "image_edit", "video_generation", "applicant_evaluation", "follow_up_draft", "dispatch_exception_analysis", "retention_assessment", "agreement_draft", "campaign_generation"] as const;
+export const TASK_IDS = ["chat_response_standard", "chat_response_advanced", "hiring_message_reading", "image_generation", "image_edit", "video_generation", "applicant_evaluation", "follow_up_draft", "dispatch_exception_analysis", "retention_assessment", "agreement_draft", "campaign_generation", "research_brief"] as const;
 export type Task = (typeof TASK_IDS)[number];
 
 export const TASKS: Record<Task, { label: string; unit: string; available: boolean }> = {
@@ -78,6 +78,11 @@ export const TASKS: Record<Task, { label: string; unit: string; available: boole
     unit: "One campaign's content generated.",
     available: false,
   },
+  research_brief: {
+    label: "Pricing research brief",
+    unit: "One research brief for Services & Pricing: up to 5 web searches and one written brief with its sources. A brief that finds nothing usable is still one unit; one that fails to finish is not charged.",
+    available: true,
+  },
 };
 
 /** The exact setup a media rate covers. Work outside it has no published price, so it cannot run. */
@@ -117,6 +122,7 @@ export const RATE_CARDS: readonly RateCard[] = [
       retention_assessment: 2,
       agreement_draft: 5,
       campaign_generation: 20,
+      research_brief: 5,
     },
   },
   {
@@ -136,6 +142,34 @@ export const RATE_CARDS: readonly RateCard[] = [
       retention_assessment: null,
       agreement_draft: null,
       campaign_generation: null,
+      /** Research briefs did not exist when this card was approved. Under this card they have no rate, so they cannot run. */
+      research_brief: null,
+    },
+    specs: {
+      image_generation: { sizes: ["1024x1024"], fastAllowed: false, describe: "Standard quality, 1024 × 1024, one image per charge." },
+      image_edit: { sizes: ["1024x1024"], describe: "Standard quality, 1024 × 1024, one edited image per charge." },
+      video_generation: { durations: [6], describe: "One 6-second clip at the standard resolution with the model's default audio. Other lengths have no published price yet." },
+    },
+    startingAt: { video_generation: true },
+  },
+  {
+    version: "2026-11b",
+    fixture: false,
+    note: "The 2026-11 rates unchanged, plus pricing research briefs at 10 credits, approved by the owner on November 16, 2026. Put in force by setting BILLING_RATE_CARD to 2026-11b.",
+    rates: {
+      chat_response_standard: 1,
+      chat_response_advanced: 5,
+      hiring_message_reading: 1,
+      image_generation: 20,
+      image_edit: 15,
+      video_generation: 200,
+      applicant_evaluation: null,
+      follow_up_draft: null,
+      dispatch_exception_analysis: null,
+      retention_assessment: null,
+      agreement_draft: null,
+      campaign_generation: null,
+      research_brief: 10,
     },
     specs: {
       image_generation: { sizes: ["1024x1024"], fastAllowed: false, describe: "Standard quality, 1024 × 1024, one image per charge." },

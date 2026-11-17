@@ -32,7 +32,7 @@ export type PricingInput = {
   targetMarginPercent?: number;
   /** Profit as a percent of the cost. */
   markupPercent?: number;
-  /** For recurring service: visits in a month. */
+  /** For recurring service: visits in a month. For an every-N-days schedule this is an annual average (4.35 for every 7 days), never 4. */
   visitsPerMonth?: number;
   /** Round each price up to a multiple of this many cents, for example 500 for $5. */
   roundToCents?: number;
@@ -166,7 +166,7 @@ export function pricing(input: PricingInput): PricingResult {
     visits !== undefined && visits > 0
       ? { visits, costCents: Math.round(totalCostCents * visits), priceAtMarginCents: priceAtMarginCents === null ? null : Math.round(priceAtMarginCents * visits), priceAtMarkupCents: priceAtMarkupCents === null ? null : Math.round(priceAtMarkupCents * visits) }
       : null;
-  if (monthly) formulas.push(`Monthly = per-visit amount × ${visits} visits`);
+  if (monthly) formulas.push(`Monthly = per-visit amount × ${visits} visits a month${Number.isInteger(visits) ? "" : " (an annual average: some months have more visits than others)"}`);
 
   return { name: input.name?.trim().slice(0, 80) || "Scenario", crewSize: crewSize ?? null, elapsedHours: elapsed, laborHours, laborCents, directCents, overheadCents, totalCostCents, priceAtMarginCents, priceAtMarkupCents, checks, monthly, formulas, assumptions };
 }

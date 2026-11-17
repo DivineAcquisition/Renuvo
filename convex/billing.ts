@@ -56,7 +56,7 @@ export const planCheck = internalQuery({
   handler: async (ctx, args) => {
     const execution = (await ctx.db.get(args.executionId))!;
     const company = (await ctx.db.get(execution.companyId))!;
-    if (execution.agent === "chat" || execution.agent === "studio") {
+    if (execution.agent === "chat" || execution.agent === "studio" || execution.agent === "services") {
       if (!verifiedPlan(company)) return { ok: false as const, block: "plan" as const, message: "AI work needs an active Operate or Expand plan." };
     } else {
       const verdict = agentVerdict(company, execution.agent);
@@ -537,7 +537,7 @@ export const setSpendingControls = ownerMutation({
     if (args.autoTopUp.enabled) throw userError("Automatic top-ups are not available yet: top-ups are not on sale. Nothing is ever bought without you.");
     const budgets: Record<string, number> = {};
     for (const [agent, value] of Object.entries(args.agentBudgets)) {
-      if (agent !== "chat" && agent !== "studio" && !(AGENT_IDS as readonly string[]).includes(agent)) throw userError("That agent is not known.");
+      if (agent !== "chat" && agent !== "studio" && agent !== "services" && !(AGENT_IDS as readonly string[]).includes(agent)) throw userError("That agent is not known.");
       budgets[agent] = whole(value, `The budget for ${agentName(agent as Doc<"aiExecutions">["agent"])}`)!;
     }
     const maxPerExecution = whole(args.maxPerExecution, "The maximum for one piece of work");
@@ -654,5 +654,5 @@ export const planAndUsage = ownerQuery({
 const TASKS_LIST = Object.keys(TASKS) as (keyof typeof TASKS)[];
 
 function agentName(agent: Doc<"aiExecutions">["agent"]): string {
-  return agent === "chat" ? "Company Chat" : agent === "studio" ? "Marketing · Creative Studio" : AGENT_CATALOG[agent].name;
+  return agent === "chat" ? "Company Chat" : agent === "studio" ? "Marketing · Creative Studio" : agent === "services" ? "Services & Pricing research" : AGENT_CATALOG[agent].name;
 }

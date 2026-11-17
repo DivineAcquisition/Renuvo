@@ -23,11 +23,11 @@ type Execution = Doc<"aiExecutions">;
 type AgentKey = Execution["agent"];
 
 export function agentLabel(agent: AgentKey): string {
-  return agent === "chat" ? "Company Chat" : agent === "studio" ? "Marketing · Creative Studio" : AGENT_CATALOG[agent].name;
+  return agent === "chat" ? "Company Chat" : agent === "studio" ? "Marketing · Creative Studio" : agent === "services" ? "Services & Pricing research" : AGENT_CATALOG[agent].name;
 }
 
 /** Fixed order, so an agent keeps its colour whatever the filter shows. */
-export const AGENT_ORDER: AgentKey[] = ["chat", "recruiter", "dispatch", "studio", "sales", "retention", "marketing", "quality", "customer-care", "team-coordinator"];
+export const AGENT_ORDER: AgentKey[] = ["chat", "services", "recruiter", "dispatch", "studio", "sales", "retention", "marketing", "quality", "customer-care", "team-coordinator"];
 
 const STATUS_WORDS: Record<Execution["state"], string> = {
   pending: "Waiting",
@@ -169,7 +169,7 @@ export const usage = ownerQuery({
     const done = charged(inRange);
     const total = done.reduce((sum, row) => sum + (row.charged ?? 0), 0);
     const share = (value: number) => (total > 0 ? Math.round((1000 * value) / total) / 10 : 0);
-    const agentKeys = AGENT_ORDER.filter((key) => key === "chat" || done.some((row) => row.agent === key) || (key === "studio" ? planIncludesFeature(plan, "creative_studio") : key in AGENT_CATALOG && agentReleased(key as never) && planIncludesAgent(plan, key as never)));
+    const agentKeys = AGENT_ORDER.filter((key) => key === "chat" || key === "services" || done.some((row) => row.agent === key) || (key === "studio" ? planIncludesFeature(plan, "creative_studio") : key in AGENT_CATALOG && agentReleased(key as never) && planIncludesAgent(plan, key as never)));
     const byAgent = agentKeys.map((key) => {
       const list = done.filter((row) => row.agent === key);
       const value = list.reduce((sum, row) => sum + (row.charged ?? 0), 0);
@@ -241,7 +241,7 @@ export const usage = ownerQuery({
       ledger: account?.ledger ?? null,
       communication: { sms: channel("sms"), email: channel("email"), voice: null as null },
       controls: account?.controls ?? null,
-      budgetAgents: AGENT_ORDER.filter((key) => key === "chat" || (key === "studio" ? planIncludesFeature(plan, "creative_studio") : key in AGENT_CATALOG && agentReleased(key as never) && planIncludesAgent(plan, key as never))).map((key) => ({ key, label: agentLabel(key) })),
+      budgetAgents: AGENT_ORDER.filter((key) => key === "chat" || key === "services" || (key === "studio" ? planIncludesFeature(plan, "creative_studio") : key in AGENT_CATALOG && agentReleased(key as never) && planIncludesAgent(plan, key as never))).map((key) => ({ key, label: agentLabel(key) })),
       priceList: priceList(state.card),
     };
   },

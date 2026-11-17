@@ -19,6 +19,7 @@ import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
+import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
   approvalStatusValidator,
@@ -205,6 +206,11 @@ export default defineSchema({
     businessSettings: v.optional(businessSettingsValidator),
     /** Counts saves of the business settings, so a stale browser tab cannot overwrite a newer save. Absent means zero. */
     settingsRevision: v.optional(v.number()),
+    /**
+     * When the services listed under businessSettings were copied into Services & Pricing (the one catalog
+     * since November 16, 2026). After it, businessSettings.services is a record of what was there, not read.
+     */
+    servicesMigratedAt: v.optional(v.number()),
     /** The sign-in subject of whoever created the company. */
     createdBy: v.optional(v.string()),
     /** Chosen by the creator's browser for one setup, so a create that is sent twice makes one company. */
@@ -727,6 +733,8 @@ export default defineSchema({
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,
   ...billingTables,
+  // Services & Pricing (convex/lib/services/schema.ts).
+  ...servicesTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

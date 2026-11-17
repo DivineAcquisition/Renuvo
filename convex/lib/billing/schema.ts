@@ -92,8 +92,8 @@ export const billingTables = {
     env: envValidator,
     /** One per piece of work, so asking twice opens one execution. */
     key: v.string(),
-    /** The agent whose work it is; "chat" for Company Chat's answers, "studio" for Creative Studio. */
-    agent: v.union(literals(AGENT_IDS), v.literal("chat"), v.literal("studio")),
+    /** The agent whose work it is; "chat" for Company Chat's answers, "studio" for Creative Studio, "services" for Services & Pricing research. */
+    agent: v.union(literals(AGENT_IDS), v.literal("chat"), v.literal("studio"), v.literal("services")),
     /** A plan feature the work also needs, such as Creative Studio. */
     feature: v.optional(v.string()),
     task: literals(TASK_IDS),

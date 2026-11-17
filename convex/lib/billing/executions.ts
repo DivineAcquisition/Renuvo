@@ -37,6 +37,7 @@ export const HOLD_MS: Record<Task, number> = {
   retention_assessment: 10 * MINUTE,
   agreement_draft: 15 * MINUTE,
   campaign_generation: 60 * MINUTE,
+  research_brief: 15 * MINUTE,
 };
 
 export type Opened = { ok: true; executionId: Id<"aiExecutions">; credits: number; repeated: boolean } | { ok: false; block: Block; message: string };
@@ -47,7 +48,7 @@ export async function openExecution(
     company: Doc<"companies">;
     key: string;
     /** The agent whose work this is; "chat" for Company Chat's own answers. */
-    agent: AgentId | "chat" | "studio";
+    agent: AgentId | "chat" | "studio" | "services";
     /** A plan feature the work also needs, such as Creative Studio. */
     feature?: PlanFeature;
     task: Task;
@@ -76,7 +77,7 @@ export async function openExecution(
   const account = await accountFor(ctx, input.company._id, price.env);
   // Before the first sync there is no copy of Autumn's record yet: the reservation fetches it and decides.
   const knowsPlan = account !== null || verifiedPlan(input.company) !== null;
-  for (const verdict of [input.agent === "chat" || input.agent === "studio" ? null : agentVerdict(input.company, input.agent), input.feature ? featureVerdict(input.company, input.feature) : null]) {
+  for (const verdict of [input.agent === "chat" || input.agent === "studio" || input.agent === "services" ? null : agentVerdict(input.company, input.agent), input.feature ? featureVerdict(input.company, input.feature) : null]) {
     if (verdict && !verdict.ok && (verdict.block !== "plan" || knowsPlan)) return verdict;
   }
   if (input.agent === "chat" && knowsPlan && verifiedPlan(input.company) === null) return { ok: false, block: "plan", message: "Company Chat needs an active Operate or Expand plan." };
