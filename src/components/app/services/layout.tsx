@@ -67,7 +67,7 @@ export function ServicesLayout({ children }: { children: React.ReactNode }) {
               >
                 {tab.label}
                 {tab.id === "changes" && catalog && catalog.counts.waiting > 0 ? (
-                  <span className="rounded-full bg-brand-500/10 px-1.5 text-xs font-medium text-brand-700 dark:text-brand-200">{catalog.counts.waiting} waiting</span>
+                  <span className="rounded-full bg-brand-500/10 px-1.5 text-xs font-medium text-brand-300">{catalog.counts.waiting} waiting</span>
                 ) : null}
               </Link>
             </li>

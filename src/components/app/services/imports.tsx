@@ -140,7 +140,7 @@ export function ImportReview({ importId }: { importId: string }) {
                     <>
                       {" "}
                       ·{" "}
-                      <Link href={servicePath(row.serviceId)} className="text-brand-700 underline-offset-4 hover:underline dark:text-brand-300">
+                      <Link href={servicePath(row.serviceId)} className="text-brand-300 underline-offset-4 hover:underline dark:text-brand-300">
                         open the draft
                       </Link>
                     </>

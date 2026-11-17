@@ -10,10 +10,10 @@ What was checked, how, and what is and is not end to end. Date: November 17, 202
 | `convex/lib/services/templates.test.ts` (24) | Every category has at least three templates; each template validates, prices once questions are answered, is marked illustrative and blocks publishing until confirmed; specialized work lists its requirements unconfirmed; the move-out template never charges included extras |
 | `convex/lib/services/imports.test.ts` (6) | CSV quoting; price reading to the tenth of a cent; hourly never assigned to cleaner or crew; source references; duplicate and existing-name flags; pasted text; unclear values held as illustrative |
 | `convex/services.test.ts` (23) | Company isolation; Office cannot draft; Managers cannot approve; costs and profitability only for the Owner; autosave revisions and stale-save conflict naming who saved; recovery at the saved step; malformed amounts refused; blockers stop submission; editing after approval returns the change; approval refused when the live version moved; scheduled publish at the start date, and cancelled by a later edit; rollback writes a new version; specialists' notes and applying a suggestion; visits priced from the live version, keeping their version, quote and price after a new version is published; stale screen price refused; missing facts and walkthroughs refused unless a price is typed; archived services refused for new visits; Settings migration once, keys kept, visits still resolve; Chat edits the same draft and a stale tab is refused; Chat submits only after approval in chat and never publishes; Office is not offered drafting tools; failed imports create nothing; drafted rows carry their source into review; free research brief with a range only from three comparable prices; web research blocked without a model says why and charges nothing; web research (with a stand-in for the search call) drops a claim citing a page it did not retrieve and charges exactly one brief; setup research starts on its own |
-| `src/components/app/services/services.test.tsx` (15) | The four ways to start shown to Owners and Managers only; current tab and waiting count; the three first-time choices; Office's empty state; template amounts labeled illustrative; units beside every typed amount; breakdown lines and calculation order; walkthroughs never shown as firm; customer, team and costs views; "net profit" never used as a label; switches with `role="switch"` and state in words; named stepper buttons; the builder reopening at its saved step; a Manager sees that only the Owner approves |
+| `src/components/app/services/services.test.tsx` (26) | The four ways to start shown to Owners and Managers only; current tab and waiting count; the three first-time choices; Office's empty state; template amounts labeled illustrative; units beside every typed amount; breakdown lines and calculation order; walkthroughs never shown as firm or as $0 ("From", "Set after a walkthrough"); the total first, the price at a glance, and the lines folded; customer, team and costs views; "net profit" never used as a label, with margin, markup and contribution explained behind named tips; the price split's accessible name and the margin meter; margin standing in words against the floor and target; tips named "About …", closed until asked, and outside the label; pricing method cards with examples, the rest one tap away, and the selected one always shown; "A usual job" worked out from the typed rate; each adjustment as a labeled switch with what it does; switches with `role="switch"` and state in words; named stepper buttons; the builder reopening at its saved step; a Manager sees that only the Owner approves; a change shown as old and new values, with unchanged prices folded and what approving does listed; change lines parsed into label, old and new |
 | `src/lib/app/navigation.test.ts`, `settings.test.ts` | The new Company entry and its pages; every page accounted for; the old Settings page is a written-down redirect; the Settings catalog without services |
 
-Full suite: `npx vitest run`, 64 files, 727 passed, 19 skipped (the same 19 as before this change: live-provider evaluation tests that need API keys).
+Full suite: `npx vitest run`, 64 files, 738 passed, 19 skipped (the same 19 as before this change: live-provider evaluation tests that need API keys).
 
 `npx tsc --noEmit` passes. `npx eslint .` shows no errors; its one warning is in an existing file
 (`convex/googleBusiness.ts`). `next build` compiles every route.
@@ -32,7 +32,26 @@ checks were scripted in that browser:
 - Pricing Studio's one-time vs recurring comparison shows real yearly visit counts and labeled annual
   estimates.
 
-Screenshots found and fixed three problems before this commit:
+The interface pass that cut configuration copy (tips, method cards, adjustment cards, the animated price, the
+price split and margin meter, the change diff) was driven in the same way, at 1440 × 2 and as an iPhone 13:
+
+- The method cards show examples. "More ways to price" expands and reports `aria-expanded`.
+- Typing a new base price moves the total, shows "+$25.00" beside it, and updates "A usual job".
+- A tip opens on click and from the keyboard (Enter), closes with Escape, and stays on screen at phone width.
+- The breakdown opens. The Costs view shows the price split (its accessible name lists every part) and the margin
+  meter ("55.7%. At or above your 45% target.").
+- Turning on Rush with the keyboard (Space) opens its fields. Demand pricing shows its cap tag.
+- The change review shows old values struck through and lists what approving does.
+- No sideways scrolling at phone width on the builder, the Extras step or the change review. No console errors.
+
+Screenshots also found and fixed:
+
+- a squeezed set of stat tiles in the narrow preview column (they now follow the column's width);
+- pale violet text, because the light theme reverses the brand scale (`text-brand-300` is used throughout now);
+- extras' fields crowded four to a row in the builder column;
+- a missing React key in the cost table.
+
+Before the first commit, screenshots found and fixed three problems:
 
 1. A too-narrow editing column at 1440.
 2. Fields overflowing the Time & Team step.

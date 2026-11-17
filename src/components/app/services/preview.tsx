@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { FileImage } from "@/components/icons";
+import { ChevronDown, FileImage, XCircle } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,8 @@ import { DEFINITIONS, profitability, type Costs, type Profitability } from "../.
 import { CATEGORY_LABELS, SCHEDULES, type Spec } from "../../../../convex/lib/services/spec";
 import { sampleInputs } from "../../../../convex/lib/services/store";
 import { addOnWord, areaWord, minutesWords, scheduleLabel } from "../../../../convex/lib/services/words";
-import { formatCents, NumberInput, Segmented, Stepper } from "./shared";
+import { formatCents, InfoTip, NumberInput, Segmented, Stepper } from "./shared";
+import { AnimatedMoney, MarginMeter, PriceChange, SPLIT_COLORS, SplitBar, type SplitPart } from "./visuals";
 
 /** Sensible first inputs for a spec: the middle of its range, with every required question answered plainly. */
 export function defaultInput(spec: Spec): QuoteInput {
@@ -80,7 +81,7 @@ export function JobInputs({ spec, input, onInput, compact }: { spec: Spec; input
             <input type="date" className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.date ?? ""} onChange={(event) => set({ date: event.target.value || undefined })} />
           </label>
         ) : null}
-        {spec.modifiers.demand.enabled && spec.modifiers.demand.busyDay.enabled ? <NumberInput label="How full the day is" unit="% booked" max={100} value={input.dayFullnessPercent ?? null} onValue={(v) => set({ dayFullnessPercent: v ?? undefined })} hint="Read from the schedule for a real visit." /> : null}
+        {spec.modifiers.demand.enabled && spec.modifiers.demand.busyDay.enabled ? <NumberInput label="How full the day is" unit="% booked" max={100} value={input.dayFullnessPercent ?? null} onValue={(v) => set({ dayFullnessPercent: v ?? undefined })} tip="For a real visit this is read from the schedule. Here you can try any value." /> : null}
       </div>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
         {spec.modifiers.firstClean.enabled && p.method !== "recurring_package" ? <Check label="First visit" checked={input.firstVisit === true} onChange={(firstVisit) => set({ firstVisit })} /> : null}
@@ -172,16 +173,47 @@ const OUTCOME: Record<Quote["outcome"], { label: string; tone: "success" | "info
   incomplete: { label: "Needs more information", tone: "error" },
 };
 
-/** The price, line by line, each with its reason. The total is the sum of the lines shown. */
-export function QuoteLines({ result, showOrder }: { result: Quote; showOrder?: boolean }) {
+/** A number that is not a firm price says so in front of it: a starting price, or an estimate. */
+const QUALIFIER: Partial<Record<Quote["outcome"], string>> = { walkthrough: "From", estimate: "About" };
+
+/** What stands in for a price that is not a number yet. Never "$0". */
+const NO_PRICE: Record<Quote["outcome"], string> = { firm: "No price yet", estimate: "No price yet", walkthrough: "Set after a walkthrough", incomplete: "Needs more answers" };
+
+type Line = Quote["lines"][number];
+
+/** The lines grouped into at most three amounts a person can take in at a glance. */
+function glance(lines: Line[]): { key: string; label: string; cents: number }[] {
+  const sum = (pick: (l: Line) => boolean) => lines.filter(pick).reduce((total, l) => total + l.amountCents, 0);
+  return [
+    { key: "base", label: "Base", cents: sum((l) => l.kind === "base") },
+    { key: "added", label: "Added", cents: sum((l) => l.kind !== "base" && l.kind !== "discount") },
+    { key: "off", label: "Off", cents: sum((l) => l.kind === "discount") },
+  ].filter((g) => g.cents !== 0);
+}
+
+/**
+ * The price first, big, rolling to its new value as the service is edited, with how much the last edit
+ * moved it. Below it, the price at a glance (base, added, off) and every line with its reason one tap
+ * away. The total is always the sum of the lines shown.
+ */
+export function QuoteLines({ result, showOrder, open }: { result: Quote; showOrder?: boolean; open?: boolean }) {
   const counted = result.lines.filter((l) => l.kind !== "info" && l.kind !== "billed_later");
   const notes = result.lines.filter((l) => l.kind === "info" || l.kind === "billed_later");
+  const groups = glance(counted);
   return (
     <div className="grid grid-cols-1 gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-heading text-3xl tabular-nums tracking-tight text-strong">
-          {result.totalCents === null ? "—" : formatCents(result.totalCents)}
-          <span className="ml-1.5 text-sm font-normal text-muted-foreground">per {result.per}</span>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          {result.totalCents === null ? (
+            <span className="font-heading text-xl tracking-tight text-strong">{NO_PRICE[result.outcome]}</span>
+          ) : (
+            <>
+              {QUALIFIER[result.outcome] ? <span className="text-sm font-medium text-muted-foreground">{QUALIFIER[result.outcome]}</span> : null}
+              <AnimatedMoney cents={result.totalCents} className="font-heading text-3xl tabular-nums tracking-tight text-strong" />
+              <span className="text-sm text-muted-foreground">per {result.per}</span>
+            </>
+          )}
+          <PriceChange cents={result.totalCents} />
         </p>
         <Badge variant={OUTCOME[result.outcome].tone} size="sm">
           {OUTCOME[result.outcome].label}
@@ -194,27 +226,61 @@ export function QuoteLines({ result, showOrder }: { result: Quote; showOrder?: b
           ))}
         </ul>
       ) : null}
+      {groups.length > 1 ? (
+        <ul aria-label="The price at a glance" className="flex flex-wrap gap-1.5">
+          {groups.map((g) => (
+            <li key={g.key} className={cn("rounded-full border px-2.5 py-0.5 text-xs tabular-nums", g.cents < 0 ? "border-success/30 bg-success/[0.06] text-success-foreground" : "border-border bg-muted/40 text-strong")}>
+              <span className="text-muted-foreground">{g.label}</span> {g.cents > 0 && g.key !== "base" ? "+" : ""}
+              {formatCents(g.cents)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {counted.length ? (
-        <table className="w-full text-sm">
-          <caption className="sr-only">How the price is made</caption>
-          <tbody>
-            {counted.map((line) => (
-              <tr key={line.key} className="border-t border-border first:border-t-0">
-                <td className="py-1.5 pr-2 align-top">
-                  <span className="text-strong">{line.label}</span>
-                  <span className="block text-xs text-muted-foreground">{line.detail}</span>
-                </td>
-                <td className={cn("py-1.5 text-right align-top tabular-nums", line.amountCents < 0 ? "text-success-foreground" : "text-strong")}>{formatCents(line.amountCents)}</td>
-              </tr>
-            ))}
-            {result.totalCents !== null ? (
-              <tr className="border-t-2 border-border font-semibold">
-                <td className="py-1.5 text-strong">Total</td>
-                <td className="py-1.5 text-right tabular-nums text-strong">{formatCents(result.totalCents)}</td>
-              </tr>
+        <details className="group rounded-xl border border-border" open={open}>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand-500/40 [&::-webkit-details-marker]:hidden">
+            <span className="font-medium text-strong">How it adds up</span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              {counted.length} line{counted.length === 1 ? "" : "s"}
+              <ChevronDown aria-hidden className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+            </span>
+          </summary>
+          <div className="border-t border-border px-3 pb-3">
+            <table className="w-full text-sm">
+              <caption className="sr-only">How the price is made</caption>
+              <tbody>
+                {counted.map((line) => (
+                  <tr key={line.key} className="border-t border-border first:border-t-0">
+                    <td className="py-1.5 pr-2 align-top">
+                      <span className="text-strong">{line.label}</span>
+                      <span className="block text-xs text-muted-foreground">{line.detail}</span>
+                    </td>
+                    <td className={cn("py-1.5 text-right align-top tabular-nums", line.amountCents < 0 ? "text-success-foreground" : "text-strong")}>{formatCents(line.amountCents)}</td>
+                  </tr>
+                ))}
+                {result.totalCents !== null ? (
+                  <tr className="border-t-2 border-border font-semibold">
+                    <td className="py-1.5 text-strong">Total</td>
+                    <td className="py-1.5 text-right tabular-nums text-strong">{formatCents(result.totalCents)}</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+            {showOrder ? (
+              <div className="mt-2 border-t border-border pt-2">
+                <p className="text-xs font-medium text-strong">The order every price is worked out in</p>
+                <ol className="mt-1.5 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+                  {CALCULATION_ORDER.map((step, i) => (
+                    <li key={step} className="inline-flex items-center gap-1 rounded-full bg-muted/50 py-0.5 pl-0.5 pr-2">
+                      <span className="grid size-4 place-items-center rounded-full bg-card text-[10px] font-semibold text-strong tabular-nums">{i + 1}</span>
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              </div>
             ) : null}
-          </tbody>
-        </table>
+          </div>
+        </details>
       ) : null}
       {notes.length ? (
         <ul className="grid grid-cols-1 gap-1 text-xs text-muted-foreground">
@@ -226,16 +292,6 @@ export function QuoteLines({ result, showOrder }: { result: Quote; showOrder?: b
         </ul>
       ) : null}
       <Warnings warnings={result.warnings} />
-      {showOrder ? (
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer text-strong">The order every price is worked out in</summary>
-          <ol className="mt-2 grid list-decimal gap-0.5 pl-5">
-            {CALCULATION_ORDER.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </details>
-      ) : null}
     </div>
   );
 }
@@ -254,11 +310,23 @@ export function Warnings({ warnings }: { warnings: { code: string; severity: "cr
   );
 }
 
-/** Costs and what remains, from the Owner's own numbers. Margin and markup, contribution and profit kept apart. */
-export function ProfitPanel({ profit }: { profit: Profitability | null }) {
+/**
+ * Costs and what remains, from the Owner's own numbers: where the price goes as one bar, the margin as
+ * a meter against the floor and target, and every cost line one tap away. Margin and markup,
+ * contribution and profit are kept apart, each with its definition behind a tip.
+ */
+export function ProfitPanel({ profit, costs }: { profit: Profitability | null; costs?: Costs | null }) {
   if (!profit) return <p className="text-sm text-muted-foreground">There is no price to measure yet: the job needs more information or a walkthrough.</p>;
+  const overhead = profit.overheadCents;
+  const remains = overhead === null ? profit.contributionCents : (profit.afterOverheadCents ?? profit.contributionCents - overhead);
+  const remainsLabel = overhead === null ? "Contribution after direct costs" : "Estimated operating profit before taxes";
+  const parts: SplitPart[] = [
+    { key: "costs", label: "Direct costs", cents: profit.directCents, color: SPLIT_COLORS.costs },
+    ...(overhead !== null ? [{ key: "overhead", label: "Overhead allocated", cents: overhead, color: SPLIT_COLORS.overhead }] : []),
+    { key: "remains", label: remainsLabel, cents: Math.max(0, remains), color: SPLIT_COLORS.remains },
+  ];
   const row = (label: string, value: string, detail?: string, strong?: boolean) => (
-    <tr className="border-t border-border first:border-t-0">
+    <tr key={label} className="border-t border-border first:border-t-0">
       <td className="py-1.5 pr-2 align-top">
         <span className={strong ? "font-semibold text-strong" : "text-strong"}>{label}</span>
         {detail ? <span className="block text-xs text-muted-foreground">{detail}</span> : null}
@@ -267,43 +335,60 @@ export function ProfitPanel({ profit }: { profit: Profitability | null }) {
     </tr>
   );
   return (
-    <div className="grid grid-cols-1 gap-3">
-      <table className="w-full text-sm">
-        <caption className="sr-only">Costs and what remains</caption>
-        <tbody>
-          {row("Customer price", formatCents(profit.revenueCents), profit.visits !== 1 ? `Covers about ${profit.visits.toFixed(2)} visits (annual average)` : undefined)}
-          {profit.costs.map((c) => row(c.label, `−${formatCents(c.cents)}`, c.detail))}
-          {row("Direct costs", formatCents(profit.directCents))}
-          {row("Contribution after direct costs", formatCents(profit.contributionCents), "What this job leaves before overhead, taxes and your own pay.", true)}
-          {profit.overheadCents !== null ? row("Overhead allocated", `−${formatCents(profit.overheadCents)}`) : null}
-          {profit.afterOverheadCents !== null ? row("Estimated operating profit before taxes", formatCents(profit.afterOverheadCents), undefined, true) : null}
-        </tbody>
-      </table>
-      <dl className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-        <Stat label="Margin" value={profit.contributionMarginPercent === null ? "—" : `${profit.contributionMarginPercent}%`} hint="of the price" />
-        <Stat label="Markup" value={profit.markupPercent === null ? "—" : `${profit.markupPercent}%`} hint="on direct costs" />
+    <div className="@container grid grid-cols-1 gap-5">
+      <div className="grid grid-cols-1 gap-2.5">
+        <p className="flex flex-wrap items-center gap-x-1 text-sm font-medium text-strong">
+          Where the {formatCents(profit.revenueCents)} goes
+          <InfoTip label={remainsLabel}>
+            <p>{overhead === null ? DEFINITIONS.contribution : DEFINITIONS.afterOverhead}</p>
+          </InfoTip>
+          {profit.visits !== 1 ? <span className="w-full text-xs font-normal text-muted-foreground">The price covers about {profit.visits.toFixed(2)} visits (annual average).</span> : null}
+        </p>
+        <SplitBar parts={parts} label={`Where the ${formatCents(profit.revenueCents)} goes`} />
+        {remains < 0 ? (
+          <p role="alert" className="inline-flex items-center gap-1.5 text-sm text-destructive-foreground">
+            <XCircle aria-hidden className="size-4" /> Costs are {formatCents(-remains)} more than the price.
+          </p>
+        ) : null}
+        <Warnings warnings={profit.warnings} />
+      </div>
+      <MarginMeter percent={profit.contributionMarginPercent} floor={costs?.floorMarginPercent ?? null} target={costs?.targetMarginPercent ?? null} tip={DEFINITIONS.margin} />
+      <dl className="grid grid-cols-2 gap-2 text-sm @xl:grid-cols-4">
+        <Stat label="Markup" value={profit.markupPercent === null ? "—" : `${profit.markupPercent}%`} hint="on direct costs" tip={DEFINITIONS.markup} />
         <Stat label="Per labor-hour" value={profit.perLaborHourCents === null ? "—" : formatCents(profit.perLaborHourCents)} hint="price ÷ cleaner-hours" />
-        <Stat label="Floor price" value={profit.floorCents === null ? "Not set" : formatCents(profit.floorCents)} hint="for your floor margin" />
+        <Stat label="Floor price" value={profit.floorCents === null ? "Not set" : formatCents(profit.floorCents)} hint="keeps your floor margin" />
+        <Stat label="Target price" value={profit.targetCents === null ? "Not set" : formatCents(profit.targetCents)} hint="reaches your target" />
       </dl>
-      {profit.targetCents !== null ? <p className="text-xs text-muted-foreground">Your target margin would need {formatCents(profit.targetCents)} for this job.</p> : null}
-      <Warnings warnings={profit.warnings} />
-      <details className="text-xs text-muted-foreground">
-        <summary className="cursor-pointer text-strong">What these words mean</summary>
-        <ul className="mt-2 grid gap-1">
-          <li>{DEFINITIONS.margin}</li>
-          <li>{DEFINITIONS.markup}</li>
-          <li>{DEFINITIONS.contribution}</li>
-          <li>{DEFINITIONS.afterOverhead}</li>
-        </ul>
+      <details className="group rounded-xl border border-border">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-xl px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-brand-500/40 [&::-webkit-details-marker]:hidden">
+          <span className="font-medium text-strong">Every cost, line by line</span>
+          <ChevronDown aria-hidden className="size-4 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+        </summary>
+        <div className="border-t border-border px-3 pb-2">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Costs and what remains</caption>
+            <tbody>
+              {row("Customer price", formatCents(profit.revenueCents), profit.visits !== 1 ? `Covers about ${profit.visits.toFixed(2)} visits (annual average)` : undefined)}
+              {profit.costs.map((c) => row(c.label, `−${formatCents(c.cents)}`, c.detail))}
+              {row("Direct costs", formatCents(profit.directCents))}
+              {row("Contribution after direct costs", formatCents(profit.contributionCents), "Before overhead, taxes and your own pay.", true)}
+              {profit.overheadCents !== null ? row("Overhead allocated", `−${formatCents(profit.overheadCents)}`) : null}
+              {profit.afterOverheadCents !== null ? row("Estimated operating profit before taxes", formatCents(profit.afterOverheadCents), undefined, true) : null}
+            </tbody>
+          </table>
+        </div>
       </details>
     </div>
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
+function Stat({ label, value, hint, tip }: { label: string; value: string; hint: string; tip?: string }) {
   return (
     <div className="rounded-xl border border-border bg-card px-3 py-2">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dt className="flex items-center gap-0.5 text-xs text-muted-foreground">
+        {label}
+        {tip ? <InfoTip label={label} className="size-5">{tip}</InfoTip> : null}
+      </dt>
       <dd className="font-semibold tabular-nums text-strong">{value}</dd>
       <dd className="text-[11px] text-muted-foreground">{hint}</dd>
     </div>
@@ -315,7 +400,7 @@ export function CustomerView({ spec, result }: { spec: Spec; result: Quote }) {
   return (
     <div className="grid grid-cols-1 gap-4">
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-brand-700 dark:text-brand-300">{CATEGORY_LABELS[spec.category]}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-brand-300">{CATEGORY_LABELS[spec.category]}</p>
         <h3 className="font-heading text-xl tracking-tight text-strong">{spec.name || "Unnamed service"}</h3>
         <p className="mt-1 text-sm text-muted-foreground">{spec.summary || "No description yet."}</p>
         <p className="mt-2 text-sm font-medium text-strong">{priceSummary(spec)}</p>
@@ -443,9 +528,9 @@ export function ScheduleCalendar({ schedule, start }: { schedule: (typeof SCHEDU
 }
 
 const VIEWS = [
-  { id: "customer", label: "What the customer sees" },
-  { id: "team", label: "What your team needs" },
-  { id: "costs", label: "Costs and earnings" },
+  { id: "customer", label: "Customer" },
+  { id: "team", label: "Team" },
+  { id: "costs", label: "Costs & earnings" },
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
@@ -465,7 +550,7 @@ export function ServicePreview({ spec, costs, canSeeCosts }: { spec: Spec; costs
         </div>
       </details>
       <div className="rounded-xl border border-border bg-card p-4" aria-live="polite">
-        {view === "customer" ? <CustomerView spec={spec} result={result} /> : view === "team" ? <TeamView spec={spec} result={result} /> : canSeeCosts ? <ProfitPanel profit={profit} /> : <p className="text-sm text-muted-foreground">Costs and earnings are the Owner&apos;s, like pay. You can see the price and the time.</p>}
+        {view === "customer" ? <CustomerView spec={spec} result={result} /> : view === "team" ? <TeamView spec={spec} result={result} /> : canSeeCosts ? <ProfitPanel profit={profit} costs={costs} /> : <p className="text-sm text-muted-foreground">Costs and earnings are the Owner&apos;s, like pay. You can see the price and the time.</p>}
       </div>
     </div>
   );

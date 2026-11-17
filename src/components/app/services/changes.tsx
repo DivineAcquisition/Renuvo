@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useCompany } from "@/components/app/company";
 import { useNow } from "@/components/app/use-now";
 import { Field, FormError, TextArea, useRun } from "@/components/app/form";
-import { ArrowLeft } from "@/components/icons";
+import { ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, CheckCircle2 } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -119,42 +119,36 @@ export function ChangeReview({ changeId }: { changeId: string }) {
           </Panel>
           {change.changesInWords.length ? (
             <Panel title="What changes">
-              <ul className="grid grid-cols-1 gap-1 text-sm text-strong">
-                {change.changesInWords.map((c) => (
-                  <li key={c}>• {c}</li>
-                ))}
+              <ul className="grid grid-cols-1 gap-1.5 text-sm">
+                {change.changesInWords.map((c) => {
+                  const pair = beforeAfter(c);
+                  return (
+                    <li key={c} className="rounded-lg border border-border px-3 py-2">
+                      {pair ? (
+                        <span className="grid grid-cols-1 gap-0.5">
+                          <span className="text-xs text-muted-foreground">{pair.label}</span>
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span className="text-muted-foreground line-through decoration-muted-foreground/60">
+                              <span className="sr-only">was </span>
+                              {pair.before}
+                            </span>
+                            <ArrowRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                            <span className="font-medium text-strong">
+                              <span className="sr-only">now </span>
+                              {pair.after}
+                            </span>
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-strong">{c}</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </Panel>
           ) : null}
-          {change.prices.length ? (
-            <Panel title="Prices before and after">
-              <table className="w-full text-sm">
-                <caption className="sr-only">Example jobs priced by the live version and by this change</caption>
-                <thead>
-                  <tr className="text-left text-xs text-muted-foreground">
-                    <th className="pb-1.5 font-medium">Example job</th>
-                    <th className="pb-1.5 text-right font-medium">Now</th>
-                    <th className="pb-1.5 text-right font-medium">After</th>
-                    <th className="pb-1.5 text-right font-medium">Difference</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {change.prices.map((row) => {
-                    const diff = row.before !== null && row.after !== null ? row.after - row.before : null;
-                    return (
-                      <tr key={row.label} className="border-t border-border">
-                        <td className="py-1.5 text-strong">{row.label}</td>
-                        <td className="py-1.5 text-right tabular-nums text-muted-foreground">{row.before === null ? "—" : formatCents(row.before)}</td>
-                        <td className="py-1.5 text-right tabular-nums text-strong">{row.after === null ? (row.note ?? "No price") : formatCents(row.after)}</td>
-                        <td className={cn("py-1.5 text-right tabular-nums", diff === null ? "text-muted-foreground" : diff > 0 ? "text-strong" : "text-success-foreground")}>{diff === null ? "—" : `${diff > 0 ? "+" : ""}${formatCents(diff)}`}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <p className="mt-2 text-xs text-muted-foreground">Worked out by the pricing engine from each version. They describe the price, not how customers will respond.</p>
-            </Panel>
-          ) : null}
+          {change.prices.length ? <PriceDiff rows={change.prices} /> : null}
           <Panel title="What it affects">
             <ul className="grid grid-cols-1 gap-1 text-sm text-strong">
               {change.impact.map((line) => (
@@ -185,7 +179,7 @@ export function ChangeReview({ changeId }: { changeId: string }) {
                     <span className="block text-strong">{e.label}</span>
                     <span className="block text-muted-foreground">{e.detail}</span>
                     {e.kind === "research" && e.ref ? (
-                      <Link href={`${SERVICES_ROOT}/research/${e.ref}`} className="text-xs text-brand-700 underline-offset-4 hover:underline dark:text-brand-300">
+                      <Link href={`${SERVICES_ROOT}/research/${e.ref}`} className="text-xs text-brand-300 underline-offset-4 hover:underline dark:text-brand-300">
                         Open the brief
                       </Link>
                     ) : null}
@@ -243,9 +237,16 @@ export function ChangeReview({ changeId }: { changeId: string }) {
             ) : null}
             {open && change.canPublish ? (
               <div className="mt-2 grid gap-3">
-                <p className="text-sm text-muted-foreground">
-                  Approving authorizes exactly this {change.kind === "publish" ? `version ${change.version}` : change.kind}. {change.kind === "publish" ? "New quotes and visits use it from " + (scheduled ? day(change.effectiveAt!) : "the moment it is published") + "; booked visits and signed agreements are not changed." : ""} A later edit to the draft cancels this approval.
-                </p>
+                <ul aria-label="What approving does" className="grid grid-cols-1 gap-1.5 text-sm">
+                  <Assurance>Approves exactly this {change.kind === "publish" ? `version ${change.version}` : change.kind}, nothing else</Assurance>
+                  {change.kind === "publish" ? (
+                    <>
+                      <Assurance>New quotes and visits use it {scheduled ? `from ${day(change.effectiveAt!)}` : "once published"}</Assurance>
+                      <Assurance>Booked visits and signed agreements keep their price</Assurance>
+                    </>
+                  ) : null}
+                  <Assurance>Editing the draft later cancels this approval</Assurance>
+                </ul>
                 {change.state === "in_review" ? (
                   <>
                     <Field label="Note (optional)">
@@ -307,6 +308,91 @@ function ReturnForm({ onReturn, onCancel, busy }: { onReturn: (reason: string) =
         </Button>
       </div>
     </div>
+  );
+}
+
+/** "Price: $150.00 → $165.00." read as its label, the old value and the new one. Anything else is left as written. */
+export function beforeAfter(line: string): { label: string; before: string; after: string } | null {
+  const match = /^([^:]+): (.+?) → (.+?)\.?$/.exec(line);
+  return match ? { label: match[1], before: match[2], after: match[3] } : null;
+}
+
+type PriceRow = { label: string; before: number | null; after: number | null; note?: string | null };
+
+/**
+ * Example jobs priced by the live version and by this change. Only the jobs whose price moves are
+ * shown up front, each with how much and which way; jobs priced the same are folded away.
+ */
+function PriceDiff({ rows }: { rows: PriceRow[] }) {
+  const same = rows.filter((r) => r.before !== null && r.after !== null && r.before === r.after);
+  const moved = rows.filter((r) => !same.includes(r));
+  return (
+    <Panel title="Prices before and after">
+      {moved.length ? (
+        <ul className="grid grid-cols-1 gap-1.5">
+          {moved.map((row) => {
+            const diff = row.before !== null && row.after !== null ? row.after - row.before : null;
+            const percent = diff !== null && row.before ? Math.round((diff / row.before) * 1000) / 10 : null;
+            return (
+              <li key={row.label} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2 text-sm">
+                <span className="min-w-0 text-strong">{row.label}</span>
+                <span className="flex flex-wrap items-center gap-2 tabular-nums">
+                  {row.before !== null ? (
+                    <>
+                      <span className="text-muted-foreground line-through decoration-muted-foreground/60">
+                        <span className="sr-only">was </span>
+                        {formatCents(row.before)}
+                      </span>
+                      <ArrowRight aria-hidden className="size-3.5 text-muted-foreground" />
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">New</span>
+                  )}
+                  <span className="font-medium text-strong">{row.after === null ? (row.note ?? "No price") : formatCents(row.after)}</span>
+                  {diff !== null ? (
+                    <span className={cn("inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-medium", diff > 0 ? "bg-brand-500/10 text-brand-300" : "bg-success/10 text-success-foreground")}>
+                      {diff > 0 ? <ArrowUpRight aria-hidden className="size-3.5" /> : <ArrowDownRight aria-hidden className="size-3.5" />}
+                      <span className="sr-only">{diff > 0 ? "up " : "down "}</span>
+                      {diff > 0 ? "+" : ""}
+                      {formatCents(diff)}
+                      {percent !== null ? ` (${diff > 0 ? "+" : ""}${percent}%)` : ""}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-sm text-strong">Every example job keeps its price.</p>
+      )}
+      {same.length && moved.length ? (
+        <details className="mt-2 text-sm">
+          <summary className="cursor-pointer text-muted-foreground hover:text-strong">
+            {same.length} example job{same.length === 1 ? "" : "s"} priced the same
+          </summary>
+          <ul className="mt-1.5 grid grid-cols-1 gap-1">
+            {same.map((row) => (
+              <li key={row.label} className="flex justify-between gap-3 px-3 text-muted-foreground">
+                <span>{row.label}</span>
+                <span className="tabular-nums">{formatCents(row.after!)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <p className="mt-2 text-xs text-muted-foreground">Worked out by the pricing engine from each version. They describe the price, not how customers will respond.</p>
+    </Panel>
+  );
+}
+
+/** One thing approving does, as a checked line instead of a sentence in a paragraph. */
+function Assurance({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2 text-strong">
+      <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-300" />
+      <span>{children}</span>
+    </li>
   );
 }
 

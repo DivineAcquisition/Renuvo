@@ -24,9 +24,11 @@ const { ServicesLayout } = await import("./layout");
 const { ServicesHome } = await import("./home");
 const { NewService } = await import("./new");
 const { ServiceBuilder } = await import("./builder");
-const { ChangeReview } = await import("./changes");
+const { ChangeReview, beforeAfter } = await import("./changes");
 const { QuoteLines, ProfitPanel, CustomerView, TeamView } = await import("./preview");
-const { MoneyInput, Toggle, Stepper } = await import("./shared");
+const { MoneyInput, Toggle, Stepper, InfoTip } = await import("./shared");
+const { PricingStep, ExtrasStep } = await import("./steps");
+const { marginStanding } = await import("./visuals");
 
 const companyId = "company1" as Id<"companies">;
 function render(role: Role, node: React.ReactNode) {
@@ -110,10 +112,24 @@ describe("prices always carry their unit", () => {
     expect(html).toContain("The order every price is worked out in");
   });
 
-  it("never shows a walkthrough job as a firm price", () => {
+  it("never shows a walkthrough job as a firm price, or as $0", () => {
     const html = renderToStaticMarkup(<QuoteLines result={quote(spec({ pricing: { method: "custom_quote", fromCents: 40000, laborMinutes: null } }), {})} />);
     expect(html).toContain("Walkthrough needed");
+    expect(html).toMatch(/>From<\/span><span[^>]*><span class="sr-only">\$400\.00/);
     expect(html).toContain("Starting price");
+    const none = renderToStaticMarkup(<QuoteLines result={quote(spec({ pricing: { method: "custom_quote", fromCents: null, laborMinutes: null } }), {})} />);
+    expect(none).toContain("Set after a walkthrough");
+    expect(none).not.toContain("$0.00");
+  });
+
+  it("leads with the total and the price at a glance, with every line one tap away", () => {
+    const withExtra = spec({ addOns: [{ id: "fridge", label: "Inside the fridge", priceCents: 2500, per: "visit", laborMinutes: 20, maxQuantity: 1 }] });
+    const html = renderToStaticMarkup(<QuoteLines result={quote(withExtra, { addOns: [{ id: "fridge", quantity: 1 }] })} />);
+    expect(html).toContain("$175.00");
+    expect(html).toContain('aria-label="The price at a glance"');
+    expect(html).toMatch(/Base<\/span> \$150\.00/);
+    expect(html).toMatch(/Added<\/span> \+\$25\.00/);
+    expect(html).toMatch(/<details[^>]*><summary[^>]*>.*How it adds up.*2 lines/);
   });
 });
 
@@ -135,11 +151,81 @@ describe("the three preview views", () => {
   it("calls the remainder contribution, never net profit, and lists what was not entered", () => {
     const html = renderToStaticMarkup(<ProfitPanel profit={profitability(quote(spec(), {}), emptyCosts())} />);
     expect(html).toContain("Contribution after direct costs");
-    // Nothing is labeled net profit; the only mention says what contribution is not.
+    // Nothing is labeled net profit. What contribution, margin and markup mean is one tap away.
     expect(html).not.toMatch(/>\s*net profit/i);
-    expect(html).toContain("It is not net profit");
+    expect(html).toContain('aria-label="About Contribution after direct costs"');
+    expect(html).toContain('aria-label="About Margin"');
+    expect(html).toContain('aria-label="About Markup"');
     expect(html).toContain("Not entered");
-    expect(html).toContain("A 50% markup is a 33.3% margin");
+  });
+
+  it("shows where the price goes as one bar, named in full for screen readers, and the margin as a meter", () => {
+    const costs = { ...emptyCosts(), pay: { model: "hourly" as const, hourlyCents: 2000, burdenPercent: 0 }, suppliesPerVisitCents: 500, targetMarginPercent: 40, floorMarginPercent: 25 };
+    const profit = profitability(quote(spec(), {}), costs);
+    const html = renderToStaticMarkup(<ProfitPanel profit={profit} costs={costs} />);
+    expect(html).toMatch(/role="img" aria-label="Where the \$150\.00 goes: Direct costs \$[\d.,]+ \([\d.]+%\), Contribution after direct costs/);
+    expect(html).toContain('role="meter"');
+    expect(html).toContain("Floor 25% · Target 40%");
+    expect(html).toContain("Target price");
+  });
+
+  it("puts a margin against the floor and target in words, never by color alone", () => {
+    expect(marginStanding(10, 25, 40).words).toBe("Below your 25% floor");
+    expect(marginStanding(30, 25, 40).words).toBe("Under your 40% target");
+    expect(marginStanding(45, 25, 40).words).toBe("At or above your 40% target");
+    expect(marginStanding(-5, null, null).words).toBe("Costs are more than the price");
+    expect(marginStanding(45, null, null).words).toBe("No target margin set");
+  });
+});
+
+describe("explanations wait behind a tip", () => {
+  it("names the tip for what it explains and keeps the explanation out of the page until asked", () => {
+    const html = renderToStaticMarkup(<InfoTip label="Rush">Short-notice bookings.</InfoTip>);
+    expect(html).toContain('aria-label="About Rush"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Short-notice bookings.");
+  });
+
+  it("keeps the tip outside the label, so the input keeps its own name", () => {
+    const html = renderToStaticMarkup(<MoneyInput label="Minimum charge" unit="per visit" cents={null} onCents={() => undefined} tip="Applied after discounts." />);
+    expect(html).toMatch(/<label for="([^"]+)"[^>]*>Minimum charge<\/label><button[^>]*aria-label="About Minimum charge"/);
+  });
+});
+
+describe("pricing shown, not described", () => {
+  const edit = () => undefined;
+
+  it("offers the common methods as cards with an example, and the rest one tap away", () => {
+    const html = renderToStaticMarkup(<PricingStep spec={spec()} edit={edit} disabled={false} />);
+    expect(html).toContain("Fixed price");
+    expect(html).toContain("e.g. $150 a visit");
+    expect(html).toContain("More ways to price (5)");
+    expect(html).not.toContain("Recurring package");
+    expect(html).toMatch(/aria-expanded="false"[^>]*>More ways to price/);
+  });
+
+  it("shows the selected method even when it is not a common one", () => {
+    const html = renderToStaticMarkup(<PricingStep spec={spec({ pricing: { method: "custom_quote", fromCents: null, laborMinutes: null } })} edit={edit} disabled={false} />);
+    expect(html).toContain("Custom quote");
+    expect(html).toContain("Fewer ways to price");
+  });
+
+  it("works out a usual job from what is typed", () => {
+    const hourly = spec({ pricing: { method: "hourly_per_cleaner", rateCents: 4500, minimumHours: 2, incrementMinutes: 30, estimatedLaborMinutes: 240 } });
+    const html = renderToStaticMarkup(<PricingStep spec={hourly} edit={edit} disabled={false} />);
+    expect(html).toContain("A usual job");
+    expect(html).toMatch(/4 cleaner-hours \(\d cleaners?\) × \$45\.00 per cleaner per hour<\/span><span[^>]*>= \$180\.00/);
+  });
+
+  it("shows each adjustment as a switch, with what it does when on", () => {
+    const base = spec();
+    const on = { ...base, modifiers: { ...base.modifiers, rush: { enabled: true, adjustment: { kind: "percent" as const, value: 25 } } } };
+    const html = renderToStaticMarkup(<ExtrasStep spec={on} edit={edit} disabled={false} />);
+    expect(html).toMatch(/id="([^"]+)-title"[^>]*>Rush<\/span>/);
+    expect(html).toMatch(/role="switch" aria-checked="true" aria-labelledby="[^"]+-title"/);
+    expect(html).toContain("+25%");
+    expect(html).toContain("Off: prices never change with demand");
+    expect(html).toContain('aria-label="About Demand pricing"');
   });
 });
 
@@ -181,7 +267,15 @@ describe("the builder and review", () => {
   });
 
   it("shows a manager that only the Owner approves, with no approve button", () => {
-    data["services:change"] = {
+    data["services:change"] = changeFixture();
+    const html = render("manager", <ChangeReview changeId="c1" />);
+    expect(html).toContain("Only the Owner approves and publishes price changes");
+    expect(html).not.toContain("Approve and publish");
+    expect(html).toContain("Set the default crew to 2");
+    expect(html).toContain("They describe the price, not how customers will respond");
+  });
+
+  const changeFixture = () => ({
       id: "c1",
       service: { id: "svc1", name: "Standard clean", status: "draft", liveVersion: null },
       kind: "publish",
@@ -211,11 +305,29 @@ describe("the builder and review", () => {
       draftMoved: false,
       canPublish: false,
       canWithdraw: true,
+  });
+
+  it("shows what changes as old and new, and folds away prices that stay the same", () => {
+    data["services:change"] = {
+      ...changeFixture(),
+      changesInWords: ["Price: $150.00 per visit → $165.00 per visit.", "The customer description changed."],
+      prices: [
+        { label: "A small home", before: 15000, after: 16500 },
+        { label: "A large home", before: 22000, after: 22000 },
+      ],
+      canPublish: true,
     };
-    const html = render("manager", <ChangeReview changeId="c1" />);
-    expect(html).toContain("Only the Owner approves and publishes price changes");
-    expect(html).not.toContain("Approve and publish");
-    expect(html).toContain("Set the default crew to 2");
-    expect(html).toContain("They describe the price, not how customers will respond");
+    const html = render("owner", <ChangeReview changeId="c1" />);
+    expect(html).toMatch(/line-through[^>]*><span class="sr-only">was <\/span>\$150\.00 per visit/);
+    expect(html).toContain("The customer description changed.");
+    expect(html).toContain("+$15.00 (+10%)");
+    expect(html).toContain("1 example job priced the same");
+    expect(html).toContain("Approves exactly this version 1, nothing else");
+    expect(html).toContain("Booked visits and signed agreements keep their price");
+  });
+
+  it("reads a change line as its label, old value and new value", () => {
+    expect(beforeAfter("Default crew: 1 → 2.")).toEqual({ label: "Default crew", before: "1", after: "2" });
+    expect(beforeAfter("Rush switched on.")).toBeNull();
   });
 });

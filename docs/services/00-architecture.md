@@ -40,6 +40,42 @@ under Settings › Plan & Usage.
 | Chat tools | `convex/lib/chat/serviceTools.ts` |
 | Screens | `src/components/app/services/*`, pages under `src/app/(product)/app/services` |
 | Routes and tabs | `src/lib/app/services.ts`; navigation entry in `src/lib/app/navigation.ts` |
+| Tips, switches, labeled fields | `src/components/app/services/shared.tsx` |
+| Animated price, price-split bar, margin meter | `src/components/app/services/visuals.tsx` |
+
+## Showing, not explaining
+
+The screens keep configuration copy short. These rules apply to every Services screen:
+
+- **Only what is needed to fill a field stays visible**: the unit beside every amount, and short notes like "Leave
+  empty for none". Anything that explains *why* goes in an `InfoTip`, which opens on click or tap (and on hover
+  with a pointer), closes with Escape, and is named "About {label}". The tip sits outside the `<label>`, so the
+  input keeps its own accessible name.
+- **The effect of a setting is shown, not described.**
+  - The preview's price rolls to its new value and shows how much the last edit moved it.
+  - The Pricing step shows "A usual job", worked out by the engine from what is typed.
+  - Each pricing method is a card with an icon and a made-up example. Four common methods show first; the rest
+    are one tap away.
+- **A setting that is off takes one line.** Each adjustment is a card with a switch. When it is on, the card
+  carries a tag saying what it does ("+25%") and its fields open beneath it.
+- **Totals first, detail on request.**
+  - The breakdown ("How it adds up") and the cost table are folded.
+  - "Base / Added / Off" summarize the price at a glance.
+  - A walkthrough is "From $400.00" or "Set after a walkthrough", never a bare number or $0. An estimate is
+    "About $180.00".
+- **Costs and earnings are pictures with words.**
+  - A thin bar splits the price into direct costs, overhead and what remains, with a legend listing names and
+    amounts, and the full split as the bar's accessible name. Its colors were checked for color-blind
+    separation in drawing order.
+  - The margin is a meter with ticks at the floor and target. Its standing ("Under your 40% target") is written
+    out with an icon, never shown by color alone.
+- **A change review shows only what moves.**
+  - Each change reads as label, old value (struck through), then new value.
+  - Example jobs whose price moves show the difference in dollars and percent; unchanged ones are folded.
+  - What approving does is a short checked list.
+- Motion respects reduced-motion settings, and screen readers hear the final price, never the frames in between.
+- Text uses `text-brand-300`, the app's deep violet on white. The light theme reverses the brand scale, so
+  `text-brand-700` is pale there.
 
 ## One catalog
 

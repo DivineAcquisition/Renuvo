@@ -279,7 +279,7 @@ function AssistantCard({ serviceId, name }: { serviceId: string; name: string })
         ))}
       </div>
       {sent ? (
-        <Link href={`/app/chat/${sent}`} className="mt-2 inline-block text-xs font-medium text-brand-700 underline-offset-4 hover:underline dark:text-brand-300">
+        <Link href={`/app/chat/${sent}`} className="mt-2 inline-block text-xs font-medium text-brand-300 underline-offset-4 hover:underline dark:text-brand-300">
           Open the conversation
         </Link>
       ) : null}

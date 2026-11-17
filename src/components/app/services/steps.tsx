@@ -1,18 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import { Field, TextArea, TextInput } from "@/components/app/form";
-import { Plus, Trash2 } from "@/components/icons";
+import { Calculator, Check, ChevronDown, Footprints, Gauge, HandCoinsIcon, HouseIcon, LayoutGrid, ListChecks, type LucideIcon, MapPin, MoonIcon, Plus, PriceTagIcon, RefreshCw, ScaleIcon, Sparkles, Square, Trash2, TrendingUp, User, Users, Zap } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { millicentsFrom, newId, rateText } from "@/lib/app/services";
 import { cn } from "@/lib/utils";
 
-import { checkSpec, scheduleFacts } from "../../../../convex/lib/services/engine";
+import { checkSpec, quote, scheduleFacts } from "../../../../convex/lib/services/engine";
 import { CATEGORIES, CATEGORY_LABELS, defaultPricing, defaultStr, METHOD_LABELS, PRICING_METHODS, SCHEDULES, type Adjustment, type PricingMethod, type Spec } from "../../../../convex/lib/services/spec";
 import { areaWord, minutesWords, scheduleLabel } from "../../../../convex/lib/services/words";
-import { ScheduleCalendar } from "./preview";
-import { MoneyInput, NumberInput, SectionTitle, Segmented, Stepper, Toggle } from "./shared";
+import { defaultInput, ScheduleCalendar } from "./preview";
+import { AudienceTag, FieldLabel, formatCents, InfoTip, LabeledField, MoneyInput, NumberInput, SectionTitle, Segmented, Stepper, SwitchButton, Toggle } from "./shared";
 
 export type StepProps = { spec: Spec; edit: (change: (spec: Spec) => Spec) => void; disabled: boolean };
 
@@ -39,11 +39,11 @@ function Problems({ spec, prefix }: { spec: Spec; prefix: string }) {
 export function BasicsStep({ spec, edit, disabled }: StepProps) {
   return (
     <div className="grid grid-cols-1 gap-5">
-      <SectionTitle title="Basics">The name and description are what customers read. Keep them plain: what you do, not how you price it.</SectionTitle>
+      <SectionTitle title="Basics" tip="Keep the name and description plain: what you do, not how you price it." action={<AudienceTag who="customers" />} />
       <Field label="Service name">
         <TextInput value={spec.name} disabled={disabled} maxLength={80} onChange={(event) => edit((s) => ({ ...s, name: event.target.value }))} placeholder="Standard clean" />
       </Field>
-      <Field label="Description for customers" hint="One or two sentences about what the visit achieves.">
+      <Field label="Description for customers">
         <TextArea value={spec.summary} disabled={disabled} maxLength={1000} onChange={(event) => edit((s) => ({ ...s, summary: event.target.value }))} placeholder="A thorough clean of the kitchen, bathrooms and living areas." />
       </Field>
       <label className="grid grid-cols-1 gap-1.5 text-sm">
@@ -86,7 +86,7 @@ export function ScopeStep({ spec, edit, disabled }: StepProps) {
   };
   return (
     <div className="grid grid-cols-1 gap-6">
-      <SectionTitle title="What's included">Each task is a promise to the customer and a line on the crew&apos;s checklist. Mark the ones the crew must photograph.</SectionTitle>
+      <SectionTitle title="What's included" tip="Each task is a promise to the customer and a line on the crew's checklist. Tick Photo for tasks the crew must photograph." />
       {sections.length === 0 ? <p className="text-sm text-muted-foreground">No tasks yet.</p> : null}
       {sections.map((name) => (
         <div key={name} className="grid grid-cols-1 gap-1.5">
@@ -128,7 +128,7 @@ export function ScopeStep({ spec, edit, disabled }: StepProps) {
       ) : null}
 
       <div className="grid grid-cols-1 gap-2">
-        <SectionTitle title="Not included">Saying what is not included prevents most disagreements.</SectionTitle>
+        <SectionTitle title="Not included" tip="Saying what is not included prevents most disagreements with customers." />
         <ul className="flex flex-wrap gap-1.5">
           {spec.excluded.map((e) => (
             <li key={e} className="inline-flex items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-3 pr-1 text-sm text-strong">
@@ -170,9 +170,9 @@ export function ScopeStep({ spec, edit, disabled }: StepProps) {
         ) : null}
       </div>
 
-      <Field label="Notes for the team" hint="Products, order of work, access. Shown to cleaners after they accept, never to customers.">
-        <TextArea value={spec.teamNotes} disabled={disabled} onChange={(event) => edit((s) => ({ ...s, teamNotes: event.target.value }))} />
-      </Field>
+      <LabeledField label="Notes for the team" tip="Shown to cleaners after they accept a visit, never to customers.">
+        {(id) => <TextArea id={id} value={spec.teamNotes} disabled={disabled} placeholder="Products, order of work, access" onChange={(event) => edit((s) => ({ ...s, teamNotes: event.target.value }))} />}
+      </LabeledField>
       <Problems spec={spec} prefix="included" />
       <Problems spec={spec} prefix="excluded" />
     </div>
@@ -181,12 +181,73 @@ export function ScopeStep({ spec, edit, disabled }: StepProps) {
 
 // ── Pricing ─────────────────────────────────────────────────────────────────────────────────────────
 
-const METHOD_GROUPS: { label: string; methods: PricingMethod[] }[] = [
-  { label: "By the visit", methods: ["fixed", "bed_bath", "size_bands"] },
-  { label: "By time", methods: ["hourly_per_cleaner", "hourly_per_crew"] },
-  { label: "By quantity", methods: ["per_area", "per_unit"] },
-  { label: "Other", methods: ["recurring_package", "custom_quote"] },
-];
+/**
+ * Each way to price, shown by what it looks like rather than described: an icon and a made-up example.
+ * The examples are illustrations of the shape of a price, not suggested rates.
+ */
+const METHOD_LOOK: Record<PricingMethod, { Icon: LucideIcon; example: string }> = {
+  fixed: { Icon: PriceTagIcon, example: "$150 a visit" },
+  bed_bath: { Icon: HouseIcon, example: "$120 + $20 a bedroom" },
+  size_bands: { Icon: LayoutGrid, example: "1,000–1,999 sq ft: $160" },
+  hourly_per_cleaner: { Icon: User, example: "$45 × each cleaner's hours" },
+  hourly_per_crew: { Icon: Users, example: "$80 × hours on site, whole crew" },
+  per_area: { Icon: Square, example: "$0.08 × square feet" },
+  per_unit: { Icon: ListChecks, example: "$12 × windows" },
+  recurring_package: { Icon: RefreshCw, example: "$480 a month on a schedule" },
+  custom_quote: { Icon: Footprints, example: "Walkthrough first, then a price" },
+};
+const COMMON_METHODS: PricingMethod[] = ["fixed", "bed_bath", "size_bands", "hourly_per_cleaner"];
+
+function MethodPicker({ value, onPick, disabled }: { value: PricingMethod; onPick: (method: PricingMethod) => void; disabled: boolean }) {
+  const others = PRICING_METHODS.filter((m) => !COMMON_METHODS.includes(m));
+  const [more, setMore] = useState(!COMMON_METHODS.includes(value));
+  const shown = [...COMMON_METHODS, ...others.filter((m) => more || m === value)];
+  return (
+    <div className="grid grid-cols-1 gap-2">
+      <fieldset disabled={disabled}>
+        <legend className="sr-only">Pricing method</legend>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {shown.map((m) => {
+            const { Icon, example } = METHOD_LOOK[m];
+            const selected = value === m;
+            return (
+              <label key={m} className={cn("flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500/40", selected ? "border-brand-500 bg-brand-500/[0.06]" : "border-border bg-card hover:border-brand-500/40")}>
+                <input type="radio" className="sr-only" name="method" checked={selected} onChange={() => onPick(m)} />
+                <span aria-hidden className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", selected ? "bg-brand-500 text-white" : "bg-brand-500/10 text-brand-300")}>
+                  <Icon className="size-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium text-strong">{METHOD_LABELS[m].label}</span>
+                  <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">e.g. {example}</span>
+                </span>
+                {selected ? <Check aria-hidden className="size-4 shrink-0 text-brand-300" /> : null}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      <button type="button" aria-expanded={more} onClick={() => setMore((v) => !v)} className="inline-flex w-fit items-center gap-1 rounded-md text-sm font-medium text-brand-300 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500/40">
+        {more ? "Fewer ways to price" : `More ways to price (${others.length})`}
+        <ChevronDown aria-hidden className={cn("size-4 transition-transform motion-reduce:transition-none", more && "rotate-180")} />
+      </button>
+    </div>
+  );
+}
+
+/** The base of a usual job, worked out by the engine from what is typed: "4 cleaner-hours × $45.00 = $180.00". */
+function UsualJob({ spec }: { spec: Spec }) {
+  const result = useMemo(() => quote(spec, defaultInput(spec)), [spec]);
+  const base = result.lines.find((l) => l.kind === "base");
+  if (!base || !base.detail || base.amountCents <= 0) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg bg-brand-500/[0.06] px-3 py-2 text-sm" aria-live="polite">
+      <Calculator aria-hidden className="size-4 text-brand-300" />
+      <span className="text-muted-foreground">A usual job</span>
+      <span className="text-strong">{base.detail}</span>
+      <span className="font-semibold tabular-nums text-strong">= {formatCents(base.amountCents)}</span>
+    </p>
+  );
+}
 
 export function PricingStep({ spec, edit, disabled }: StepProps) {
   const p = spec.pricing;
@@ -194,41 +255,26 @@ export function PricingStep({ spec, edit, disabled }: StepProps) {
   const setP = (patch: Partial<Spec["pricing"]>) => edit((s) => ({ ...s, pricing: { ...s.pricing, ...patch } as Spec["pricing"] }));
   return (
     <div className="grid grid-cols-1 gap-6">
-      <SectionTitle title="How it's priced">Pick the way you think about this work. Every amount shows its unit, so &ldquo;per hour&rdquo; is never unclear.</SectionTitle>
-      <div className="grid grid-cols-1 gap-3">
-        {METHOD_GROUPS.map((group) => (
-          <fieldset key={group.label} disabled={disabled}>
-            <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</legend>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
-              {group.methods.map((m) => (
-                <label key={m} className={cn("cursor-pointer rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500/40", p.method === m ? "border-brand-500 bg-brand-500/[0.06]" : "border-border bg-card hover:border-brand-500/40")}>
-                  <input type="radio" className="sr-only" name="method" checked={p.method === m} onChange={() => edit((s) => ({ ...s, pricing: defaultPricing(m) }))} />
-                  <span className="block font-medium text-strong">{METHOD_LABELS[m].label}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{METHOD_LABELS[m].blurb}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ))}
-      </div>
+      <SectionTitle title="How it's priced" tip="Pick the way you think about this work. Every amount shows its unit beside it, so “per hour” is never unclear. Switching methods starts that method's amounts fresh." />
+      <MethodPicker value={p.method} disabled={disabled} onPick={(m) => edit((s) => ({ ...s, pricing: defaultPricing(m) }))} />
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-card p-4">
         {p.method === "fixed" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <MoneyInput label="Price" unit={`per ${word}`} cents={p.amountCents} disabled={disabled} onCents={(c) => setP({ amountCents: c ?? 0 })} />
-            <NumberInput label="Usual cleaner-time" unit="hours, all cleaners" step={0.25} disabled={disabled} value={hours(p.laborMinutes)} onValue={(h) => setP({ laborMinutes: minutesOf(h) })} hint="Two cleaners for two hours is four." />
+            <NumberInput label="Usual cleaner-time" unit="hours, all cleaners" step={0.25} disabled={disabled} value={hours(p.laborMinutes)} onValue={(h) => setP({ laborMinutes: minutesOf(h) })} tip="Add up every cleaner's time: two cleaners for two hours is four cleaner-hours. Used to plan the visit and measure earnings, not to bill." />
           </div>
         ) : null}
         {p.method === "hourly_per_cleaner" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <MoneyInput label="Rate" unit="per cleaner per hour" cents={p.rateCents} disabled={disabled} onCents={(c) => setP({ rateCents: c ?? 0 })} hint="Two cleaners for two hours is four billed hours." />
+            <MoneyInput label="Rate" unit="per cleaner per hour" cents={p.rateCents} disabled={disabled} onCents={(c) => setP({ rateCents: c ?? 0 })} />
             <NumberInput label="Minimum billed" unit="cleaner-hours" step={0.5} disabled={disabled} value={p.minimumHours} onValue={(v) => setP({ minimumHours: v ?? 0 })} />
             <Segmented label="Billed time rounds up to" value={String(p.incrementMinutes) as "15" | "30" | "60"} disabled={disabled} options={[{ id: "15", label: "15 min" }, { id: "30", label: "30 min" }, { id: "60", label: "1 hour" }]} onChange={(v) => setP({ incrementMinutes: Number(v) })} />
-            <NumberInput label="Usual cleaner-time" unit="hours, all cleaners" step={0.25} disabled={disabled} value={hours(p.estimatedLaborMinutes)} onValue={(h) => setP({ estimatedLaborMinutes: minutesOf(h) })} hint="Used for estimates; the bill follows the real time." />
+            <NumberInput label="Usual cleaner-time" unit="hours, all cleaners" step={0.25} disabled={disabled} value={hours(p.estimatedLaborMinutes)} onValue={(h) => setP({ estimatedLaborMinutes: minutesOf(h) })} tip="Used for estimates and the preview. The bill follows the cleaners' real hours." />
           </div>
         ) : null}
         {p.method === "hourly_per_crew" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <MoneyInput label="Rate" unit={`per hour for the crew of ${p.crewSize}`} cents={p.rateCents} disabled={disabled} onCents={(c) => setP({ rateCents: c ?? 0 })} hint="One rate for the whole crew, however many people." />
+            <MoneyInput label="Rate" unit={`per hour for the crew of ${p.crewSize}`} cents={p.rateCents} disabled={disabled} onCents={(c) => setP({ rateCents: c ?? 0 })} />
             <Stepper label="Crew this rate covers" value={p.crewSize} min={1} max={12} disabled={disabled} onValue={(crewSize) => setP({ crewSize })} />
             <NumberInput label="Minimum billed" unit="hours on site" step={0.5} disabled={disabled} value={p.minimumHours} onValue={(v) => setP({ minimumHours: v ?? 0 })} />
             <Segmented label="Billed time rounds up to" value={String(p.incrementMinutes) as "15" | "30" | "60"} disabled={disabled} options={[{ id: "15", label: "15 min" }, { id: "30", label: "30 min" }, { id: "60", label: "1 hour" }]} onChange={(v) => setP({ incrementMinutes: Number(v) })} />
@@ -254,8 +300,8 @@ export function PricingStep({ spec, edit, disabled }: StepProps) {
         ) : null}
         {p.method === "per_unit" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="One unit is a…" hint="Singular: room, load, window, turnover.">
-              <TextInput value={p.unitWord} disabled={disabled} maxLength={30} onChange={(event) => setP({ unitWord: event.target.value })} />
+            <Field label="One unit is a…">
+              <TextInput value={p.unitWord} disabled={disabled} maxLength={30} placeholder="room, load, window" onChange={(event) => setP({ unitWord: event.target.value })} />
             </Field>
             <MoneyInput label="Price" unit={`per ${p.unitWord || "unit"}`} cents={p.unitCents} disabled={disabled} onCents={(c) => setP({ unitCents: c ?? 0 })} />
             <MoneyInput label="Plus a base charge" unit={`per ${word}`} cents={p.baseCents} disabled={disabled} onCents={(c) => setP({ baseCents: c ?? 0 })} hint="Leave at 0 for none." />
@@ -300,11 +346,12 @@ export function PricingStep({ spec, edit, disabled }: StepProps) {
         ) : null}
         {p.method === "custom_quote" ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <MoneyInput label="Advertised starting price (optional)" unit={`from, per ${word}`} cents={p.fromCents} disabled={disabled} onCents={(c) => setP({ fromCents: c })} hint="Shown as “from”, never as a quote. The firm price is set after the walkthrough." />
+            <MoneyInput label="Advertised starting price (optional)" unit={`from, per ${word}`} cents={p.fromCents} disabled={disabled} onCents={(c) => setP({ fromCents: c })} tip="Shown to customers as “from”, never as a quote. The firm price is set after the walkthrough." />
             <NumberInput label="Usual cleaner-time" unit="hours" step={0.25} disabled={disabled} value={p.laborMinutes === null ? null : hours(p.laborMinutes)} onValue={(h) => setP({ laborMinutes: h === null ? null : minutesOf(h) })} />
           </div>
         ) : null}
       </div>
+      <UsualJob spec={spec} />
       <Problems spec={spec} prefix="pricing" />
     </div>
   );
@@ -376,7 +423,7 @@ function BandsEditor({ spec, edit, disabled }: StepProps) {
           </Button>
         </div>
       ) : null}
-      <p className="text-xs text-muted-foreground">Sizes above the last band need a walkthrough. Leave &ldquo;up to&rdquo; empty on the last band to cover every larger size.</p>
+      <p className="text-xs text-muted-foreground">Leave the last &ldquo;up to&rdquo; empty to cover every larger size; otherwise larger homes need a walkthrough.</p>
     </div>
   );
 }
@@ -384,15 +431,17 @@ function BandsEditor({ spec, edit, disabled }: StepProps) {
 function AreaRate({ spec, edit, disabled }: StepProps) {
   const p = spec.pricing as Extract<Spec["pricing"], { method: "per_area" }>;
   const [text, setText] = useState<string | null>(null);
+  const rateId = useId();
   const unit = areaWord(p.unit, 1);
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <Segmented label="Measured in" value={p.unit} disabled={disabled} options={[{ id: "sq_ft", label: "Square feet" }, { id: "sq_m", label: "Square meters" }]} onChange={(u) => edit((s) => ({ ...s, pricing: { ...p, unit: u } }))} />
-      <label className="grid grid-cols-1 gap-1.5 text-sm">
-        <span className="font-medium text-strong">Rate</span>
-        <div className="flex min-h-10 items-center rounded-lg border border-border bg-card">
+      <div className="grid grid-cols-1 gap-1.5 text-sm">
+        <FieldLabel htmlFor={rateId} label="Rate" tip="Fractions of a cent are kept: 0.085 is eight and a half cents." />
+        <div className="flex min-h-10 items-center rounded-lg border border-border bg-card focus-within:border-brand-500/60 focus-within:outline-2 focus-within:outline-brand-500/30">
           <span className="pl-3 text-muted-foreground">$</span>
           <input
+            id={rateId}
             inputMode="decimal"
             disabled={disabled}
             className="w-full bg-transparent px-1.5 py-2 tabular-nums outline-none"
@@ -406,8 +455,7 @@ function AreaRate({ spec, edit, disabled }: StepProps) {
           />
           <span className="pr-3 text-xs text-muted-foreground">per {unit}</span>
         </div>
-        <span className="text-xs text-muted-foreground">Fractions of a cent are kept: 0.085 is eight and a half cents.</span>
-      </label>
+      </div>
       <NumberInput label={`Cleaner-time per 1,000 ${areaWord(p.unit)}`} unit="minutes" disabled={disabled} value={p.laborMinutesPer1000} onValue={(v) => edit((s) => ({ ...s, pricing: { ...p, laborMinutesPer1000: v ?? 0 } }))} />
       <NumberInput label="Walkthrough at or above" unit={areaWord(p.unit)} disabled={disabled} value={p.walkthroughAbove} onValue={(v) => edit((s) => ({ ...s, pricing: { ...p, walkthroughAbove: v } }))} hint="Leave empty for no limit." />
     </div>
@@ -423,11 +471,11 @@ export function TeamStep({ spec, edit, disabled }: StepProps) {
   const setTeam = (patch: Partial<Spec["team"]>) => edit((s) => ({ ...s, team: { ...s.team, ...patch } }));
   return (
     <div className="grid grid-cols-1 gap-6">
-      <SectionTitle title="Time and team">Dispatch uses these to staff the visit and offer it only to cleaners who can do it.</SectionTitle>
+      <SectionTitle title="Time and team" tip="Dispatch uses these to staff the visit and offer it only to cleaners who can do it." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Stepper label="Usual crew" value={spec.team.crewSize} min={1} max={12} disabled={disabled} onValue={(crewSize) => setTeam({ crewSize, maxCrew: Math.max(spec.team.maxCrew, crewSize) })} unit="cleaners" />
         <Stepper label="Largest crew" value={spec.team.maxCrew} min={spec.team.crewSize} max={12} disabled={disabled} onValue={(maxCrew) => setTeam({ maxCrew })} unit="cleaners" />
-        <NumberInput label="Longest a visit should run" unit="hours on site" step={0.5} disabled={disabled} value={hours(spec.team.maxVisitMinutes)} onValue={(h) => setTeam({ maxVisitMinutes: Math.max(15, minutesOf(h)) })} hint="Longer jobs get a warning to add a cleaner or split the visit." />
+        <NumberInput label="Longest a visit should run" unit="hours on site" step={0.5} disabled={disabled} value={hours(spec.team.maxVisitMinutes)} onValue={(h) => setTeam({ maxVisitMinutes: Math.max(15, minutesOf(h)) })} tip="Longer jobs get a warning to add a cleaner or split the visit." />
         <NumberInput label="Arrival window" unit="minutes" disabled={disabled} value={spec.team.arrivalWindowMinutes} onValue={(v) => setTeam({ arrivalWindowMinutes: v ?? 0 })} hint={spec.team.arrivalWindowMinutes ? `The crew may arrive up to ${minutesWords(spec.team.arrivalWindowMinutes)} after the start.` : "0: the crew arrives at the start time."} />
       </div>
       <div className="grid grid-cols-1 gap-2">
@@ -465,7 +513,7 @@ export function TeamStep({ spec, edit, disabled }: StepProps) {
       <QuestionsEditor spec={spec} edit={edit} disabled={disabled} />
 
       <div className="grid grid-cols-1 gap-2">
-        <SectionTitle title="When a walkthrough is needed">Situations where the team should see the property before a firm price.</SectionTitle>
+        <SectionTitle title="When a walkthrough is needed" tip="Situations where the team should see the property before giving a firm price." />
         <ul className="grid grid-cols-1 gap-1">
           {spec.walkthroughNotes.map((n) => (
             <li key={n} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-1.5 text-sm">
@@ -496,7 +544,7 @@ export function TeamStep({ spec, edit, disabled }: StepProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-2">
-        <SectionTitle title="What your company must have">Training, insurance, equipment or certification this work needs. Each must be confirmed before the service is published; listing it does not claim you have it.</SectionTitle>
+        <SectionTitle title="What your company must have" tip="Training, insurance, equipment or certification this work needs. Listing one does not claim you have it.">Each is confirmed before publishing.</SectionTitle>
         <ul className="grid grid-cols-1 gap-1">
           {spec.requirements.map((r) => (
             <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-1.5 text-sm">
@@ -537,7 +585,7 @@ function QuestionsEditor({ spec, edit, disabled }: StepProps) {
   const set = (id: string, patch: Partial<Spec["questions"][number]>) => edit((s) => ({ ...s, questions: s.questions.map((q) => (q.id === id ? { ...q, ...patch } : q)) }));
   return (
     <div className="grid grid-cols-1 gap-2">
-      <SectionTitle title="Questions a price needs">What to ask before quoting. An answer can mark the job as needing a walkthrough.</SectionTitle>
+      <SectionTitle title="Questions a price needs" tip="What to ask before quoting. An answer can send the job to a walkthrough instead of a price." />
       <ul className="grid grid-cols-1 gap-2">
         {spec.questions.map((q) => (
           <li key={q.id} className="grid grid-cols-1 gap-2 rounded-xl border border-border p-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
@@ -605,7 +653,7 @@ function StrEditor({ spec, edit, disabled }: StepProps) {
   const setStr = (patch: Partial<NonNullable<Spec["str"]>>) => edit((s) => ({ ...s, str: { ...(s.str ?? defaultStr()), ...patch } }));
   return (
     <div className="grid grid-cols-1 gap-3 rounded-xl border border-border p-4">
-      <Toggle label="Short-term rental turnover" description="Beds and linens, laundry, restocking, and a window between checkout and check-in. Not an ordinary residential clean." checked={Boolean(str?.enabled)} disabled={disabled} onChange={(on) => edit((s) => ({ ...s, str: on ? { ...(s.str ?? defaultStr()), enabled: true } : s.str ? { ...s.str, enabled: false } : null }))} />
+      <Toggle label="Short-term rental turnover" tip="Beds and linens, laundry, restocking, and a window between checkout and check-in. Not an ordinary residential clean." checked={Boolean(str?.enabled)} disabled={disabled} onChange={(on) => edit((s) => ({ ...s, str: on ? { ...(s.str ?? defaultStr()), enabled: true } : s.str ? { ...s.str, enabled: false } : null }))} />
       {str?.enabled ? (
         <div className="grid grid-cols-1 gap-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -693,20 +741,60 @@ function AdjustmentInput({ label, value, onChange, disabled, base }: { label: st
   );
 }
 
-function Advanced({ title, summary, children, open }: { title: string; summary: string; children: React.ReactNode; open?: boolean }) {
+/** An adjustment in a few words: "+20%", "−$15.00". */
+function adjustmentWords(a: Adjustment, sign: "+" | "−"): string {
+  return a.kind === "percent" ? `${sign}${a.value}%` : `${sign}${formatCents(a.value).replace("−", "")}`;
+}
+
+/**
+ * One adjustment as a single row: an icon, its name, a switch, and when it is on, a tag that says what
+ * it does ("+25%"). Its fields open beneath only when asked for. A card without a switch (minimum,
+ * promotions) is a setting that is always in force; it opens the same way.
+ */
+function AdjustmentCard({ icon: Icon, title, short, tip, on, onToggle, summary, disabled, children }: { icon: LucideIcon; title: string; short: string; tip?: React.ReactNode; on?: boolean; onToggle?: (on: boolean) => void; summary: string; disabled: boolean; children: React.ReactNode }) {
+  const id = useId();
+  const switchable = onToggle !== undefined;
+  const active = switchable ? Boolean(on) : true;
+  const [open, setOpen] = useState(false);
+  const expanded = active && open;
   return (
-    <details className="group rounded-xl border border-border bg-card" open={open}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline-2 focus-visible:outline-brand-500/40">
-        <span>
-          <span className="block text-sm font-medium text-strong">{title}</span>
-          <span className="block text-xs text-muted-foreground">{summary}</span>
+    <li className={cn("rounded-xl border bg-card transition-colors", switchable && active ? "border-brand-500/40" : "border-border")}>
+      <div className="flex items-center gap-3 p-3">
+        <span aria-hidden className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", switchable && !active ? "bg-muted text-muted-foreground" : "bg-brand-500/10 text-brand-300")}>
+          <Icon className="size-5" />
         </span>
-        <span aria-hidden className="text-muted-foreground transition-transform group-open:rotate-180">
-          ▾
-        </span>
-      </summary>
-      <div className="grid grid-cols-1 gap-4 border-t border-border p-4">{children}</div>
-    </details>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-0.5">
+            <span id={`${id}-title`} className="text-sm font-medium text-strong">
+              {title}
+            </span>
+            {tip ? <InfoTip label={title}>{tip}</InfoTip> : null}
+          </div>
+          {active ? <span className="mt-0.5 inline-block max-w-full truncate rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-300">{summary}</span> : <span className="block truncate text-xs text-muted-foreground">{short}</span>}
+        </div>
+        {active ? (
+          <button type="button" aria-expanded={expanded} aria-controls={expanded ? `${id}-body` : undefined} aria-label={`${expanded ? "Hide" : "Change"} ${title}`} onClick={() => setOpen((v) => !v)} className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-overlay/[0.05] hover:text-strong focus-visible:outline-2 focus-visible:outline-brand-500/40">
+            <ChevronDown aria-hidden className={cn("size-4 transition-transform motion-reduce:transition-none", expanded && "rotate-180")} />
+          </button>
+        ) : null}
+        {switchable ? (
+          <SwitchButton
+            checked={active}
+            disabled={disabled}
+            labelledBy={`${id}-title`}
+            onChange={(next) => {
+              onToggle(next);
+              setOpen(next);
+            }}
+          />
+        ) : null}
+      </div>
+      {expanded ? (
+        <div id={`${id}-body`} className="grid grid-cols-1 gap-4 border-t border-border p-4">
+          {children}
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -718,12 +806,12 @@ export function ExtrasStep({ spec, edit, disabled }: StepProps) {
   const setAddOn = (id: string, patch: Partial<Spec["addOns"][number]>) => edit((s) => ({ ...s, addOns: s.addOns.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
   return (
     <div className="grid grid-cols-1 gap-6">
-      <SectionTitle title="Extras">Add-ons a customer can choose. Link an extra to an included task and it is never charged on this service.</SectionTitle>
+      <SectionTitle title="Extras" tip="Add-ons a customer can choose. Link an extra to a task this service already includes and it is shown as included, never charged." />
       <ul className="grid grid-cols-1 gap-2">
         {spec.addOns.map((a) => {
           const covered = a.coversItemId && spec.included.some((i) => i.id === a.coversItemId);
           return (
-            <li key={a.id} className="grid grid-cols-1 gap-3 rounded-xl border border-border p-3">
+            <li key={a.id} className="@container grid grid-cols-1 gap-3 rounded-xl border border-border p-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
                 <Field label="Extra">
                   <TextInput value={a.label} disabled={disabled} onChange={(e) => setAddOn(a.id, { label: e.target.value })} />
@@ -733,7 +821,7 @@ export function ExtrasStep({ spec, edit, disabled }: StepProps) {
                   <Trash2 aria-hidden />
                 </Button>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 @xl:grid-cols-4">
                 <label className="grid grid-cols-1 gap-1.5 text-sm">
                   <span className="font-medium text-strong">Charged</span>
                   <select disabled={disabled} className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={a.per} onChange={(e) => setAddOn(a.id, { per: e.target.value as typeof a.per })}>
@@ -775,112 +863,186 @@ export function ExtrasStep({ spec, edit, disabled }: StepProps) {
         </div>
       ) : null}
 
-      <SectionTitle title="Adjustments">Open only what this service needs. Each one appears in the price breakdown with its reason.</SectionTitle>
-      <div className="grid grid-cols-1 gap-2">
-        <Advanced title="Recurring discounts" summary={m.recurring.enabled ? m.recurring.options.map((o) => `${scheduleLabel(o.schedule)}: ${o.discount.kind === "percent" ? `${o.discount.value}%` : `$${(o.discount.value / 100).toFixed(2)}`} off`).join(" · ") || "On, no schedules yet" : "Off"}>
-          <Toggle label="Offer recurring service" description="A discount per visit for each schedule. Schedules are calendars: every 7 days is 4 or 5 visits a month, not always 4." checked={m.recurring.enabled} disabled={disabled} onChange={(enabled) => setM({ recurring: { ...m.recurring, enabled } })} />
-          {m.recurring.enabled
-            ? SCHEDULES.map((schedule) => {
-                const option = m.recurring.options.find((o) => o.schedule === schedule);
-                return (
-                  <div key={schedule} className="grid items-end gap-2 sm:grid-cols-[12rem_1fr]">
-                    <label className="inline-flex items-center gap-2 text-sm">
-                      <input type="checkbox" disabled={disabled} checked={Boolean(option)} onChange={(e) => setM({ recurring: { ...m.recurring, options: e.target.checked ? [...m.recurring.options, { schedule, discount: { kind: "percent", value: 0 } }] : m.recurring.options.filter((o) => o.schedule !== schedule) } })} />
-                      {scheduleLabel(schedule)}
-                    </label>
-                    {option ? <NumberInput label="Discount" unit="% off each visit's cleaning" step={0.5} disabled={disabled} value={option.discount.value} onValue={(v) => setM({ recurring: { ...m.recurring, options: m.recurring.options.map((o) => (o.schedule === schedule ? { ...o, discount: { kind: "percent", value: v ?? 0 } } : o)) } })} /> : <span />}
-                  </div>
-                );
-              })
-            : null}
-        </Advanced>
+      <SectionTitle title="Adjustments" tip="Switch on only what this service needs. Each one shows up in the price breakdown with its reason, in a fixed order." />
+      <ul className="grid grid-cols-1 gap-2">
+        <AdjustmentCard
+          icon={RefreshCw}
+          title="Recurring discounts"
+          short="A discount for repeat schedules"
+          tip="A discount on each visit for the schedules you offer. Schedules are real calendars: every 7 days is 4 or 5 visits in a month, not always 4."
+          on={m.recurring.enabled}
+          onToggle={(enabled) => setM({ recurring: { ...m.recurring, enabled } })}
+          summary={m.recurring.options.length ? m.recurring.options.map((o) => `${scheduleLabel(o.schedule)} ${adjustmentWords(o.discount, "−")}`).join(" · ") : "No schedules picked yet"}
+          disabled={disabled}
+        >
+          {SCHEDULES.map((schedule) => {
+            const option = m.recurring.options.find((o) => o.schedule === schedule);
+            return (
+              <div key={schedule} className="grid items-end gap-2 sm:grid-cols-[12rem_1fr]">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" disabled={disabled} checked={Boolean(option)} onChange={(e) => setM({ recurring: { ...m.recurring, options: e.target.checked ? [...m.recurring.options, { schedule, discount: { kind: "percent", value: 0 } }] : m.recurring.options.filter((o) => o.schedule !== schedule) } })} />
+                  {scheduleLabel(schedule)}
+                </label>
+                {option ? <NumberInput label="Discount" unit="% off each visit's cleaning" step={0.5} disabled={disabled} value={option.discount.value} onValue={(v) => setM({ recurring: { ...m.recurring, options: m.recurring.options.map((o) => (o.schedule === schedule ? { ...o, discount: { kind: "percent", value: v ?? 0 } } : o)) } })} /> : <span />}
+              </div>
+            );
+          })}
+        </AdjustmentCard>
 
-        <Advanced title="Property condition" summary={m.condition.enabled ? `${m.condition.levels.length} levels` : "Off"}>
-          <Toggle label="Price by condition" description="Price and time change separately and are both shown. A level can require a walkthrough instead of a price." checked={m.condition.enabled} disabled={disabled} onChange={(enabled) => setM({ condition: { ...m.condition, enabled } })} />
-          {m.condition.enabled ? (
-            <ul className="grid grid-cols-1 gap-2">
-              {m.condition.levels.map((level, i) => (
-                <li key={level.id} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-2 sm:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] sm:items-end">
-                  <Field label={i === 0 ? "Level (first is the usual)" : "Level"}>
-                    <TextInput disabled={disabled} value={level.label} onChange={(e) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, label: e.target.value } : l)) } })} />
-                  </Field>
-                  <NumberInput label="Price" unit="%" min={-100} disabled={disabled || level.requiresWalkthrough} value={level.pricePercent} onValue={(v) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, pricePercent: v ?? 0 } : l)) } })} />
-                  <NumberInput label="Time" unit="%" min={-100} disabled={disabled || level.requiresWalkthrough} value={level.timePercent} onValue={(v) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, timePercent: v ?? 0 } : l)) } })} />
-                  <label className="inline-flex items-center gap-1.5 pb-2 text-sm">
-                    <input type="checkbox" disabled={disabled} checked={level.requiresWalkthrough} onChange={(e) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, requiresWalkthrough: e.target.checked } : l)) } })} /> Walkthrough
-                  </label>
-                </li>
-              ))}
-            </ul>
+        <AdjustmentCard
+          icon={Gauge}
+          title="Property condition"
+          short="Price by how the home looks"
+          tip="Price and time change separately, and both are shown. A level can send the job to a walkthrough instead of a price."
+          on={m.condition.enabled}
+          onToggle={(enabled) => setM({ condition: { ...m.condition, enabled } })}
+          summary={`${m.condition.levels.length} level${m.condition.levels.length === 1 ? "" : "s"}`}
+          disabled={disabled}
+        >
+          <ul className="grid grid-cols-1 gap-2">
+            {m.condition.levels.map((level, i) => (
+              <li key={level.id} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-2 sm:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] sm:items-end">
+                <Field label={i === 0 ? "Level (first is the usual)" : "Level"}>
+                  <TextInput disabled={disabled} value={level.label} onChange={(e) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, label: e.target.value } : l)) } })} />
+                </Field>
+                <NumberInput label="Price" unit="%" min={-100} disabled={disabled || level.requiresWalkthrough} value={level.pricePercent} onValue={(v) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, pricePercent: v ?? 0 } : l)) } })} />
+                <NumberInput label="Time" unit="%" min={-100} disabled={disabled || level.requiresWalkthrough} value={level.timePercent} onValue={(v) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, timePercent: v ?? 0 } : l)) } })} />
+                <label className="inline-flex items-center gap-1.5 pb-2 text-sm">
+                  <input type="checkbox" disabled={disabled} checked={level.requiresWalkthrough} onChange={(e) => setM({ condition: { ...m.condition, levels: m.condition.levels.map((l) => (l.id === level.id ? { ...l, requiresWalkthrough: e.target.checked } : l)) } })} /> Walkthrough
+                </label>
+              </li>
+            ))}
+          </ul>
+        </AdjustmentCard>
+
+        <AdjustmentCard
+          icon={Sparkles}
+          title="First-clean reset"
+          short="More for the first visit"
+          tip="For a home that has not been kept up to your standard yet. The first visit costs more and takes longer."
+          on={m.firstClean.enabled}
+          onToggle={(enabled) => setM({ firstClean: { ...m.firstClean, enabled } })}
+          summary={`${adjustmentWords(m.firstClean.price, "+")} on the first visit`}
+          disabled={disabled}
+        >
+          <AdjustmentInput label="First visit adds" value={m.firstClean.price} disabled={disabled} base="the base price" onChange={(price) => setM({ firstClean: { ...m.firstClean, price } })} />
+          <NumberInput label="Extra time" unit="% longer" disabled={disabled} value={m.firstClean.timePercent} onValue={(v) => setM({ firstClean: { ...m.firstClean, timePercent: v ?? 0 } })} />
+        </AdjustmentCard>
+
+        <AdjustmentCard
+          icon={MapPin}
+          title="Service area or travel"
+          short="Travel fees by postal code"
+          tip="Groups of postal codes you already serve, each with a travel fee or a percent."
+          on={m.area.enabled}
+          onToggle={(enabled) => setM({ area: { ...m.area, enabled } })}
+          summary={`${m.area.zones.length} area${m.area.zones.length === 1 ? "" : "s"}${m.area.outside === "refuse" ? " · others walkthrough" : ""}`}
+          disabled={disabled}
+        >
+          {m.area.zones.map((zone) => (
+            <div key={zone.id} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <Field label="Area name">
+                  <TextInput disabled={disabled} value={zone.label} onChange={(e) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, label: e.target.value } : z)) } })} />
+                </Field>
+                <Button size="icon-sm" variant="ghost" disabled={disabled} aria-label={`Remove ${zone.label}`} onClick={() => setM({ area: { ...m.area, zones: m.area.zones.filter((z) => z.id !== zone.id) } })}>
+                  <Trash2 aria-hidden />
+                </Button>
+              </div>
+              <Field label="Postal codes" hint="Separate with commas.">
+                <TextInput disabled={disabled} value={zone.postalCodes.join(", ")} onChange={(e) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, postalCodes: e.target.value.split(/[,\s]+/).filter(Boolean) } : z)) } })} />
+              </Field>
+              <AdjustmentInput label="Adds" value={zone.adjustment} disabled={disabled} base="the cleaning" onChange={(adjustment) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, adjustment } : z)) } })} />
+            </div>
+          ))}
+          {!disabled ? (
+            <div>
+              <Button size="sm" variant="secondary" onClick={() => setM({ area: { ...m.area, zones: [...m.area.zones, { id: newId("area", m.area.zones.map((z) => z.id)), label: "Outer area", postalCodes: [], adjustment: { kind: "fixed", value: 0 } }] } })}>
+                <Plus aria-hidden /> Add an area
+              </Button>
+            </div>
           ) : null}
-        </Advanced>
+          <Segmented label="A postal code in no area is" value={m.area.outside} disabled={disabled} options={[{ id: "standard", label: "Priced as standard" }, { id: "refuse", label: "Sent to a walkthrough" }]} onChange={(outside) => setM({ area: { ...m.area, outside } })} />
+        </AdjustmentCard>
 
-        <Advanced title="First-clean reset" summary={m.firstClean.enabled ? `On: ${m.firstClean.price.kind === "percent" ? `${m.firstClean.price.value}%` : `$${(m.firstClean.price.value / 100).toFixed(2)}`} more on the first visit` : "Off"}>
-          <Toggle label="Charge more for the first visit" description="For a home that has not been kept up to your standard yet." checked={m.firstClean.enabled} disabled={disabled} onChange={(enabled) => setM({ firstClean: { ...m.firstClean, enabled } })} />
-          {m.firstClean.enabled ? (
-            <>
-              <AdjustmentInput label="First visit adds" value={m.firstClean.price} disabled={disabled} base="the base price" onChange={(price) => setM({ firstClean: { ...m.firstClean, price } })} />
-              <NumberInput label="Extra time" unit="% longer" disabled={disabled} value={m.firstClean.timePercent} onValue={(v) => setM({ firstClean: { ...m.firstClean, timePercent: v ?? 0 } })} />
-            </>
-          ) : null}
-        </Advanced>
+        <AdjustmentCard icon={Zap} title="Rush" short="Short-notice bookings" on={m.rush.enabled} onToggle={(enabled) => setM({ rush: { ...m.rush, enabled } })} summary={adjustmentWords(m.rush.adjustment, "+")} disabled={disabled}>
+          <AdjustmentInput label="Rush adds" value={m.rush.adjustment} disabled={disabled} base="the cleaning" onChange={(adjustment) => setM({ rush: { ...m.rush, adjustment } })} />
+        </AdjustmentCard>
 
-        <Advanced title="Service area or travel" summary={m.area.enabled ? `${m.area.zones.length} area${m.area.zones.length === 1 ? "" : "s"}` : "Off"}>
-          <Toggle label="Adjust by area" description="Groups of postal codes you already serve, each with a travel fee or a percent." checked={m.area.enabled} disabled={disabled} onChange={(enabled) => setM({ area: { ...m.area, enabled } })} />
-          {m.area.enabled ? (
-            <>
-              {m.area.zones.map((zone) => (
-                <div key={zone.id} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3">
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                    <Field label="Area name">
-                      <TextInput disabled={disabled} value={zone.label} onChange={(e) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, label: e.target.value } : z)) } })} />
-                    </Field>
-                    <Button size="icon-sm" variant="ghost" disabled={disabled} aria-label={`Remove ${zone.label}`} onClick={() => setM({ area: { ...m.area, zones: m.area.zones.filter((z) => z.id !== zone.id) } })}>
-                      <Trash2 aria-hidden />
-                    </Button>
-                  </div>
-                  <Field label="Postal codes" hint="Separate with commas.">
-                    <TextInput disabled={disabled} value={zone.postalCodes.join(", ")} onChange={(e) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, postalCodes: e.target.value.split(/[,\s]+/).filter(Boolean) } : z)) } })} />
+        <AdjustmentCard icon={MoonIcon} title="After hours" short="Outside your usual hours" on={m.afterHours.enabled} onToggle={(enabled) => setM({ afterHours: { ...m.afterHours, enabled } })} summary={adjustmentWords(m.afterHours.adjustment, "+")} disabled={disabled}>
+          <AdjustmentInput label="After hours adds" value={m.afterHours.adjustment} disabled={disabled} base="the cleaning" onChange={(adjustment) => setM({ afterHours: { ...m.afterHours, adjustment } })} />
+        </AdjustmentCard>
+
+        <AdjustmentCard
+          icon={TrendingUp}
+          title="Demand pricing"
+          short="Off: prices never change with demand"
+          tip="It reads only your own calendar and the days you mark, never anything about the customer. When a marked day and a busy day both apply, the larger is used, and never above your cap."
+          on={m.demand.enabled}
+          onToggle={(enabled) => setM({ demand: { ...m.demand, enabled } })}
+          summary={`Up to +${m.demand.capPercent}%${m.demand.peakDays.length ? ` · ${m.demand.peakDays.length} marked` : ""}${m.demand.busyDay.enabled ? " · busy days" : ""}${m.demand.endsOn ? ` · until ${m.demand.endsOn}` : ""}`}
+          disabled={disabled}
+        >
+          <NumberInput label="Cap" unit="% most it can add" max={100} disabled={disabled} value={m.demand.capPercent} onValue={(v) => setM({ demand: { ...m.demand, capPercent: v ?? 0 } })} />
+          <div className="grid grid-cols-1 gap-2">
+            <p className="text-sm font-medium text-strong">Days you mark</p>
+            {m.demand.peakDays.map((d) => (
+              <div key={d.id} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
+                  <Field label="Name">
+                    <TextInput disabled={disabled} value={d.label} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, label: e.target.value } : x)) } })} />
                   </Field>
-                  <AdjustmentInput label="Adds" value={zone.adjustment} disabled={disabled} base="the cleaning" onChange={(adjustment) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, adjustment } : z)) } })} />
-                </div>
-              ))}
-              {!disabled ? (
-                <div>
-                  <Button size="sm" variant="secondary" onClick={() => setM({ area: { ...m.area, zones: [...m.area.zones, { id: newId("area", m.area.zones.map((z) => z.id)), label: "Outer area", postalCodes: [], adjustment: { kind: "fixed", value: 0 } }] } })}>
-                    <Plus aria-hidden /> Add an area
+                  <NumberInput label="Adds" unit="%" disabled={disabled} value={d.percent} onValue={(v) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, percent: v ?? 0 } : x)) } })} />
+                  <Button size="icon-sm" variant="ghost" disabled={disabled} aria-label={`Remove ${d.label}`} onClick={() => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.filter((x) => x.id !== d.id) } })}>
+                    <Trash2 aria-hidden />
                   </Button>
                 </div>
-              ) : null}
-              <Segmented label="A postal code in no area is" value={m.area.outside} disabled={disabled} options={[{ id: "standard", label: "Priced as standard" }, { id: "refuse", label: "Sent to a walkthrough" }]} onChange={(outside) => setM({ area: { ...m.area, outside } })} />
-            </>
+                <fieldset className="flex flex-wrap gap-1.5 text-sm" disabled={disabled}>
+                  <legend className="sr-only">Weekdays</legend>
+                  {WEEKDAY_SHORT.map((w, i) => (
+                    <label key={w} className={cn("cursor-pointer rounded-full border px-2.5 py-1 text-xs transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500/40", d.weekdays.includes(i) ? "border-brand-500 bg-brand-500/10 font-medium text-strong" : "border-border text-muted-foreground")}>
+                      <input type="checkbox" className="sr-only" checked={d.weekdays.includes(i)} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, weekdays: e.target.checked ? [...x.weekdays, i].sort() : x.weekdays.filter((y) => y !== i) } : x)) } })} />
+                      {w}
+                    </label>
+                  ))}
+                </fieldset>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Field label="From (optional)">
+                    <TextInput type="date" disabled={disabled} value={d.from ?? ""} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, from: e.target.value || null } : x)) } })} />
+                  </Field>
+                  <Field label="To (optional)">
+                    <TextInput type="date" disabled={disabled} value={d.to ?? ""} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, to: e.target.value || null } : x)) } })} />
+                  </Field>
+                </div>
+              </div>
+            ))}
+            {!disabled ? (
+              <div>
+                <Button size="sm" variant="secondary" onClick={() => setM({ demand: { ...m.demand, peakDays: [...m.demand.peakDays, { id: newId("peak", m.demand.peakDays.map((d) => d.id)), label: "Fridays", weekdays: [5], from: null, to: null, percent: 10 }] } })}>
+                  <Plus aria-hidden /> Mark days
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <Toggle label="When the day is already busy" tip="Reads how full that day's schedule is from your cleaners' availability." checked={m.demand.busyDay.enabled} disabled={disabled} onChange={(enabled) => setM({ demand: { ...m.demand, busyDay: { ...m.demand.busyDay, enabled } } })} />
+          {m.demand.busyDay.enabled ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <NumberInput label="Busy at" unit="% booked or more" max={100} disabled={disabled} value={m.demand.busyDay.thresholdPercent} onValue={(v) => setM({ demand: { ...m.demand, busyDay: { ...m.demand.busyDay, thresholdPercent: v ?? 85 } } })} />
+              <NumberInput label="Adds" unit="%" max={100} disabled={disabled} value={m.demand.busyDay.percent} onValue={(v) => setM({ demand: { ...m.demand, busyDay: { ...m.demand.busyDay, percent: v ?? 0 } } })} />
+            </div>
           ) : null}
-        </Advanced>
+          <LabeledField label="Stop on (optional)" tip="Demand pricing switches itself off after this date.">
+            {(id) => <TextInput id={id} type="date" disabled={disabled} value={m.demand.endsOn ?? ""} onChange={(e) => setM({ demand: { ...m.demand, endsOn: e.target.value || null } })} />}
+          </LabeledField>
+        </AdjustmentCard>
 
-        <Advanced title="Rush and after-hours" summary={[m.rush.enabled ? "Rush on" : null, m.afterHours.enabled ? "After-hours on" : null].filter(Boolean).join(" · ") || "Off"}>
-          <Toggle label="Rush (short notice)" checked={m.rush.enabled} disabled={disabled} onChange={(enabled) => setM({ rush: { ...m.rush, enabled } })} />
-          {m.rush.enabled ? <AdjustmentInput label="Rush adds" value={m.rush.adjustment} disabled={disabled} base="the cleaning" onChange={(adjustment) => setM({ rush: { ...m.rush, adjustment } })} /> : null}
-          <Toggle label="After hours" checked={m.afterHours.enabled} disabled={disabled} onChange={(enabled) => setM({ afterHours: { ...m.afterHours, enabled } })} />
-          {m.afterHours.enabled ? <AdjustmentInput label="After hours adds" value={m.afterHours.adjustment} disabled={disabled} base="the cleaning" onChange={(adjustment) => setM({ afterHours: { ...m.afterHours, adjustment } })} /> : null}
-        </Advanced>
-
-        <Advanced title="Minimum charge and rounding" summary={`${m.minimumCents === null ? "No minimum" : `Minimum $${(m.minimumCents / 100).toFixed(2)}`} · ${m.rounding.stepCents ? `rounded to $${(m.rounding.stepCents / 100).toFixed(2)}` : "no rounding"}`}>
-          <MoneyInput label="Minimum charge" unit={`per ${spec.visitWord}`} cents={m.minimumCents} disabled={disabled} onCents={(minimumCents) => setM({ minimumCents })} hint="Leave empty for none. Applied after discounts." />
-          <Segmented
-            label="Round the final price"
-            value={String(m.rounding.stepCents) as "0" | "100" | "500"}
-            disabled={disabled}
-            options={[
-              { id: "0", label: "No rounding" },
-              { id: "100", label: "To $1" },
-              { id: "500", label: "To $5" },
-            ]}
-            onChange={(v) => setM({ rounding: { ...m.rounding, stepCents: Number(v) } })}
-          />
-          {m.rounding.stepCents ? <Segmented label="Direction" value={m.rounding.mode} disabled={disabled} options={[{ id: "nearest", label: "Nearest" }, { id: "up", label: "Always up" }]} onChange={(mode) => setM({ rounding: { ...m.rounding, mode } })} /> : null}
-        </Advanced>
-
-        <Advanced title="Promotions and how discounts combine" summary={`${m.promotions.length} promotion${m.promotions.length === 1 ? "" : "s"} · ${m.discounts.stacking === "best_only" ? "never combined" : "stacked"} · at most ${m.discounts.maxTotalPercent}% off`}>
+        <AdjustmentCard
+          icon={HandCoinsIcon}
+          title="Promotions and how discounts combine"
+          short="Offers and discount limits"
+          summary={`${m.promotions.length} promotion${m.promotions.length === 1 ? "" : "s"} · ${m.discounts.stacking === "best_only" ? "larger discount only" : "discounts stack"} · at most ${m.discounts.maxTotalPercent}% off`}
+          disabled={disabled}
+        >
           <Segmented label="When a recurring discount and a promotion both apply" value={m.discounts.stacking} disabled={disabled} options={[{ id: "best_only", label: "Only the larger one" }, { id: "stack", label: "Both: recurring first" }]} onChange={(stacking) => setM({ discounts: { ...m.discounts, stacking } })} />
           <NumberInput label="Most a visit is ever discounted" unit="% of the cleaning" max={100} disabled={disabled} value={m.discounts.maxTotalPercent} onValue={(v) => setM({ discounts: { ...m.discounts, maxTotalPercent: v ?? 0 } })} />
           {m.promotions.map((promo) => (
@@ -914,66 +1076,24 @@ export function ExtrasStep({ spec, edit, disabled }: StepProps) {
               </Button>
             </div>
           ) : null}
-        </Advanced>
+        </AdjustmentCard>
 
-        <Advanced title="Demand pricing" summary={m.demand.enabled ? `On, capped at ${m.demand.capPercent}%` : "Off: prices never change with demand"}>
-          <Toggle label="Raise prices when demand is high" description="Off until you switch it on. It reads only your calendar and the days you mark, never anything about the customer. When a marked day and a busy day both apply, the larger is used, and never above your cap." checked={m.demand.enabled} disabled={disabled} onChange={(enabled) => setM({ demand: { ...m.demand, enabled } })} />
-          {m.demand.enabled ? (
-            <>
-              <NumberInput label="Cap" unit="% most it can add" max={100} disabled={disabled} value={m.demand.capPercent} onValue={(v) => setM({ demand: { ...m.demand, capPercent: v ?? 0 } })} />
-              <div className="grid grid-cols-1 gap-2">
-                <p className="text-sm font-medium text-strong">Days you mark</p>
-                {m.demand.peakDays.map((d) => (
-                  <div key={d.id} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-3">
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto] sm:items-end">
-                      <Field label="Name">
-                        <TextInput disabled={disabled} value={d.label} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, label: e.target.value } : x)) } })} />
-                      </Field>
-                      <NumberInput label="Adds" unit="%" disabled={disabled} value={d.percent} onValue={(v) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, percent: v ?? 0 } : x)) } })} />
-                      <Button size="icon-sm" variant="ghost" disabled={disabled} aria-label={`Remove ${d.label}`} onClick={() => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.filter((x) => x.id !== d.id) } })}>
-                        <Trash2 aria-hidden />
-                      </Button>
-                    </div>
-                    <fieldset className="flex flex-wrap gap-2 text-sm" disabled={disabled}>
-                      <legend className="sr-only">Weekdays</legend>
-                      {WEEKDAY_SHORT.map((w, i) => (
-                        <label key={w} className="inline-flex items-center gap-1">
-                          <input type="checkbox" checked={d.weekdays.includes(i)} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, weekdays: e.target.checked ? [...x.weekdays, i].sort() : x.weekdays.filter((y) => y !== i) } : x)) } })} /> {w}
-                        </label>
-                      ))}
-                    </fieldset>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Field label="From (optional)">
-                        <TextInput type="date" disabled={disabled} value={d.from ?? ""} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, from: e.target.value || null } : x)) } })} />
-                      </Field>
-                      <Field label="To (optional)">
-                        <TextInput type="date" disabled={disabled} value={d.to ?? ""} onChange={(e) => setM({ demand: { ...m.demand, peakDays: m.demand.peakDays.map((x) => (x.id === d.id ? { ...x, to: e.target.value || null } : x)) } })} />
-                      </Field>
-                    </div>
-                  </div>
-                ))}
-                {!disabled ? (
-                  <div>
-                    <Button size="sm" variant="secondary" onClick={() => setM({ demand: { ...m.demand, peakDays: [...m.demand.peakDays, { id: newId("peak", m.demand.peakDays.map((d) => d.id)), label: "Fridays", weekdays: [5], from: null, to: null, percent: 10 }] } })}>
-                      <Plus aria-hidden /> Mark days
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-              <Toggle label="When the day is already busy" description="Reads how full the schedule is that day from your cleaners' availability." checked={m.demand.busyDay.enabled} disabled={disabled} onChange={(enabled) => setM({ demand: { ...m.demand, busyDay: { ...m.demand.busyDay, enabled } } })} />
-              {m.demand.busyDay.enabled ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <NumberInput label="Busy at" unit="% booked or more" max={100} disabled={disabled} value={m.demand.busyDay.thresholdPercent} onValue={(v) => setM({ demand: { ...m.demand, busyDay: { ...m.demand.busyDay, thresholdPercent: v ?? 85 } } })} />
-                  <NumberInput label="Adds" unit="%" max={100} disabled={disabled} value={m.demand.busyDay.percent} onValue={(v) => setM({ demand: { ...m.demand, busyDay: { ...m.demand.busyDay, percent: v ?? 0 } } })} />
-                </div>
-              ) : null}
-              <Field label="Stop on (optional)" hint="Demand pricing switches itself off after this date.">
-                <TextInput type="date" disabled={disabled} value={m.demand.endsOn ?? ""} onChange={(e) => setM({ demand: { ...m.demand, endsOn: e.target.value || null } })} />
-              </Field>
-            </>
-          ) : null}
-        </Advanced>
-      </div>
+        <AdjustmentCard icon={ScaleIcon} title="Minimum charge and rounding" short="The least a visit costs" summary={`${m.minimumCents === null ? "No minimum" : `Minimum ${formatCents(m.minimumCents)}`} · ${m.rounding.stepCents ? `rounded ${m.rounding.mode === "up" ? "up " : ""}to ${formatCents(m.rounding.stepCents)}` : "no rounding"}`} disabled={disabled}>
+          <MoneyInput label="Minimum charge" unit={`per ${spec.visitWord}`} cents={m.minimumCents} disabled={disabled} onCents={(minimumCents) => setM({ minimumCents })} hint="Leave empty for none." tip="Applied after discounts, before rounding." />
+          <Segmented
+            label="Round the final price"
+            value={String(m.rounding.stepCents) as "0" | "100" | "500"}
+            disabled={disabled}
+            options={[
+              { id: "0", label: "No rounding" },
+              { id: "100", label: "To $1" },
+              { id: "500", label: "To $5" },
+            ]}
+            onChange={(v) => setM({ rounding: { ...m.rounding, stepCents: Number(v) } })}
+          />
+          {m.rounding.stepCents ? <Segmented label="Direction" value={m.rounding.mode} disabled={disabled} options={[{ id: "nearest", label: "Nearest" }, { id: "up", label: "Always up" }]} onChange={(mode) => setM({ rounding: { ...m.rounding, mode } })} /> : null}
+        </AdjustmentCard>
+      </ul>
       <Problems spec={spec} prefix="addOns" />
       <Problems spec={spec} prefix="modifiers" />
     </div>

@@ -72,7 +72,7 @@ function ServiceCard({ row }: { row: Row }) {
     <Link href={servicePath(row.id)} className="group flex h-full flex-col rounded-2xl border border-border bg-card p-4 transition-[border-color,box-shadow] hover:border-brand-500/40 hover:shadow-[0_10px_30px_-18px_rgba(104,56,239,0.5)] focus-visible:outline-2 focus-visible:outline-brand-500/50 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-brand-700 dark:text-brand-300">{CATEGORY_LABELS[row.category]}</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-brand-300">{CATEGORY_LABELS[row.category]}</p>
           <h3 className="mt-0.5 truncate font-heading text-lg tracking-tight text-strong">{row.name}</h3>
         </div>
         {row.status === "archived" ? (
@@ -114,7 +114,7 @@ function ServiceCard({ row }: { row: Row }) {
             Illustrative amounts
           </Badge>
         ) : null}
-        <span className="ml-auto inline-flex items-center gap-1 text-sm font-medium text-brand-700 group-hover:underline dark:text-brand-300">
+        <span className="ml-auto inline-flex items-center gap-1 text-sm font-medium text-brand-300 group-hover:underline dark:text-brand-300">
           {row.draft ? "Continue" : "Open"} <ArrowRight aria-hidden className="size-4" />
         </span>
       </div>
@@ -170,7 +170,7 @@ function FirstTime({ catalog }: { catalog: Catalog }) {
                 </span>
                 <span className="mt-3 text-base font-semibold text-strong">{title}</span>
                 <span className="mt-1 text-sm text-muted-foreground">{body}</span>
-                <span className="mt-auto inline-flex items-center gap-1 pt-4 text-sm font-medium text-brand-700 dark:text-brand-300">
+                <span className="mt-auto inline-flex items-center gap-1 pt-4 text-sm font-medium text-brand-300">
                   Start <ArrowRight aria-hidden className="size-4" />
                 </span>
               </Link>
@@ -179,7 +179,7 @@ function FirstTime({ catalog }: { catalog: Catalog }) {
         </ul>
         <p className="mt-4 text-sm text-muted-foreground">
           Or{" "}
-          <Link href={`${SERVICES_ROOT}/new?mode=blank`} className="font-medium text-brand-700 underline-offset-4 hover:underline dark:text-brand-300">
+          <Link href={`${SERVICES_ROOT}/new?mode=blank`} className="font-medium text-brand-300 underline-offset-4 hover:underline dark:text-brand-300">
             add a service by hand
           </Link>
           .

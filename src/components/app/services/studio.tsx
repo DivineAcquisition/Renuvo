@@ -230,7 +230,7 @@ function ScenarioCard({ services, scenario, costs, onChange, onRemove }: { servi
               {r.result.schedule ? <ScheduleCalendar schedule={r.result.schedule.schedule} start={scenario.input.date ?? new Date().toISOString().slice(0, 10)} /> : null}
             </>
           ) : (
-            <ProfitPanel profit={r.profit} />
+            <ProfitPanel profit={r.profit} costs={costs} />
           )}
         </>
       ) : (

@@ -312,7 +312,7 @@ export function BriefView({ briefId }: { briefId: string }) {
                 </span>
               </div>
               {s.url ? (
-                <a href={s.url} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 break-all text-xs text-brand-700 underline-offset-4 hover:underline dark:text-brand-300">
+                <a href={s.url} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 break-all text-xs text-brand-300 underline-offset-4 hover:underline dark:text-brand-300">
                   {s.url} <ExternalLink aria-hidden className="size-3" />
                 </a>
               ) : null}
