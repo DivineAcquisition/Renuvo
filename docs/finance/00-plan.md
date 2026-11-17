@@ -31,6 +31,13 @@ Settings › Plan & Usage (`docs/billing/README.md`), and the two never share a 
 | When cleaners are paid | After each job: each completed job's pay is worked out, reviewed and approved on its own |
 | Tips | Customers can add a tip on the pay page (never pre-chosen). 100% goes to that job's crew, split evenly; the company covers Stripe's fee on it. Cash tips can be recorded |
 | Cleaner statements | A private link the Owner sends (text or email, previewed and approved) showing only that cleaner's own jobs, pay and payments for 90 days |
+| Getting expenses in (phase 4) | Snap or upload receipts (read by Selestial), type by hand, import a bank or card CSV; a Gmail receipts label in 4b |
+| Expense autonomy | The Owner's own rules set a category; a rule marked "file on its own" records an expense only when vendor, date and amount were read clearly and it isn't a possible repeat. Everything else waits; suggestions stay suggestions |
+| Cleaner receipts | Cleaners submit receipts in their portal; the Owner approves; the reimbursement is added to their next Team Pay payment (4b) |
+| Bills | Recurring and one-off bills with due dates and reminders; marking one paid records the expense (4b) |
+| Expense categories | A cleaning-business set (Supplies, Equipment, Laundry, Vehicle & fuel, Parking & tolls, Subcontractors, Insurance, Software, Marketing, Rent & utilities, Licenses & fees, Training, Office, Other), editable, matched to Services & Pricing's cost estimates and to QuickBooks accounts |
+| Paid with | Business card, bank, cash, other, or paid personally; personal ones are owed back to the Owner until marked paid back (default taken; the question was skipped) |
+| Visit links | Selestial suggests the only visit on the receipt's day; linked only when the Owner accepts |
 
 ## Phases
 
@@ -40,7 +47,7 @@ Settings › Plan & Usage (`docs/billing/README.md`), and the two never share a 
 | 1 Stripe and getting paid | Connect the company's Stripe account; invoices with deposits and partial payments; branded pay page; Stripe webhooks; payments recorded by hand; customer statements; refunds and credits behind a confirmation; recovery from unclear Stripe answers | **Built** |
 | 2 Collections with Selestial | Invoices and reminders to customers by email or text through the shared sending rules; Selestial drafts on a schedule; the Owner edits and approves each, or Send all; "Ready for you" queue; Chat tools and invoice context | **Built** |
 | 3 Team Pay | Fixed, hourly, % share and % tiers; check-out and corrected hours; tips; Calculated → Needs review → Approved → Payment started → Paid; cleaner statements | **Built** |
-| 4 Expenses | Receipt capture and extraction to confirm, categories and rules, duplicates, upcoming bills, links to jobs | |
+| 4 Expenses | 4a: receipts read into drafts, manual entry, bank/card CSV import, categories, the Owner's rules, possible repeats, visit links, paid personally and owed back. 4b: bills and reminders, cleaner reimbursements through the portal and Team Pay, Gmail receipts label | **4a built** |
 | 5 Profitability | Estimated vs actual per job, service, customer, property; missing costs shown; margin vs markup; scenarios; "Review pricing" draft into Services & Pricing | |
 | 6 Integrations | CSV export, QuickBooks Online sync, Stripe payouts to cleaners if the company is eligible | |
 | 7 Final checks | Permissions, desktop and phone review, keyboard, tests and build | |
@@ -145,6 +152,32 @@ job completed ──► syncJobEarnings (on opening Team Pay, every 15 minutes, 
 - **Overview** shows team pay to review, approved-not-paid and paid in the period, and "Needs your
   attention" points to pay waiting for review, approved pay unpaid after two days, payments started and not
   confirmed after three days, and cleaners with no pay set.
+
+## Expenses (phase 4a)
+
+```
+snap / upload ──► expenseReceipts (file kept; same file twice is noticed by its fingerprint)
+                     │ first bytes checked: only a photo or PDF is sent, once, to the photo-understanding model
+                     ▼
+                  read: vendor, date, total, tax, card, each marked clear or unclear (nothing guessed)
+                     │ fills only what the Owner hasn't typed
+                     ▼
+type by hand ──►  expenses: To review ──(Owner records)──► Recorded ──► Void (with a reason)
+CSV import  ──►      │  · category: the Owner's rule, else a suggestion (how this vendor was filed before, or the receipt)
+                     │  · visit: suggested only when it was the only visit that day
+                     │  · possible repeat: same amount within 3 days, same or unknown vendor; never merged
+                     └─ a rule marked "file on its own" records it only when everything it needs is clear
+```
+
+- **Spent** counts recorded expenses by the day they were paid. Drafts never count. Stripe fees stay on each
+  payment and cleaner pay in Team Pay, so neither is entered as an expense.
+- **Statement rows** that match an expense already added (same amount within 3 days) are tied to it, not
+  added again; money in is skipped; each row has its own identity, so importing the same file twice adds nothing.
+- **Paid personally** expenses are owed back to the Owner until marked paid back.
+- **Receipt reading** uses the same Claude model as Quality's photo review and is recorded as AI usage
+  (`receipt_read`). It isn't counted against the Selestial plan yet. Without a model key, receipts are
+  kept and wait for the Owner to type the details.
+- Chat: `list_expenses` (read only) for a period or category, with what waits and what's owed back.
 
 ## Setup
 

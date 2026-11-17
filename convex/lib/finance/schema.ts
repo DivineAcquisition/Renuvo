@@ -77,6 +77,48 @@ export const TEAM_PAY_METHODS = ["zelle", "venmo", "cash", "check", "bank_transf
 export type TeamPayMethod = (typeof TEAM_PAY_METHODS)[number];
 export const teamPayMethodValidator = literals(TEAM_PAY_METHODS);
 
+/**
+ * An expense, as stored. "to_review" is a draft Selestial prepared (from a receipt, a statement row or an
+ * unfinished manual entry) that waits for the Owner; "recorded" is in the books, put there by the Owner or
+ * by one of the Owner's own rules; "void" was set aside with a reason. Nothing is deleted.
+ */
+export const EXPENSE_STATUSES = ["to_review", "recorded", "void"] as const;
+export type ExpenseStatus = (typeof EXPENSE_STATUSES)[number];
+export const expenseStatusValidator = literals(EXPENSE_STATUSES);
+
+/** Where an expense came from. */
+export const EXPENSE_SOURCES = ["receipt", "manual", "statement", "gmail", "cleaner"] as const;
+export const expenseSourceValidator = literals(EXPENSE_SOURCES);
+
+/** What paid for it. "personal" means the Owner paid out of pocket and is owed it back. */
+export const PAID_WITH = ["business_card", "bank", "cash", "personal", "other"] as const;
+export type PaidWith = (typeof PAID_WITH)[number];
+export const paidWithValidator = literals(PAID_WITH);
+
+/** What an expense is for: one visit, one property, one service, or the business in general. */
+export const expenseLinkValidator = v.union(
+  v.object({ kind: v.literal("job"), jobId: v.id("jobs") }),
+  v.object({ kind: v.literal("property"), propertyId: v.id("properties") }),
+  v.object({ kind: v.literal("service"), serviceKey: v.string() }),
+  v.object({ kind: v.literal("overhead") }),
+);
+
+/** A category the company files expenses under. Job costs can be linked to a visit; overhead can't. */
+export const expenseCategoryValidator = v.object({
+  id: v.string(),
+  name: v.string(),
+  kind: v.union(v.literal("job"), v.literal("overhead")),
+  /** The Services & Pricing estimate this compares to in Profitability. */
+  costKey: v.optional(v.union(v.literal("supplies"), v.literal("travel"), v.literal("equipment"), v.literal("laundry"))),
+  /** The QuickBooks account it goes to when that sync is built. */
+  accountName: v.optional(v.string()),
+  hidden: v.optional(v.boolean()),
+});
+
+/** One field read from a receipt: the value, and whether it could be read clearly. */
+const readNumber = v.object({ value: v.union(v.number(), v.null()), clear: v.boolean() });
+const readText = v.object({ value: v.union(v.string(), v.null()), clear: v.boolean() });
+
 export const STRIPE_ACCOUNT_STATUSES = ["onboarding", "active", "restricted", "disconnected"] as const;
 export type StripeAccountStatus = (typeof STRIPE_ACCOUNT_STATUSES)[number];
 export const stripeAccountStatusValidator = literals(STRIPE_ACCOUNT_STATUSES);
@@ -139,6 +181,8 @@ export const financeTables = {
     replyTo: v.optional(v.string()),
     /** Customers may add a tip on the pay page, all of it for the job's cleaners. Absent means on. */
     tipsOn: v.optional(v.boolean()),
+    /** The categories expenses are filed under. Absent means the cleaning-business set in code. */
+    expenseCategories: v.optional(v.array(expenseCategoryValidator)),
     /** The next number to give an invoice when it is issued. Drafts have no number. */
     nextInvoiceNumber: v.number(),
     invoicePrefix: v.string(),
@@ -495,6 +539,144 @@ export const financeTables = {
    * An amount the customer no longer owes on an issued invoice, with the reason. No money moves. A
    * credit given by mistake is reversed with a reason, never removed.
    */
+  /**
+   * The company's expenses. Amounts are what was paid, tax included, in whole cents. A field Selestial read
+   * from a receipt is only a suggestion until the Owner records the expense or one of their rules files it.
+   */
+  expenses: defineTable({
+    companyId: v.id("companies"),
+    status: expenseStatusValidator,
+    source: expenseSourceValidator,
+    vendor: v.optional(v.string()),
+    /** The vendor in a form that matches across spellings ("home depot"), for rules, history and duplicates. */
+    vendorKey: v.optional(v.string()),
+    /** The calendar day it was paid, on the company's clock. Absent until known. */
+    spentOn: v.optional(v.string()),
+    /** What was paid, tax included. Absent until known; never guessed as zero. */
+    amountCents: v.optional(v.number()),
+    /** Sales tax shown on the receipt, when there is one. */
+    taxCents: v.optional(v.number()),
+    description: v.optional(v.string()),
+    categoryId: v.optional(v.string()),
+    /** Who chose the category: a person, or one of the Owner's rules. */
+    categoryBy: v.optional(v.union(v.literal("person"), v.literal("rule"))),
+    /** Selestial's suggestion, kept apart until a person accepts it or a rule covers it. */
+    suggestion: v.optional(v.object({ categoryId: v.string(), why: v.string(), from: v.union(v.literal("history"), v.literal("receipt")) })),
+    link: v.optional(expenseLinkValidator),
+    /** The linked visit, kept beside `link` so a visit's costs can be found by index. */
+    jobId: v.optional(v.id("jobs")),
+    jobSuggestion: v.optional(v.object({ jobId: v.id("jobs"), why: v.string() })),
+    paidWith: v.optional(paidWithValidator),
+    /** "Card ending 4242", "Chase checking". Plain words only. */
+    paidWithNote: v.optional(v.string()),
+    /** For an expense paid personally: when the business paid the Owner back. */
+    repaid: v.optional(v.object({ on: v.string(), at: v.number(), by: v.id("members") })),
+    receiptId: v.optional(v.id("expenseReceipts")),
+    importId: v.optional(v.id("expenseImports")),
+    /** One statement row's identity, so importing the same file twice adds nothing twice. */
+    importKey: v.optional(v.string()),
+    /** The statement row this expense was matched to, as the bank wrote it. */
+    statementLine: v.optional(v.object({ description: v.string(), amountCents: v.number(), on: v.string(), importId: v.id("expenseImports") })),
+    /** Fields from the receipt that couldn't be read clearly. The Owner checks these before recording. */
+    unclear: v.optional(v.array(v.string())),
+    /** A recorded expense this one may repeat, and whether the Owner said it isn't a repeat. */
+    duplicateOf: v.optional(v.id("expenses")),
+    duplicateCleared: v.optional(v.boolean()),
+    /** The Owner's rule that filed it, when one did. */
+    ruleId: v.optional(v.id("expenseRules")),
+    recordedAt: v.optional(v.number()),
+    recordedBy: v.optional(v.union(v.object({ kind: v.literal("member"), memberId: v.id("members") }), v.object({ kind: v.literal("rule"), ruleId: v.id("expenseRules") }))),
+    voided: v.optional(v.object({ at: v.number(), by: v.id("members"), reason: v.string() })),
+    /** A browser's key for one "add", so a repeated click adds once. */
+    clientKey: v.optional(v.string()),
+    revision: v.number(),
+    createdBy: v.optional(v.id("members")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company_status_spent", ["companyId", "status", "spentOn"])
+    .index("by_company_spent", ["companyId", "spentOn"])
+    .index("by_company_amount", ["companyId", "amountCents"])
+    .index("by_company_vendor", ["companyId", "vendorKey"])
+    .index("by_company_job", ["companyId", "jobId"])
+    .index("by_company_import_key", ["companyId", "importKey"])
+    .index("by_company_receipt", ["companyId", "receiptId"])
+    .index("by_company_clientKey", ["companyId", "clientKey"]),
+
+  /**
+   * A receipt file: a photo or PDF the Owner uploaded. Selestial reads it once and keeps what it read
+   * beside the file; the expense holds what the Owner accepted. The file is never changed.
+   */
+  expenseReceipts: defineTable({
+    companyId: v.id("companies"),
+    storageId: v.id("_storage"),
+    name: v.string(),
+    contentType: v.string(),
+    size: v.number(),
+    /** The file's fingerprint, so the same receipt uploaded twice is noticed. */
+    sha256: v.optional(v.string()),
+    source: v.union(v.literal("upload"), v.literal("gmail"), v.literal("cleaner")),
+    uploadedBy: v.optional(v.id("members")),
+    reading: v.object({
+      state: v.union(v.literal("pending"), v.literal("read"), v.literal("failed"), v.literal("not_available"), v.literal("not_a_receipt")),
+      note: v.optional(v.string()),
+      at: v.optional(v.number()),
+      fields: v.optional(
+        v.object({
+          vendor: readText,
+          date: readText,
+          totalCents: readNumber,
+          taxCents: readNumber,
+          paidWith: readText,
+          items: v.optional(v.string()),
+          categoryName: v.optional(v.string()),
+          categoryWhy: v.optional(v.string()),
+        }),
+      ),
+    }),
+    expenseId: v.optional(v.id("expenses")),
+    createdAt: v.number(),
+  })
+    .index("by_company_sha", ["companyId", "sha256"])
+    .index("by_storage", ["storageId"]),
+
+  /**
+   * The Owner's own filing rules: "anything from Home Depot is Supplies". A rule that auto-files records a
+   * matching expense only when its vendor, date and amount were read clearly and it isn't a possible repeat;
+   * otherwise the rule's category is shown as a suggestion.
+   */
+  expenseRules: defineTable({
+    companyId: v.id("companies"),
+    /** Matched against the vendor's normalized name: "home depot" matches "The Home Depot #4521". */
+    vendorContains: v.string(),
+    categoryId: v.string(),
+    paidWith: v.optional(paidWithValidator),
+    autoFile: v.boolean(),
+    active: v.boolean(),
+    matches: v.number(),
+    lastMatchedAt: v.optional(v.number()),
+    createdBy: v.id("members"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_company", ["companyId"]),
+
+  /** One bank or card statement brought in from a CSV file. The rows become expenses or match existing ones. */
+  expenseImports: defineTable({
+    companyId: v.id("companies"),
+    name: v.string(),
+    paidWith: paidWithValidator,
+    paidWithNote: v.optional(v.string()),
+    rows: v.number(),
+    added: v.number(),
+    matched: v.number(),
+    skipped: v.number(),
+    clientKey: v.string(),
+    createdBy: v.id("members"),
+    createdAt: v.number(),
+  })
+    .index("by_company_created", ["companyId", "createdAt"])
+    .index("by_company_clientKey", ["companyId", "clientKey"]),
+
   invoiceCredits: defineTable({
     companyId: v.id("companies"),
     invoiceId: v.id("invoices"),

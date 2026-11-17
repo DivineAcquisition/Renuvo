@@ -188,7 +188,7 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     path: `${APP_ROOT}/finance`,
     availability: LIVE,
     minimumRole: "owner",
-    accessNote: "The Owner only, by the owner's decision on November 15, 2026. Invoices, payments, credits, refunds and Team Pay are built; Expenses and Profitability are shown as not built yet.",
+    accessNote: "The Owner only, by the owner's decision on November 15, 2026. Invoices, payments, credits, refunds, Team Pay and Expenses are built; Profitability is shown as not built yet.",
   },
   {
     id: "reports",
@@ -247,7 +247,7 @@ export const SERVICES_PAGES: readonly { path: string; label: string; purpose: st
 
 /** Pages inside Finance, reached from it. They have no sidebar entry of their own. */
 export const FINANCE_PAGES: readonly { path: string; label: string; purpose: string }[] = [
-  { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account, its invoice settings (tax, terms, numbering), pay tiers and tips." },
+  { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account, its invoice settings (tax, terms, numbering), pay tiers, tips and expense categories." },
 ];
 
 /** Pages inside Cleaners. They have no sidebar entry of their own: the directory links to them. */

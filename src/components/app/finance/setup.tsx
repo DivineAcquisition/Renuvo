@@ -69,6 +69,9 @@ function Setup() {
           <div className="lg:col-span-2">
             <TeamPaySettings data={data} />
           </div>
+          <div className="lg:col-span-2">
+            <ExpenseCategories data={data} />
+          </div>
         </div>
       )}
     </>
@@ -420,6 +423,65 @@ function TeamPaySettings({ data }: { data: Settings }) {
           ) : null}
           <Button type="submit" variant="default" disabled={busy || Boolean(bad)}>
             Save team pay
+          </Button>
+        </div>
+      </form>
+    </Section>
+  );
+}
+
+/** The categories expenses are filed under: rename, add, choose job cost or overhead, hide. A used category is hidden, never removed. */
+function ExpenseCategories({ data }: { data: Settings }) {
+  const { companyId } = useCompany();
+  const save = useMutation(api.expenses.saveCategories);
+  const { busy, error, run } = useRun();
+  const [rows, setRows] = useState(() => data.settings.expenseCategories.map((c) => ({ ...c, hidden: Boolean(c.hidden) })));
+  const [saved, setSaved] = useState(false);
+  const change = (i: number, patch: Partial<(typeof rows)[number]>) => (setRows((list) => list.map((r, j) => (j === i ? { ...r, ...patch } : r))), setSaved(false));
+  const bad = rows.some((r) => !r.name.trim());
+  return (
+    <Section title="Expense categories" description="Job costs can be linked to a visit and compared with Services & Pricing's estimates; overhead is the cost of running the business">
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (bad) return;
+          void run(async () => {
+            await save({ companyId, categories: rows.map((r) => ({ id: r.id, name: r.name, kind: r.kind, costKey: r.costKey, accountName: r.accountName, hidden: r.hidden || undefined })) });
+            setSaved(true);
+          });
+        }}
+      >
+        <ul className="grid gap-2 lg:grid-cols-2 lg:gap-x-6">
+          {rows.map((row, i) => (
+            <li key={row.id || `new-${i}`} className={cn("grid grid-cols-[minmax(0,1fr)_8.5rem_auto] items-center gap-2", row.hidden && "opacity-60")}>
+              <TextInput aria-label="Category name" value={row.name} maxLength={40} onChange={(e) => change(i, { name: e.target.value })} />
+              <select aria-label={`${row.name || "Category"} kind`} value={row.kind} onChange={(e) => change(i, { kind: e.target.value as "job" | "overhead" })} className="h-10 rounded-lg border border-border bg-card px-2 text-sm text-strong sm:h-9">
+                <option value="job">Job cost</option>
+                <option value="overhead">Overhead</option>
+              </select>
+              <Button size="xs" variant="ghost" onClick={() => change(i, { hidden: !row.hidden })}>
+                {row.hidden ? "Show" : "Hide"}
+              </Button>
+            </li>
+          ))}
+        </ul>
+        {rows.length < 60 ? (
+          <Button size="sm" variant="ghost" className="w-fit" onClick={() => setRows((list) => [...list, { id: "", name: "", kind: "overhead" as const, hidden: false }])}>
+            <Plus aria-hidden />
+            Add a category
+          </Button>
+        ) : null}
+        <p className="text-xs text-muted-foreground">Hidden categories stay on the expenses already filed under them. Each category maps to a QuickBooks account for when that sync is built.</p>
+        <FormError message={error ?? (bad ? "Give each category a name." : null)} />
+        <div className="flex items-center justify-end gap-3">
+          {saved ? (
+            <span role="status" className="inline-flex items-center gap-1 text-sm text-success-foreground">
+              <CheckCircle2 className="size-4" aria-hidden /> Saved
+            </span>
+          ) : null}
+          <Button type="submit" variant="default" disabled={busy || bad}>
+            Save categories
           </Button>
         </div>
       </form>

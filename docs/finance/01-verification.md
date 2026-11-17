@@ -204,3 +204,52 @@ With both merges: 74 test files, 843 passed, 19 skipped; typecheck, lint and bui
 - Statement links sent by real text or email (sending uses the shared messaging code, tested on its own).
 - Stripe payouts to cleaners: not built; payments are made outside Selestial and recorded (Phase 6).
 
+# Phase 4a: Expenses
+
+## Tests
+
+`convex/expenses.test.ts` (12 tests), with a stand-in for the receipt reader:
+
+- A receipt is read into a draft that waits; the category is only suggested; recording several accepts the
+  suggestion only as part of that call. The reading is recorded as AI usage.
+- An unclear amount is marked and keeps it out of "record ready"; the same file twice is noticed; a file
+  that isn't a photo, though it says so, is never sent; with reading unavailable the receipt is still kept.
+- Rules: a clear, complete receipt is filed by the Owner's rule; an unclear one or a possible repeat is not.
+- By hand: recorded when complete; a possible repeat waits until the Owner says it isn't one; a stale
+  revision is refused; one click adds once; amounts, dates, categories and overhead-vs-visit are checked.
+- Paid personally: owed back until marked paid back; can't be voided after.
+- Visits: the only visit that day is suggested, linked only when accepted; none for overhead.
+- Statement import: new rows to review (or filed by rule), rows matched to receipts, money in skipped,
+  nothing added twice.
+- Categories renamed and added; a removed one is hidden so past expenses keep their meaning. Owner only.
+- Overview: spending, review, possible repeats and money owed back after two weeks.
+
+`src/lib/app/expenses.test.ts` (3 tests): statement dates and amounts as banks write them, column and sign
+guessing, debit/credit columns.
+
+```
+npm test            # 76 files, 858 passed, 19 skipped
+npm run typecheck   # passes
+npx eslint .        # 0 errors
+npx next build      # passes
+```
+
+## In a real browser
+
+Local backend, labelled sample data, including a sample receipt image marked "SAMPLE RECEIPT · LOCAL
+PREVIEW". At 1440 and 390 wide with no sideways scrolling: the Expenses tab, the receipt drawer (receipt
+beside its fields, suggestions to accept), a possible repeat, record-ready, statement import, rules, the
+Overview with expenses, and categories in Payments setup. Driven by clicking: accept the suggested
+category and visit, choose "paid with", tick "Always file", record; then import a CSV (2 added, 2 matched,
+1 filed by rule, 1 skipped). Fixed from looking: phone actions, receipt photo height on a phone, dates
+written as 2026-11-14, a repeat warned about twice, the card read from a receipt hidden until "paid with"
+was chosen, cut-off import options.
+
+Screenshots: `docs/screenshots/finance/25`–`33`.
+
+## Not verified
+
+- Reading a real receipt with the live model (no key here; the reader was a stand-in in tests and the
+  sample was seeded as read).
+- HEIC photos on browsers that can't decode them: they are refused with a message rather than converted.
+

@@ -55,7 +55,7 @@ export const FINANCE_PATH = "/app/finance";
 export const FINANCE_TABS = [
   { id: "overview", label: "Overview", built: true },
   { id: "invoices", label: "Invoices & Payments", built: true },
-  { id: "expenses", label: "Expenses", built: false },
+  { id: "expenses", label: "Expenses", built: true },
   { id: "team-pay", label: "Team Pay", built: true },
   { id: "profitability", label: "Profitability", built: false },
 ] as const;

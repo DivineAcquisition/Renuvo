@@ -11,7 +11,7 @@ import { CAPABILITIES, PROVIDERS } from "./registry";
 export const capabilityValidator = literals(CAPABILITIES);
 export const providerValidator = literals(PROVIDERS);
 
-export const FEATURES = ["chat", "recruiter_mail", "photo_review", "video_review", "image_generate", "image_edit", "video_generate", "embed", "document_search"] as const;
+export const FEATURES = ["chat", "recruiter_mail", "photo_review", "video_review", "image_generate", "image_edit", "video_generate", "embed", "document_search", "receipt_read"] as const;
 export type Feature = (typeof FEATURES)[number];
 export const featureValidator = literals(FEATURES);
 

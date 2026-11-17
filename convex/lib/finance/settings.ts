@@ -1,10 +1,13 @@
 /**
  * The company's invoice settings and the calendar arithmetic Finance needs, on the company's clock.
  */
+import { v } from "convex/values";
+
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { QueryCtx, MutationCtx } from "../../_generated/server";
 import { addLocalDays, startOfLocalDay } from "../time";
 import { userError } from "../errors";
+import { DEFAULT_CATEGORIES, type ExpenseCategory } from "./categories";
 
 export const DEFAULTS = {
   paymentTermsDays: 7,
@@ -23,6 +26,7 @@ export type FinanceSettings = {
   remindersOn: boolean;
   replyTo: string | null;
   tipsOn: boolean;
+  expenseCategories: ExpenseCategory[];
   invoicePrefix: string;
   nextInvoiceNumber: number;
   revision: number;
@@ -46,6 +50,7 @@ export function settingsOf(row: Doc<"financeSettings"> | null): FinanceSettings 
     remindersOn: row?.remindersOn ?? true,
     replyTo: row?.replyTo ?? null,
     tipsOn: row?.tipsOn ?? true,
+    expenseCategories: row?.expenseCategories ?? DEFAULT_CATEGORIES,
     invoicePrefix: row?.invoicePrefix ?? DEFAULTS.invoicePrefix,
     nextInvoiceNumber: row?.nextInvoiceNumber ?? DEFAULTS.nextInvoiceNumber,
     revision: row?.revision ?? 0,
@@ -77,4 +82,29 @@ export function dueAfterDays(now: number, days: number, timezone: string): numbe
 
 export function invoiceNumber(settings: Pick<FinanceSettings, "invoicePrefix" | "nextInvoiceNumber">): string {
   return `${settings.invoicePrefix}-${settings.nextInvoiceNumber}`;
+}
+
+export const PERIODS = ["this_month", "last_month", "last_90_days", "this_year"] as const;
+export type Period = (typeof PERIODS)[number];
+export const periodValidator = v.union(...PERIODS.map((p) => v.literal(p)));
+
+/** A reporting period on the company's clock: from its first moment to now (or to its end, for a past month). */
+export function periodRange(period: Period, now: number, timezone: string): { from: number; to: number; label: string } {
+  const today = localDateKey(now, timezone);
+  const [y, m] = today.split("-").map(Number);
+  const startOf = (date: string) => startOfLocalDay(endOfLocalDate(date, timezone), timezone);
+  const monthKey = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}-01`;
+  const name = (year: number, month: number) => new Date(Date.UTC(year, month - 1, 15)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  switch (period) {
+    case "this_month":
+      return { from: startOf(monthKey(y, m)), to: now, label: name(y, m) };
+    case "last_month": {
+      const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
+      return { from: startOf(monthKey(py, pm)), to: startOf(monthKey(y, m)) - 1, label: name(py, pm) };
+    }
+    case "last_90_days":
+      return { from: addLocalDays(startOfLocalDay(now, timezone), -89, timezone), to: now, label: "Last 90 days" };
+    case "this_year":
+      return { from: startOf(`${y}-01-01`), to: now, label: String(y) };
+  }
 }

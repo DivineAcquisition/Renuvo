@@ -13,6 +13,7 @@ import { FINANCE_PATH, FINANCE_TABS, PERIODS, type FinanceTab, type PeriodId } f
 import { cn } from "@/lib/utils";
 
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { ExpenseSheet, ExpensesTab } from "./expenses";
 import { InvoiceSheet } from "./invoice-sheet";
 import { InvoicesTab } from "./invoices";
 import { ReviewSheet } from "./messages";
@@ -22,8 +23,8 @@ import { StatementSheet } from "./statement";
 import { CleanerSheet, EarningSheet, TeamPayTab } from "./team-pay";
 
 /**
- * Company → Finance. The cleaning company's own money: invoices, payments, balances and team pay now;
- * expenses and profitability as they are built. Not Selestial's subscription (Settings › Plan & Usage).
+ * Company → Finance. The cleaning company's own money: invoices, payments, balances, team pay and
+ * expenses now; profitability as it is built. Not Selestial's subscription (Settings › Plan & Usage).
  *
  * Which tab, filter and drawer are open lives in the address, so a link reopens the same view and the
  * browser's back button closes a drawer.
@@ -44,6 +45,7 @@ export type FinanceNav = {
   openStatement: (id: Id<"customers">) => void;
   showInvoices: (filter?: string) => void;
   showTeamPay: (filter?: string) => void;
+  showExpenses: (filter?: string) => void;
   newInvoice: () => void;
 };
 
@@ -78,6 +80,7 @@ export function useFinanceNav(): FinanceNav & { params: URLSearchParams; set: (c
     openStatement: (id) => set({ customer: id, invoice: null }, true),
     showInvoices: (filter) => set({ tab: "invoices", filter: filter ?? null, invoice: null }, true),
     showTeamPay: (filter) => set({ tab: "team-pay", filter: filter ?? null, invoice: null }, true),
+    showExpenses: (filter) => set({ tab: "expenses", filter: filter ?? null, invoice: null }, true),
     newInvoice: () => set({ new: "1" }, true),
   };
 }
@@ -100,6 +103,7 @@ function Finance() {
   const customerId = nav.params.get("customer") as Id<"customers"> | null;
   const earningId = nav.params.get("earning") as Id<"earnings"> | null;
   const cleanerId = nav.params.get("cleaner") as Id<"cleaners"> | null;
+  const expenseId = nav.params.get("expense") as Id<"expenses"> | null;
   return (
     <>
       <PageHeader
@@ -119,12 +123,13 @@ function Finance() {
         }
       />
       <Tabs active={nav.tab} onPick={(tab) => nav.set({ tab: tab === "overview" ? null : tab, filter: null }, true)} />
-      <div className="mt-5">{nav.tab === "invoices" ? <InvoicesTab nav={nav} /> : nav.tab === "team-pay" ? <TeamPayTab nav={nav} /> : <OverviewTab nav={nav} />}</div>
+      <div className="mt-5">{nav.tab === "invoices" ? <InvoicesTab nav={nav} /> : nav.tab === "team-pay" ? <TeamPayTab nav={nav} /> : nav.tab === "expenses" ? <ExpensesTab nav={nav} /> : <OverviewTab nav={nav} />}</div>
       <InvoiceSheet invoiceId={invoiceId} onClose={() => nav.set({ invoice: null })} onOpenStatement={nav.openStatement} />
       <StatementSheet customerId={invoiceId ? null : customerId} onClose={() => nav.set({ customer: null })} onOpenInvoice={nav.openInvoice} />
       <ReviewSheet open={nav.params.get("queue") === "1" && !invoiceId} onClose={() => nav.set({ queue: null })} onOpenInvoice={(id) => nav.set({ queue: null, invoice: id }, true)} />
       <EarningSheet earningId={earningId} onClose={() => nav.set({ earning: null })} onOpenCleaner={(id) => nav.set({ earning: null, cleaner: id }, true)} />
       <CleanerSheet cleanerId={earningId ? null : cleanerId} onClose={() => nav.set({ cleaner: null })} onOpenEarning={(id) => nav.set({ cleaner: null, earning: id }, true)} />
+      <ExpenseSheet expenseId={expenseId} onClose={() => nav.set({ expense: null })} />
       <NewInvoiceDialog open={nav.params.get("new") === "1"} onClose={() => nav.set({ new: null })} onCreated={(id) => nav.set({ new: null, invoice: id, tab: "invoices" })} />
     </>
   );

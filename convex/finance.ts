@@ -23,10 +23,10 @@ import { emptyTotals, invoiceRows, recompute, REFUND_COUNTS, REFUND_IN_FLIGHT } 
 import { cleanLines, dollars, LIMITS, linesTotal, percentLabel } from "./lib/finance/money";
 import { newPublicId, payLinksConfigured, payToken, payUrl } from "./lib/finance/payLinks";
 import { invoiceLineValidator, MANUAL_METHODS, paymentMethodValidator, type InvoiceLine, type PaymentMethod } from "./lib/finance/schema";
-import { dueAfterDays, endOfLocalDate, invoiceNumber, localDateKey, settingsOf, settingsRow } from "./lib/finance/settings";
+import { companyServices } from "./lib/finance/services";
+import { dueAfterDays, endOfLocalDate, invoiceNumber, localDateKey, periodRange, periodValidator, settingsOf, settingsRow } from "./lib/finance/settings";
 import { stripeConfig } from "./lib/finance/stripe";
 import { stripeState } from "./lib/finance/stripeState";
-import { businessSettingsOf } from "./lib/settings/business";
 import { addLocalDays, startOfLocalDay } from "./lib/time";
 
 type Ctx = (QueryCtx | MutationCtx) & MemberAccess;
@@ -172,6 +172,36 @@ async function teamPayWaiting(ctx: QueryCtx & { companyId: Id<"companies">; comp
   };
 }
 
+/** Expenses as the Overview needs them: the period's recorded spending, and what waits on the Owner. */
+async function expensesSummary(ctx: QueryCtx & { companyId: Id<"companies">; company: Doc<"companies"> }, now: number, range: { from: number; to: number }) {
+  const tz = ctx.company.timezone;
+  const waiting = await ctx.db
+    .query("expenses")
+    .withIndex("by_company_status_spent", (q) => q.eq("companyId", ctx.companyId).eq("status", "to_review"))
+    .take(500);
+  const inPeriod = await ctx.db
+    .query("expenses")
+    .withIndex("by_company_status_spent", (q) => q.eq("companyId", ctx.companyId).eq("status", "recorded").gte("spentOn", localDateKey(range.from, tz)).lte("spentOn", localDateKey(range.to, tz)))
+    .take(3000);
+  const personal = (
+    await ctx.db
+      .query("expenses")
+      .withIndex("by_company_status_spent", (q) => q.eq("companyId", ctx.companyId).eq("status", "recorded"))
+      .order("desc")
+      .take(3000)
+  ).filter((e) => e.paidWith === "personal" && !e.repaid);
+  return {
+    findings: { review: waiting, repeats: waiting.filter((e) => e.duplicateOf && !e.duplicateCleared), owedBack: personal.filter((e) => (e.recordedAt ?? e.createdAt) < now - 14 * DAY) },
+    metric: {
+      spentCents: inPeriod.reduce((s, e) => s + (e.amountCents ?? 0), 0),
+      spentCount: inPeriod.length,
+      reviewCount: waiting.length,
+      owedBackCents: personal.reduce((s, e) => s + (e.amountCents ?? 0), 0),
+      any: waiting.length + inPeriod.length + personal.length > 0,
+    },
+  };
+}
+
 async function uninvoicedJobs(ctx: QueryCtx, companyId: Id<"companies">, now: number) {
   const jobs = await ctx.db
     .query("jobs")
@@ -188,30 +218,6 @@ async function uninvoicedJobs(ctx: QueryCtx, companyId: Id<"companies">, now: nu
     if (!invoices.some((invoice) => invoice.status !== "void")) out.push(job);
   }
   return out;
-}
-
-const PERIODS = ["this_month", "last_month", "last_90_days", "this_year"] as const;
-type Period = (typeof PERIODS)[number];
-const periodValidator = v.union(...PERIODS.map((p) => v.literal(p)));
-
-function periodRange(period: Period, now: number, timezone: string): { from: number; to: number; label: string } {
-  const today = localDateKey(now, timezone);
-  const [y, m] = today.split("-").map(Number);
-  const startOf = (date: string) => startOfLocalDay(endOfLocalDate(date, timezone), timezone);
-  const monthKey = (year: number, month: number) => `${year}-${String(month).padStart(2, "0")}-01`;
-  const name = (year: number, month: number) => new Date(Date.UTC(year, month - 1, 15)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
-  switch (period) {
-    case "this_month":
-      return { from: startOf(monthKey(y, m)), to: now, label: name(y, m) };
-    case "last_month": {
-      const [py, pm] = m === 1 ? [y - 1, 12] : [y, m - 1];
-      return { from: startOf(monthKey(py, pm)), to: startOf(monthKey(y, m)) - 1, label: name(py, pm) };
-    }
-    case "last_90_days":
-      return { from: addLocalDays(startOfLocalDay(now, timezone), -89, timezone), to: now, label: "Last 90 days" };
-    case "this_year":
-      return { from: startOf(`${y}-01-01`), to: now, label: String(y) };
-  }
 }
 
 /** The overview: where the money stands, what changed in the period and what needs the Owner. */
@@ -309,7 +315,9 @@ export const overview = ownerQuery({
       if (row.stage === "overdue_14") scheduleDone.add(row.invoiceId);
     }
     const teamPay = await teamPayWaiting(ctx, now, range);
+    const expenses = await expensesSummary(ctx, now, range);
     const found = findings({
+      expenses: expenses.findings,
       sentByMessage,
       scheduleDone,
       teamPay: teamPay.findings,
@@ -343,6 +351,7 @@ export const overview = ownerQuery({
       trend,
       upcoming,
       teamPay: teamPay.metric,
+      expenses: expenses.metric,
       findings: found,
       activity: activityRows,
       stripe,
@@ -352,7 +361,7 @@ export const overview = ownerQuery({
   },
 });
 
-const FINANCE_EVENT = /^(invoice|payment|refund|credit|stripe|finance_settings|collection|team_payment|tip)\./;
+const FINANCE_EVENT = /^(?:(?:invoice|payment|refund|credit|stripe|finance_settings|collection|team_payment|tip)\.|expense\.(?:recorded|filed_by_rule|edited|voided|repaid|imported)$)/;
 
 const EVENT_WORDS: Record<string, string> = {
   "invoice.created": "Draft invoice created",
@@ -385,6 +394,12 @@ const EVENT_WORDS: Record<string, string> = {
   "team_payment.canceled": "Team payment canceled",
   "tip.received": "Tip received on the pay page",
   "tip.recorded": "Tip recorded",
+  "expense.recorded": "Expense recorded",
+  "expense.filed_by_rule": "Expense filed by your rule",
+  "expense.edited": "Expense changed",
+  "expense.voided": "Expense voided",
+  "expense.repaid": "Paid back for a personal expense",
+  "expense.imported": "Statement imported",
   "collection.drafted": "Selestial prepared a message",
   "collection.approved": "Message approved and sent",
   "collection.skipped": "Prepared message skipped",
@@ -406,6 +421,10 @@ async function activityRow(ctx: QueryCtx, event: Doc<"events">) {
     invoiceId = row?.invoiceId ?? null;
   }
   let cleaner: string | null = null;
+  if (event.subject.table === "expenses") {
+    const expense = await ctx.db.get(event.subject.id as Id<"expenses">);
+    cleaner = expense?.vendor ?? null;
+  }
   if (event.subject.table === "teamPayments") {
     const payment = await ctx.db.get(event.subject.id as Id<"teamPayments">);
     cleaner = payment ? ((await ctx.db.get(payment.cleanerId))?.name ?? null) : null;
@@ -625,20 +644,6 @@ export const invoiceSources = ownerQuery({
     };
   },
 });
-
-/**
- * The company's active services, by the id its visits carry (`serviceSnapshot.serviceId`): the Services &
- * Pricing catalog's key once the company moved to it (a moved service keeps its Settings id as its key),
- * otherwise Settings' own list. Taxed services are chosen from these.
- */
-async function companyServices(ctx: QueryCtx & { companyId: Id<"companies">; company: Doc<"companies"> }): Promise<{ id: string; name: string }[]> {
-  if (ctx.company.servicesMigratedAt === undefined) return businessSettingsOf(ctx.company).services.filter((s) => s.status === "active").map((s) => ({ id: s.id, name: s.name }));
-  const rows = await ctx.db
-    .query("services")
-    .withIndex("by_company_key", (q) => q.eq("companyId", ctx.companyId))
-    .take(500);
-  return rows.filter((s) => s.status === "active" && s.publishedVersion !== undefined).map((s) => ({ id: s.key, name: s.name }));
-}
 
 export const settings = ownerQuery({
   args: {},

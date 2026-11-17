@@ -123,6 +123,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "teamPayments", index: "by_company_cleaner" },
   { table: "tips", index: "by_company_job" },
   { table: "statementLinks", index: "by_company_cleaner", omit: ["publicId"], why: "Half of a cleaner's statement link." },
+  { table: "expenses", index: "by_company_spent" },
+  { table: "expenseReceipts", index: "by_company_sha", omit: ["storageId"], why: "An internal file reference; the receipt files themselves are not in the export. What was read from each is." },
+  { table: "expenseRules", index: "by_company" },
+  { table: "expenseImports", index: "by_company_created" },
   // Cleaners (convex/lib/cleaners/schema.ts). The export is the Owner's, so pay and personnel records are included.
   { table: "subcontractors", index: "by_company_status" },
   { table: "workerAffiliations", index: "by_company_cleaner" },

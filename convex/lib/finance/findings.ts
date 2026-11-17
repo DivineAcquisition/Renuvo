@@ -4,6 +4,7 @@
  * pointer: acting on it is always a separate, visible step.
  */
 import type { Doc, Id } from "../../_generated/dataModel";
+import { shortDate } from "./expenses";
 import { amountRequested, invoiceState } from "./invoiceState";
 
 export type FindingRecord =
@@ -11,7 +12,8 @@ export type FindingRecord =
   | { kind: "job"; id: Id<"jobs">; label: string; detail: string; amountCents: number | null }
   | { kind: "payment"; id: Id<"payments">; invoiceId: Id<"invoices">; label: string; detail: string; amountCents: number }
   | { kind: "earning"; id: Id<"earnings">; label: string; detail: string; amountCents: number | null }
-  | { kind: "cleaner"; id: Id<"cleaners">; label: string; detail: string; amountCents: number | null };
+  | { kind: "cleaner"; id: Id<"cleaners">; label: string; detail: string; amountCents: number | null }
+  | { kind: "expense"; id: Id<"expenses">; label: string; detail: string; amountCents: number | null };
 
 export type Finding = {
   id: string;
@@ -25,7 +27,7 @@ export type Finding = {
   recommend: string;
   records: FindingRecord[];
   /** The one action the card offers. Every one opens a real record or a real form. */
-  action: { label: string; kind: "open_invoice" | "invoice_jobs" | "open_setup" | "filter_invoices" | "team_pay"; filter?: "overdue" | "drafts" | "review" | "approved" | "started" };
+  action: { label: string; kind: "open_invoice" | "invoice_jobs" | "open_setup" | "filter_invoices" | "team_pay" | "expenses"; filter?: "overdue" | "drafts" | "review" | "approved" | "started" | "owed_back" };
   totalCents: number | null;
 };
 
@@ -54,6 +56,13 @@ export type FindingInput = {
     started: { payment: Doc<"teamPayments">; cleaner: string }[];
     /** Cleaners with completed jobs and no pay method. */
     noPay: { cleanerId: Id<"cleaners">; cleaner: string; jobs: number }[];
+  };
+  /** Expenses waiting on the Owner. Absent when they weren't read. */
+  expenses?: {
+    review: Doc<"expenses">[];
+    repeats: Doc<"expenses">[];
+    /** Paid personally, recorded more than 14 days ago, and not paid back. */
+    owedBack: Doc<"expenses">[];
   };
 };
 
@@ -274,6 +283,52 @@ export function findings(input: FindingInput): Finding[] {
       records: team.noPay.slice(0, 5).map((row) => ({ kind: "cleaner", id: row.cleanerId, label: row.cleaner, detail: plural(row.jobs, "job"), amountCents: null })),
       action: { label: "Review team pay", kind: "team_pay", filter: "review" },
       totalCents: null,
+    });
+  }
+
+  const ex = input.expenses;
+  const expenseRecord = (e: Doc<"expenses">) => ({ kind: "expense" as const, id: e._id, label: e.vendor ?? (e.source === "receipt" ? "A receipt being read" : "An expense"), detail: e.spentOn ? shortDate(e.spentOn) : "No date yet", amountCents: e.amountCents ?? null });
+  if (ex?.repeats.length) {
+    out.push({
+      id: "expense_repeats",
+      tone: "warning",
+      state: "needs_attention",
+      title: `${plural(ex.repeats.length, "possible repeat expense")}`,
+      noticed: `${plural(ex.repeats.length, "expense")} waiting for review ${ex.repeats.length === 1 ? "has" : "have"} the same amount within three days of one already added.`,
+      recommend: "Open each one: void it if it's the same purchase, or say it isn't a repeat and record it.",
+      records: ex.repeats.slice(0, 5).map(expenseRecord),
+      action: { label: "Review expenses", kind: "expenses", filter: "review" },
+      totalCents: ex.repeats.reduce((s, e) => s + (e.amountCents ?? 0), 0),
+    });
+  }
+  const plainReview = ex?.review.filter((e) => !ex.repeats.includes(e)) ?? [];
+  if (ex && plainReview.length) {
+    const known = plainReview.filter((e) => e.amountCents !== undefined);
+    const suggested = plainReview.filter((e) => !e.categoryId && e.suggestion).length;
+    out.push({
+      id: "expenses_review",
+      tone: "info",
+      state: "needs_your_approval",
+      title: `${plural(plainReview.length, "expense")} to review`,
+      noticed: `${money(known.reduce((s, e) => s + (e.amountCents ?? 0), 0))} from receipts and statement rows Selestial prepared${suggested ? `; ${plural(suggested, "has a category", "have a category")} suggested` : ""}${plainReview.length > known.length ? `; ${plural(plainReview.length - known.length, "has no amount", "have no amount")} yet` : ""}.`,
+      recommend: "Check each one and record it. Suggested categories are only suggestions until you accept them.",
+      records: plainReview.slice(0, 5).map(expenseRecord),
+      action: { label: "Review expenses", kind: "expenses", filter: "review" },
+      totalCents: known.reduce((s, e) => s + (e.amountCents ?? 0), 0),
+    });
+  }
+  if (ex?.owedBack.length) {
+    const total = ex.owedBack.reduce((s, e) => s + (e.amountCents ?? 0), 0);
+    out.push({
+      id: "owed_back",
+      tone: "info",
+      state: "needs_attention",
+      title: `${money(total)} owed back to you`,
+      noticed: `You paid ${plural(ex.owedBack.length, "expense")} personally more than two weeks ago, and the business hasn't paid you back yet as far as Selestial knows.`,
+      recommend: "Pay yourself back from the business account, then mark them paid back.",
+      records: ex.owedBack.slice(0, 5).map(expenseRecord),
+      action: { label: "See what's owed back", kind: "expenses", filter: "owed_back" },
+      totalCents: total,
     });
   }
 
