@@ -17,6 +17,7 @@ import { localParts, overlaps, type Span } from "../availability";
 import { companyFacts, readinessOf } from "../cleaners/records";
 import { exceptionSpan } from "../cleaners/schedule";
 import { assess, type CleanerFacts, type ExclusionCode } from "../dispatch/eligibility";
+import { requiredCrew } from "../dispatch/crew";
 import { heldSpans } from "../dispatch/facts";
 import { dispatchSettings } from "../dispatch/settings";
 import { businessSettingsOf, normalizePostalCode } from "../settings/business";
@@ -44,6 +45,8 @@ type Loaded = {
   cleaners: { doc: Doc<"cleaners">; windows: CleanerFacts["windows"]; timeOff: Span[]; held: Span[]; off: Span[]; extra: Span[] }[];
   blockers: (cleaner: Doc<"cleaners">, at: number) => string[];
   holds: Doc<"salesHolds">[];
+  /** Visits already booked that still need cleaners: the places nobody has been offered or accepted yet. */
+  unstaffed: { span: Span; places: number }[];
 };
 
 /** Reads once what any number of times can then be checked against: every ready cleaner's hours, time off and jobs, and the time already reserved. */
@@ -80,8 +83,24 @@ export async function loadCapacity(ctx: Ctx, company: Doc<"companies">, need: Pi
     .query("salesHolds")
     .withIndex("by_company_start", (q) => q.eq("companyId", company._id).gte("startsAt", range.startsAt - 24 * HOUR).lte("startsAt", range.endsAt))
     .take(300);
+  // A booked visit with no cleaner yet will need one of these same people. Counting only accepted work would let
+  // Sales sell a time that Dispatch has not staffed yet.
+  const jobs = await ctx.db
+    .query("jobs")
+    .withIndex("by_company_start", (q) => q.eq("companyId", company._id).gte("startsAt", range.startsAt - 24 * HOUR).lte("startsAt", range.endsAt))
+    .take(500);
+  const unstaffed: Loaded["unstaffed"] = [];
+  for (const job of jobs) {
+    if (job.status !== "scheduled") continue;
+    const assignments = await ctx.db
+      .query("assignments")
+      .withIndex("by_company_job", (q) => q.eq("companyId", company._id).eq("jobId", job._id))
+      .take(50);
+    const places = requiredCrew(job) - assignments.filter((row) => row.status === "offered" || row.status === "accepted").length;
+    if (places > 0) unstaffed.push({ span: { startsAt: job.startsAt, endsAt: job.endsAt }, places });
+  }
   const service = { name: need.serviceName, skills: need.skills };
-  return { company, cleaners: out, blockers: (cleaner, at) => readinessOf(cleaner, known, company, at, service).blockers.map((view) => view.label), holds };
+  return { company, cleaners: out, blockers: (cleaner, at) => readinessOf(cleaner, known, company, at, service).blockers.map((view) => view.label), holds, unstaffed };
 }
 
 const WHY: Partial<Record<ExclusionCode, (count: number) => string>> = {
@@ -145,7 +164,8 @@ export function assessSlot(loaded: Loaded, need: Need, span: Span, now: number, 
   }
   const padded = { startsAt: span.startsAt - buffer * MINUTE, endsAt: span.endsAt + buffer * MINUTE };
   const reserved = loaded.holds.filter((hold) => hold.status === "held" && hold.expiresAt > now && hold.opportunityId !== except.opportunityId && overlaps({ startsAt: hold.startsAt, endsAt: hold.endsAt }, padded)).reduce((sum, hold) => sum + hold.crew, 0);
-  const free = Math.max(0, eligible - reserved);
+  const promised = loaded.unstaffed.filter((row) => overlaps(row.span, padded)).reduce((sum, row) => sum + row.places, 0);
+  const free = Math.max(0, eligible - reserved - promised);
   if (free >= need.crew) return { ok: true, free, needed: need.crew, reasons: [], checkedAt: now };
   const reasons: string[] = [];
   if (loaded.cleaners.length === 0) reasons.push("No cleaner is marked ready for work, so no time can be confirmed.");
@@ -153,6 +173,7 @@ export function assessSlot(loaded: Loaded, need: Need, span: Span, now: number, 
     reasons.push(`${need.crew === 1 ? "A cleaner is" : `${need.crew} cleaners are`} needed and ${free} ${free === 1 ? "is" : "are"} free then.`);
     const why = [...counts.entries()].sort((a, b) => b[1] - a[1]).flatMap(([code, count]) => (WHY[code] ? [WHY[code]!(count)] : [])).slice(0, 3);
     if (why.length > 0) reasons.push(`Of the others: ${why.join("; ")}.`);
+    if (promised > 0) reasons.push(`${promised} ${promised === 1 ? "is" : "are"} needed for a visit that is booked then and not staffed yet.`);
     if (reserved > 0) reasons.push(`${reserved} ${reserved === 1 ? "is" : "are"} reserved for another prospect's booking.`);
   }
   return { ok: false, free, needed: need.crew, reasons, checkedAt: now };

@@ -108,7 +108,7 @@ export function readByRule(input: ReadInput): Reading {
     if (units) add({ key: "units", value: toNumber(units.value), excerpt: units.excerpt });
   }
   // A postal code: five digits standing alone, never part of a size or a phone number.
-  const postal = /(?:^|[^\d,.$])(\d{5})(?:-\d{4})?(?!\s*(?:sq|sf|square|m²)|[\d,])/i.exec(text);
+  const postal = /(?:^|[^\d,.$])(\d{5})(?:-\d{4})?(?!\s*(?:sq|sf|square|m²)|\d|,\d)/i.exec(text);
   if (postal) add({ key: "postalCode", value: postal[1], excerpt: clip(postal[0].replace(/^[^\d]/, "")) });
   for (const row of SCHEDULE_WORDS) {
     const match = row.pattern.exec(text);

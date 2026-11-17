@@ -113,7 +113,7 @@ export const begin = internalMutation({
 });
 
 export const apply = internalMutation({
-  args: { runId: v.id("salesRuns"), reading: v.optional(readingValidator), messageId: v.optional(v.id("salesMessages")), followUpId: v.optional(v.id("salesFollowUps")), route: v.boolean(), notes: v.array(v.string()) },
+  args: { runId: v.id("salesRuns"), reading: v.optional(readingValidator), messageId: v.optional(v.id("salesMessages")), followUpId: v.optional(v.id("salesFollowUps")), route: v.boolean(), notes: v.array(v.string()), reader: v.string() },
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run || run.status !== "running") return null;
@@ -122,6 +122,7 @@ export const apply = internalMutation({
     const message = args.messageId ? await ctx.db.get(args.messageId) : null;
     const output = await advance(ctx, company, run.opportunityId, { trigger: run.trigger, runId: run._id, reading: args.reading, messageRef: message?._id, messageText: message?.direction === "in" ? message.body : undefined, followUpId: args.followUpId, route: args.route });
     const steps = [...args.notes.map((text) => note("read_opportunity", "read", text)), ...output.steps];
+    await ctx.db.patch(run._id, { reader: args.reader });
     const fresh = (await ctx.db.get(run._id))!;
     if (args.route || output.drafts.length === 0) {
       await end(ctx, fresh, "done", output.result, steps);
@@ -214,7 +215,7 @@ export const run = internalAction({
         }
       }
       const useAi = model.name !== "rules" && read;
-      const applied = await ctx.runMutation(internal.salesAgent.apply, { runId: args.runId, reading, messageId: args.messageId, followUpId: args.followUpId, route: !useAi, notes });
+      const applied = await ctx.runMutation(internal.salesAgent.apply, { runId: args.runId, reading, messageId: args.messageId, followUpId: args.followUpId, route: !useAi, notes, reader: useAi ? model.name : "rules" });
       const wording: { actionId: Id<"salesActions">; text: string | null }[] = [];
       for (const draft of applied?.drafts ?? []) {
         let text: string | null = null;

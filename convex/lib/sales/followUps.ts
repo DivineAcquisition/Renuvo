@@ -14,7 +14,9 @@
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
+import { readProfile } from "../compliance/profile";
 import { recordEvent, type Actor } from "../events";
+import { quietUntil } from "../messaging/policy";
 import { currentQuote, isOpen } from "./opportunities";
 import type { FollowUpPurpose } from "./schema";
 import { salesSettings } from "./settings";
@@ -72,7 +74,11 @@ export async function planFollowUp(
   // A date the customer named is its own single reminder; the others follow the Owner's timing.
   const dated = input.purpose === "requested_date" || input.purpose === "deferred";
   if (!dated && input.attempt > hours.length) return null;
-  const dueAt = dated ? (input.at ?? now + 30 * 24 * HOUR) : now + hours[input.attempt - 1] * HOUR;
+  const wanted = dated ? (input.at ?? now + 30 * 24 * HOUR) : now + hours[input.attempt - 1] * HOUR;
+  // A reminder is Sales reaching out, not answering. It waits for the end of the company's quiet hours even when
+  // the company lets work messages through at night. The customer's own time zone is not known, so the company's is used.
+  const quiet = (await readProfile(ctx, company._id)).messaging.quietHours;
+  const dueAt = quiet ? (quietUntil(wanted, company.timezone, quiet) ?? wanted) : wanted;
   const key = `${opportunity._id}:${input.purpose}:${input.attempt}:${input.quoteVersion ?? ""}:${dated ? dueAt : (opportunity.lastInboundAt ?? 0)}`;
   const existing = await ctx.db
     .query("salesFollowUps")

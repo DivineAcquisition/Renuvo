@@ -38,11 +38,15 @@ export function known(facts: Fact[], key: string): boolean {
   return fact !== undefined && fact.status !== "unverified" && fact.value !== "";
 }
 
-/** Adds or replaces one fact. A confirmed fact is not overwritten by a weaker reading of the same thing. */
+/**
+ * Adds or replaces one fact. What a person at the company recorded is not overwritten by a reading of a
+ * message: the two are shown side by side and a person says which is right. A customer correcting what
+ * they themselves said earlier (on the form, or in an earlier message) simply updates it.
+ */
 export function withFact(facts: Fact[], next: Fact): { facts: Fact[]; changed: boolean; conflict: Fact | null } {
   const current = factOf(facts, next.key);
-  if (current && current.value === next.value && current.status === next.status) return { facts, changed: false, conflict: null };
-  if (current && current.status === "confirmed" && next.status !== "confirmed" && current.value !== next.value) return { facts, changed: false, conflict: current };
+  if (current && current.value === next.value && (current.status === next.status || current.status === "confirmed")) return { facts, changed: false, conflict: null };
+  if (current && current.source.kind === "member" && next.source.kind !== "member" && current.value !== next.value) return { facts, changed: false, conflict: current };
   return { facts: [...facts.filter((fact) => fact.key !== next.key), next].slice(-60), changed: true, conflict: current && current.value !== next.value ? current : null };
 }
 

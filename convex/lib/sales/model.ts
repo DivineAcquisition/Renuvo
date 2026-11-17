@@ -49,7 +49,7 @@ const mock: SalesModel = {
   name: "mock",
   async read(input) {
     mockSalesModel.calls += 1;
-    return mockSalesModel.read ? mockSalesModel.read(input) : readByRule(input);
+    return mockSalesModel.read ? mockSalesModel.read(input) : { ...readByRule(input), reader: "mock" };
   },
   async word(input) {
     return mockSalesModel.word ? mockSalesModel.word(input) : null;

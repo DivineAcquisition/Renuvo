@@ -53,7 +53,8 @@ export type RunInput = {
 
 export type RunOutput = { steps: RunStep[]; result: string; drafts: Id<"salesActions">[] };
 
-const PRICE_QUESTION = /\b(how much|price[sd]?|pricing|costs?|quotes?|estimates?|rates?|charge[sd]?|fees?)\b/i;
+/** Questions Sales answers by doing its job: what it costs, and whether the company takes this kind of work. */
+const PRICE_QUESTION = /\b(how much|price[sd]?|pricing|costs?|quotes?|estimates?|rates?|charge[sd]?|fees?|do you (clean|offer|do|provide|service|have)|can you (clean|do|help)|are you (taking|accepting))\b/i;
 /** A first name to greet by, or a neutral word when the record only has a number or an address for them. */
 const firstName = (name: string, fallback: string) => (/^[+\d\s().-]+$/.test(name.trim()) || name.includes("@") || !name.trim() ? fallback : name.trim().split(/\s+/)[0]);
 
@@ -177,7 +178,7 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
       const at = Number.isFinite(until) && until > Date.now() + DAY ? until : Date.now() + 30 * DAY;
       opportunity = await setStage(ctx, await fresh(), "deferred", SALES, { deferredUntil: at, note: input.messageText?.slice(0, 300) });
       const voice = await voiceOf(ctx, company, opportunity);
-      const planned = await planFollowUp(ctx, company, opportunity, { purpose: reading.date ? "requested_date" : "deferred", attempt: 1, reason: reading.date ? `${first} asked to be contacted on this date.` : `${first} asked for more time. One check-in, then it is yours to decide.`, preview: requestedDateMessage(name, voice, { service: opportunity.serviceKey ? ((await currentService())?.version.spec.name ?? null) : null }), at, actor: SALES });
+      const planned = await planFollowUp(ctx, company, opportunity, { purpose: reading.date ? "requested_date" : "deferred", attempt: 1, reason: reading.date ? `${first} asked to be contacted on this date.` : `${first} asked for more time. One check-in, then it is yours to decide.`, preview: requestedDateMessage(onRecord, voice, { service: opportunity.serviceKey ? ((await currentService())?.version.spec.name ?? null) : null }), at, actor: SALES });
       await setNext(ctx, opportunity, { what: `Check back with ${first} once`, by: "sales", dueAt: planned?.dueAt ?? at });
       step("defer_opportunity", "done", `${first} asked for more time. Deferred, with one check-in planned.`);
       return done("Deferred at the customer's request.");
@@ -241,7 +242,7 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
   }
   if (!service) {
     const options = (catalog.filter((row) => kindOfService(row.version.spec) === opportunity.kind).length ? catalog.filter((row) => kindOfService(row.version.spec) === opportunity.kind) : catalog).map((row) => row.version.spec.name);
-    await act({ kind: "question", channel, subject: `Your request to ${company.name}`, body: serviceQuestion(name, voice, options), summary: `Ask ${first} which service they want.`, reason: "The request does not say which service, and more than one could fit.", evidence: [{ label: "Request", detail: opportunity.inquiry.slice(0, 280) }], nextStep: "Once the service is known, Sales asks only what that service's price needs.", permission: REPLY_AND_QUOTE });
+    await act({ kind: "question", channel, subject: `Your request to ${company.name}`, body: serviceQuestion(onRecord, voice, options), summary: `Ask ${first} which service they want.`, reason: "The request does not say which service, and more than one could fit.", evidence: [{ label: "Request", detail: opportunity.inquiry.slice(0, 280) }], nextStep: "Once the service is known, Sales asks only what that service's price needs.", permission: REPLY_AND_QUOTE });
     return done("Asked which service is wanted.");
   }
   const spec = service.version.spec;
@@ -251,7 +252,7 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
   if (opportunity.stage === "deferred") {
     if (input.trigger !== "follow_up_due" || !followUp) return done("Deferred. Sales waits for the date or the customer.");
     opportunity = await setStage(ctx, opportunity, opportunity.firstResponseAt ? "qualifying" : "new", SALES);
-    await act({ kind: "follow_up", channel, subject: `Checking back from ${company.name}`, body: requestedDateMessage(name, voice, { service: spec.name }), followUpId: followUp._id, summary: `Check back with ${first}, as they asked.`, reason: followUp.reason, evidence: [{ label: "Planned", detail: PURPOSE_WORDS[followUp.purpose] }], nextStep: "If there is no answer, the opportunity goes to you. Sales does not keep chasing.", permission: FOLLOW_UP });
+    await act({ kind: "follow_up", channel, subject: `Checking back from ${company.name}`, body: requestedDateMessage(onRecord, voice, { service: spec.name }), followUpId: followUp._id, summary: `Check back with ${first}, as they asked.`, reason: followUp.reason, evidence: [{ label: "Planned", detail: PURPOSE_WORDS[followUp.purpose] }], nextStep: "If there is no answer, the opportunity goes to you. Sales does not keep chasing.", permission: FOLLOW_UP });
     return done("Checked back with the customer on the date they asked for.");
   }
 
@@ -280,10 +281,10 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
     const key = `booking:${theirs.map((item) => item.key).join("+")}`;
     const told = opportunity.asked.find((row) => row.key === key);
     if (theirs.length > 0 && (!told || input.trigger === "follow_up_due")) {
-      const stepsForCustomer = theirs.map((item) => (item.key === "details" ? "we need the service address and how our team gets in." : item.key === "time" ? "please choose a time that works; you can do that on your quote page." : item.key === "agreement" ? "please sign the service agreement we sent." : item.key === "deposit" ? `please pay the ${readiness.facts.version?.depositCents ? formatCents(readiness.facts.version.depositCents) : ""} deposit using the link we sent.`.replace("  ", " ") : item.detail));
+      const stepsForCustomer = theirs.map((item) => (item.key === "details" ? "we need the service address and how our team gets in." : item.key === "time" ? "please choose a time that works; you can do that on your quote page." : item.key === "agreement" ? "please sign the service agreement we sent." : item.key === "deposit" ? `the ${readiness.facts.version?.depositCents ? formatCents(readiness.facts.version.depositCents) : ""} deposit is due. It is paid on a secure page; the link comes with your invoice.`.replace("  ", " ") : item.detail));
       await ctx.db.patch(opportunity._id, { asked: [...opportunity.asked.filter((row) => row.key !== key), { key, at: Date.now(), times: (told?.times ?? 0) + 1 }].slice(-30) });
       const purpose = theirs.some((item) => item.key === "deposit") ? "deposit" : theirs.some((item) => item.key === "agreement") ? "agreement" : "missing_info";
-      const body = bookingStepsMessage(name, voice, stepsForCustomer);
+      const body = bookingStepsMessage(onRecord, voice, stepsForCustomer);
       const routed = await act({ kind: followUp ? "follow_up" : "booking_steps", channel, subject: `Next steps for your booking with ${company.name}`, body, followUpId: followUp?._id, summary: `Tell ${first} what is still needed before the booking can be confirmed.`, reason: "The quote is accepted, and the booking is not confirmed until these are done.", evidence: theirs.map((item) => ({ label: item.label, detail: item.detail })), nextStep: "Sales confirms the booking as soon as these are done and the time is still open.", permission: followUp ? FOLLOW_UP : REPLY_AND_QUOTE });
       if (routed === "sent" && !followUp) {
         const planned = await planFollowUp(ctx, company, await fresh(), { purpose, attempt: 1, reason: `${first} accepted the quote and has not finished the booking steps.`, preview: body, quoteVersion: readiness.facts.version?.version, actor: SALES });
@@ -301,7 +302,7 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
     const sent = await versionOf(ctx, quote, quote.sentVersion ?? quote.currentVersion);
     const validUntil = new Intl.DateTimeFormat("en-US", { timeZone: company.timezone, month: "short", day: "numeric" }).format(new Date(quote.validUntil ?? Date.now()));
     if (input.trigger === "follow_up_due" && followUp && sent) {
-      await act({ kind: "follow_up", channel, subject: `Your quote from ${company.name}`, body: quoteReminder(name, voice, { service: sent.serviceName, totalCents: sent.totalCents, validUntil }), quote: { quoteId: quote._id, version: sent.version }, followUpId: followUp._id, summary: `Remind ${first} about the quote (reminder ${followUp.attempt} of ${followUp.maxAttempts}).`, reason: followUp.reason, evidence: [{ label: "Quote", detail: `Q-${quote.number} v${sent.version}, ${formatCents(sent.totalCents)}, open until ${validUntil}` }], nextStep: followUp.attempt >= followUp.maxAttempts ? "This is the last reminder. After it, the opportunity comes to you." : "One more reminder is planned if there is no answer.", permission: FOLLOW_UP });
+      await act({ kind: "follow_up", channel, subject: `Your quote from ${company.name}`, body: quoteReminder(onRecord, voice, { service: sent.serviceName, totalCents: sent.totalCents, validUntil }), quote: { quoteId: quote._id, version: sent.version }, followUpId: followUp._id, summary: `Remind ${first} about the quote (reminder ${followUp.attempt} of ${followUp.maxAttempts}).`, reason: followUp.reason, evidence: [{ label: "Quote", detail: `Q-${quote.number} v${sent.version}, ${formatCents(sent.totalCents)}, open until ${validUntil}` }], nextStep: followUp.attempt >= followUp.maxAttempts ? "This is the last reminder. After it, the opportunity comes to you." : "One more reminder is planned if there is no answer.", permission: FOLLOW_UP });
       return done("Sent a quote reminder.");
     }
     if (reading) {
@@ -313,11 +314,11 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
         return quoteFrom(priced, true);
       }
       if (reading.intent === "accept") {
-        await act({ kind: "reply", channel, subject: `Your quote from ${company.name}`, body: acceptOnPageMessage(name, voice), quote: sent ? { quoteId: quote._id, version: sent.version } : undefined, summary: `Point ${first} to the quote page to accept.`, reason: "A yes by message does not say which version was accepted. The quote page records the exact price and scope.", evidence: input.messageText ? [{ label: `${first} wrote`, detail: input.messageText.slice(0, 280) }] : [], nextStep: "When they accept on the page, Sales starts the booking steps.", permission: REPLY_AND_QUOTE });
+        await act({ kind: "reply", channel, subject: `Your quote from ${company.name}`, body: acceptOnPageMessage(onRecord, voice), quote: sent ? { quoteId: quote._id, version: sent.version } : undefined, summary: `Point ${first} to the quote page to accept.`, reason: "A yes by message does not say which version was accepted. The quote page records the exact price and scope.", evidence: input.messageText ? [{ label: `${first} wrote`, detail: input.messageText.slice(0, 280) }] : [], nextStep: "When they accept on the page, Sales starts the booking steps.", permission: REPLY_AND_QUOTE });
         return done("Pointed the customer to the quote page to accept.");
       }
       if (answer) {
-        await act({ kind: "reply", channel, subject: `Your quote from ${company.name}`, body: answerMessage(name, voice, answer.answer, "Your quote is here whenever you're ready: {link}"), quote: sent ? { quoteId: quote._id, version: sent.version } : undefined, summary: `Answer ${first}'s question from an approved answer.`, reason: "The Playbook has an approved answer for what they asked.", evidence: [{ label: `${first} asked`, detail: answer.question }, { label: "Approved answer", detail: answer.answer.slice(0, 280) }], nextStep: "The quote stays open for them to accept.", permission: REPLY_AND_QUOTE });
+        await act({ kind: "reply", channel, subject: `Your quote from ${company.name}`, body: answerMessage(onRecord, voice, answer.answer, "Your quote is here whenever you're ready: {link}"), quote: sent ? { quoteId: quote._id, version: sent.version } : undefined, summary: `Answer ${first}'s question from an approved answer.`, reason: "The Playbook has an approved answer for what they asked.", evidence: [{ label: `${first} asked`, detail: answer.question }, { label: "Approved answer", detail: answer.answer.slice(0, 280) }], nextStep: "The quote stays open for them to accept.", permission: REPLY_AND_QUOTE });
         return done("Answered from an approved answer.");
       }
       await escalate(`${name} replied about the quote and Sales has nothing approved to say back.`, "The message is not an acceptance, a decline or a question with an approved answer.", input.messageText ? [{ label: `${first} wrote`, detail: input.messageText.slice(0, 280) }] : []);
@@ -344,7 +345,7 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
       return done("Still missing details after two asks; handed to a person.");
     }
     const answered = answer ? answer.answer : null;
-    const body = followUp ? missingInfoReminder(name, voice, { service: spec.name, ask }) : questionMessage(name, voice, { service: spec.name, ask, answered });
+    const body = followUp ? missingInfoReminder(onRecord, voice, { service: spec.name, ask }) : questionMessage(onRecord, voice, { service: spec.name, ask, answered });
     await ctx.db.patch(opportunity._id, { asked: [...opportunity.asked.filter((row) => !ask.some((item) => item.key === row.key)), ...ask.map((row, index) => ({ key: row.key, at: now, times: repeats[index] + 1 }))].slice(-30) });
     const have = requirements.filter((row) => row.phase === "quote" && known(opportunity.facts, row.key));
     if (opportunity.stage === "new" && input.route === false) opportunity = await setStage(ctx, await fresh(), "qualifying", SALES);
@@ -415,7 +416,7 @@ export async function advance(ctx: MutationCtx, company: Doc<"companies">, oppor
       step("prepare_quote", "done", "A firm price from the published rules with no discount, so it needs no review.");
     }
     const validUntil = new Intl.DateTimeFormat("en-US", { timeZone: company.timezone, month: "short", day: "numeric" }).format(new Date(Date.now() + saved.version.validDays * DAY));
-    const body = quoteMessage(name, await voiceOf(ctx, company, opportunity), { service: saved.version.serviceName, totalCents: saved.version.totalCents, per: saved.version.per, estimate: saved.version.outcome === "estimate", validUntil, depositCents: saved.version.depositCents });
+    const body = quoteMessage(onRecord, await voiceOf(ctx, company, opportunity), { service: saved.version.serviceName, totalCents: saved.version.totalCents, per: saved.version.per, estimate: saved.version.outcome === "estimate", validUntil, depositCents: saved.version.depositCents });
     await act({
       kind: "send_quote",
       channel,
