@@ -118,6 +118,7 @@ import type * as lib_billing_reserve from "../lib/billing/reserve.js";
 import type * as lib_builders from "../lib/builders.js";
 import type * as lib_chat_agreementTools from "../lib/chat/agreementTools.js";
 import type * as lib_chat_artifacts from "../lib/chat/artifacts.js";
+import type * as lib_chat_business from "../lib/chat/business.js";
 import type * as lib_chat_calc from "../lib/chat/calc.js";
 import type * as lib_chat_claude from "../lib/chat/claude.js";
 import type * as lib_chat_cleanerTools from "../lib/chat/cleanerTools.js";
@@ -443,6 +444,7 @@ declare const fullApi: ApiFromModules<{
   "lib/builders": typeof lib_builders;
   "lib/chat/agreementTools": typeof lib_chat_agreementTools;
   "lib/chat/artifacts": typeof lib_chat_artifacts;
+  "lib/chat/business": typeof lib_chat_business;
   "lib/chat/calc": typeof lib_chat_calc;
   "lib/chat/claude": typeof lib_chat_claude;
   "lib/chat/cleanerTools": typeof lib_chat_cleanerTools;

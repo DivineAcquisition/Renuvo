@@ -3,16 +3,16 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, messageOf, SelectInput, TextInput, useRun } from "@/components/app/form";
-import { CreditIndicator } from "@/components/app/billing/credit-indicator";
-import { ArrowLeft, ArrowRight, ArrowUp, Check, ExternalLink, Globe, MapPin, Paperclip, Plus, PriceTagIcon, Search, Sparkles, Trash2, X } from "@/components/icons";
+import { useChat } from "@/components/app/chat/chat-context";
+import { Composer, type Outgoing } from "@/components/app/chat/composer";
+import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
+import { ArrowLeft, ArrowRight, ChatIcon, ExternalLink, Plus, Search, Sparkles, Trash2 } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import { briefPath, centsFrom, SERVICES_ROOT, servicePath } from "@/lib/app/services";
 import { cn } from "@/lib/utils";
 
@@ -41,35 +41,59 @@ function researchStarters(area: string): string[] {
   ];
 }
 
+const BRIEF_ORIGIN: Record<string, string> = { setup: "started by setup", chat: "started in Chat", member: "started by your team" };
+
 /**
- * Research starts the way Chat does: a box to ask one question in. Sending it starts a research brief and
- * opens it while it runs. Earlier briefs are listed underneath.
+ * Research starts as a real Chat conversation: Chat's own box, centered on the page. Sending opens the
+ * conversation in Chat, which knows the business and the person for every reply and can start a research
+ * brief when one is worth running. Earlier research chats and briefs are listed underneath.
  */
 export function ResearchHome() {
   const { companyId } = useCompany();
   const data = useQuery(api.servicesResearch.briefs, { companyId });
   const profile = useQuery(api.services.profile, { companyId });
+  const chats = useQuery(api.chat.researchChats, { companyId });
+  const send = useMutation(api.chat.send);
+  const router = useRouter();
+  const { page, setConversationId } = useChat();
   const [seed, setSeed] = useState("");
+  const [model, setModel] = useState<string | null>(null);
   if (!data) return <Skeleton className="h-64 rounded-2xl" />;
   const area = profile?.context.serviceAreas.trim() ?? "";
+
+  const start = async (outgoing: Outgoing) => {
+    const result = await send({
+      companyId,
+      text: outgoing.text,
+      clientKey: outgoing.clientKey,
+      page: outgoing.includePage && page ? page.path : undefined,
+      context: outgoing.records.map((record) => ({ table: record.table, id: record.id })),
+      attachments: outgoing.files.map((file) => ({ storageId: file.storageId as Id<"_storage">, name: file.name })),
+      model: model ?? undefined,
+      origin: { kind: "research" },
+    });
+    setConversationId(result.conversationId);
+    router.push(`/app/chat/${result.conversationId}`);
+  };
+
   return (
-    <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-8">
+    <div className="grid grid-cols-1 gap-10">
       {data.canStart ? (
-        <section aria-labelledby="research-ask" className="grid grid-cols-1 gap-5 pt-2">
-          <div className="flex items-center gap-3">
-            <span aria-hidden className="relative inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-brand-500/30 bg-card shadow-[0_12px_32px_-14px_rgba(104,56,239,0.8)]">
-              <Search className="size-5 text-brand-300" />
-            </span>
-            <div className="min-w-0">
-              <h2 id="research-ask" className="flex items-center gap-0.5 font-heading text-2xl tracking-tight text-strong">
-                What do you want to find out?
-                <InfoTip label="Research & Insights">Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price. If you already have reliable job data, you can skip it.</InfoTip>
-              </h2>
-              <p className="text-sm text-muted-foreground">Ask one question about prices, demand or your area. Selestial researches it and writes a brief.</p>
-            </div>
+        <section aria-labelledby="research-ask" className="mx-auto flex min-h-[min(36rem,calc(100dvh-18rem))] w-full max-w-3xl flex-col items-center justify-center gap-6 py-6 text-center">
+          <span aria-hidden className="inline-flex size-12 items-center justify-center rounded-full border border-brand-500/30 bg-card shadow-[0_12px_32px_-14px_rgba(104,56,239,0.8)]">
+            <Search className="size-5 text-brand-300" />
+          </span>
+          <div className="grid gap-1.5">
+            <h2 id="research-ask" className="flex items-center justify-center gap-0.5 font-heading text-2xl tracking-tight text-strong sm:text-3xl">
+              What do you want to find out?
+              <InfoTip label="Research & Insights">This opens a Chat conversation that already knows your business: where you work, what you sell and how your team works. Chat can start a research brief that searches public web pages (10 Selestial Credits, with your approval) and tells the conversation when it is ready. Research proposes; it never changes a price.</InfoTip>
+            </h2>
+            <p className="text-sm text-muted-foreground">Ask about prices, demand or your area. Selestial answers in Chat and can research it for you.</p>
           </div>
-          <ResearchComposer seed={seed} defaultArea={area} />
-          <ul aria-label="Ideas to start from" className="grid gap-2 sm:grid-cols-2">
+          <div className="w-full text-left">
+            <Composer working={false} stopping={false} seed={seed} autoFocus placeholder="Ask a pricing or market question…" onSend={start} onStop={async () => undefined} model={model} onModel={async (key) => setModel(key)} />
+          </div>
+          <ul aria-label="Ideas to start from" className="grid w-full gap-2 text-left sm:grid-cols-2">
             {researchStarters(area).map((starter) => (
               <li key={starter}>
                 <button type="button" onClick={() => setSeed(starter)} className="group flex h-full w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-3 text-left text-sm text-strong hover:border-brand-500/50 hover:bg-brand-500/[0.04] focus-visible:outline-2 focus-visible:outline-brand-500">
@@ -85,32 +109,58 @@ export function ResearchHome() {
         <SectionTitle title="Research & Insights" tip="Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price.">Briefs your Owner and Managers started.</SectionTitle>
       )}
 
-      <section aria-labelledby="research-list" className="grid grid-cols-1 gap-2">
-        <h2 id="research-list" className="font-heading text-base tracking-tight text-strong">
-          Your research {data.briefs.length ? <span className="text-sm font-normal text-muted-foreground">· {data.briefs.length}</span> : null}
-        </h2>
-        {data.briefs.length === 0 ? <Empty title="No research yet">{data.canStart ? "Ask a question above when a decision needs it. Your own completed visits are always included, free." : "Briefs appear here once someone starts one."}</Empty> : null}
-        <ul className="grid grid-cols-1 gap-2">
-          {data.briefs.map((b) => (
-            <li key={b.id}>
-              <Link href={briefPath(b.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
-                <span className="min-w-0">
-                  <span className="block font-medium text-strong">{b.question}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {b.geography || "No area given"} · {b.mode === "web" ? "Web research" : "Your sources and records"} · {b.origin === "setup" ? "started by setup" : "started by your team"} · {when(b.createdAt)}
+      <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-8">
+        {chats && chats.length ? (
+          <section aria-labelledby="research-chats" className="grid grid-cols-1 gap-2">
+            <h2 id="research-chats" className="font-heading text-base tracking-tight text-strong">
+              Your research chats <span className="text-sm font-normal text-muted-foreground">· {chats.length}</span>
+            </h2>
+            <ul className="grid grid-cols-1 gap-2">
+              {chats.map((chat) => (
+                <li key={chat.id}>
+                  <Link href={`/app/chat/${chat.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <ChatIcon aria-hidden className="size-4 shrink-0 text-brand-300" />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-strong">{chat.title}</span>
+                        <span className="block text-xs text-muted-foreground">{chat.state === "working" ? "Answering now" : `Updated ${when(chat.updatedAt)}`}</span>
+                      </span>
+                    </span>
+                    <ArrowRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <section aria-labelledby="research-list" className="grid grid-cols-1 gap-2">
+          <h2 id="research-list" className="font-heading text-base tracking-tight text-strong">
+            Research briefs {data.briefs.length ? <span className="text-sm font-normal text-muted-foreground">· {data.briefs.length}</span> : null}
+          </h2>
+          {data.briefs.length === 0 ? <Empty title="No briefs yet">{data.canStart ? "Ask in the box above. When a question needs current prices from the web, Chat offers to start a brief." : "Briefs appear here once someone starts one."}</Empty> : null}
+          <ul className="grid grid-cols-1 gap-2">
+            {data.briefs.map((b) => (
+              <li key={b.id}>
+                <Link href={briefPath(b.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
+                  <span className="min-w-0">
+                    <span className="block font-medium text-strong">{b.question}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {b.geography || "No area given"} · {b.mode === "web" ? "Web research" : "Your sources and records"} · {BRIEF_ORIGIN[b.origin] ?? BRIEF_ORIGIN.member} · {when(b.createdAt)}
+                    </span>
                   </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{b.findings} findings</span>
-                  <Badge variant={b.state === "ready" ? "success" : b.state === "failed" ? "error" : "info"} size="sm">
-                    {STATE_WORDS[b.state]}
-                  </Badge>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{b.findings} findings</span>
+                    <Badge variant={b.state === "ready" ? "success" : b.state === "failed" ? "error" : "info"} size="sm">
+                      {STATE_WORDS[b.state]}
+                    </Badge>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
     </div>
   );
 }
@@ -174,233 +224,6 @@ function SourceRows({ sources, setSources }: { sources: OwnerSource[]; setSource
 
 const toOwner = (s: OwnerSource) => ({ ...(s.url.trim() ? { url: s.url.trim() } : {}), title: s.title, geography: s.geography, excerpt: s.excerpt, priceCents: s.price.trim() ? centsFrom(s.price) : null, priceKind: s.price.trim() ? s.priceKind : null, unit: s.unit, comparable: s.comparable, limitation: "" });
 
-const chip = "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500";
-
-/**
- * The research box, built like Chat's composer: type a question and press Enter. The chips under it set
- * where to look, which service it is about, and whether to search the web (10 credits, charged only if
- * it finishes). The company's own completed visits are always included, free. Sources the person found
- * themselves are added from the + menu.
- */
-function ResearchComposer({ seed, defaultArea }: { seed: string; defaultArea: string }) {
-  const { companyId } = useCompany();
-  const router = useRouter();
-  const start = useMutation(api.servicesResearch.start);
-  const catalog = useQuery(api.services.catalog, { companyId });
-  const [text, setText] = useState(seed);
-  const [area, setArea] = useState<string | null>(null);
-  const [serviceId, setServiceId] = useState("");
-  const [web, setWeb] = useState(true);
-  const [sources, setSources] = useState<OwnerSource[]>([]);
-  const [menu, setMenu] = useState<"none" | "plus" | "service" | "area">("none");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const box = useRef<HTMLTextAreaElement>(null);
-  const label = useId();
-  const where = area ?? defaultArea;
-  const service = catalog?.services.find((row) => row.id === serviceId) ?? null;
-
-  // A picked idea fills the box; the person still sends it.
-  const [seenSeed, setSeenSeed] = useState(seed);
-  if (seed !== seenSeed) {
-    setSeenSeed(seed);
-    if (seed) setText(seed);
-  }
-  useEffect(() => {
-    if (seed) box.current?.focus();
-  }, [seed]);
-  useEffect(() => {
-    const node = box.current;
-    if (!node) return;
-    node.style.height = "auto";
-    node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
-  }, [text]);
-
-  const canSend = text.trim().length > 0 && !busy;
-  const submit = async () => {
-    if (!canSend) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await start({ companyId, question: text.trim(), geography: where, web, sources: sources.filter((s) => s.title.trim()).map(toOwner), ...(serviceId ? { serviceId: serviceId as Id<"services"> } : {}) });
-      router.push(briefPath(result.briefId));
-    } catch (caught) {
-      setError(messageOf(caught));
-      setBusy(false);
-    }
-  };
-  const close = (event: React.KeyboardEvent) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      setMenu("none");
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-1 gap-3">
-      <div>
-        <form
-          className="relative rounded-2xl border border-border bg-card p-2.5 shadow-[0_18px_50px_-30px_rgba(104,56,239,0.55)] transition-colors focus-within:border-brand-500/50"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <div className="flex flex-wrap items-center gap-1.5 px-1.5 pt-1 pb-1.5">
-            <span className="text-[11px] text-muted-foreground">This research will use:</span>
-            {where ? (
-              <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-strong">
-                <MapPin className="size-3 text-brand-300" aria-hidden /> {where}
-                <button type="button" onClick={() => setArea("")} aria-label="Remove the area" className="ml-0.5 rounded text-muted-foreground hover:text-strong">
-                  <X className="size-3" aria-hidden />
-                </button>
-              </span>
-            ) : null}
-            {service ? (
-              <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-strong">
-                <PriceTagIcon className="size-3 text-brand-300" aria-hidden /> {service.name}
-                <button type="button" onClick={() => setServiceId("")} aria-label={`Not about ${service.name}`} className="ml-0.5 rounded text-muted-foreground hover:text-strong">
-                  <X className="size-3" aria-hidden />
-                </button>
-              </span>
-            ) : null}
-            {sources.length ? (
-              <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-strong">
-                <Paperclip className="size-3 text-brand-300" aria-hidden /> {sources.length} source{sources.length === 1 ? "" : "s"} you found
-              </span>
-            ) : null}
-            <span className="inline-flex items-center gap-1 rounded-lg border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
-              <Check className="size-3 text-success-foreground" aria-hidden /> Your completed visits · free
-            </span>
-          </div>
-          <label htmlFor={label} className="sr-only">
-            Ask a research question
-          </label>
-          <textarea
-            id={label}
-            ref={box}
-            value={text}
-            rows={3}
-            maxLength={500}
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                void submit();
-              }
-            }}
-            placeholder="Ask a pricing or market question… for example, what do businesses near me charge for move-out cleans?"
-            className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed text-strong outline-none placeholder:text-muted-foreground/80"
-          />
-          <div className="flex flex-wrap items-center gap-1.5 px-0.5 pt-1">
-            <div className="relative">
-              <button type="button" onClick={() => setMenu((m) => (m === "none" ? "plus" : "none"))} aria-haspopup="menu" aria-expanded={menu === "plus" || menu === "service"} aria-label="Add a source or a service" className={cn(chip, "w-8 justify-center px-0", menu === "plus" || menu === "service" ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-border text-muted-foreground hover:text-strong")}>
-                <Plus className="size-4" aria-hidden />
-              </button>
-              {menu === "plus" ? (
-                <ul role="menu" aria-label="Add" onKeyDown={close} className="live-enter absolute top-full left-0 z-30 mt-2 grid w-64 gap-0.5 rounded-xl border border-border bg-card p-1 shadow-xl">
-                  <li role="none">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      autoFocus
-                      onClick={() => {
-                        setSources((list) => [...list, blankSource()]);
-                        setMenu("none");
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted"
-                    >
-                      <Paperclip className="size-4 text-muted-foreground" aria-hidden />
-                      <span className="flex-1">Add a source you found</span>
-                    </button>
-                  </li>
-                  <li role="none">
-                    <button type="button" role="menuitem" onClick={() => setMenu("service")} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted">
-                      <PriceTagIcon className="size-4 text-muted-foreground" aria-hidden />
-                      <span className="flex-1">About one of your services</span>
-                    </button>
-                  </li>
-                </ul>
-              ) : null}
-              {menu === "service" ? (
-                <ul role="listbox" aria-label="Your services" onKeyDown={close} className="live-enter absolute top-full left-0 z-30 mt-2 grid max-h-64 w-64 gap-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl">
-                  {(catalog?.services ?? []).length === 0 ? <li className="px-2.5 py-2 text-xs text-muted-foreground">No services yet.</li> : null}
-                  {(catalog?.services ?? []).map((row, i) => (
-                    <li key={row.id} role="option" aria-selected={row.id === serviceId}>
-                      <button
-                        type="button"
-                        autoFocus={i === 0}
-                        onClick={() => {
-                          setServiceId(row.id);
-                          setMenu("none");
-                          box.current?.focus();
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted"
-                      >
-                        <span className="min-w-0 flex-1 truncate">{row.name}</span>
-                        {row.id === serviceId ? <Check className="size-4 text-brand-300" aria-hidden /> : null}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-            <div className="relative">
-              <button type="button" onClick={() => setMenu((m) => (m === "area" ? "none" : "area"))} aria-haspopup="dialog" aria-expanded={menu === "area"} className={cn(chip, menu === "area" ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-border text-muted-foreground hover:text-strong")}>
-                <MapPin className="size-3.5" aria-hidden /> {where ? "Change area" : "Add an area"}
-              </button>
-              {menu === "area" ? (
-                <div role="dialog" aria-label="Where to look" onKeyDown={close} className="live-enter absolute top-full left-0 z-30 mt-2 w-[min(18rem,calc(100vw-3rem))] rounded-xl border border-border bg-card p-2 shadow-xl">
-                  <label className="grid gap-1 text-xs text-muted-foreground">
-                    Where to look
-                    <input
-                      autoFocus
-                      value={where}
-                      onChange={(event) => setArea(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          setMenu("none");
-                          box.current?.focus();
-                        }
-                      }}
-                      placeholder="Austin, TX (78701–78759)"
-                      maxLength={200}
-                      className="h-9 rounded-lg border border-border bg-background px-2.5 text-sm text-strong outline-none focus-visible:border-brand-500/60"
-                    />
-                  </label>
-                </div>
-              ) : null}
-            </div>
-            <button type="button" aria-pressed={web} onClick={() => setWeb((on) => !on)} className={cn(chip, web ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-border text-muted-foreground hover:text-strong")}>
-              <Globe className="size-3.5" aria-hidden /> {web ? "Web research · 10 credits" : "No web search · free"}
-            </button>
-            <div className="ml-auto">
-              <button type="submit" disabled={!canSend} aria-label={web ? "Start research (10 credits)" : "Make the brief (free)"} className="inline-flex size-9 items-center justify-center rounded-full bg-gradient-to-b from-brand-400 via-brand-500 to-brand-700 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_8px_20px_-10px_rgba(104,56,239,0.9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-40 disabled:shadow-none">
-                {busy ? <Spinner className="size-4" /> : <ArrowUp className="size-4" aria-hidden />}
-              </button>
-            </div>
-          </div>
-        </form>
-        {error ? (
-          <p role="alert" className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-foreground">
-            {error}
-          </p>
-        ) : null}
-        <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          {web ? "Web research uses up to 5 searches and costs 10 Selestial Credits, charged only if it finishes." : "Without web research, the brief uses only your sources and your completed visits, free."} Research proposes; it never changes a price. {web ? <CreditIndicator /> : null}
-        </p>
-      </div>
-      {sources.length ? (
-        <div className="grid grid-cols-1 gap-2">
-          <p className="text-sm font-medium text-strong">Sources you found</p>
-          <SourceRows sources={sources} setSources={setSources} />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 /** A brief: what was found, what is comparable, what is uncertain, options, and every finding with its kind and sources. */
 export function BriefView({ briefId }: { briefId: string }) {
   const { companyId } = useCompany();
@@ -423,9 +246,16 @@ export function BriefView({ briefId }: { briefId: string }) {
   return (
     <div className="grid grid-cols-1 gap-5">
       <div>
-        <Link href={`${SERVICES_ROOT}/research`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-strong">
-          <ArrowLeft aria-hidden className="size-4" /> All research
-        </Link>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <Link href={`${SERVICES_ROOT}/research`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-strong">
+            <ArrowLeft aria-hidden className="size-4" /> All research
+          </Link>
+          {brief.conversationId ? (
+            <Link href={`/app/chat/${brief.conversationId}`} className="inline-flex items-center gap-1 text-sm font-medium text-brand-300 hover:underline">
+              <ChatIcon aria-hidden className="size-4" /> Back to the conversation
+            </Link>
+          ) : null}
+        </div>
         <h2 className="mt-1 font-heading text-xl tracking-tight text-strong">{brief.question}</h2>
         <p className="text-sm text-muted-foreground">
           {brief.geography || "No area given"} · {brief.mode === "web" ? "Web research" : "Your sources and your records"} · {STATE_WORDS[brief.state]} · started {when(brief.createdAt)}

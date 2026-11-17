@@ -319,7 +319,11 @@ export const servicesTables = {
     createdBy: actorValidator,
     createdAt: v.number(),
     finishedAt: v.optional(v.number()),
-  }).index("by_company_created", ["companyId", "createdAt"]),
+    /** The Chat conversation that started it. That conversation is told when it is ready. */
+    conversationId: v.optional(v.id("conversations")),
+  })
+    .index("by_company_created", ["companyId", "createdAt"])
+    .index("by_company_conversation", ["companyId", "conversationId"]),
 
   researchSources: defineTable({
     companyId: v.id("companies"),

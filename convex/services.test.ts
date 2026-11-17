@@ -351,6 +351,96 @@ describe("Services & Pricing", () => {
       expect(mockChat.seen[0].tools).not.toContain("publish_service");
     });
 
+    it("gives every reply the business, the person and where the conversation started, even after its first messages scroll away", async () => {
+      const { t, as, companyId } = await setup();
+      await publishNew(as, companyId, readySpec());
+      const profile = await as.query(api.services.profile, { companyId });
+      await as.mutation(api.services.saveProfile, { companyId, expectedRevision: 0, context: { ...profile.context, serviceAreas: "Austin, TX", customerKinds: ["home"], teamStructure: "one_crew" }, costs: { ...profile.costs!, suppliesPerVisitCents: 800, targetMarginPercent: 40 }, strategy: "positioning", positioning: "premium", researchDuringSetup: false, completeSetup: true });
+      mockChat.script = [{ text: "Happy to look into it." }, { text: "Still on it." }];
+      const sent = await as.mutation(api.chat.send, { companyId, text: "What do businesses near me charge for move-out cleans?", clientKey: "ctx-1", origin: { kind: "research" } });
+      await settle(t);
+      const first = mockChat.seen[0].system;
+      expect(first).toContain("<business>");
+      expect(first).toContain("Areas served: Austin, TX");
+      expect(first).toContain("Standard clean (Residential, version 1): From $120.00 per visit, by bedrooms and bathrooms");
+      expect(first).toContain("Team: one crew");
+      expect(first).toContain("Pricing approach: positioning-led, premium positioning");
+      expect(first).toContain("supplies entered");
+      expect(first).toContain("<person>\n- owner-a, the company's owner");
+      expect(first).toContain('with the question: "What do businesses near me charge for move-out cleans?"');
+      // Amounts stay out of the prompt; the Owner's own margin targets are given to the Owner only.
+      expect(first).not.toContain("$8.00");
+      expect(first).toContain("target 40%");
+
+      // Forty-four more messages push the first question out of the window the model reads.
+      await t.run(async (ctx) => {
+        const conversation = (await ctx.db.get(sent.conversationId as Id<"conversations">))!;
+        const last = await ctx.db
+          .query("chatMessages")
+          .withIndex("by_company_conversation_seq", (q) => q.eq("companyId", companyId).eq("conversationId", conversation._id))
+          .order("desc")
+          .first();
+        for (let i = 1; i <= 44; i++) await ctx.db.insert("chatMessages", { companyId, conversationId: conversation._id, seq: last!.seq + i, role: i % 2 ? "user" : "assistant", status: "complete", ...(i % 2 ? { text: `Filler question ${i}` } : { parts: [{ kind: "text" as const, text: `Filler answer ${i}` }] }), createdAt: Date.now() });
+      });
+      await as.mutation(api.chat.send, { companyId, text: "Where were we?", clientKey: "ctx-2", conversationId: sent.conversationId });
+      await settle(t);
+      const later = mockChat.seen[1];
+      expect(JSON.stringify(later.messages)).not.toContain("move-out cleans");
+      expect(later.system).toContain('with the question: "What do businesses near me charge for move-out cleans?"');
+      expect(later.system).toContain("Areas served: Austin, TX");
+    });
+
+    it("keeps a Manager's prompt free of the Owner's margins", async () => {
+      const { t, as, companyId } = await setup();
+      const profile = await as.query(api.services.profile, { companyId });
+      await as.mutation(api.services.saveProfile, { companyId, expectedRevision: 0, context: { ...profile.context, serviceAreas: "Austin, TX" }, costs: { ...profile.costs!, targetMarginPercent: 40 }, strategy: null, positioning: null, researchDuringSetup: false });
+      const manager = await addMember(t, as, companyId, "manager-a", "manager");
+      mockChat.script = [{ text: "Sure." }];
+      await manager.mutation(api.chat.send, { companyId, text: "Hello", clientKey: "ctx-m" });
+      await settle(t);
+      expect(mockChat.seen[0].system).toContain("manager-a, the company's manager");
+      expect(mockChat.seen[0].system).not.toContain("target 40%");
+    });
+
+    it("starts research only after the person approves, and tells the conversation when it is ready", async () => {
+      process.env.ANTHROPIC_API_KEY = "test-key";
+      try {
+        const { t, as, companyId } = await setup();
+        const profile = await as.query(api.services.profile, { companyId });
+        await as.mutation(api.services.saveProfile, { companyId, expectedRevision: 0, context: { ...profile.context, serviceAreas: "Austin, TX" }, costs: profile.costs!, strategy: null, positioning: null, researchDuringSetup: false });
+        mockChat.script = [{ toolCalls: [{ name: "start_research", input: { question: "What do businesses near me charge for a standard clean?", web: true } }] }, { text: "Started. I'll let you know." }, { text: "Here is what it found." }];
+        const sent = await as.mutation(api.chat.send, { companyId, text: "Research standard clean prices near me.", clientKey: "res-1", origin: { kind: "research" } });
+        await settle(t);
+        const chat = await as.query(api.chat.thread, { companyId, conversationId: sent.conversationId });
+        const step = Object.values(chat.steps).find((s) => (s as { tool: string }).tool === "start_research") as { stepId: string; status: string; preview: { summary: string; lines: string[] } };
+        expect(step.status).toBe("awaiting_approval");
+        expect(step.preview.summary).toBe("Start web research (10 Selestial Credits)");
+        expect(step.preview.lines).toContain("Where: Austin, TX");
+        expect((await as.query(api.servicesResearch.briefs, { companyId })).briefs).toEqual([]);
+
+        await as.mutation(api.chat.decideStep, { companyId, stepId: step.stepId, approve: true });
+        await settle(t);
+        const [brief] = (await as.query(api.servicesResearch.briefs, { companyId })).briefs;
+        expect(brief).toMatchObject({ origin: "chat", state: "ready", geography: "Austin, TX" });
+        const stored = await t.run((ctx) => ctx.db.get(brief.id as Id<"researchBriefs">));
+        expect(stored?.conversationId).toBe(sent.conversationId);
+        const messages = await t.run((ctx) => ctx.db.query("chatMessages").collect());
+        const ready = messages.find((m) => m.parts?.some((p) => p.kind === "text" && p.text.startsWith("**Research ready:**")));
+        expect(ready?.conversationId).toBe(sent.conversationId);
+        expect(JSON.stringify(ready?.parts)).toContain(`/app/services/research/${brief.id}`);
+
+        // The next reply knows the brief this conversation started, and can read it.
+        mockChat.script = [{ toolCalls: [{ name: "read_research_brief", input: { briefId: brief.id } }] }, { text: "One advertised starting price so far." }];
+        await as.mutation(api.chat.send, { companyId, text: "What did it find?", clientKey: "res-2", conversationId: sent.conversationId });
+        await settle(t);
+        const last = mockChat.seen.at(-1)!;
+        expect(last.system).toContain(`Research brief ${brief.id} started here`);
+        expect(JSON.stringify(last.messages)).toContain("A Clean advertises standard cleans from $129.");
+      } finally {
+        delete process.env.ANTHROPIC_API_KEY;
+      }
+    });
+
     it("does not offer drafting tools to an Office member", async () => {
       const { t, as, companyId } = await setup();
       const office = await addMember(t, as, companyId, "office-a", "office");
@@ -361,6 +451,9 @@ describe("Services & Pricing", () => {
       expect(tools).toEqual(expect.arrayContaining(["list_services", "read_service", "quote_service"]));
       expect(tools).not.toContain("edit_service_draft");
       expect(tools).not.toContain("submit_service_for_review");
+      // Office reads research but does not start it.
+      expect(tools).toContain("read_research_brief");
+      expect(tools).not.toContain("start_research");
     });
   });
 

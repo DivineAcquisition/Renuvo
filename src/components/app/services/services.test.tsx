@@ -31,6 +31,7 @@ const { PricingStep, ExtrasStep } = await import("./steps");
 const { marginStanding, PriceStrip } = await import("./visuals");
 const { setupSteps } = await import("./home");
 const { ResearchHome } = await import("./research");
+const { ChatProvider } = await import("@/components/app/chat/chat-context");
 
 const companyId = "company1" as Id<"companies">;
 function render(role: Role, node: React.ReactNode) {
@@ -293,31 +294,45 @@ describe("phase two: less to scan", () => {
   });
 });
 
-describe("research starts with a question box, like Chat", () => {
+describe("research starts a real Chat conversation", () => {
   const briefs = (over: Record<string, unknown> = {}) => ({ canStart: true, briefs: [], ...over });
   const profile = { costs: emptyCosts(), context: { serviceAreas: "Austin, TX" } };
+  const inChat = (role: Role, node: React.ReactNode) => render(role, <ChatProvider userId="user-a" companyId={companyId}>{node}</ChatProvider>);
 
-  it("opens with a box to ask in, what it will use, and ideas to start from", () => {
+  it("opens on Chat's own box, centered, with ideas to start from", () => {
+    pathname = "/app/services/research";
     data["servicesResearch:briefs"] = briefs();
     data["services:profile"] = profile;
-    data["services:catalog"] = catalog();
-    const html = render("owner", <ResearchHome />);
+    data["chat:researchChats"] = [];
+    const html = inChat("owner", <ResearchHome />);
     expect(html).toContain("What do you want to find out?");
-    expect(html).toMatch(/<label[^>]*class="sr-only"[^>]*>Ask a research question<\/label><textarea/);
-    expect(html).toContain("This research will use:");
-    expect(html).toContain("Austin, TX");
-    expect(html).toContain("Your completed visits · free");
-    expect(html).toMatch(/aria-pressed="true"[^>]*>.*?Web research · 10 credits/);
-    expect(html).toContain('aria-label="Start research (10 credits)"');
+    expect(html).toMatch(/<section aria-labelledby="research-ask" class="[^"]*items-center[^"]*justify-center[^"]*text-center/);
+    // Chat's composer: the same labelled box and send button as Chat.
+    expect(html).toMatch(/<label[^>]*class="sr-only"[^>]*>Message Selestial<\/label><textarea/);
+    expect(html).toContain('placeholder="Ask a pricing or market question…"');
+    expect(html).toContain('aria-label="Send"');
+    // Chat is told which page the conversation started on.
+    expect(html).toContain("You are on Services &amp; Pricing");
     expect(html).toContain("What do cleaning businesses near Austin, TX publish for a standard home clean?");
     expect(html).not.toContain("New research");
+  });
+
+  it("lists research chats to carry on, and says where each brief started", () => {
+    data["servicesResearch:briefs"] = briefs({ briefs: [{ id: "b1", question: "What do businesses near Austin charge?", geography: "Austin", origin: "chat", mode: "web", state: "ready", blocked: null, findings: 4, createdAt: 1, finishedAt: 2 }] });
+    data["services:profile"] = profile;
+    data["chat:researchChats"] = [{ id: "c1", title: "Move-out prices near Austin", updatedAt: 1, state: "idle" }];
+    const html = inChat("owner", <ResearchHome />);
+    expect(html).toContain('href="/app/chat/c1"');
+    expect(html).toContain("Move-out prices near Austin");
+    expect(html).toContain("started in Chat");
   });
 
   it("shows Office the briefs, with no box to start one", () => {
     data["servicesResearch:briefs"] = briefs({ canStart: false, briefs: [{ id: "b1", question: "What do businesses near Austin charge?", geography: "Austin", origin: "member", mode: "web", state: "ready", blocked: null, findings: 4, createdAt: 1, finishedAt: 2 }] });
     data["services:profile"] = profile;
-    const html = render("office", <ResearchHome />);
-    expect(html).not.toContain("Ask a research question");
+    data["chat:researchChats"] = [];
+    const html = inChat("office", <ResearchHome />);
+    expect(html).not.toContain("Message Selestial");
     expect(html).toContain("What do businesses near Austin charge?");
   });
 });
