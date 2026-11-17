@@ -99,8 +99,10 @@ function fromRecord(def: Definition, facts: ReadinessFacts): RequirementState | 
 export function viewOf(def: Definition, row: RequirementRow, facts: ReadinessFacts, now: number, warningDays: number): RequirementView {
   const recorded = fromRecord(def, facts);
   let state: RequirementState = row.status;
-  // A person's waiver stands over what the record says. Otherwise the record answers for itself.
-  if (row.status !== "waived" && recorded !== null && (recorded === "accepted" || row.status === "not_started")) state = recorded;
+  // Weekly hours and areas are facts on the record: only the record (or a person's waiver) answers for them.
+  if ((def.kind === "availability" || def.kind === "service_areas") && row.status !== "waived") state = recorded ?? "not_started";
+  // For an agreement, a signed one in Agreements answers; without one, a person's record of a paper copy stands.
+  else if (row.status !== "waived" && recorded !== null && (recorded === "accepted" || row.status === "not_started")) state = recorded;
   if (state === "accepted" && row.expiresAt !== undefined && row.expiresAt <= now) state = "expired";
   const met = MET.includes(state);
   return {
