@@ -21,6 +21,8 @@ export type RequirementRow = {
   submittedAt?: number;
   reviewNote?: string;
   waiver?: { reason: string; at: number };
+  /** For an acknowledgment: the words the cleaner agreed to. */
+  acknowledged?: { words: string; at: number };
 };
 
 /** What the record says, outside the requirement rows, for requirements that are read from data. */
@@ -103,6 +105,8 @@ export function viewOf(def: Definition, row: RequirementRow, facts: ReadinessFac
   if ((def.kind === "availability" || def.kind === "service_areas") && row.status !== "waived") state = recorded ?? "not_started";
   // For an agreement, a signed one in Agreements answers; without one, a person's record of a paper copy stands.
   else if (row.status !== "waived" && recorded !== null && (recorded === "accepted" || row.status === "not_started")) state = recorded;
+  // An acknowledgment is of the words it was given to. When the company changes them, it is asked again.
+  if (def.kind === "acknowledgment" && state === "accepted" && row.acknowledged && row.acknowledged.words.trim() !== (def.description ?? "").trim()) state = "not_started";
   if (state === "accepted" && row.expiresAt !== undefined && row.expiresAt <= now) state = "expired";
   const met = MET.includes(state);
   return {

@@ -208,6 +208,8 @@ export const cleanersTables = {
     /** When an accepted requirement stops counting. */
     expiresAt: v.optional(v.number()),
     waiver: v.optional(v.object({ by: v.id("members"), at: v.number(), reason: v.string() })),
+    /** For an acknowledgment: the exact words the cleaner agreed to. New words need a new agreement. */
+    acknowledged: v.optional(v.object({ words: v.string(), at: v.number() })),
     updatedAt: v.number(),
   })
     .index("by_company_cleaner", ["companyId", "cleanerId", "key"])

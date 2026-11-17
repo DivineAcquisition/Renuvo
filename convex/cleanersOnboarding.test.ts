@@ -136,7 +136,7 @@ describe("the cleaner portal", () => {
 
         // The cleaner does their part.
         expect(await s.t.mutation(api.portal.confirmContact, { token, phone: "+1 512 555 0101", email: "rosa@example.com", workTexts: true })).toEqual({ status: "accepted" });
-        await s.t.mutation(api.portal.acknowledge, { token, key: "policies" });
+        await s.t.mutation(api.portal.acknowledge, { token, key: "policies", words: "Read and acknowledge how the company works." });
         await s.t.mutation(api.portal.setAvailability, { token, windows: [{ weekday: 2, startMinute: 480, endMinute: 1020 }] });
         const upload = await file(s.t, "image/jpeg");
         expect(await s.t.mutation(api.portal.submitRequirement, { token, key: "documents", storageIds: [upload] })).toEqual({ status: "awaiting_review" });
@@ -155,6 +155,15 @@ describe("the cleaner portal", () => {
         await s.as.mutation(api.cleanerProfile.setEngagementStatus, { companyId: s.companyId, cleanerId: s.cleanerId, status: "ready" });
         profile = await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() });
         expect(profile.readiness).toMatchObject({ state: "ready", eligible: true, payoutReady: false });
+
+        // An agreement is to exact words. When the Owner changes the policies, Rosa is asked again, and the old words cannot be agreed to.
+        await s.as.mutation(api.requirements.saveDefinition, { companyId: s.companyId, key: "policies", label: "Company policies", description: "Read and acknowledge how the company works, including the new key-handling policy.", kind: "acknowledgment", effect: "blocks_assignments", appliesTo: ["employee", "contractor", "subcontractor"], reviewer: "manager", cleanerCompletes: true });
+        profile = await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() });
+        expect(profile.readiness.blockers.map((row) => row.key)).toEqual(["policies"]);
+        expect(await refusal(s.t.mutation(api.portal.acknowledge, { token, key: "policies", words: "Read and acknowledge how the company works." }))).toContain("changed since this page opened");
+        await s.t.mutation(api.portal.acknowledge, { token, key: "policies", words: "Read and acknowledge how the company works, including the new key-handling policy." });
+        profile = await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() });
+        expect(profile.readiness).toMatchObject({ state: "ready", blockers: [] });
         // Each act is in their history, as theirs.
         const history = await s.as.query(api.cleanerProfile.activity, { companyId: s.companyId, cleanerId: s.cleanerId });
         expect(history.filter((row) => row.whoKind === "cleaner").map((row) => row.text)).toEqual(expect.arrayContaining(["submitted Identity documents", "had their weekly availability set (1 window)"]));
@@ -185,7 +194,7 @@ describe("the cleaner portal", () => {
         const link = await issuePortalLink(ctx, { companyId: s.companyId, holder: { cleanerId: s.cleanerId }, purpose: "task", requirementKey: "documents", expiresAt: Date.now() + DAY, issuedBy: { kind: "system" }, actor: { kind: "system" } });
         return portalTokenFor(link!);
       });
-      expect(await refusal(s.t.mutation(api.portal.acknowledge, { token: task!, key: "policies" }))).toBe("This link is for a different step.");
+      expect(await refusal(s.t.mutation(api.portal.acknowledge, { token: task!, key: "policies", words: "Read and acknowledge how the company works." }))).toBe("This link is for a different step.");
       expect(await refusal(s.t.mutation(api.portal.claimSkill, { token: task!, skill: "windows" }))).toBe(NOT_ALLOWED);
 
       // Ending the engagement ends portal access (the company's default), and the record is kept.
