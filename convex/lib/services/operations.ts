@@ -7,7 +7,7 @@ import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { localParts } from "../availability";
 import type { Actor } from "../events";
 import { addLocalDays, startOfLocalDay } from "../time";
-import { ENGINE_VERSION, quote, type Quote, type QuoteInput } from "./engine";
+import { ENGINE_VERSION, quote, type PropertyPrice, type Quote, type QuoteInput } from "./engine";
 import { canonical, inputHash } from "./store";
 import type { Spec } from "./spec";
 
@@ -41,10 +41,17 @@ export async function dayFullness(ctx: QueryCtx, company: Doc<"companies">, at: 
   return Math.min(100, Math.round((booked / available) * 1000) / 10);
 }
 
-/** The inputs a visit's quote uses: what the person entered, plus the visit's own date and the day's fullness when demand pricing needs it. */
-export async function visitInput(ctx: QueryCtx, company: Doc<"companies">, spec: Spec, input: QuoteInput, startsAt: number): Promise<QuoteInput> {
+/**
+ * The inputs a visit's quote uses: what the person entered, plus the visit's own date, the day's fullness
+ * when demand pricing needs it, and the property's own price when the Owner approved one for this service
+ * and it is in force on the visit's day (looked up by the caller with priceInForce). Those three come
+ * from the records, never from what was typed.
+ */
+export async function visitInput(ctx: QueryCtx, company: Doc<"companies">, spec: Spec, input: QuoteInput, startsAt: number, own: PropertyPrice | null = null): Promise<QuoteInput> {
   const full: QuoteInput = { ...input, date: localParts(startsAt, company.timezone).day };
   delete full.dayFullnessPercent;
+  delete full.propertyPrice;
+  if (own) full.propertyPrice = own;
   if (spec.modifiers.demand.enabled && spec.modifiers.demand.busyDay.enabled) {
     const fullness = await dayFullness(ctx, company, startsAt);
     if (fullness !== undefined) full.dayFullnessPercent = fullness;

@@ -14,7 +14,7 @@ import type { AddOn, Adjustment, Modifiers, Pricing, Schedule, SizeBand, Spec } 
 export const ENGINE_VERSION = 1;
 
 export const CALCULATION_ORDER = [
-  "Base price from the pricing method",
+  "Base price from the pricing method, or the property's own price when the Owner approved one",
   "Property condition, as a percent of the base price",
   "First-clean reset",
   "Extras the customer chose (anything the service already includes is never charged)",
@@ -61,6 +61,21 @@ export type QuoteInput = {
   answers?: Record<string, string | number | boolean>;
   /** Pricing Studio: "what if it takes longer". 100 is as expected. */
   timePercent?: number;
+  /**
+   * The property's own base price for this service, approved by the Owner. Selestial adds it from the
+   * property's record when it prices a visit; it is never taken from what a person or a model typed. It
+   * replaces only the base: condition, first clean, extras, area, rush, demand, discounts, the minimum
+   * and rounding still come from the service.
+   */
+  propertyPrice?: PropertyPrice;
+};
+
+export type PropertyPrice = {
+  /** The propertyPrices row, kept with a saved quote so it can be traced. */
+  id?: string;
+  baseCents: number;
+  /** Labor-minutes at this property, when they differ from the service's. Null or absent: the service's. */
+  laborMinutes?: number | null;
 };
 
 export type LineKind = "base" | "adjustment" | "add_on" | "fee" | "discount" | "minimum" | "rounding" | "info" | "billed_later";
@@ -246,6 +261,7 @@ function findBand(bands: SizeBand[], area: number): SizeBand | null {
 }
 
 function base(spec: Spec, input: QuoteInput): Base {
+  if (input.propertyPrice) return propertyBase(spec, input, input.propertyPrice);
   const p = spec.pricing;
   const word = spec.visitWord;
   const none = { missing: [] as string[], walkthrough: [] as string[], estimate: [] as string[], hourly: false };
@@ -334,6 +350,30 @@ function base(spec: Spec, input: QuoteInput): Base {
     case "custom_quote":
       return { ...none, walkthrough: ["This service is priced after a walkthrough."], cents: null, laborMinutes: p.laborMinutes ?? 0, label: "Base price", detail: "" };
   }
+}
+
+/**
+ * A property's own base price. It stands in for the method's base, so the size, rooms or walkthrough the
+ * method would need are not asked again. Its time is the property's own when given, else the method's
+ * when the facts allow, else the service's usual time.
+ */
+function propertyBase(spec: Spec, input: QuoteInput, own: PropertyPrice): Base {
+  const method = base(spec, { ...input, propertyPrice: undefined });
+  const known = method.missing.length === 0 && method.walkthrough.length === 0 && method.laborMinutes > 0;
+  const laborMinutes = own.laborMinutes ?? (known ? method.laborMinutes : usualLaborMinutes(spec));
+  const per = method.per ?? spec.visitWord;
+  return {
+    missing: [],
+    walkthrough: [],
+    estimate: [],
+    hourly: false,
+    cents: own.baseCents,
+    laborMinutes,
+    crewSize: method.crewSize,
+    label: spec.pricing.method === "recurring_package" ? "Monthly price for this property" : "Base price for this property",
+    detail: `${formatCents(own.baseCents)} per ${per}, this property's own price`,
+    per: method.per,
+  };
 }
 
 /** Hourly methods: billed time rounded up to the increment, never below the minimum. */
@@ -533,8 +573,8 @@ export function quote(spec: Spec, input: QuoteInput): Quote {
   if (isPackage && spec.pricing.method === "recurring_package") {
     const p = spec.pricing;
     const facts = p.basis === "schedule" ? scheduleFacts(p.schedule) : null;
-    const perVisit = facts ? roundCents((p.monthlyCents * 12) / facts.visitsPerYear) : p.includedVisits > 0 ? roundCents(p.monthlyCents / p.includedVisits) : 0;
-    lines.push({ key: "per_visit", kind: "info", label: "Per visit, annual average", detail: facts ? `${formatCents(p.monthlyCents)} × 12 months ÷ ${trimNumber(facts.visitsPerYear)} visits a year` : `${formatCents(p.monthlyCents)} ÷ ${p.includedVisits} included visits`, amountCents: 0 });
+    const perVisit = facts ? roundCents((baseCents * 12) / facts.visitsPerYear) : p.includedVisits > 0 ? roundCents(baseCents / p.includedVisits) : 0;
+    lines.push({ key: "per_visit", kind: "info", label: "Per visit, annual average", detail: facts ? `${formatCents(baseCents)} × 12 months ÷ ${trimNumber(facts.visitsPerYear)} visits a year` : `${formatCents(baseCents)} ÷ ${p.includedVisits} included visits`, amountCents: 0 });
     if (perVisit) lines[lines.length - 1].detail += ` = ${formatCents(perVisit)}`;
     if (p.extraVisitCents !== null) lines.push({ key: "extra_visit", kind: "info", label: "Extra visit", detail: `${formatCents(p.extraVisitCents)} for each visit beyond the plan`, amountCents: 0 });
     for (const extra of extras) lines.push({ key: `addon:${extra.id}`, kind: "info", label: extra.label, detail: extra.included ? "Included in the plan" : `${formatCents(extra.amountCents)} per visit when requested, billed with the visit`, amountCents: 0 });

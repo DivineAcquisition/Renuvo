@@ -86,6 +86,7 @@ export const subjectValidator = v.union(
   // Services & Pricing (convex/lib/services/schema.ts).
   v.object({ table: v.literal("services"), id: v.id("services") }),
   v.object({ table: v.literal("serviceChanges"), id: v.id("serviceChanges") }),
+  v.object({ table: v.literal("propertyPrices"), id: v.id("propertyPrices") }),
   v.object({ table: v.literal("serviceImports"), id: v.id("serviceImports") }),
   v.object({ table: v.literal("researchBriefs"), id: v.id("researchBriefs") }),
   // Finance: the company's own money (convex/lib/finance/schema.ts).

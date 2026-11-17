@@ -21,6 +21,7 @@ import { byMember, recordEvent } from "./lib/events";
 import { businessSettingsOf, checkArea, checkHours, findService } from "./lib/settings/business";
 import type { Quote, QuoteInput } from "./lib/services/engine";
 import { quote as runQuote, saveQuote, visitInput, visitScope } from "./lib/services/operations";
+import { dayOf, engineInput, priceInForce } from "./lib/services/propertyPrices";
 import { quoteInputValidator } from "./lib/services/schema";
 import { publishedByKey } from "./lib/services/store";
 import { formatCents } from "./lib/services/words";
@@ -142,7 +143,9 @@ export const create = companyMutation({
     // The price: a person's typed price wins and is recorded as theirs; otherwise the engine prices the published version.
     let priced: { input: QuoteInput; result: Quote } | null = null;
     if (spec && args.priceCents === undefined) {
-      const input = await visitInput(ctx, ctx.company, spec, (args.quoteInput ?? {}) as QuoteInput, times.startsAt);
+      // The property's own price, when the Owner approved one and it is in force on the visit's day.
+      const own = catalog ? await priceInForce(ctx, ctx.companyId, property._id, catalog.service._id, dayOf(times.startsAt, ctx.company.timezone)) : null;
+      const input = await visitInput(ctx, ctx.company, spec, (args.quoteInput ?? {}) as QuoteInput, times.startsAt, own ? engineInput(own) : null);
       const result = runQuote(spec, input);
       if (args.quoteInput || result.outcome === "firm" || result.outcome === "estimate") {
         if (result.outcome === "incomplete") throw userError(`This price needs: ${result.missing.join(", ")}. Answer them, or type a price.`);

@@ -101,11 +101,12 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "googleAdsSnapshots", index: "by_company_account" },
   { table: "googleDriveTexts", index: "by_company_resource" },
   { table: "googleSettings", index: "by_company" },
-  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, costs, quotes, imports and research.
+  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, property prices, costs, quotes, imports and research.
   { table: "services", index: "by_company_status" },
   { table: "serviceVersions", index: "by_company_service_version" },
   { table: "serviceDrafts", index: "by_company_service" },
   { table: "serviceChanges", index: "by_company_updated", omit: ["scheduledFunctionId"], why: "An internal reference to the scheduler." },
+  { table: "propertyPrices", index: "by_company_state" },
   { table: "pricingProfiles", index: "by_company" },
   { table: "serviceQuotes", index: "by_company_created" },
   { table: "serviceImports", index: "by_company_created" },
