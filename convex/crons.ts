@@ -17,6 +17,8 @@ crons.interval("dispatch watches the day of service", { minutes: 5 }, internal.d
 // Finance: card payments and refunds still in flight are read back from Stripe when its notification is late,
 // and payments a customer started and abandoned are stopped. Nothing is ever charged or refunded again here.
 crons.interval("finance reconciles payments with Stripe", { minutes: 10 }, internal.financeStripe.reconcile, {});
+// Finance: Selestial prepares the payment reminders each open invoice is due for. It prepares only; a person approves every send.
+crons.interval("finance prepares payment reminders", { hours: 1 }, internal.financeMessages.sweep, {});
 
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});

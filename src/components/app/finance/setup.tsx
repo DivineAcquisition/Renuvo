@@ -54,7 +54,10 @@ function Setup() {
         </div>
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <StripeCard data={data} />
+          <div className="grid gap-5">
+            <StripeCard data={data} />
+            <Reminders data={data} />
+          </div>
           <InvoiceSettings data={data} />
         </div>
       )}
@@ -174,6 +177,56 @@ function StripeCard({ data }: { data: Settings }) {
           Stripe collects and checks your business details, not Selestial. You manage payouts, disputes and your bank in your Stripe Dashboard.
         </p>
       </div>
+    </Section>
+  );
+}
+
+/** Whether Selestial prepares reminders on the schedule, and where customers' email replies go. */
+function Reminders({ data }: { data: Settings }) {
+  const { companyId } = useCompany();
+  const save = useMutation(api.financeMessages.saveReminders);
+  const { busy, error, run } = useRun();
+  const [on, setOn] = useState(data.settings.remindersOn);
+  const [replyTo, setReplyTo] = useState(data.settings.replyTo ?? "");
+  const [saved, setSaved] = useState(false);
+  return (
+    <Section title="Invoices and reminders to customers" description="Selestial prepares; you approve every message before it goes">
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void run(async () => {
+            await save({ companyId, remindersOn: on, replyTo: replyTo || null });
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+          });
+        }}
+      >
+        <label className="flex items-start gap-2.5 text-sm text-strong">
+          <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+          <span>
+            Prepare payment reminders on a schedule
+            <span className="block text-xs text-muted-foreground">3 days before the due date, then 1, 7 and 14 days late. After that, Selestial flags the invoice for you instead.</span>
+          </span>
+        </label>
+        <Field label="Replies go to" hint="Leave empty to use your own email. Emails go out under your company's name.">
+          <TextInput type="email" value={replyTo} onChange={(e) => setReplyTo(e.target.value)} placeholder="billing@yourcompany.com" />
+        </Field>
+        <p className="text-xs text-muted-foreground">
+          Email or text, the shared sending rules apply: your sending setup (Settings › Compliance), each customer&apos;s recorded permission, the do-not-contact list and quiet hours.
+        </p>
+        <FormError message={error} />
+        <div className="flex items-center justify-end gap-3">
+          {saved ? (
+            <span role="status" className="inline-flex items-center gap-1 text-sm text-success-foreground">
+              <CheckCircle2 className="size-4" aria-hidden /> Saved
+            </span>
+          ) : null}
+          <Button type="submit" variant="default" disabled={busy}>
+            Save
+          </Button>
+        </div>
+      </form>
     </Section>
   );
 }

@@ -353,7 +353,7 @@ function IssueForm({ invoiceId, revision, totalCents, depositCents, customer, te
       <Consequences
         lines={[
           depositCents ? `${customer} is asked for a ${usd(depositCents)} deposit now, of ${usd(totalCents)} in total. You request the rest after the visit.` : `${customer} is asked for ${usd(totalCents)}.`,
-          "Selestial doesn't send it for you yet. Copy the pay link and send it, then mark it sent.",
+          "Nothing is sent yet. Next, send it by email or text from the invoice (you approve the exact message), or copy the pay link.",
           "To change it after this, add a credit or void it.",
         ]}
       />
@@ -394,7 +394,7 @@ function RequestBalanceForm({ invoiceId, balanceCents, customer, termsDueDate, o
       <Field label="Balance due">
         <TextInput type="date" value={due} min={todayKey(timezone)} onChange={(e) => setDue(e.target.value)} />
       </Field>
-      <Consequences lines={[`${customer}'s pay link will ask for the remaining ${usd(balanceCents)}.`, "Nothing is sent: share the same link again so they know."]} />
+      <Consequences lines={[`${customer}'s pay link will ask for the remaining ${usd(balanceCents)}.`, "Nothing is sent by this. Selestial prepares a message for you to approve when it's due, or send one from the invoice now."]} />
       <FormError message={error} />
       <Footer onClose={onDone}>
         <Button type="submit" variant="default" disabled={busy}>

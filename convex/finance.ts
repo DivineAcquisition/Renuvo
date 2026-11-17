@@ -235,7 +235,20 @@ export const overview = ownerQuery({
     const jobs = await uninvoicedJobs(ctx, ctx.companyId, now);
     const jobNames = await namesFor(ctx, jobs.map((job) => job.customerId));
     const stripe = await stripeState(ctx, ctx.companyId);
+    const approvedMessages = await ctx.db
+      .query("financeMessages")
+      .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "approved"))
+      .order("desc")
+      .take(2000);
+    const sentByMessage = new Set<string>();
+    const scheduleDone = new Set<string>();
+    for (const row of approvedMessages) {
+      if (row.kind === "invoice") sentByMessage.add(row.invoiceId);
+      if (row.stage === "overdue_14") scheduleDone.add(row.invoiceId);
+    }
     const found = findings({
+      sentByMessage,
+      scheduleDone,
       now,
       invoices,
       customerName: name,
@@ -274,7 +287,7 @@ export const overview = ownerQuery({
   },
 });
 
-const FINANCE_EVENT = /^(invoice|payment|refund|credit|stripe|finance_settings)\./;
+const FINANCE_EVENT = /^(invoice|payment|refund|credit|stripe|finance_settings|collection)\./;
 
 const EVENT_WORDS: Record<string, string> = {
   "invoice.created": "Draft invoice created",
@@ -302,19 +315,30 @@ const EVENT_WORDS: Record<string, string> = {
   "stripe.connected": "Stripe connected",
   "stripe.updated": "Stripe account updated",
   "finance_settings.saved": "Invoice settings changed",
+  "collection.drafted": "Selestial prepared a message",
+  "collection.approved": "Message approved and sent",
+  "collection.skipped": "Prepared message skipped",
 };
+
+/** Who did it, in a word: the Owner, Stripe (what its notices changed) or Selestial (its schedule and checks). */
+function whoDid(event: Doc<"events">): string {
+  if (event.actor.kind === "member") return "You";
+  if (event.type === "payment.started") return "Customer";
+  if (event.actor.kind === "system" && /^(payment|refund|invoice\.paid|stripe)/.test(event.type)) return "Stripe";
+  return "Selestial";
+}
 
 async function activityRow(ctx: QueryCtx, event: Doc<"events">) {
   let invoiceId: Id<"invoices"> | null = null;
   if (event.subject.table === "invoices") invoiceId = event.subject.id;
-  if (event.subject.table === "payments" || event.subject.table === "refunds" || event.subject.table === "invoiceCredits") {
+  if (event.subject.table === "payments" || event.subject.table === "refunds" || event.subject.table === "invoiceCredits" || event.subject.table === "financeMessages") {
     const row = (await ctx.db.get(event.subject.id)) as { invoiceId?: Id<"invoices"> } | null;
     invoiceId = row?.invoiceId ?? null;
   }
   const invoice = invoiceId ? await ctx.db.get(invoiceId) : null;
   const customer = invoice ? await ctx.db.get(invoice.customerId) : null;
   const amount = typeof event.data?.amountCents === "number" ? event.data.amountCents : null;
-  const by = event.actor.kind === "member" ? "You" : event.actor.kind === "system" ? "Stripe" : "Selestial";
+  const by = whoDid(event);
   return { id: event._id, at: event.at, title: EVENT_WORDS[event.type] ?? "Finance updated", invoiceId, invoiceNumber: invoice?.number ?? null, customer: customer?.name ?? null, amountCents: amount, by };
 }
 
@@ -391,7 +415,11 @@ export const invoice = ownerQuery({
       .withIndex("by_company_subject_at", (q) => q.eq("companyId", ctx.companyId).eq("subjectId", invoice._id))
       .order("desc")
       .take(50);
-    const childIds = new Set<string>([...rows.payments.map((p) => p._id), ...rows.refunds.map((r) => r._id), ...rows.credits.map((c) => c._id)]);
+    const drafts = await ctx.db
+      .query("financeMessages")
+      .withIndex("by_company_invoice", (q) => q.eq("companyId", ctx.companyId).eq("invoiceId", invoice._id))
+      .take(100);
+    const childIds = new Set<string>([...rows.payments.map((p) => p._id), ...rows.refunds.map((r) => r._id), ...rows.credits.map((c) => c._id), ...drafts.map((d) => d._id)]);
     const childEvents = [];
     for (const id of childIds) {
       childEvents.push(
@@ -404,7 +432,7 @@ export const invoice = ownerQuery({
     const timeline = [...history, ...childEvents]
       .sort((a, b) => b.at - a.at)
       .slice(0, 40)
-      .map((event) => ({ id: event._id, at: event.at, title: EVENT_WORDS[event.type] ?? "Updated", amountCents: typeof event.data?.amountCents === "number" ? event.data.amountCents : null, by: event.actor.kind === "member" ? "You" : event.actor.kind === "system" ? "Stripe" : "Selestial" }));
+      .map((event) => ({ id: event._id, at: event.at, title: EVENT_WORDS[event.type] ?? "Updated", amountCents: typeof event.data?.amountCents === "number" ? event.data.amountCents : null, by: whoDid(event) }));
     const state = invoiceState(invoice, now);
     const stripe = await stripeState(ctx, ctx.companyId);
     return {

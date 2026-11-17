@@ -1,4 +1,4 @@
-# Finance, Phases 0–1: verification
+# Finance: verification
 
 ## Tests
 
@@ -87,3 +87,52 @@ Screenshots: `docs/screenshots/finance/`.
 3. Saved cards and charging them, recurring invoices, write-offs, and connecting an existing Stripe
    account through OAuth.
 4. Expenses, Team Pay and Profitability are shown as "Soon" and do nothing.
+
+
+---
+
+# Phase 2: collections with Selestial
+
+## Tests
+
+`convex/financeMessages.test.ts` (8 tests), with the mock email provider:
+
+- The schedule: 3 days before, 1, 7 and 14 days after; nothing for an invoice issued inside the 3-day
+  window; nothing when nothing is asked for.
+- The sweep prepares each step once and never sends; a later step replaces a waiting earlier draft; paying
+  the invoice takes the draft out of the queue and the sweep sets it aside.
+- Reminders off: nothing prepared. A Manager can't see the queue or prepare.
+- Approve: the email goes exactly as approved, under the company's name, replies to the Owner, with the
+  pay link made at sending time; approving twice sends once; delivery shows on the invoice.
+- Can't send: "sending setup not finished" then "no recorded permission", in the policy's words, before
+  approving; approved anyway, the policy refuses it and it shows as needing attention. Nothing is emailed.
+- What's owed changes after review: the approval is refused, Selestial's words are rewritten with the new
+  amount, and the re-reviewed message goes with $140.00, not $240.00.
+- Send all: the permitted message goes, the other is reported with its reason. A message held for quiet
+  hours is not sent once its invoice is voided ("The invoice was voided before the message went out.").
+- Chat: the three finance tools are offered to the Owner only; they list overdue invoices from the record,
+  explain one by its number, and prepare drafts with nothing sent.
+
+```
+npm test            # 61 files, 653 passed, 19 skipped
+npm run typecheck   # passes
+npx eslint .        # 0 errors (1 warning in an existing file, not this work)
+npx next build      # passes
+```
+
+## In a real browser
+
+Same local backend and labelled sample data. The hourly schedule had already prepared two reminders on its
+own (a 14-day reminder that could send, and a 7-day reminder blocked for lack of permission). Driven by
+clicking: Record permission from the blocked card → Edit the words → Approve and send → the queue shrinks
+and "Sent recently" shows it Delivered (mock email). Send all lists each recipient, channel and amount.
+Checked at 1440 wide and 390 wide with no sideways scrolling; fixed a rail card wider than its column, and
+renamed schedule steps ("7-day reminder") so they don't contradict the actual days late in the text.
+
+Screenshots: `docs/screenshots/finance/09`–`12`.
+
+## Not verified
+
+- Real email and text delivery (Resend, the company's Gmail, Telnyx), bounces and STOP replies end to end.
+  These go through the shared messaging code, which has its own tests.
+- A real model choosing the Chat tools; the tools were called directly.

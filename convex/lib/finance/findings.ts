@@ -39,6 +39,10 @@ export type FindingInput = {
   troubledPayments: Doc<"payments">[];
   stripe: { state: "not_available" | "not_connected" | "onboarding" | "active" | "restricted" | "disconnected"; problem: string | null };
   money: (cents: number) => string;
+  /** Invoices Selestial sent to the customer through the outbox, as the Owner approved. */
+  sentByMessage: ReadonlySet<string>;
+  /** Invoices whose whole reminder schedule went out. */
+  scheduleDone: ReadonlySet<string>;
 };
 
 export function findings(input: FindingInput): Finding[] {
@@ -91,7 +95,23 @@ export function findings(input: FindingInput): Finding[] {
     });
   }
 
-  const overdue = invoices.filter((invoice) => invoiceState(invoice, now) === "overdue").sort((a, b) => (a.dueAt ?? 0) - (b.dueAt ?? 0));
+  const overdueAll = invoices.filter((invoice) => invoiceState(invoice, now) === "overdue").sort((a, b) => (a.dueAt ?? 0) - (b.dueAt ?? 0));
+  const exhausted = overdueAll.filter((invoice) => input.scheduleDone.has(invoice._id));
+  const overdue = overdueAll.filter((invoice) => !input.scheduleDone.has(invoice._id));
+  if (exhausted.length) {
+    const total = exhausted.reduce((s, invoice) => s + amountRequested(invoice), 0);
+    out.push({
+      id: "exhausted",
+      tone: "danger",
+      state: "needs_attention",
+      title: `${plural(exhausted.length, "invoice")} still unpaid after every reminder`,
+      noticed: `${money(total)} is still owed after the 3-day, 1, 7 and 14-day reminders went out. Selestial won't prepare more on its own.`,
+      recommend: "Call the customer, agree a plan, or decide whether to keep pursuing it.",
+      records: exhausted.slice(0, 5).map((invoice) => ({ kind: "invoice", id: invoice._id, label: label(invoice), detail: `${money(amountRequested(invoice))} due`, amountCents: amountRequested(invoice) })),
+      action: { label: "Open the invoice", kind: "open_invoice" },
+      totalCents: total,
+    });
+  }
   if (overdue.length) {
     const total = overdue.reduce((s, invoice) => s + amountRequested(invoice), 0);
     out.push({
@@ -100,7 +120,7 @@ export function findings(input: FindingInput): Finding[] {
       state: "needs_attention",
       title: `${plural(overdue.length, "invoice")} overdue`,
       noticed: `${money(total)} is past due across ${plural(overdue.length, "invoice")}. The oldest was due ${Math.max(1, Math.floor((now - (overdue[0].dueAt ?? now)) / 86_400_000))} days ago.`,
-      recommend: "Follow up with each customer and share their pay link. Reminder drafts arrive with customer messaging.",
+      recommend: "Review the reminders Selestial prepared under Ready for you, or prepare one from the invoice.",
       records: overdue.slice(0, 5).map((invoice) => ({ kind: "invoice", id: invoice._id, label: label(invoice), detail: `${money(amountRequested(invoice))} due`, amountCents: amountRequested(invoice) })),
       action: { label: "See overdue invoices", kind: "filter_invoices", filter: "overdue" },
       totalCents: total,
@@ -152,7 +172,7 @@ export function findings(input: FindingInput): Finding[] {
     });
   }
 
-  const unshared = invoices.filter((invoice) => invoice.status === "open" && !invoice.shared && invoice.issuedAt !== undefined && now - invoice.issuedAt > 6 * 3_600_000);
+  const unshared = invoices.filter((invoice) => invoice.status === "open" && !invoice.shared && !input.sentByMessage.has(invoice._id) && invoice.issuedAt !== undefined && now - invoice.issuedAt > 6 * 3_600_000);
   if (unshared.length) {
     out.push({
       id: "unshared",
@@ -160,7 +180,7 @@ export function findings(input: FindingInput): Finding[] {
       state: "needs_attention",
       title: `${plural(unshared.length, "invoice")} issued but not shared`,
       noticed: `${plural(unshared.length, "customer")} ${unshared.length === 1 ? "hasn't" : "haven't"} been given a pay link yet, as far as Selestial knows.`,
-      recommend: "Copy the pay link and send it, or mark it sent if you already did.",
+      recommend: "Send it from the invoice by email or text, or copy the link and mark it sent if you shared it yourself.",
       records: unshared.slice(0, 5).map((invoice) => ({ kind: "invoice", id: invoice._id, label: label(invoice), detail: `${money(invoice.totals.balanceCents)} requested`, amountCents: invoice.totals.balanceCents })),
       action: { label: "Open the invoice", kind: "open_invoice" },
       totalCents: null,

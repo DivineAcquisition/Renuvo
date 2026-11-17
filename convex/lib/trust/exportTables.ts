@@ -108,6 +108,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "payments", index: "by_company_invoice", omit: ["stripe.clientSecret"], why: "Lets a browser finish an unfinished card payment." },
   { table: "refunds", index: "by_company_invoice" },
   { table: "invoiceCredits", index: "by_company_invoice" },
+  { table: "financeMessages", index: "by_company_invoice" },
 ];
 
 /** Company tables kept out of the export, and why. */

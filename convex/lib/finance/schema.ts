@@ -54,6 +54,16 @@ export const REFUND_STATUSES = ["sending", "pending", "succeeded", "failed", "ca
 export type RefundStatus = (typeof REFUND_STATUSES)[number];
 export const refundStatusValidator = literals(REFUND_STATUSES);
 
+/** Where a prepared customer message is. After "approved" the outbox row says what happened. */
+export const FINANCE_MESSAGE_STATUSES = ["draft", "approved", "skipped", "stale"] as const;
+export type FinanceMessageStatus = (typeof FINANCE_MESSAGE_STATUSES)[number];
+export const financeMessageStatusValidator = literals(FINANCE_MESSAGE_STATUSES);
+
+/** The reminder schedule, plus a message a person asked for. */
+export const FINANCE_MESSAGE_STAGES = ["invoice", "before_due", "overdue_1", "overdue_7", "overdue_14", "manual"] as const;
+export type FinanceMessageStage = (typeof FINANCE_MESSAGE_STAGES)[number];
+export const financeMessageStageValidator = literals(FINANCE_MESSAGE_STAGES);
+
 export const STRIPE_ACCOUNT_STATUSES = ["onboarding", "active", "restricted", "disconnected"] as const;
 export type StripeAccountStatus = (typeof STRIPE_ACCOUNT_STATUSES)[number];
 export const stripeAccountStatusValidator = literals(STRIPE_ACCOUNT_STATUSES);
@@ -110,6 +120,10 @@ export const financeTables = {
     allowPartialPayments: v.boolean(),
     /** A short note printed on every invoice, for example how to pay by check. */
     invoiceNote: v.optional(v.string()),
+    /** Selestial prepares reminder drafts on the schedule (3 days before, then 1, 7 and 14 days after). Absent means on. */
+    remindersOn: v.optional(v.boolean()),
+    /** Where customers' replies to invoice and reminder emails go. Absent means the Owner's email. */
+    replyTo: v.optional(v.string()),
     /** The next number to give an invoice when it is issued. Drafts have no number. */
     nextInvoiceNumber: v.number(),
     invoicePrefix: v.string(),
@@ -207,6 +221,7 @@ export const financeTables = {
     .index("by_company_created", ["companyId", "createdAt"])
     .index("by_company_issued", ["companyId", "issuedAt"])
     .index("by_company_due", ["companyId", "status", "dueAt"])
+    .index("by_status_due", ["status", "dueAt"])
     .index("by_publicId", ["publicId"]),
 
   /**
@@ -293,6 +308,40 @@ export const financeTables = {
     .index("by_company_clientKey", ["companyId", "clientKey"])
     .index("by_company_settled", ["companyId", "settledAt"])
     .index("by_stripe_refund", ["stripeRefundId"])
+    .index("by_status_updated", ["status", "updatedAt"]),
+
+  /**
+   * A message to a customer about an invoice that Selestial prepared (or the Owner started) and a person
+   * approves before it goes. Approving hands it to the shared outbox as a `messages` row, where the
+   * sending policy decides; what happened after that is read from that row, never copied here.
+   */
+  financeMessages: defineTable({
+    companyId: v.id("companies"),
+    invoiceId: v.id("invoices"),
+    customerId: v.id("customers"),
+    kind: v.union(v.literal("invoice"), v.literal("reminder")),
+    /** Which step of the schedule this is, so the same step is never prepared twice for one invoice. */
+    stage: financeMessageStageValidator,
+    channel: v.union(v.literal("email"), v.literal("sms")),
+    subject: v.optional(v.string()),
+    /** With "{link}" where the pay link goes. The link is made when the message is sent. */
+    body: v.string(),
+    status: financeMessageStatusValidator,
+    /** Why it was set aside: skipped by the Owner, or no longer needed, in words. */
+    closedReason: v.optional(v.string()),
+    /** The Owner changed the text Selestial wrote. A change in what is owed then waits for them, not for Selestial. */
+    edited: v.boolean(),
+    /** What the invoice said when the text was written. A different answer later means the text may be wrong. */
+    basis: v.object({ requestedCents: v.number(), dueAt: v.union(v.number(), v.null()), state: v.string() }),
+    preparedBy: v.union(v.object({ kind: v.literal("selestial") }), v.object({ kind: v.literal("member"), memberId: v.id("members") })),
+    approvedBy: v.optional(v.id("members")),
+    approvedAt: v.optional(v.number()),
+    messageId: v.optional(v.id("messages")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company_status", ["companyId", "status", "createdAt"])
+    .index("by_company_invoice", ["companyId", "invoiceId", "createdAt"])
     .index("by_status_updated", ["status", "updatedAt"]),
 
   /**

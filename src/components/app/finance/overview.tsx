@@ -16,6 +16,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 import type { FinanceNav } from "./finance-screen";
 import { Amount, Empty, Section, TrendChart, eyebrow } from "./kit";
+import { ReadyForYou } from "./messages";
 
 type Overview = FunctionReturnType<typeof api.finance.overview>;
 type Finding = Overview["findings"][number];
@@ -57,7 +58,8 @@ export function OverviewTab({ nav }: { nav: FinanceNav & { set: (c: Record<strin
             <Activity rows={data.activity} onOpen={nav.openInvoice} />
           </div>
         </div>
-        <div className="order-1 lg:sticky lg:top-20 lg:order-2">
+        <div className="order-1 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 lg:sticky lg:top-20 lg:order-2">
+          <ReadyForYou onReview={() => nav.set({ queue: "1" }, true)} onOpenInvoice={nav.openInvoice} />
           <Attention findings={data.findings} checkedAt={data.checkedAt} nav={nav} hasInvoices={data.hasInvoices} />
         </div>
       </div>

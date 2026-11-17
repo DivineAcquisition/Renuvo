@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { InvoiceMessages } from "./messages";
 import { CreditDialog, IssueDialog, RecordPaymentDialog, RefundDialog, RequestBalanceDialog, VoidInvoiceDialog, VoidPaymentDialog } from "./actions";
 import { Chip, Notice, StateBadge, eyebrow } from "./kit";
 
@@ -38,7 +39,7 @@ function Body({ invoiceId, onOpenStatement }: { invoiceId: Id<"invoices">; onOpe
   const { companyId } = useCompany();
   const detail = useQuery(api.finance.invoice, { companyId, invoiceId });
   // The chat panel may use this customer as context: the same record, not a copy.
-  useOfferChatContext(detail ? [{ table: "customers", id: detail.customer.id }] : null);
+  useOfferChatContext(detail ? [{ table: "invoices", id: detail.id }, { table: "customers", id: detail.customer.id }] : null);
   if (detail === undefined) {
     return (
       <div className="grid gap-3 p-6">
@@ -105,6 +106,7 @@ function Issued({ detail }: { detail: Detail }) {
         </Notice>
       ) : null}
       {open ? <PayLink detail={detail} /> : null}
+      {detail.status !== "draft" ? <InvoiceMessages invoiceId={detail.id} /> : null}
       {open ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="default" onClick={() => setDialog("record")} disabled={owed <= 0}>
@@ -228,7 +230,7 @@ function PayLink({ detail }: { detail: Detail }) {
         <div>
           <p className="text-sm font-medium text-strong">Pay link</p>
           <p className="text-xs text-muted-foreground">
-            {detail.shared ? (detail.shared.how === "marked_sent" ? `You sent it ${moment(detail.shared.at, timezone)}` : `Copied ${moment(detail.shared.at, timezone)}, not marked sent`) : "Not shared yet. Selestial doesn't message customers for you yet."}
+            {detail.shared ? (detail.shared.how === "marked_sent" ? `You sent it ${moment(detail.shared.at, timezone)}` : `Copied ${moment(detail.shared.at, timezone)}, not marked sent`) : "Not shared yet. Send it below, or copy the link."}
             {detail.cardPayments ? " · Card and bank payments on" : " · Card payments off until Stripe is set up"}
           </p>
         </div>

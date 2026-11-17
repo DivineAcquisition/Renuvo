@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { InvoiceSheet } from "./invoice-sheet";
 import { InvoicesTab } from "./invoices";
+import { ReviewSheet } from "./messages";
 import { NewInvoiceDialog } from "./new-invoice";
 import { OverviewTab } from "./overview";
 import { StatementSheet } from "./statement";
@@ -116,6 +117,7 @@ function Finance() {
       <div className="mt-5">{nav.tab === "invoices" ? <InvoicesTab nav={nav} /> : <OverviewTab nav={nav} />}</div>
       <InvoiceSheet invoiceId={invoiceId} onClose={() => nav.set({ invoice: null })} onOpenStatement={nav.openStatement} />
       <StatementSheet customerId={invoiceId ? null : customerId} onClose={() => nav.set({ customer: null })} onOpenInvoice={nav.openInvoice} />
+      <ReviewSheet open={nav.params.get("queue") === "1" && !invoiceId} onClose={() => nav.set({ queue: null })} onOpenInvoice={(id) => nav.set({ queue: null, invoice: id }, true)} />
       <NewInvoiceDialog open={nav.params.get("new") === "1"} onClose={() => nav.set({ new: null })} onCreated={(id) => nav.set({ new: null, invoice: id, tab: "invoices" })} />
     </>
   );

@@ -20,6 +20,8 @@ export type FinanceSettings = {
   paymentTermsDays: number;
   allowPartialPayments: boolean;
   invoiceNote: string | null;
+  remindersOn: boolean;
+  replyTo: string | null;
   invoicePrefix: string;
   nextInvoiceNumber: number;
   revision: number;
@@ -40,6 +42,8 @@ export function settingsOf(row: Doc<"financeSettings"> | null): FinanceSettings 
     paymentTermsDays: row?.paymentTermsDays ?? DEFAULTS.paymentTermsDays,
     allowPartialPayments: row?.allowPartialPayments ?? DEFAULTS.allowPartialPayments,
     invoiceNote: row?.invoiceNote ?? null,
+    remindersOn: row?.remindersOn ?? true,
+    replyTo: row?.replyTo ?? null,
     invoicePrefix: row?.invoicePrefix ?? DEFAULTS.invoicePrefix,
     nextInvoiceNumber: row?.nextInvoiceNumber ?? DEFAULTS.nextInvoiceNumber,
     revision: row?.revision ?? 0,

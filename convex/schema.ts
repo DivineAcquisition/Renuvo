@@ -516,6 +516,9 @@ export default defineSchema({
       v.literal("hiring_offer"),
       v.literal("application_decline"),
       v.literal("urgent_outreach"),
+      // Finance, to customers: an invoice's pay link, and a reminder about what is due (convex/lib/finance/outbox.ts).
+      v.literal("invoice_sent"),
+      v.literal("payment_reminder"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -527,6 +530,9 @@ export default defineSchema({
     /** The provider reported that the address rejected the message. */
     bouncedAt: v.optional(v.number()),
     cleanerId: v.optional(v.id("cleaners")),
+    /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
+    customerId: v.optional(v.id("customers")),
+    invoiceId: v.optional(v.id("invoices")),
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
     linkId: v.optional(v.id("actionLinks")),
@@ -555,6 +561,7 @@ export default defineSchema({
     .index("by_company_job", ["companyId", "jobId"])
     .index("by_company_queued", ["companyId", "queuedAt"])
     .index("by_company_application", ["companyId", "applicationId"])
+    .index("by_company_invoice", ["companyId", "invoiceId"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
 
