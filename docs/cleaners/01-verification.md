@@ -110,3 +110,61 @@ cleaner "To do".
 
 **Not verified here:** a real text or email provider (the mock was used), a real phone camera upload, and
 signing through a provider (none is connected in Selestial).
+
+## Phase 3: availability, crews, Dispatch eligibility, subcontractor access
+
+**Works end to end (functions, tests and screens):**
+
+- **Dispatch reads the same records.** A cleaner whose requirements for work are not met is never offered a
+  job, with the requirement named; readiness is judged as of the job's start, so a document that expires
+  before the job counts. A date the cleaner cannot work keeps them out; a date they can work makes them
+  eligible outside their weekly hours. Existing Dispatch behaviour and tests are unchanged.
+- **Availability from the office** (profile, Availability & Jobs): weekly hours, time away, single dates
+  (cannot work / can work, whole day or a time range), "still right" with how it was confirmed, and removing
+  time away or a date. Before saving, each dialog lists the accepted and offered work in the next 60 days the
+  change would touch, marking what already clashed. Saving never removes anyone from a job; the clash shows
+  on the profile and in the directory until a person keeps or covers it in Dispatch. Owners and Managers
+  change availability; Office reads it.
+- **Crews** (`/app/cleaners/crews`): permanent crews with a lead, dated memberships (a change of lead is a
+  new membership, so the history shows who led when), an optional subcontractor company and what the crew
+  brings. Ending a crew keeps its history. A person whose engagement ended cannot join.
+- **Crew builder for one job**: scheduled jobs in the next two weeks with places still open; for the chosen
+  job, every active person is checked with Dispatch's rules for that job, and permanent crews are shown
+  member by member. Reasons that hold for everyone (a date they cannot work, hours, time away, other work,
+  requirements) come before Dispatch's preferences, so "outside their areas" is shown, and may be set aside
+  by a person, only when nothing else stops them. Offers go out through Dispatch's one offer path, the lead
+  first, each checked again as it is made; anyone refused is listed with the reason, and the places still
+  open stay visible. Places that already have an offer out are not offered twice. The job keeps one team,
+  which keeps its people whatever later happens to the permanent crew.
+- **Crew leads**: in their portal a cleaner sees their crew and, on each accepted crew job, who else has
+  accepted (first name and initial); a lead also sees the places still open and offers out.
+- **Subcontractor companies** (`/app/cleaners/subcontractors`): contact, areas, workers and former workers,
+  changes by Owners and Managers, pausing and ending by the Owner with a reason. The contact's link opens
+  their own workers only: who is ready and, by name only, what each still needs; their weekly hours; their
+  upcoming work (the street once accepted); their crews. They can say a worker will be away (booked work it
+  touches goes to a person in Dispatch) and ask the office. Ending the relationship ends the contact's link;
+  the workers keep their records.
+
+**Tests:** `convex/cleanersCrews.test.ts`: assembling a crew with a member away and the open places reported;
+pressing twice offers nobody twice and the job keeps one team; a decline reopens the place and a later round
+adds to the same team; no place offered twice while offers are out; a permanent crew change leaves the job's
+team as it was, with dated lead changes; requirements and date exceptions in Dispatch both ways; the impact
+preview before saving, with nothing removed from the job; Office can read but not change availability or
+crews; the crew lead's view; the subcontractor contact's scope, refusals for anyone else's worker and for a
+cleaner's link, and the end of access with the relationship; tenant isolation for crews, jobs and previews.
+
+**Visually inspected:** crews and the crew builder at 1440 and 390 wide (including making an offer from the
+screen); a profile's availability with the single-date dialog and its preview; subcontractor companies at
+1440 and 390; the contact's portal and a crew lead's portal at 390; the directory header for Owner and Office.
+
+**Found and fixed while inspecting:** the builder showed only Dispatch's first reason, so a cleaner who cannot
+work that day looked like "outside their areas, check first"; a cleaner with no pay arrangement was labelled
+"check first" though they could not be chosen; the builder's sticky footer put its button under the floating
+team dock; the builder invited more offers than places with offers already out; on phones the jobs strip
+stretched the page wider than the screen.
+
+**Not done, and why:** Selestial does not text or email a subcontractor contact: the send policy needs a
+recorded permission for each address, and a contact is not yet a person the compliance records can hold
+permission for. The office makes the link and sends it; that is said on screen. A contact sees no pay (pay
+summaries are Phase 4). A subcontractor worker's pay goes through their company, which Dispatch cannot yet
+state on an offer, so such a worker is shown as not offerable for that reason.

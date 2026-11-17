@@ -227,6 +227,8 @@ export const CLEANER_PAGES: readonly { path: string; label: string; purpose: str
   { path: `${APP_ROOT}/cleaners/[id]/[[...section]]`, label: "Cleaner", purpose: "One person's profile, each section at its own address: overview, availability and jobs, onboarding and documents, skills and equipment, performance and coaching, pay, and activity." },
   { path: `${APP_ROOT}/cleaners/import`, label: "Import cleaners", purpose: "Bring in a list, with every row reviewed for duplicates before anything is written." },
   { path: `${APP_ROOT}/cleaners/onboarding`, label: "Onboarding checklist", purpose: "What each kind of worker needs, what an unmet item holds up, who reviews it and how long it stays valid." },
+  { path: `${APP_ROOT}/cleaners/crews`, label: "Crews", purpose: "Permanent crews with a lead, the team for each upcoming job, and a crew builder that checks each person for one job." },
+  { path: `${APP_ROOT}/cleaners/subcontractors`, label: "Subcontractor companies", purpose: "Companies that supply their own cleaners: their contact, their workers, and the contact's access to their own workers." },
 ];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */

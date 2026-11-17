@@ -210,7 +210,10 @@ export const forJob = companyQuery({
     const people = [];
     for (const cleaner of cleaners) {
       const facts = await cleanerFacts(ctx, job, cleaner, history, known);
-      const exclusion = assess(facts, view, DISPATCH_RULES);
+      // What holds for everyone is checked first, so a date they cannot work is never shown as only "outside
+      // their areas". Then Dispatch's own preferences, which a person may set aside when offering by hand.
+      const hard = assess(facts, view, { ...personRules(false), ended: true });
+      const exclusion = hard ?? assess(facts, view, DISPATCH_RULES);
       const current = assignments.find((row) => row.cleanerId === cleaner._id && (row.status === "offered" || row.status === "accepted"));
       people.push({
         cleanerId: cleaner._id,
@@ -218,8 +221,8 @@ export const forJob = companyQuery({
         initials: initialsOf(cleaner.name),
         onJob: current ? current.status : null,
         eligible: exclusion === null,
-        /** Set aside only by a person, by choice: the area and a missing pay arrangement. */
-        soft: exclusion !== null && SOFT.includes(exclusion.code),
+        /** Can be offered by a person who chooses to: outside their areas only. A missing pay arrangement cannot be offered. */
+        soft: hard === null && exclusion !== null && SOFT.includes(exclusion.code) && facts.pay.ok,
         reason: exclusion?.reason ?? null,
         code: exclusion?.code ?? null,
         // Pay is the Owner's: other roles see only whether an offer could state it.
@@ -249,8 +252,10 @@ export const forJob = companyQuery({
     crewRows.sort((a, b) => Number(b.coversOpen) - Number(a.coversOpen) || b.eligible - a.eligible || a.name.localeCompare(b.name));
     const best = crewRows.find((row) => row.coversOpen && staff.open > 0) ?? null;
     const customer = await ctx.db.get(job.customerId);
+    const leadRow = assignments.find((row) => (row.status === "offered" || row.status === "accepted") && row.role === "lead");
+    const lead = leadRow ? { name: (await ctx.db.get(leadRow.cleanerId))?.name ?? "A cleaner", status: leadRow.status } : null;
     return {
-      job: { jobId: job._id, label: jobLabel(job, customer?.name ?? null, company.timezone), service: job.serviceType, startsAt: job.startsAt, endsAt: job.endsAt, requiredSkills: job.requiredSkills, status: job.status },
+      job: { jobId: job._id, label: jobLabel(job, customer?.name ?? null, company.timezone), customer: customer?.name ?? null, service: job.serviceType, startsAt: job.startsAt, endsAt: job.endsAt, requiredSkills: job.requiredSkills, status: job.status, lead },
       staffing: staff,
       people: people.sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.priorVisits - a.priorVisits || a.name.localeCompare(b.name)),
       crews: crewRows,
@@ -276,7 +281,15 @@ export const assembleForJob = managerMutation({
     const chosen = [...new Set(args.cleanerIds)];
     if (chosen.length === 0) throw userError("Choose at least one person.");
     const before = staffing(job, await jobAssignments(ctx, job));
-    if (chosen.length > before.open) throw userError(`This job needs ${before.open} more ${before.open === 1 ? "cleaner" : "cleaners"}; you chose ${chosen.length}.`);
+    // Places with an offer already out are not offered twice: a crew is asked for the places nobody holds.
+    const room = Math.max(0, before.open - before.offersOut);
+    if (chosen.length > room) {
+      throw userError(
+        before.offersOut === 0
+          ? `This job needs ${before.open} more ${before.open === 1 ? "cleaner" : "cleaners"}; you chose ${chosen.length}.`
+          : `This job has ${before.open} ${before.open === 1 ? "place" : "places"} without an accepted cleaner and ${before.offersOut} ${before.offersOut === 1 ? "offer" : "offers"} out, so ${room} more can be offered; you chose ${chosen.length}.`,
+      );
+    }
     if (args.leadId && !chosen.includes(args.leadId)) throw userError("The lead must be one of the people chosen.");
     const company = ctx.company;
     const respondBy = Math.min(job.startsAt - 60 * 60 * 1000, Date.now() + dispatchSettings(company).offerWindowMinutes * 60 * 1000);

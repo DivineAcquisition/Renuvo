@@ -74,6 +74,8 @@ describe("Cleaners: crews, availability and Dispatch", () => {
     expect(again.results[0]).toMatchObject({ offered: false });
     expect(again.results[0].words).toContain("already has an open offer");
     expect((await s.job(jobId)).assignments).toHaveLength(2);
+    // With two offers out for three places, only one more can be offered: no place is offered twice.
+    expect(await refusal(s.as.mutation(api.crews.assembleForJob, { companyId: s.companyId, jobId, cleanerIds: [s.cleaners.Noor, s.cleaners.Mia] }))).toContain("2 offers out, so 1 more can be offered; you chose 2");
 
     // Rosa declines: her place opens again, and Noor is added to the same team, not a second one.
     const rosa = (await s.job(jobId)).assignments.find((row) => row.cleanerId === s.cleaners.Rosa)!;

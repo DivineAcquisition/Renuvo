@@ -14,7 +14,7 @@ import { useStableQuery } from "@/lib/app/stable-query";
 import { useDetail } from "@/components/app/detail-panel";
 import { PageHeader } from "@/components/app/shell";
 import { useNow } from "@/components/app/use-now";
-import { CalendarIcon, Check, ChevronDown, ClipboardList, Clock, FunnelIcon, LayoutGrid, MessageSquareText, Plus, Search, Sparkles, TableIcon, TriangleAlert, Upload, Users, X } from "@/components/icons";
+import { Building2, CalendarIcon, Check, ChevronDown, ClipboardList, Clock, FunnelIcon, LayoutGrid, MessageSquareText, Plus, Search, Sparkles, TableIcon, TriangleAlert, Upload, Users, X } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clock, dayName, localDate, zonedInstant } from "@/lib/app/format";
@@ -443,26 +443,36 @@ export function CleanersScreen() {
         title="Cleaners"
         lead="Who is ready to work, who is free for a job, who needs attention and why. Dispatch, Recruiter and Chat read these same records."
         actions={
-          manager ? (
-            <>
-              <Button variant="ghost" size="sm" render={<Link href={`${CLEANERS_PATH}/onboarding`} />}>
-                <ClipboardList aria-hidden />
-                Onboarding checklist
-              </Button>
-              <Button variant="outline" size="sm" render={<Link href={`${CLEANERS_PATH}/import`} />}>
-                <Upload aria-hidden />
-                Import cleaners
-              </Button>
-              <Button variant="outline" size="sm" disabled={!data} onClick={() => setInviting(true)}>
-                <MessageSquareText aria-hidden />
-                Invite to portal
-              </Button>
-              <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
-                <Plus aria-hidden />
-                Add cleaner
-              </Button>
-            </>
-          ) : null
+          <>
+            <Button variant="ghost" size="sm" render={<Link href={`${CLEANERS_PATH}/crews`} />}>
+              <Users aria-hidden />
+              Crews
+            </Button>
+            <Button variant="ghost" size="sm" render={<Link href={`${CLEANERS_PATH}/subcontractors`} />}>
+              <Building2 aria-hidden />
+              Subcontractors
+            </Button>
+            <Button variant="ghost" size="sm" render={<Link href={`${CLEANERS_PATH}/onboarding`} />}>
+              <ClipboardList aria-hidden />
+              Onboarding checklist
+            </Button>
+            {manager ? (
+              <>
+                <Button variant="outline" size="sm" render={<Link href={`${CLEANERS_PATH}/import`} />}>
+                  <Upload aria-hidden />
+                  Import cleaners
+                </Button>
+                <Button variant="outline" size="sm" disabled={!data} onClick={() => setInviting(true)}>
+                  <MessageSquareText aria-hidden />
+                  Invite to portal
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
+                  <Plus aria-hidden />
+                  Add cleaner
+                </Button>
+              </>
+            ) : null}
+          </>
         }
       />
 

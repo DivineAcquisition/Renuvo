@@ -8,7 +8,7 @@
 import { useMutation } from "convex/react";
 
 import { useStableQuery } from "@/lib/app/stable-query";
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 
 import { CalendarIcon, Check, ClipboardList, Clock, HouseIcon, Lock, Wallet } from "@/components/icons";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,9 @@ import { cn } from "@/lib/utils";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { ContactPortal } from "./contact-portal";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "./shell";
+import { fmt, useMinute, zoned } from "./time";
 
 type View = Extract<FunctionReturnType<typeof api.portal.view>, { state: "active"; jobs: unknown }>;
 type Step = View["steps"][number];
@@ -31,49 +33,23 @@ type Tab = (typeof TABS)[number]["id"];
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-const minute = () => Math.floor(Date.now() / 60_000) * 60_000;
-const subscribe = (change: () => void) => {
-  const timer = setInterval(change, 30_000);
-  return () => clearInterval(timer);
-};
-function useMinute() {
-  return useSyncExternalStore(subscribe, minute, () => 0);
-}
-
-function fmt(at: number, timezone: string, options: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: timezone, ...options }).format(new Date(at));
-}
 const toTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 const toMinute = (t: string) => {
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
 };
-function zoned(date: string, time: string, timezone: string): number | null {
-  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const t = /^(\d{2}):(\d{2})$/.exec(time);
-  if (!d || !t) return null;
-  const wanted = Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2]);
-  const local = (at: number) => {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(at));
-    const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
-    return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
-  };
-  let at = wanted - (local(wanted) - wanted);
-  at -= local(at) - wanted;
-  return at;
-}
 
 export function PortalPage({ token }: { token: string }) {
   const now = useMinute();
   const view = useStableQuery(api.portal.view, now ? { token, asOf: now } : "skip");
   const [tab, setTab] = useState<Tab>("home");
   if (view === undefined) return <Loading what="your portal" />;
+  if (view.state === "subcontractor") return <ContactPortal token={token} />;
   if (view.state !== "active") {
     const copy = {
       expired: { title: "This link has expired", body: "Ask the office for a new link. Your jobs and details are all still there." },
       revoked: { title: "This link is no longer active", body: "The office ended it or sent you a newer one. Use the latest link you received." },
       ended: { title: "Your work with us has ended", body: "This link no longer changes anything. Contact the office if you have a question." },
-      subcontractor: { title: "Hello", body: "Your workers' schedule will be shown here. For now, contact the office." },
     }[view.state];
     return <Closed company={view.company} title={copy.title} body={copy.body} />;
   }
@@ -110,6 +86,19 @@ function Closed({ company, title, body }: { company: string; title: string; body
         {body}
       </Notice>
     </Page>
+  );
+}
+
+/** Who else is on a job they accepted; a lead also sees the places still open. */
+function TeamLine({ team }: { team: NonNullable<View["jobs"][number]["team"]> }) {
+  const others = team.with.length ? `With ${team.with.join(", ")}` : "No one else has accepted yet";
+  const open = team.lead && team.open > 0 ? ` · ${team.open} ${team.open === 1 ? "place" : "places"} still open${team.offersOut ? `, ${team.offersOut} offered` : ""}` : "";
+  return (
+    <p className="text-sm text-muted-foreground">
+      {team.lead ? <span className="font-medium text-foreground">You lead. </span> : null}
+      {others}
+      {open}
+    </p>
   );
 }
 
@@ -150,6 +139,7 @@ function Home({ view, token, onTab }: { view: View; token: string; onTab: (tab: 
             <Row label="When">{fmt(next.startsAt, view.timezone, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</Row>
             <Row label="What">{next.service}</Row>
             {next.where ? <Row label="Where">{next.where}</Row> : null}
+            {next.team ? <TeamLine team={next.team} /> : null}
             {next.page ? (
               <a href={next.page} className="mt-1 text-sm font-semibold text-brand-300 underline-offset-4">
                 Open the job
@@ -160,6 +150,15 @@ function Home({ view, token, onTab }: { view: View; token: string; onTab: (tab: 
           <p className="text-sm text-muted-foreground">No accepted jobs coming up.</p>
         )}
       </Card>
+      {view.crews.length > 0 ? (
+        <Card title={view.crews.length === 1 ? "Your crew" : "Your crews"}>
+          {view.crews.map((crew) => (
+            <Row key={crew.name} label={crew.lead ? `${crew.name} (you lead)` : crew.name}>
+              {crew.with.length ? crew.with.join(", ") : "Just you for now"}
+            </Row>
+          ))}
+        </Card>
+      ) : null}
       {view.feedback.length > 0 ? (
         <Card title="From the office">
           {view.feedback.slice(0, 2).map((item) => (
@@ -216,6 +215,7 @@ function Jobs({ view }: { view: View }) {
               {job.service}
               {job.where ? ` · ${job.where}` : ""} · {job.status === "accepted" ? "Accepted" : "Offered to you"}
             </p>
+            {job.team ? <TeamLine team={job.team} /> : null}
             {job.page ? (
               <a href={job.page} className="text-sm font-semibold text-brand-300">
                 Open the job

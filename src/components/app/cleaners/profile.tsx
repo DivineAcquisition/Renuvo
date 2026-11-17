@@ -16,7 +16,7 @@ import { useDetail } from "@/components/app/detail-panel";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
 import { useNow } from "@/components/app/use-now";
-import { type LucideIcon, ArrowRight, CalendarIcon, Check, ChevronDown, Clock, Hand, HistoryIcon, Mail, MapPin, MessageSquareText, PenLine, Sparkles, TriangleAlert, User, Users } from "@/components/icons";
+import { type LucideIcon, ArrowRight, CalendarIcon, Check, ChevronDown, Clock, Hand, HistoryIcon, Mail, MapPin, MessageSquareText, PenLine, Plus, Sparkles, TriangleAlert, User, Users } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,6 +27,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Avatar, Chips, EFFECT_WORDS, ENGAGEMENT_WORDS, Progress, ReadinessLine, RequirementBadge, StatusBadge, type EngagementStatus } from "./bits";
+import { ConfirmHoursDialog, ExceptionDialog, RemoveButton, TimeAwayDialog, WeekDialog } from "./availability-edit";
 import { FollowUpsCard, PortalAccessCard, RequirementActions, SkillClaims } from "./onboarding-review";
 import { profilePath, SECTIONS, type SectionId } from "./state";
 
@@ -589,40 +590,94 @@ function WeekBars({ windows }: { windows: Profile["availability"]["windows"] }) 
 const ASSIGNMENT_WORDS: Record<string, string> = { accepted: "Accepted", offered: "Offered", declined: "Declined", expired: "No answer", cancelled: "Ended" };
 const END_WORDS: Record<string, string> = { released: "released by a person", job_covered: "job was covered", job_cancelled: "job was cancelled", job_moved: "job moved", dropped: "they said they could not attend", no_show: "no-show declared by a person", undelivered: "offer was not delivered" };
 
+type AvailabilityDialog = "week" | "away" | "date" | "confirm" | null;
+const SOURCE_WORDS: Record<string, string> = { cleaner: "From them", subcontractor: "From their company", member: "Recorded" };
+
 export function AvailabilitySection({ profile }: { profile: Profile }) {
-  const { timezone } = useCompany();
+  const { timezone, role } = useCompany();
   const now = useNow();
   const past = profile.history.filter((row) => row.startsAt < now);
   const openJob = useDetail();
+  const [dialog, setDialog] = useState<AvailabilityDialog>(null);
+  const manager = canManage(role) && profile.status !== "ended";
+  const firstName = profile.name.trim().split(/\s+/)[0];
+  const close = () => setDialog(null);
   return (
     <div className="grid gap-4 @3xl:grid-cols-2">
-      <Card title="Weekly hours">
+      {dialog === "week" ? <WeekDialog cleanerId={profile.cleanerId} firstName={firstName} windows={profile.availability.windows} onClose={close} /> : null}
+      {dialog === "away" ? <TimeAwayDialog cleanerId={profile.cleanerId} firstName={firstName} onClose={close} /> : null}
+      {dialog === "date" ? <ExceptionDialog cleanerId={profile.cleanerId} firstName={firstName} onClose={close} /> : null}
+      {dialog === "confirm" ? <ConfirmHoursDialog cleanerId={profile.cleanerId} firstName={firstName} onClose={close} /> : null}
+      <Card
+        title="Weekly hours"
+        action={
+          manager ? (
+            <Button variant="ghost" size="xs" onClick={() => setDialog("week")}>
+              <PenLine aria-hidden />
+              Change
+            </Button>
+          ) : null
+        }
+      >
         <WeekBars windows={profile.availability.windows} />
-        <p className="mt-3 text-xs text-muted-foreground">{profile.availability.confirmedAt ? `Last confirmed ${longDay(profile.availability.confirmedAt, timezone)}.` : "Never confirmed with them."} Dispatch never offers a time outside these hours.</p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">{profile.availability.confirmedAt ? `Last confirmed ${longDay(profile.availability.confirmedAt, timezone)}.` : "Never confirmed with them."} Dispatch never offers a time outside these hours.</p>
+          {manager && profile.availability.windows.length > 0 ? (
+            <Button variant="outline" size="xs" onClick={() => setDialog("confirm")}>
+              <Check aria-hidden />
+              Still right
+            </Button>
+          ) : null}
+        </div>
       </Card>
-      <Card title="Time away and date changes">
+      <Card
+        title="Time away and single dates"
+        action={
+          manager ? (
+            <span className="flex gap-1">
+              <Button variant="ghost" size="xs" onClick={() => setDialog("away")}>
+                <Plus aria-hidden />
+                Time away
+              </Button>
+              <Button variant="ghost" size="xs" onClick={() => setDialog("date")}>
+                <Plus aria-hidden />
+                One date
+              </Button>
+            </span>
+          ) : null
+        }
+      >
         {profile.availability.timeOff.length === 0 && profile.availability.exceptions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No time away or date exceptions ahead.</p>
+          <p className="text-sm text-muted-foreground">No time away or single dates ahead.</p>
         ) : (
           <ul className="grid gap-2 text-sm">
             {profile.availability.timeOff.map((row) => (
               <li key={row.id} className="flex items-start justify-between gap-2 rounded-xl border border-border px-3 py-2">
-                <span>
-                  <span className="font-medium text-strong">Away {dayName(row.startsAt, timezone)} – {dayName(row.endsAt, timezone)}</span>
-                  {row.note ? <span className="block text-xs text-muted-foreground">{row.note}</span> : null}
+                <span className="min-w-0">
+                  <span className="font-medium text-strong">
+                    Away {dayName(row.startsAt, timezone)} {clock(row.startsAt, timezone)} – {dayName(row.endsAt, timezone)} {clock(row.endsAt, timezone)}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {SOURCE_WORDS[row.source ?? "member"]}
+                    {row.note ? ` · ${row.note}` : ""}
+                  </span>
                 </span>
-                <Badge variant="outline" size="sm">
-                  {row.source === "cleaner" ? "From them" : "Recorded"}
-                </Badge>
+                {manager ? <RemoveButton what={{ timeOffId: row.id }} label={`Remove time away from ${dayName(row.startsAt, timezone)}`} /> : null}
               </li>
             ))}
             {profile.availability.exceptions.map((row) => (
-              <li key={row.id} className="rounded-xl border border-border px-3 py-2">
-                <span className="font-medium text-strong">
-                  {row.kind === "available" ? "Can work" : "Cannot work"} {row.date}
-                  {row.startMinute !== null && row.endMinute !== null ? `, ${minuteWords(row.startMinute)} – ${minuteWords(row.endMinute)}` : ", all day"}
+              <li key={row.id} className="flex items-start justify-between gap-2 rounded-xl border border-border px-3 py-2">
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-1.5 font-medium text-strong">
+                    <Badge variant={row.kind === "available" ? "success" : "warning"} size="sm">
+                      {row.kind === "available" ? "Can work" : "Cannot work"}
+                    </Badge>
+                    {longDay(Date.parse(`${row.date}T12:00:00Z`), "UTC")}
+                    {row.startMinute !== null && row.endMinute !== null ? `, ${minuteWords(row.startMinute)} – ${minuteWords(row.endMinute)}` : ", all day"}
+                  </span>
+                  {row.note ? <span className="block text-xs text-muted-foreground">{row.note}</span> : null}
                 </span>
-                {row.note ? <span className="block text-xs text-muted-foreground">{row.note}</span> : null}
+                {manager ? <RemoveButton what={{ exceptionId: row.id }} label={`Remove the date ${row.date}`} /> : null}
               </li>
             ))}
           </ul>
