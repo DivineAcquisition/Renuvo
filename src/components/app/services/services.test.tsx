@@ -30,6 +30,7 @@ const { MoneyInput, Toggle, Stepper, InfoTip } = await import("./shared");
 const { PricingStep, ExtrasStep } = await import("./steps");
 const { marginStanding, PriceStrip } = await import("./visuals");
 const { setupSteps } = await import("./home");
+const { ResearchHome } = await import("./research");
 
 const companyId = "company1" as Id<"companies">;
 function render(role: Role, node: React.ReactNode) {
@@ -289,6 +290,35 @@ describe("phase two: less to scan", () => {
     const html = render("owner", <ServiceBuilder serviceId="svc1" />);
     expect(html).toContain('Basics</span><span class="sr-only">, nothing to fix</span>');
     expect(html).toMatch(/role="progressbar"[^>]*aria-valuetext="Step 3 of 6: Pricing"/);
+  });
+});
+
+describe("research starts with a question box, like Chat", () => {
+  const briefs = (over: Record<string, unknown> = {}) => ({ canStart: true, briefs: [], ...over });
+  const profile = { costs: emptyCosts(), context: { serviceAreas: "Austin, TX" } };
+
+  it("opens with a box to ask in, what it will use, and ideas to start from", () => {
+    data["servicesResearch:briefs"] = briefs();
+    data["services:profile"] = profile;
+    data["services:catalog"] = catalog();
+    const html = render("owner", <ResearchHome />);
+    expect(html).toContain("What do you want to find out?");
+    expect(html).toMatch(/<label[^>]*class="sr-only"[^>]*>Ask a research question<\/label><textarea/);
+    expect(html).toContain("This research will use:");
+    expect(html).toContain("Austin, TX");
+    expect(html).toContain("Your completed visits · free");
+    expect(html).toMatch(/aria-pressed="true"[^>]*>.*?Web research · 10 credits/);
+    expect(html).toContain('aria-label="Start research (10 credits)"');
+    expect(html).toContain("What do cleaning businesses near Austin, TX publish for a standard home clean?");
+    expect(html).not.toContain("New research");
+  });
+
+  it("shows Office the briefs, with no box to start one", () => {
+    data["servicesResearch:briefs"] = briefs({ canStart: false, briefs: [{ id: "b1", question: "What do businesses near Austin charge?", geography: "Austin", origin: "member", mode: "web", state: "ready", blocked: null, findings: 4, createdAt: 1, finishedAt: 2 }] });
+    data["services:profile"] = profile;
+    const html = render("office", <ResearchHome />);
+    expect(html).not.toContain("Ask a research question");
+    expect(html).toContain("What do businesses near Austin charge?");
   });
 });
 

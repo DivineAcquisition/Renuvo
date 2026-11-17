@@ -86,6 +86,16 @@ The screens keep configuration copy short. These rules apply to every Services s
   amounts in a draft that still exactly match its template's illustrative numbers. Review groups them by
   step, each with a way to change it, so the owner confirms specific prices rather than "every amount".
   Times and counts are not listed: they describe the work, not a market's prices.
+- **Research starts with a question box, like Chat.**
+  - Research & Insights opens on a box in the style of Chat's composer: type one question and press Enter
+    (Shift+Enter for a new line), or pick one of four starter ideas.
+  - Chips above the text show what the brief will use: the area (taken from setup), a service if one is
+    picked, sources the owner adds, and the company's completed visits, which are always included and free.
+  - The toolbar sets the area, adds a service or a source from the + menu, and switches web research on or
+    off. Web research costs 10 credits, and the cost is shown on the chip and the send button.
+  - Sending starts the brief through `servicesResearch.start` and opens it while it runs. Earlier briefs
+    are listed underneath. Office sees the list without the box, since only Owners and Managers start
+    research.
 - **Research draws its range.** Comparable prices that share the range's unit are dots on one line, with
   the computed range as a band. The service's own starting price (`startingCents`, `engine.ts`) is marked
   only when the range is of advertised starting prices per visit, so like is compared with like.

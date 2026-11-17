@@ -3,14 +3,16 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
-import { ArrowLeft, ExternalLink, Plus, Trash2 } from "@/components/icons";
+import { Field, FormError, messageOf, SelectInput, TextInput, useRun } from "@/components/app/form";
+import { CreditIndicator } from "@/components/app/billing/credit-indicator";
+import { ArrowLeft, ArrowRight, ArrowUp, Check, ExternalLink, Globe, MapPin, Paperclip, Plus, PriceTagIcon, Search, Sparkles, Trash2, X } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { briefPath, centsFrom, SERVICES_ROOT, servicePath } from "@/lib/app/services";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +20,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { startingCents } from "../../../../convex/lib/services/engine";
 import { BASIS_LABELS, comparableRange } from "../../../../convex/lib/services/research";
-import { Empty, formatCents, Notice, SectionTitle, Toggle, when } from "./shared";
+import { Empty, formatCents, InfoTip, Notice, SectionTitle, when } from "./shared";
 import { PriceStrip } from "./visuals";
 
 const BASIS_TONE: Record<string, "info" | "warning" | "success" | "outline"> = { advertised_starting: "warning", estimated: "info", firm_published: "success", company_data: "success", ai_inference: "outline" };
@@ -28,44 +30,87 @@ const STATE_WORDS: Record<string, string> = { queued: "Waiting to start", runnin
 type OwnerSource = { url: string; title: string; price: string; priceKind: "advertised_starting" | "estimated" | "firm_published"; unit: string; geography: string; excerpt: string; comparable: boolean };
 const blankSource = (): OwnerSource => ({ url: "", title: "", price: "", priceKind: "advertised_starting", unit: "per visit", geography: "", excerpt: "", comparable: true });
 
-/** Research briefs, newest first, and how to start one. */
+/** Ideas to start from, using the company's own area when setup gave one. Picking one fills the box; the person still sends it. */
+function researchStarters(area: string): string[] {
+  const near = area && area.length <= 40 ? ` near ${area}` : " near me";
+  return [
+    `What do cleaning businesses${near} publish for a standard home clean?`,
+    "Do companies near me price deep cleans by size, or by bedrooms and bathrooms?",
+    `Is there demand for short-term rental turnovers${near}, and how are they priced?`,
+    "What do commercial cleaners publish for small office cleaning?",
+  ];
+}
+
+/**
+ * Research starts the way Chat does: a box to ask one question in. Sending it starts a research brief and
+ * opens it while it runs. Earlier briefs are listed underneath.
+ */
 export function ResearchHome() {
   const { companyId } = useCompany();
   const data = useQuery(api.servicesResearch.briefs, { companyId });
-  const [starting, setStarting] = useState(false);
+  const profile = useQuery(api.services.profile, { companyId });
+  const [seed, setSeed] = useState("");
   if (!data) return <Skeleton className="h-64 rounded-2xl" />;
+  const area = profile?.context.serviceAreas.trim() ?? "";
   return (
-    <div className="grid grid-cols-1 gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionTitle title="Research & Insights" tip="Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price. If you already have reliable job data, you can skip it.">Ask one question. Nothing here changes a price.</SectionTitle>
-        {data.canStart && !starting ? (
-          <Button variant="primary" size="sm" onClick={() => setStarting(true)}>
-            <Plus aria-hidden /> New research
-          </Button>
-        ) : null}
-      </div>
-      {starting ? <NewBrief onDone={() => setStarting(false)} /> : null}
-      {data.briefs.length === 0 && !starting ? <Empty title="No research yet">Start one when a decision needs it. Your own completed visits are always included, free.</Empty> : null}
-      <ul className="grid grid-cols-1 gap-2">
-        {data.briefs.map((b) => (
-          <li key={b.id}>
-            <Link href={briefPath(b.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
-              <span className="min-w-0">
-                <span className="block font-medium text-strong">{b.question}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {b.geography || "No area given"} · {b.mode === "web" ? "Web research" : "Your sources and records"} · {b.origin === "setup" ? "started by setup" : "started by your team"} · {when(b.createdAt)}
+    <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-8">
+      {data.canStart ? (
+        <section aria-labelledby="research-ask" className="grid grid-cols-1 gap-5 pt-2">
+          <div className="flex items-center gap-3">
+            <span aria-hidden className="relative inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-brand-500/30 bg-card shadow-[0_12px_32px_-14px_rgba(104,56,239,0.8)]">
+              <Search className="size-5 text-brand-300" />
+            </span>
+            <div className="min-w-0">
+              <h2 id="research-ask" className="flex items-center gap-0.5 font-heading text-2xl tracking-tight text-strong">
+                What do you want to find out?
+                <InfoTip label="Research & Insights">Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price. If you already have reliable job data, you can skip it.</InfoTip>
+              </h2>
+              <p className="text-sm text-muted-foreground">Ask one question about prices, demand or your area. Selestial researches it and writes a brief.</p>
+            </div>
+          </div>
+          <ResearchComposer seed={seed} defaultArea={area} />
+          <ul aria-label="Ideas to start from" className="grid gap-2 sm:grid-cols-2">
+            {researchStarters(area).map((starter) => (
+              <li key={starter}>
+                <button type="button" onClick={() => setSeed(starter)} className="group flex h-full w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-3 text-left text-sm text-strong hover:border-brand-500/50 hover:bg-brand-500/[0.04] focus-visible:outline-2 focus-visible:outline-brand-500">
+                  <Sparkles className="size-4 shrink-0 text-brand-300" aria-hidden />
+                  <span className="flex-1">{starter}</span>
+                  <ArrowRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
+        <SectionTitle title="Research & Insights" tip="Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price.">Briefs your Owner and Managers started.</SectionTitle>
+      )}
+
+      <section aria-labelledby="research-list" className="grid grid-cols-1 gap-2">
+        <h2 id="research-list" className="font-heading text-base tracking-tight text-strong">
+          Your research {data.briefs.length ? <span className="text-sm font-normal text-muted-foreground">· {data.briefs.length}</span> : null}
+        </h2>
+        {data.briefs.length === 0 ? <Empty title="No research yet">{data.canStart ? "Ask a question above when a decision needs it. Your own completed visits are always included, free." : "Briefs appear here once someone starts one."}</Empty> : null}
+        <ul className="grid grid-cols-1 gap-2">
+          {data.briefs.map((b) => (
+            <li key={b.id}>
+              <Link href={briefPath(b.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
+                <span className="min-w-0">
+                  <span className="block font-medium text-strong">{b.question}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {b.geography || "No area given"} · {b.mode === "web" ? "Web research" : "Your sources and records"} · {b.origin === "setup" ? "started by setup" : "started by your team"} · {when(b.createdAt)}
+                  </span>
                 </span>
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{b.findings} findings</span>
-                <Badge variant={b.state === "ready" ? "success" : b.state === "failed" ? "error" : "info"} size="sm">
-                  {STATE_WORDS[b.state]}
-                </Badge>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+                <span className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{b.findings} findings</span>
+                  <Badge variant={b.state === "ready" ? "success" : b.state === "failed" ? "error" : "info"} size="sm">
+                    {STATE_WORDS[b.state]}
+                  </Badge>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }
@@ -129,59 +174,229 @@ function SourceRows({ sources, setSources }: { sources: OwnerSource[]; setSource
 
 const toOwner = (s: OwnerSource) => ({ ...(s.url.trim() ? { url: s.url.trim() } : {}), title: s.title, geography: s.geography, excerpt: s.excerpt, priceCents: s.price.trim() ? centsFrom(s.price) : null, priceKind: s.price.trim() ? s.priceKind : null, unit: s.unit, comparable: s.comparable, limitation: "" });
 
-function NewBrief({ onDone }: { onDone: () => void }) {
+const chip = "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500";
+
+/**
+ * The research box, built like Chat's composer: type a question and press Enter. The chips under it set
+ * where to look, which service it is about, and whether to search the web (10 credits, charged only if
+ * it finishes). The company's own completed visits are always included, free. Sources the person found
+ * themselves are added from the + menu.
+ */
+function ResearchComposer({ seed, defaultArea }: { seed: string; defaultArea: string }) {
   const { companyId } = useCompany();
   const router = useRouter();
   const start = useMutation(api.servicesResearch.start);
   const catalog = useQuery(api.services.catalog, { companyId });
-  const { busy, error, run } = useRun();
-  const [question, setQuestion] = useState("");
-  const [geography, setGeography] = useState("");
+  const [text, setText] = useState(seed);
+  const [area, setArea] = useState<string | null>(null);
   const [serviceId, setServiceId] = useState("");
   const [web, setWeb] = useState(true);
   const [sources, setSources] = useState<OwnerSource[]>([]);
+  const [menu, setMenu] = useState<"none" | "plus" | "service" | "area">("none");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const label = useId();
+  const where = area ?? defaultArea;
+  const service = catalog?.services.find((row) => row.id === serviceId) ?? null;
+
+  // A picked idea fills the box; the person still sends it.
+  const [seenSeed, setSeenSeed] = useState(seed);
+  if (seed !== seenSeed) {
+    setSeenSeed(seed);
+    if (seed) setText(seed);
+  }
+  useEffect(() => {
+    if (seed) box.current?.focus();
+  }, [seed]);
+  useEffect(() => {
+    const node = box.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${Math.min(node.scrollHeight, 220)}px`;
+  }, [text]);
+
+  const canSend = text.trim().length > 0 && !busy;
+  const submit = async () => {
+    if (!canSend) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await start({ companyId, question: text.trim(), geography: where, web, sources: sources.filter((s) => s.title.trim()).map(toOwner), ...(serviceId ? { serviceId: serviceId as Id<"services"> } : {}) });
+      router.push(briefPath(result.briefId));
+    } catch (caught) {
+      setError(messageOf(caught));
+      setBusy(false);
+    }
+  };
+  const close = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      setMenu("none");
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-4 rounded-2xl border border-brand-500/25 bg-gradient-to-b from-brand-500/[0.05] to-card p-4 sm:p-6">
-      <Field label="What should it answer?" hint="One decision at a time works best.">
-        <TextArea rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="What do comparable businesses in north Austin publish for move-out cleans, and do they quote by size or after a walkthrough?" />
-      </Field>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Where">
-          <TextInput value={geography} onChange={(e) => setGeography(e.target.value)} placeholder="Austin, TX (78701–78759)" />
-        </Field>
-        <label className="grid grid-cols-1 gap-1.5 text-sm">
-          <span className="font-medium text-strong">About one of your services (optional)</span>
-          <SelectInput value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-            <option value="">None</option>
-            {catalog?.services.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </SelectInput>
-        </label>
-      </div>
-      <Toggle label="Search public web pages" description="Up to 5 searches and one written brief: 10 Selestial Credits, charged only if it finishes. Without it, the brief uses only the sources you add and your own completed visits, free." checked={web} onChange={setWeb} />
-      <SourceRows sources={sources} setSources={setSources} />
-      <FormError message={error} />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="primary"
-          loading={busy}
-          disabled={!question.trim()}
-          onClick={() =>
-            void run(async () => {
-              const result = await start({ companyId, question, geography, web, sources: sources.filter((s) => s.title.trim()).map(toOwner), ...(serviceId ? { serviceId: serviceId as Id<"services"> } : {}) });
-              router.push(briefPath(result.briefId));
-            })
-          }
+    <div className="grid grid-cols-1 gap-3">
+      <div>
+        <form
+          className="relative rounded-2xl border border-border bg-card p-2.5 shadow-[0_18px_50px_-30px_rgba(104,56,239,0.55)] transition-colors focus-within:border-brand-500/50"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
         >
-          {web ? "Start research (10 credits)" : "Make the brief"}
-        </Button>
-        <Button variant="ghost" onClick={onDone}>
-          Cancel
-        </Button>
+          <div className="flex flex-wrap items-center gap-1.5 px-1.5 pt-1 pb-1.5">
+            <span className="text-[11px] text-muted-foreground">This research will use:</span>
+            {where ? (
+              <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-strong">
+                <MapPin className="size-3 text-brand-300" aria-hidden /> {where}
+                <button type="button" onClick={() => setArea("")} aria-label="Remove the area" className="ml-0.5 rounded text-muted-foreground hover:text-strong">
+                  <X className="size-3" aria-hidden />
+                </button>
+              </span>
+            ) : null}
+            {service ? (
+              <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-strong">
+                <PriceTagIcon className="size-3 text-brand-300" aria-hidden /> {service.name}
+                <button type="button" onClick={() => setServiceId("")} aria-label={`Not about ${service.name}`} className="ml-0.5 rounded text-muted-foreground hover:text-strong">
+                  <X className="size-3" aria-hidden />
+                </button>
+              </span>
+            ) : null}
+            {sources.length ? (
+              <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-strong">
+                <Paperclip className="size-3 text-brand-300" aria-hidden /> {sources.length} source{sources.length === 1 ? "" : "s"} you found
+              </span>
+            ) : null}
+            <span className="inline-flex items-center gap-1 rounded-lg border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
+              <Check className="size-3 text-success-foreground" aria-hidden /> Your completed visits · free
+            </span>
+          </div>
+          <label htmlFor={label} className="sr-only">
+            Ask a research question
+          </label>
+          <textarea
+            id={label}
+            ref={box}
+            value={text}
+            rows={3}
+            maxLength={500}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+            placeholder="Ask a pricing or market question… for example, what do businesses near me charge for move-out cleans?"
+            className="block w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-relaxed text-strong outline-none placeholder:text-muted-foreground/80"
+          />
+          <div className="flex flex-wrap items-center gap-1.5 px-0.5 pt-1">
+            <div className="relative">
+              <button type="button" onClick={() => setMenu((m) => (m === "none" ? "plus" : "none"))} aria-haspopup="menu" aria-expanded={menu === "plus" || menu === "service"} aria-label="Add a source or a service" className={cn(chip, "w-8 justify-center px-0", menu === "plus" || menu === "service" ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-border text-muted-foreground hover:text-strong")}>
+                <Plus className="size-4" aria-hidden />
+              </button>
+              {menu === "plus" ? (
+                <ul role="menu" aria-label="Add" onKeyDown={close} className="live-enter absolute top-full left-0 z-30 mt-2 grid w-64 gap-0.5 rounded-xl border border-border bg-card p-1 shadow-xl">
+                  <li role="none">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      autoFocus
+                      onClick={() => {
+                        setSources((list) => [...list, blankSource()]);
+                        setMenu("none");
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted"
+                    >
+                      <Paperclip className="size-4 text-muted-foreground" aria-hidden />
+                      <span className="flex-1">Add a source you found</span>
+                    </button>
+                  </li>
+                  <li role="none">
+                    <button type="button" role="menuitem" onClick={() => setMenu("service")} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted">
+                      <PriceTagIcon className="size-4 text-muted-foreground" aria-hidden />
+                      <span className="flex-1">About one of your services</span>
+                    </button>
+                  </li>
+                </ul>
+              ) : null}
+              {menu === "service" ? (
+                <ul role="listbox" aria-label="Your services" onKeyDown={close} className="live-enter absolute top-full left-0 z-30 mt-2 grid max-h-64 w-64 gap-0.5 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-xl">
+                  {(catalog?.services ?? []).length === 0 ? <li className="px-2.5 py-2 text-xs text-muted-foreground">No services yet.</li> : null}
+                  {(catalog?.services ?? []).map((row, i) => (
+                    <li key={row.id} role="option" aria-selected={row.id === serviceId}>
+                      <button
+                        type="button"
+                        autoFocus={i === 0}
+                        onClick={() => {
+                          setServiceId(row.id);
+                          setMenu("none");
+                          box.current?.focus();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-strong hover:bg-muted"
+                      >
+                        <span className="min-w-0 flex-1 truncate">{row.name}</span>
+                        {row.id === serviceId ? <Check className="size-4 text-brand-300" aria-hidden /> : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+            <div className="relative">
+              <button type="button" onClick={() => setMenu((m) => (m === "area" ? "none" : "area"))} aria-haspopup="dialog" aria-expanded={menu === "area"} className={cn(chip, menu === "area" ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-border text-muted-foreground hover:text-strong")}>
+                <MapPin className="size-3.5" aria-hidden /> {where ? "Change area" : "Add an area"}
+              </button>
+              {menu === "area" ? (
+                <div role="dialog" aria-label="Where to look" onKeyDown={close} className="live-enter absolute top-full left-0 z-30 mt-2 w-[min(18rem,calc(100vw-3rem))] rounded-xl border border-border bg-card p-2 shadow-xl">
+                  <label className="grid gap-1 text-xs text-muted-foreground">
+                    Where to look
+                    <input
+                      autoFocus
+                      value={where}
+                      onChange={(event) => setArea(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          setMenu("none");
+                          box.current?.focus();
+                        }
+                      }}
+                      placeholder="Austin, TX (78701–78759)"
+                      maxLength={200}
+                      className="h-9 rounded-lg border border-border bg-background px-2.5 text-sm text-strong outline-none focus-visible:border-brand-500/60"
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+            <button type="button" aria-pressed={web} onClick={() => setWeb((on) => !on)} className={cn(chip, web ? "border-brand-500/30 bg-brand-500/10 text-brand-300" : "border-border text-muted-foreground hover:text-strong")}>
+              <Globe className="size-3.5" aria-hidden /> {web ? "Web research · 10 credits" : "No web search · free"}
+            </button>
+            <div className="ml-auto">
+              <button type="submit" disabled={!canSend} aria-label={web ? "Start research (10 credits)" : "Make the brief (free)"} className="inline-flex size-9 items-center justify-center rounded-full bg-gradient-to-b from-brand-400 via-brand-500 to-brand-700 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_8px_20px_-10px_rgba(104,56,239,0.9)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:opacity-40 disabled:shadow-none">
+                {busy ? <Spinner className="size-4" /> : <ArrowUp className="size-4" aria-hidden />}
+              </button>
+            </div>
+          </div>
+        </form>
+        {error ? (
+          <p role="alert" className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-foreground">
+            {error}
+          </p>
+        ) : null}
+        <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
+          {web ? "Web research uses up to 5 searches and costs 10 Selestial Credits, charged only if it finishes." : "Without web research, the brief uses only your sources and your completed visits, free."} Research proposes; it never changes a price. {web ? <CreditIndicator /> : null}
+        </p>
       </div>
+      {sources.length ? (
+        <div className="grid grid-cols-1 gap-2">
+          <p className="text-sm font-medium text-strong">Sources you found</p>
+          <SourceRows sources={sources} setSources={setSources} />
+        </div>
+      ) : null}
     </div>
   );
 }
