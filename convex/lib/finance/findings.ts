@@ -9,7 +9,9 @@ import { amountRequested, invoiceState } from "./invoiceState";
 export type FindingRecord =
   | { kind: "invoice"; id: Id<"invoices">; label: string; detail: string; amountCents: number }
   | { kind: "job"; id: Id<"jobs">; label: string; detail: string; amountCents: number | null }
-  | { kind: "payment"; id: Id<"payments">; invoiceId: Id<"invoices">; label: string; detail: string; amountCents: number };
+  | { kind: "payment"; id: Id<"payments">; invoiceId: Id<"invoices">; label: string; detail: string; amountCents: number }
+  | { kind: "earning"; id: Id<"earnings">; label: string; detail: string; amountCents: number | null }
+  | { kind: "cleaner"; id: Id<"cleaners">; label: string; detail: string; amountCents: number | null };
 
 export type Finding = {
   id: string;
@@ -23,7 +25,7 @@ export type Finding = {
   recommend: string;
   records: FindingRecord[];
   /** The one action the card offers. Every one opens a real record or a real form. */
-  action: { label: string; kind: "open_invoice" | "invoice_jobs" | "open_setup" | "filter_invoices"; filter?: "overdue" | "drafts" };
+  action: { label: string; kind: "open_invoice" | "invoice_jobs" | "open_setup" | "filter_invoices" | "team_pay"; filter?: "overdue" | "drafts" | "review" | "approved" | "started" };
   totalCents: number | null;
 };
 
@@ -43,6 +45,16 @@ export type FindingInput = {
   sentByMessage: ReadonlySet<string>;
   /** Invoices whose whole reminder schedule went out. */
   scheduleDone: ReadonlySet<string>;
+  /** Team pay waiting on the Owner. Absent when it wasn't read. */
+  teamPay?: {
+    review: { earning: Doc<"earnings">; cleaner: string; job: string }[];
+    /** Approved more than two days ago and not yet paid. */
+    unpaid: { earning: Doc<"earnings">; cleaner: string; job: string }[];
+    /** Recorded as started more than three days ago and not confirmed. */
+    started: { payment: Doc<"teamPayments">; cleaner: string }[];
+    /** Cleaners with completed jobs and no pay method. */
+    noPay: { cleanerId: Id<"cleaners">; cleaner: string; jobs: number }[];
+  };
 };
 
 export function findings(input: FindingInput): Finding[] {
@@ -199,6 +211,69 @@ export function findings(input: FindingInput): Finding[] {
       records: drafts.slice(0, 5).map((invoice) => ({ kind: "invoice", id: invoice._id, label: label(invoice), detail: `${money(invoice.totals.totalCents)} draft`, amountCents: invoice.totals.totalCents })),
       action: { label: "See drafts", kind: "filter_invoices", filter: "drafts" },
       totalCents: drafts.reduce((s, invoice) => s + invoice.totals.totalCents, 0),
+    });
+  }
+
+  const team = input.teamPay;
+  if (team?.review.length) {
+    const flagged = team.review.filter((row) => row.earning.status === "needs_review" || row.earning.flags.length > 0);
+    const known = team.review.filter((row) => row.earning.totalCents !== null);
+    const total = known.reduce((s, row) => s + row.earning.totalCents!, 0);
+    const missing = team.review.length - known.length;
+    out.push({
+      id: "team_review",
+      tone: flagged.length ? "warning" : "info",
+      state: "needs_your_approval",
+      title: `${plural(team.review.length, "job")} of team pay to review`,
+      noticed: `Selestial worked out ${money(total)} for ${plural(new Set(team.review.map((row) => row.earning.cleanerId)).size, "cleaner")}${missing ? `; ${plural(missing, "job")} can't be worked out yet` : ""}.${flagged.length ? ` ${plural(flagged.length, "job")} ${flagged.length === 1 ? "has" : "have"} something to check, such as hours or a changed amount.` : ""}`,
+      recommend: flagged.length ? "Check the flagged jobs first, then approve. Approving agrees the amount; it doesn't pay anyone." : "Approve them. Approving agrees the amount; it doesn't pay anyone.",
+      records: [...flagged, ...team.review.filter((row) => !flagged.includes(row))].slice(0, 5).map((row) => ({ kind: "earning", id: row.earning._id, label: row.cleaner, detail: row.job, amountCents: row.earning.totalCents })),
+      action: { label: "Review team pay", kind: "team_pay", filter: "review" },
+      totalCents: total,
+    });
+  }
+
+  if (team?.unpaid.length) {
+    const total = team.unpaid.reduce((s, row) => s + (row.earning.totalCents ?? 0), 0);
+    out.push({
+      id: "team_unpaid",
+      tone: "warning",
+      state: "needs_attention",
+      title: `${money(total)} approved, not paid`,
+      noticed: `${plural(team.unpaid.length, "job")} for ${plural(new Set(team.unpaid.map((row) => row.earning.cleanerId)).size, "cleaner")} ${team.unpaid.length === 1 ? "was" : "were"} approved more than two days ago and no payment is recorded.`,
+      recommend: "Pay them the way you usually do, then record it, so their statement shows it.",
+      records: team.unpaid.slice(0, 5).map((row) => ({ kind: "earning", id: row.earning._id, label: row.cleaner, detail: row.job, amountCents: row.earning.totalCents })),
+      action: { label: "See who's owed", kind: "team_pay", filter: "approved" },
+      totalCents: total,
+    });
+  }
+
+  if (team?.started.length) {
+    const total = team.started.reduce((s, row) => s + row.payment.amountCents, 0);
+    out.push({
+      id: "team_started",
+      tone: "info",
+      state: "needs_attention",
+      title: `${plural(team.started.length, "team payment")} not confirmed`,
+      noticed: `${money(total)} was recorded as on its way more than three days ago and hasn't been confirmed as paid.`,
+      recommend: "Confirm each one once it arrived, or cancel it with a reason if it didn't go through.",
+      records: team.started.slice(0, 5).map((row) => ({ kind: "cleaner", id: row.payment.cleanerId, label: row.cleaner, detail: `${money(row.payment.amountCents)} started`, amountCents: row.payment.amountCents })),
+      action: { label: "See started payments", kind: "team_pay", filter: "started" },
+      totalCents: total,
+    });
+  }
+
+  if (team?.noPay.length) {
+    out.push({
+      id: "team_nopay",
+      tone: "warning",
+      state: "needs_attention",
+      title: `${plural(team.noPay.length, "cleaner")} with no pay set`,
+      noticed: `${plural(team.noPay.reduce((s, row) => s + row.jobs, 0), "completed job")} can't be worked out because ${team.noPay.length === 1 ? "this cleaner has" : "these cleaners have"} no pay method.`,
+      recommend: "Set how each one is paid: a tier, their own %, a fixed amount per job, or hourly for employees.",
+      records: team.noPay.slice(0, 5).map((row) => ({ kind: "cleaner", id: row.cleanerId, label: row.cleaner, detail: plural(row.jobs, "job"), amountCents: null })),
+      action: { label: "Review team pay", kind: "team_pay", filter: "review" },
+      totalCents: null,
     });
   }
 

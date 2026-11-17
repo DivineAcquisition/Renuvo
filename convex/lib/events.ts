@@ -76,6 +76,10 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("stripeAccounts"), id: v.id("stripeAccounts") }),
   v.object({ table: v.literal("financeSettings"), id: v.id("financeSettings") }),
   v.object({ table: v.literal("financeMessages"), id: v.id("financeMessages") }),
+  v.object({ table: v.literal("earnings"), id: v.id("earnings") }),
+  v.object({ table: v.literal("teamPayments"), id: v.id("teamPayments") }),
+  v.object({ table: v.literal("tips"), id: v.id("tips") }),
+  v.object({ table: v.literal("statementLinks"), id: v.id("statementLinks") }),
 );
 export type Subject = typeof subjectValidator.type;
 

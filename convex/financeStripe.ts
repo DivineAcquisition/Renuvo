@@ -20,6 +20,7 @@ import { userError } from "./lib/errors";
 import { byMember, recordEvent, type Actor } from "./lib/events";
 import { requireFinance } from "./lib/finance/authority";
 import { recompute } from "./lib/finance/ledger";
+import { jobCrew, splitEvenly, syncJobEarnings } from "./lib/finance/teamPay";
 import {
   accountFacts,
   cancelPaymentIntent,
@@ -255,8 +256,9 @@ export const createIntent = internalAction({
       paymentId: payment._id,
       invoiceId: invoice._id,
       companyId: payment.companyId,
-      amountCents: payment.amountCents,
-      description: `${invoice.number ?? "Invoice"} · ${found.companyName}`.slice(0, 200),
+      // The invoice amount and the tip go in one charge; Selestial keeps them apart in its records.
+      amountCents: payment.amountCents + (payment.tipCents ?? 0),
+      description: `${invoice.number ?? "Invoice"}${payment.tipCents ? " + tip" : ""} · ${found.companyName}`.slice(0, 200),
       receiptEmail: found.customerEmail ?? undefined,
     });
     if (answer.kind === "ok") {
@@ -371,7 +373,8 @@ async function applyPayment(ctx: MutationCtx, paymentId: Id<"payments">, facts: 
   await ctx.db.patch(payment._id, {
     status,
     method: facts.method,
-    amountCents: status === "succeeded" && facts.receivedCents > 0 ? facts.receivedCents : payment.amountCents,
+    // What Stripe received less the tip is what paid the invoice; the tip is the cleaners'.
+    amountCents: status === "succeeded" && facts.receivedCents > 0 ? facts.receivedCents - (payment.tipCents ?? 0) : payment.amountCents,
     problem: status === "failed" ? (facts.problem ?? "The payment was declined.") : undefined,
     stripe: { ...payment.stripe, feeCents: facts.feeCents ?? payment.stripe.feeCents, methodLabel: facts.methodLabel ?? payment.stripe.methodLabel, clientSecret: settled ? undefined : payment.stripe.clientSecret },
     succeededAt: status === "succeeded" ? (payment.succeededAt ?? now) : payment.succeededAt,
@@ -381,12 +384,30 @@ async function applyPayment(ctx: MutationCtx, paymentId: Id<"payments">, facts: 
   if (status !== payment.status && EVENT_FOR[status]) {
     await recordEvent(ctx, { companyId: payment.companyId, type: EVENT_FOR[status]!, actor: SYSTEM, subject: { table: "payments", id: payment._id }, data: { amountCents: payment.amountCents } });
   }
+  if (status === "succeeded" && payment.status !== "succeeded" && (payment.tipCents ?? 0) > 0) await tipReceived(ctx, payment);
   const before = (await ctx.db.get(payment.invoiceId))!;
   const after = await recompute(ctx, payment.invoiceId);
   if (before.status !== "paid" && after.status === "paid") {
     await recordEvent(ctx, { companyId: payment.companyId, type: "invoice.paid", actor: SYSTEM, subject: { table: "invoices", id: after._id }, data: { amountCents: after.totals.totalCents } });
     await cancelStartedPayments(ctx, after._id, payment._id);
   }
+}
+
+/** A tip paid with a card payment arrived: all of it to the job's crew, split evenly, counted in their earnings. */
+async function tipReceived(ctx: MutationCtx, payment: Doc<"payments">) {
+  const existing = await ctx.db
+    .query("tips")
+    .withIndex("by_company_payment", (q) => q.eq("companyId", payment.companyId).eq("paymentId", payment._id))
+    .first();
+  if (existing) return;
+  const invoice = await ctx.db.get(payment.invoiceId);
+  const job = invoice?.jobId ? await ctx.db.get(invoice.jobId) : null;
+  if (!invoice || !job) return;
+  const crew = await jobCrew(ctx, job);
+  const now = Date.now();
+  const tipId = await ctx.db.insert("tips", { companyId: payment.companyId, jobId: job._id, invoiceId: invoice._id, paymentId: payment._id, amountCents: payment.tipCents!, source: "pay_page", status: "received", allocations: splitEvenly(payment.tipCents!, crew.map((a) => a.cleanerId)), createdAt: now, updatedAt: now });
+  await recordEvent(ctx, { companyId: payment.companyId, type: "tip.received", actor: SYSTEM, subject: { table: "tips", id: tipId }, data: { amountCents: payment.tipCents!, jobId: job._id } });
+  await syncJobEarnings(ctx, job);
 }
 
 /** Stops a payment the customer started and did not finish. If it already went through, reads it instead. */

@@ -109,6 +109,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "refunds", index: "by_company_invoice" },
   { table: "invoiceCredits", index: "by_company_invoice" },
   { table: "financeMessages", index: "by_company_invoice" },
+  { table: "earnings", index: "by_company_job" },
+  { table: "teamPayments", index: "by_company_cleaner" },
+  { table: "tips", index: "by_company_job" },
+  { table: "statementLinks", index: "by_company_cleaner", omit: ["publicId"], why: "Half of a cleaner's statement link." },
 ];
 
 /** Company tables kept out of the export, and why. */

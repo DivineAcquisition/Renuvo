@@ -178,7 +178,7 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     path: `${APP_ROOT}/finance`,
     availability: LIVE,
     minimumRole: "owner",
-    accessNote: "The Owner only, by the owner's decision on November 15, 2026. Invoices, payments, credits and refunds are built; Expenses, Team Pay and Profitability are shown as not built yet.",
+    accessNote: "The Owner only, by the owner's decision on November 15, 2026. Invoices, payments, credits, refunds and Team Pay are built; Expenses and Profitability are shown as not built yet.",
   },
   {
     id: "reports",
@@ -224,7 +224,7 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 
 /** Pages inside Finance, reached from it. They have no sidebar entry of their own. */
 export const FINANCE_PAGES: readonly { path: string; label: string; purpose: string }[] = [
-  { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account and its invoice settings: tax, terms, numbering." },
+  { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account, its invoice settings (tax, terms, numbering), pay tiers and tips." },
 ];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */

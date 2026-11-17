@@ -56,7 +56,7 @@ export const FINANCE_TABS = [
   { id: "overview", label: "Overview", built: true },
   { id: "invoices", label: "Invoices & Payments", built: true },
   { id: "expenses", label: "Expenses", built: false },
-  { id: "team-pay", label: "Team Pay", built: false },
+  { id: "team-pay", label: "Team Pay", built: true },
   { id: "profitability", label: "Profitability", built: false },
 ] as const;
 export type FinanceTab = (typeof FINANCE_TABS)[number]["id"];

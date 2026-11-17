@@ -10,6 +10,7 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import { payMutation, payQuery } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { recordEvent } from "./lib/events";
@@ -65,15 +66,35 @@ export const view = payQuery({
       canPayByCard: stripe.canPayByCard && invoice.status === "open" && requested >= MIN_CARD_CENTS,
       cardUnavailableReason: invoice.status !== "open" ? null : !stripe.canPayByCard ? `${company.name} doesn't take online payments yet. Please pay them directly.` : requested < MIN_CARD_CENTS && requested > 0 ? "The amount left is too small to pay by card. Please pay the company directly." : null,
       allowPartial: settings.allowPartialPayments && !inDepositStage(invoice),
+      tips: await tipOffer(ctx, invoice, settings.tipsOn),
       testMode: stripe.testMode,
       minCents: MIN_CARD_CENTS,
     };
   },
 });
 
+/** Whether the pay page offers a tip: tips on, a job with a crew, the balance (not a deposit) being paid. */
+async function tipOffer(ctx: QueryCtx, invoice: Doc<"invoices">, tipsOn: boolean) {
+  if (!tipsOn || !invoice.jobId || invoice.status !== "open" || inDepositStage(invoice)) return null;
+  const job = await ctx.db.get(invoice.jobId);
+  if (!job || job.status !== "completed") return null;
+  const crew = (
+    await ctx.db
+      .query("assignments")
+      .withIndex("by_company_job", (q) => q.eq("companyId", invoice.companyId).eq("jobId", job._id))
+      .take(50)
+  ).filter((a) => a.status === "accepted");
+  if (!crew.length) return null;
+  const names = [];
+  for (const a of crew) names.push(((await ctx.db.get(a.cleanerId))?.name ?? "").split(/\s+/)[0]);
+  return { crew: names.filter(Boolean), maxCents: MAX_TIP_CENTS };
+}
+
+const MAX_TIP_CENTS = 50_000;
+
 /** The customer starts paying. Makes one payment record per click (by the browser's key) and asks Stripe to prepare it. */
 export const start = payMutation({
-  args: { amountCents: v.number(), clientKey: v.string() },
+  args: { amountCents: v.number(), clientKey: v.string(), tipCents: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const { invoice, company } = ctx;
     if (!/^[\w-]{8,80}$/.test(args.clientKey)) throw userError("Reload the page and try again.");
@@ -93,6 +114,11 @@ export const start = payMutation({
     if (!Number.isInteger(args.amountCents) || args.amountCents < MIN_CARD_CENTS) throw userError("Enter at least $0.50.");
     if (args.amountCents > requested) throw userError("That's more than what's due right now.");
     if (!partial && args.amountCents !== requested) throw userError("Please pay the full amount due.");
+    const tipCents = args.tipCents ?? 0;
+    if (tipCents) {
+      if (!Number.isSafeInteger(tipCents) || tipCents < 0 || tipCents > MAX_TIP_CENTS) throw userError("Enter a tip up to $500.");
+      if (!(await tipOffer(ctx, invoice, settings.tipsOn))) throw userError("Tips can't be added to this payment.");
+    }
     const config = stripeConfig();
     const account = await currentStripeAccount(ctx, company._id);
     if (!config || !account?.accountId || account.status !== "active" || account.livemode !== config.livemode || !config.publishableKey) throw userError(`${company.name} doesn't take online payments right now. Please pay them directly.`);
@@ -108,6 +134,7 @@ export const start = payMutation({
       clientKey: args.clientKey,
       stripe: { accountId: account.accountId, livemode: account.livemode, createTries: 0 },
       refundedCents: 0,
+      tipCents: tipCents || undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -143,6 +170,7 @@ export const attempt = payQuery({
       words: ATTEMPT_WORDS[payment.status],
       preparing: payment.status === "awaiting_customer" && !payment.stripe.paymentIntentId,
       amountCents: payment.amountCents,
+      tipCents: payment.tipCents ?? 0,
       problem: payment.problem ?? null,
       clientSecret: ready ? payment.stripe.clientSecret! : null,
       publishableKey: ready ? (config?.publishableKey ?? null) : null,

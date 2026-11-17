@@ -27,6 +27,10 @@ Settings › Plan & Usage (`docs/billing/README.md`), and the two never share a 
 | Reminder schedule | Drafts 3 days before due, then 1, 7 and 14 days overdue; after that Selestial flags the invoice and prepares nothing more |
 | Approving customer messages | Each one, edited if wanted; Send all lists every recipient, channel and amount first |
 | Who emails come from | The company's name via Selestial's sending address, replies to the Owner (or a set reply-to); the company's own Gmail when connected for sending |
+| Pay tiers (phase 3) | Selestial suggests New 35%, Proven 40%, Lead 45%; the Owner renames, re-rates, adds or removes tiers, assigns each contractor, or gives one their own % |
+| When cleaners are paid | After each job: each completed job's pay is worked out, reviewed and approved on its own |
+| Tips | Customers can add a tip on the pay page (never pre-chosen). 100% goes to that job's crew, split evenly; the company covers Stripe's fee on it. Cash tips can be recorded |
+| Cleaner statements | A private link the Owner sends (text or email, previewed and approved) showing only that cleaner's own jobs, pay and payments for 90 days |
 
 ## Phases
 
@@ -35,7 +39,7 @@ Settings › Plan & Usage (`docs/billing/README.md`), and the two never share a 
 | 0 Foundations | Money records with an audit trail, separate finance capabilities checked on the server, Finance in the sidebar with its tabs, shared money UI | **Built** |
 | 1 Stripe and getting paid | Connect the company's Stripe account; invoices with deposits and partial payments; branded pay page; Stripe webhooks; payments recorded by hand; customer statements; refunds and credits behind a confirmation; recovery from unclear Stripe answers | **Built** |
 | 2 Collections with Selestial | Invoices and reminders to customers by email or text through the shared sending rules; Selestial drafts on a schedule; the Owner edits and approves each, or Send all; "Ready for you" queue; Chat tools and invoice context | **Built** |
-| 3 Team Pay | Fixed, hourly, % share and % tiers; check-out and corrected hours; tips; Calculated → Needs review → Approved → Payment started → Paid; cleaner statements | |
+| 3 Team Pay | Fixed, hourly, % share and % tiers; check-out and corrected hours; tips; Calculated → Needs review → Approved → Payment started → Paid; cleaner statements | **Built** |
 | 4 Expenses | Receipt capture and extraction to confirm, categories and rules, duplicates, upcoming bills, links to jobs | |
 | 5 Profitability | Estimated vs actual per job, service, customer, property; missing costs shown; margin vs markup; scenarios; "Review pricing" draft into Services & Pricing | |
 | 6 Integrations | CSV export, QuickBooks Online sync, Stripe payouts to cleaners if the company is eligible | |
@@ -107,6 +111,40 @@ hourly sweep (financeMessages.sweep)            Owner: "Send invoice" / "Prepare
   `messages` row, never copied.
 - Chat (Owner only): `list_unpaid_invoices`, `explain_invoice`, `prepare_payment_reminders` (drafts only),
   and an invoice can be attached as context. Refunds and credits stay in Finance's confirmations.
+
+## Team Pay (phase 3)
+
+```
+job completed ──► syncJobEarnings (on opening Team Pay, every 15 minutes, and after any change)
+                     │ one earnings row per accepted crew member
+                     │ pay method snapshot (payUsed) taken the first time, so a later rate change never rewrites it
+                     │ hours: check-in → marked complete; scheduled hours when missing; the Owner's correction wins
+                     ▼
+   Calculated ──(something to check: no pay, hours off, offer ≠ pay, closed without review)──► Needs review
+        │ Owner approves exactly what they reviewed (fingerprint)                                   │
+        ▼                                                                                           │
+    Approved ── changed afterwards (tip, hours, rate) ──► Needs review: "Changed after you approved it"
+        │ Owner records a payment made outside Selestial (Zelle, cash, check, bank, payroll…)
+        ▼
+ Payment started ── Owner confirms it arrived ──► Paid          (or canceled with a reason → Approved again)
+```
+
+- **Approval is not payment.** Approving agrees an amount. "Paid" needs the Owner's explicit confirmation
+  that the money reached the cleaner, with the day. A payment recorded twice (same browser key) records once.
+- **Nothing is guessed.** No pay method, a missing tier or missing hours are shown as such; the amount
+  stays empty ("Not worked out") and the job can't be approved until it can be worked out.
+- **Adjustments and hour corrections** each keep a reason, who and when; a reversed adjustment stays in the
+  history. Paid or started earnings are frozen; a tip that arrives later is owed on its own.
+- **Tips** (`tips` table) are split evenly across the accepted crew, cent by cent. A pay-page tip is charged
+  with the invoice payment but never counted toward the invoice.
+- **Employees** are paid through the company's payroll: Selestial records hours and gross pay only and
+  says so; it doesn't calculate or withhold taxes or file payroll.
+- **Statements** are `/c/earnings/<publicId>.<HMAC>` (`selestial.statement.v1:` under `ACTION_LINK_SECRET`),
+  valid 90 days; making a new link closes the old one. The page shows that cleaner's own jobs (service, day,
+  town), how each was worked out, adjustments with reasons, tips and payments, and nothing about anyone else.
+- **Overview** shows team pay to review, approved-not-paid and paid in the period, and "Needs your
+  attention" points to pay waiting for review, approved pay unpaid after two days, payments started and not
+  confirmed after three days, and cleaners with no pay set.
 
 ## Setup
 

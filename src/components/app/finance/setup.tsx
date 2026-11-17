@@ -8,7 +8,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, TextArea, TextInput, useRun } from "@/components/app/form";
 import { PageHeader } from "@/components/app/shell";
-import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, RefreshCw, ShieldCheck, Wallet } from "@/components/icons";
+import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, Wallet } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FINANCE_PATH, moment } from "@/lib/app/finance";
@@ -21,6 +21,13 @@ import { Notice, Section } from "./kit";
 type Settings = FunctionReturnType<typeof api.finance.settings>;
 
 /** Finance › Payments setup: the company's own Stripe account, and how its invoices are made. */
+/** A starting point the Owner can rename, re-rate, add to or remove before saving. */
+const SUGGESTED_TIERS = [
+  { name: "New", percent: "35" },
+  { name: "Proven", percent: "40" },
+  { name: "Lead", percent: "45" },
+];
+
 export function PaymentsSetup() {
   return (
     <Suspense fallback={<Skeleton className="h-96 rounded-2xl" />}>
@@ -59,6 +66,9 @@ function Setup() {
             <Reminders data={data} />
           </div>
           <InvoiceSettings data={data} />
+          <div className="lg:col-span-2">
+            <TeamPaySettings data={data} />
+          </div>
         </div>
       )}
     </>
@@ -314,6 +324,102 @@ function InvoiceSettings({ data }: { data: Settings }) {
           ) : null}
           <Button type="submit" variant="default" disabled={busy || Number.isNaN(taxBps)}>
             Save invoice settings
+          </Button>
+        </div>
+      </form>
+    </Section>
+  );
+}
+
+/** Pay tiers the Owner names and rates, and whether customers can tip their crew on the pay page. */
+function TeamPaySettings({ data }: { data: Settings }) {
+  const { companyId } = useCompany();
+  const saveTiers = useMutation(api.teamPay.saveTiers);
+  const saveTips = useMutation(api.teamPay.saveTips);
+  const { busy, error, run } = useRun();
+  const [rows, setRows] = useState(() => data.tiers.map((t) => ({ id: t.id as string | null, name: t.name, percent: String(t.shareBps / 100), cleaners: t.cleaners })));
+  const [tipsOn, setTipsOn] = useState(data.settings.tipsOn);
+  const [saved, setSaved] = useState(false);
+  const bad = rows.find((r) => !r.name.trim() || !/^\d{1,3}(\.\d{1,2})?$/.test(r.percent.trim()) || Number(r.percent) > 100);
+  const change = (i: number, patch: Partial<(typeof rows)[number]>) => setRows((list) => list.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <Section title="Team pay" description="How contractors on a percentage are paid, and tips">
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (bad) return;
+          void run(async () => {
+            const result = await saveTiers({ companyId, tiers: rows.map((r) => ({ id: r.id, name: r.name, sharePercent: Number(r.percent) })) });
+            if (tipsOn !== data.settings.tipsOn) await saveTips({ companyId, tipsOn });
+            setRows(result.tiers.map((t) => ({ id: t.id, name: t.name, percent: String(t.shareBps / 100), cleaners: rows.find((r) => r.id === t.id)?.cleaners ?? 0 })));
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2500);
+          });
+        }}
+      >
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium text-strong">Pay tiers</legend>
+          <p className="text-xs text-muted-foreground">A share of each job&apos;s price before tax. Put a cleaner on a tier from their page in Team Pay, or give them their own %. Changing a tier&apos;s share applies to jobs worked out from now on.</p>
+          {rows.length === 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-3.5 py-3 text-sm text-muted-foreground">
+              No tiers yet.
+              <Button size="sm" variant="outline" onClick={() => setRows(SUGGESTED_TIERS.map((t) => ({ id: null, name: t.name, percent: t.percent, cleaners: 0 })))}>
+                Start with New 35%, Proven 40%, Lead 45%
+              </Button>
+            </div>
+          ) : (
+            <ul className="grid gap-2">
+              {rows.map((row, i) => (
+                <li key={row.id ?? `new-${i}`} className="grid grid-cols-[minmax(0,1fr)_6.5rem_auto] items-center gap-2">
+                  <TextInput aria-label="Tier name" value={row.name} maxLength={30} onChange={(e) => change(i, { name: e.target.value })} />
+                  <div className="relative">
+                    <TextInput aria-label={`${row.name || "Tier"} share`} inputMode="decimal" value={row.percent} onChange={(e) => change(i, { percent: e.target.value })} className="pr-7" />
+                    <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                  </div>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={row.cleaners ? `${row.name} has ${row.cleaners} cleaner${row.cleaners === 1 ? "" : "s"}; move them first` : `Remove ${row.name || "tier"}`}
+                    disabled={row.cleaners > 0}
+                    onClick={() => setRows((list) => list.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                  {row.cleaners ? <span className="col-span-3 -mt-1 text-xs text-muted-foreground">{row.cleaners} cleaner{row.cleaners === 1 ? "" : "s"} on this tier</span> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {rows.length > 0 && rows.length < 12 ? (
+            <Button size="sm" variant="ghost" className="w-fit" onClick={() => setRows((list) => [...list, { id: null, name: "", percent: "", cleaners: 0 }])}>
+              <Plus aria-hidden />
+              Add a tier
+            </Button>
+          ) : null}
+        </fieldset>
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium text-strong">Tips</legend>
+          <label className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3 text-sm text-strong">
+            <input type="checkbox" checked={tipsOn} onChange={(e) => setTipsOn(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+            <span>
+              Let customers add a tip when they pay
+              <span className="block text-xs text-muted-foreground">Offered on the pay page once a job is done, never chosen for them. All of it goes to that job&apos;s crew, split evenly; your company covers Stripe&apos;s fee on it.</span>
+            </span>
+          </label>
+          <p className="text-xs text-muted-foreground">Cash or other tips can be recorded on a job in Team Pay, and are split the same way.</p>
+        </fieldset>
+        </div>
+        <FormError message={error ?? (bad ? "Give each tier a name and a share between 0% and 100%." : null)} />
+        <div className="flex items-center justify-end gap-3">
+          {saved ? (
+            <span role="status" className="inline-flex items-center gap-1 text-sm text-success-foreground">
+              <CheckCircle2 className="size-4" aria-hidden /> Saved
+            </span>
+          ) : null}
+          <Button type="submit" variant="default" disabled={busy || Boolean(bad)}>
+            Save team pay
           </Button>
         </div>
       </form>

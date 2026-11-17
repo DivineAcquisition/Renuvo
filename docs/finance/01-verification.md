@@ -136,3 +136,49 @@ Screenshots: `docs/screenshots/finance/09`–`12`.
 - Real email and text delivery (Resend, the company's Gmail, Telnyx), bounces and STOP replies end to end.
   These go through the shared messaging code, which has its own tests.
 - A real model choosing the Chat tools; the tools were called directly.
+
+# Phase 3: Team Pay
+
+## Tests
+
+`convex/teamPay.test.ts` (10 tests):
+
+- Pay worked out by a share, a tier, a fixed amount and an hourly rate from check-in to completion; a tier's
+  rate going up leaves the job already worked at the old rate until the Owner asks for the current one.
+- Never guessing: no pay method or no check-in is flagged and can't be approved; corrected hours need a reason.
+- States kept apart: a stale approval is refused; approved, payment started and paid; a canceled payment
+  puts the jobs back to approved; a changed total after approval goes back to review.
+- Tips split evenly, cent by cent; a tip arriving after payment is owed on its own.
+- A pay-page tip through fake Stripe: charged with the payment, not counted toward the invoice, given to the crew.
+- Only the Owner; a Manager is refused.
+- A statement link shows only that cleaner; a new link closes the old one.
+- Overview: team pay waiting, records named, approved pay unpaid after two days; "pay changed since" shown
+  on an earning and cleaners counted per tier in setup.
+
+```
+npm test            # 62 files, 663 passed, 19 skipped
+npm run typecheck   # passes
+npx eslint .        # 0 errors (1 warning in an existing file, not this work)
+npx next build      # passes
+```
+
+## In a real browser
+
+Local backend, labelled sample data (a six-person crew across completed jobs, tips, payments in every
+state, one statement link). At 1440 and 390 wide, no sideways scrolling: Team Pay tab, earning drawer,
+cleaner panel, Approve all, record payment, confirm paid, Overview with team pay, Payments setup with tiers
+and tips, the pay page with the tip choice, and the cleaner's statement. Driven by clicking: approve a job →
+Record payment (button stays disabled until "I paid" is ticked) → the drawer shows Paid by Zelle with the day.
+
+Fixed from looking: hourly basis read "4.08 hours" (now "4 h 5 min"); a $0 offer (none recorded) flagged
+every job; rows too tall on a phone; the pay text repeated on the cleaner panel; "Paid hours" shown for
+cleaners not paid by the hour; setup columns unbalanced.
+
+Screenshots: `docs/screenshots/finance/13`–`23`.
+
+## Not verified
+
+- A real Stripe test charge with a tip (the fake Stripe transport covers the amounts and states).
+- Statement links sent by real text or email (sending uses the shared messaging code, tested on its own).
+- Stripe payouts to cleaners: not built; payments are made outside Selestial and recorded (Phase 6).
+

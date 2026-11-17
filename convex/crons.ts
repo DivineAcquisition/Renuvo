@@ -19,6 +19,8 @@ crons.interval("dispatch watches the day of service", { minutes: 5 }, internal.d
 crons.interval("finance reconciles payments with Stripe", { minutes: 10 }, internal.financeStripe.reconcile, {});
 // Finance: Selestial prepares the payment reminders each open invoice is due for. It prepares only; a person approves every send.
 crons.interval("finance prepares payment reminders", { hours: 1 }, internal.financeMessages.sweep, {});
+// Finance: completed jobs get each cleaner's earnings worked out. Nothing is approved or paid here.
+crons.interval("finance works out team earnings", { minutes: 15 }, internal.teamPay.sweep, {});
 
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});

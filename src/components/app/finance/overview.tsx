@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { useCompany } from "@/components/app/company";
 import { useRun } from "@/components/app/form";
-import { AlertTriangle, ArrowRight, CircleDollarSign, Clock, FileText, HistoryIcon, Info, Plus, Sparkles, Wallet } from "@/components/icons";
+import { AlertTriangle, ArrowRight, CircleDollarSign, Clock, FileText, HistoryIcon, Info, Plus, Sparkles, Users, Wallet } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FINANCE_PATH, PERIODS, moment, usd, type PeriodId } from "@/lib/app/finance";
@@ -47,6 +47,7 @@ export function OverviewTab({ nav }: { nav: FinanceNav & { set: (c: Record<strin
       </div>
 
       <MoneyStrip data={data} onOverdue={() => nav.showInvoices("overdue")} onOutstanding={() => nav.showInvoices("outstanding")} />
+      <TeamPayRow data={data} onOpen={(filter) => nav.showTeamPay(filter)} />
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22.5rem]">
         <div className="order-2 grid min-w-0 gap-5 lg:order-1">
@@ -150,8 +151,47 @@ function MoneyStrip({ data, onOverdue, onOutstanding }: { data: Overview; onOver
         })}
       </div>
       <p className="border-t border-border bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
-        Team pay, expenses and job profit aren&apos;t tracked in Finance yet, so nothing here is net profit.
+        Expenses and job profit aren&apos;t tracked in Finance yet, so nothing here is net profit.
       </p>
+    </section>
+  );
+}
+
+/** Team pay at a glance: what's waiting on the Owner, and what was paid in the period. Each part opens Team Pay. */
+function TeamPayRow({ data, onOpen }: { data: Overview; onOpen: (filter?: string) => void }) {
+  const t = data.teamPay;
+  if (!t.any) return null;
+  const parts = [
+    { key: "review", label: "To review", cents: t.reviewCents, sub: `${t.reviewCount} job${t.reviewCount === 1 ? "" : "s"}${t.reviewMissing ? ` · ${t.reviewMissing} not worked out` : ""}`, filter: undefined },
+    { key: "approved", label: "Approved, not paid", cents: t.approvedUnpaidCents, sub: `${t.approvedCount} job${t.approvedCount === 1 ? "" : "s"}${t.startedCents ? ` · ${usd(t.startedCents)} on its way` : ""}`, filter: "approved" },
+    { key: "paid", label: `Paid · ${data.period.label}`, cents: t.paidInPeriodCents, sub: `${t.paidInPeriodCount} payment${t.paidInPeriodCount === 1 ? "" : "s"} you confirmed`, filter: "paid" },
+  ];
+  return (
+    <section aria-label="Team pay" className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-[auto_repeat(3,minmax(0,1fr))]">
+      <div className="flex items-center gap-2.5 border-b border-border px-4 py-3 sm:border-r sm:border-b-0 sm:px-5">
+        <span className="grid size-8 place-items-center rounded-lg bg-brand-500/10 text-info-foreground">
+          <Users className="size-4" aria-hidden />
+        </span>
+        <span>
+          <span className="block text-sm font-semibold text-strong">Team pay</span>
+          <span className="block text-xs text-muted-foreground">What your cleaners earned</span>
+        </span>
+      </div>
+      {parts.map((part, i) => (
+        <button
+          key={part.key}
+          type="button"
+          onClick={() => onOpen(part.filter)}
+          className={cn("flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500 sm:block sm:px-5", i > 0 && "border-t border-border sm:border-t-0 sm:border-l")}
+        >
+          <span>
+            <span className={eyebrow}>{part.label}</span>
+            <span className="block text-xs text-muted-foreground sm:mt-1 sm:hidden">{part.sub}</span>
+          </span>
+          <span className="block font-heading text-lg leading-none tracking-tight tabular-nums text-strong sm:mt-1.5 sm:text-xl">{usd(part.cents)}</span>
+          <span className="mt-1 hidden text-xs text-muted-foreground sm:block">{part.sub}</span>
+        </button>
+      ))}
     </section>
   );
 }
@@ -163,7 +203,9 @@ const TONE_RING: Record<Finding["tone"], string> = {
 };
 
 /** What Selestial found in the records. Each card names the records, recommends one step, and offers it. */
-function Attention({ findings, checkedAt, nav, hasInvoices }: { findings: Finding[]; checkedAt: number; nav: FinanceNav; hasInvoices: boolean }) {
+type Nav = FinanceNav & { set: (c: Record<string, string | null>, push?: boolean) => void };
+
+function Attention({ findings, checkedAt, nav, hasInvoices }: { findings: Finding[]; checkedAt: number; nav: Nav; hasInvoices: boolean }) {
   const { timezone } = useCompany();
   return (
     <section aria-labelledby="attention-title" className="rounded-2xl border border-border bg-card">
@@ -182,7 +224,7 @@ function Attention({ findings, checkedAt, nav, hasInvoices }: { findings: Findin
       </header>
       {findings.length === 0 ? (
         hasInvoices ? (
-          <Empty icon={CircleDollarSign} title="Nothing needs you right now" body="No overdue invoices, failed payments or visits waiting for an invoice." />
+          <Empty icon={CircleDollarSign} title="Nothing needs you right now" body="No overdue invoices, failed payments, visits waiting for an invoice or team pay to review." />
         ) : (
           <Empty icon={FileText} title="Start with an invoice" body="Create one from a completed visit or for any customer. It stays a draft until you issue it." action={<Button onClick={nav.newInvoice}>New invoice</Button>} />
         )
@@ -197,13 +239,14 @@ function Attention({ findings, checkedAt, nav, hasInvoices }: { findings: Findin
   );
 }
 
-function FindingCard({ finding, nav }: { finding: Finding; nav: FinanceNav }) {
+function FindingCard({ finding, nav }: { finding: Finding; nav: Nav }) {
   const { companyId } = useCompany();
   const create = useMutation(api.finance.createInvoice);
   const { busy, error, run } = useRun();
-  const Icon = finding.tone === "info" ? (finding.id === "stripe" ? Wallet : FileText) : finding.tone === "danger" ? AlertTriangle : Clock;
+  const Icon = finding.id.startsWith("team_") ? Users : finding.tone === "info" ? (finding.id === "stripe" ? Wallet : FileText) : finding.tone === "danger" ? AlertTriangle : Clock;
   const firstInvoice = finding.records.find((r) => r.kind === "invoice" || r.kind === "payment");
   const act = () => {
+    if (finding.action.kind === "team_pay") return nav.showTeamPay(finding.action.filter === "review" ? undefined : finding.action.filter);
     if (finding.action.kind === "filter_invoices") return nav.showInvoices(finding.action.filter);
     if (finding.action.kind === "invoice_jobs") return nav.newInvoice();
     if (finding.action.kind === "open_invoice" && firstInvoice) return nav.openInvoice(firstInvoice.kind === "payment" ? firstInvoice.invoiceId : (firstInvoice.id as Id<"invoices">));
@@ -236,6 +279,18 @@ function FindingCard({ finding, nav }: { finding: Finding; nav: FinanceNav }) {
                       </span>
                       {record.amountCents !== null ? <Amount cents={record.amountCents} className="shrink-0 text-xs" /> : <span className="shrink-0 text-muted-foreground">No price</span>}
                       <Plus className="size-3.5 shrink-0 text-info-foreground" aria-label="Create a draft" />
+                    </button>
+                  ) : record.kind === "earning" || record.kind === "cleaner" ? (
+                    <button
+                      type="button"
+                      onClick={() => nav.set(record.kind === "earning" ? { earning: record.id } : { cleaner: record.id }, true)}
+                      className="flex w-full items-center gap-2 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-left text-xs hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="font-medium text-strong">{record.label}</span> <span className="text-muted-foreground">· {record.detail}</span>
+                      </span>
+                      {record.amountCents !== null ? <Amount cents={record.amountCents} className="shrink-0 text-xs" /> : null}
+                      <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                     </button>
                   ) : (
                     <button

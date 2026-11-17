@@ -110,6 +110,66 @@ async function companyInvoices(ctx: QueryCtx, companyId: Id<"companies">, limit 
 }
 
 /** Completed visits with a price that have no invoice yet (or only void ones), most recent first. */
+/**
+ * Team pay as the Overview needs it: what is waiting on the Owner (for the findings) and the period's
+ * figures. Amounts are the recorded earnings and payments; nothing is estimated.
+ */
+async function teamPayWaiting(ctx: QueryCtx & { companyId: Id<"companies">; company: Doc<"companies"> }, now: number, range: { from: number; to: number }) {
+  const tz = ctx.company.timezone;
+  const byStatus = async (status: Doc<"earnings">["status"]) =>
+    ctx.db
+      .query("earnings")
+      .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", status))
+      .order("desc")
+      .take(400);
+  const review = [...(await byStatus("calculated")), ...(await byStatus("needs_review"))];
+  const approved = await byStatus("approved");
+  const started = await ctx.db
+    .query("teamPayments")
+    .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "started"))
+    .take(200);
+  const paid = await ctx.db
+    .query("teamPayments")
+    .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "paid").gte("createdAt", range.from - 62 * DAY))
+    .take(1000);
+  const paidInPeriod = paid.filter((p) => (p.paidAt ?? p.createdAt) >= range.from && (p.paidAt ?? p.createdAt) <= range.to);
+  const cleaners = new Map<string, string>();
+  const cleanerName = async (id: Id<"cleaners">) => {
+    if (!cleaners.has(id)) cleaners.set(id, (await ctx.db.get(id))?.name ?? "Cleaner");
+    return cleaners.get(id)!;
+  };
+  const describe = async (earning: Doc<"earnings">) => {
+    const job = await ctx.db.get(earning.jobId);
+    return { earning, cleaner: await cleanerName(earning.cleanerId), job: job ? jobLabel(job, tz) : "Job" };
+  };
+  const unpaid = approved.filter((e) => e.approved && now - e.approved.at > 2 * DAY);
+  const noPay = new Map<Id<"cleaners">, number>();
+  for (const e of review) if (e.method === "none") noPay.set(e.cleanerId, (noPay.get(e.cleanerId) ?? 0) + 1);
+  const reviewRows = [];
+  for (const e of review.slice(0, 50)) reviewRows.push(await describe(e));
+  const unpaidRows = [];
+  for (const e of unpaid.slice(0, 50)) unpaidRows.push(await describe(e));
+  const startedRows = [];
+  for (const p of started.filter((p) => now - p.startedAt > 3 * DAY)) startedRows.push({ payment: p, cleaner: await cleanerName(p.cleanerId) });
+  const noPayRows = [];
+  for (const [cleanerId, jobs] of noPay) noPayRows.push({ cleanerId, cleaner: await cleanerName(cleanerId), jobs });
+  return {
+    // The review list is complete for the counts even when only the first 50 are described.
+    findings: { review: review.length > 50 ? [...reviewRows, ...review.slice(50).map((earning) => ({ earning, cleaner: "Cleaner", job: "Job" }))] : reviewRows, unpaid: unpaidRows, started: startedRows, noPay: noPayRows },
+    metric: {
+      reviewCents: review.reduce((s, e) => s + (e.totalCents ?? 0), 0),
+      reviewCount: review.length,
+      reviewMissing: review.filter((e) => e.totalCents === null).length,
+      approvedUnpaidCents: approved.reduce((s, e) => s + (e.totalCents ?? 0), 0),
+      approvedCount: approved.length,
+      startedCents: started.reduce((s, p) => s + p.amountCents, 0),
+      paidInPeriodCents: paidInPeriod.reduce((s, p) => s + p.amountCents, 0),
+      paidInPeriodCount: paidInPeriod.length,
+      any: review.length + approved.length + started.length + paid.length > 0,
+    },
+  };
+}
+
 async function uninvoicedJobs(ctx: QueryCtx, companyId: Id<"companies">, now: number) {
   const jobs = await ctx.db
     .query("jobs")
@@ -246,9 +306,11 @@ export const overview = ownerQuery({
       if (row.kind === "invoice") sentByMessage.add(row.invoiceId);
       if (row.stage === "overdue_14") scheduleDone.add(row.invoiceId);
     }
+    const teamPay = await teamPayWaiting(ctx, now, range);
     const found = findings({
       sentByMessage,
       scheduleDone,
+      teamPay: teamPay.findings,
       now,
       invoices,
       customerName: name,
@@ -278,6 +340,7 @@ export const overview = ownerQuery({
       },
       trend,
       upcoming,
+      teamPay: teamPay.metric,
       findings: found,
       activity: activityRows,
       stripe,
@@ -287,7 +350,7 @@ export const overview = ownerQuery({
   },
 });
 
-const FINANCE_EVENT = /^(invoice|payment|refund|credit|stripe|finance_settings|collection)\./;
+const FINANCE_EVENT = /^(invoice|payment|refund|credit|stripe|finance_settings|collection|team_payment|tip)\./;
 
 const EVENT_WORDS: Record<string, string> = {
   "invoice.created": "Draft invoice created",
@@ -315,6 +378,11 @@ const EVENT_WORDS: Record<string, string> = {
   "stripe.connected": "Stripe connected",
   "stripe.updated": "Stripe account updated",
   "finance_settings.saved": "Invoice settings changed",
+  "team_payment.started": "Team payment started",
+  "team_payment.paid": "Team payment recorded as paid",
+  "team_payment.canceled": "Team payment canceled",
+  "tip.received": "Tip received on the pay page",
+  "tip.recorded": "Tip recorded",
   "collection.drafted": "Selestial prepared a message",
   "collection.approved": "Message approved and sent",
   "collection.skipped": "Prepared message skipped",
@@ -331,15 +399,20 @@ function whoDid(event: Doc<"events">): string {
 async function activityRow(ctx: QueryCtx, event: Doc<"events">) {
   let invoiceId: Id<"invoices"> | null = null;
   if (event.subject.table === "invoices") invoiceId = event.subject.id;
-  if (event.subject.table === "payments" || event.subject.table === "refunds" || event.subject.table === "invoiceCredits" || event.subject.table === "financeMessages") {
+  if (event.subject.table === "payments" || event.subject.table === "refunds" || event.subject.table === "invoiceCredits" || event.subject.table === "financeMessages" || event.subject.table === "tips") {
     const row = (await ctx.db.get(event.subject.id)) as { invoiceId?: Id<"invoices"> } | null;
     invoiceId = row?.invoiceId ?? null;
+  }
+  let cleaner: string | null = null;
+  if (event.subject.table === "teamPayments") {
+    const payment = await ctx.db.get(event.subject.id as Id<"teamPayments">);
+    cleaner = payment ? ((await ctx.db.get(payment.cleanerId))?.name ?? null) : null;
   }
   const invoice = invoiceId ? await ctx.db.get(invoiceId) : null;
   const customer = invoice ? await ctx.db.get(invoice.customerId) : null;
   const amount = typeof event.data?.amountCents === "number" ? event.data.amountCents : null;
   const by = whoDid(event);
-  return { id: event._id, at: event.at, title: EVENT_WORDS[event.type] ?? "Finance updated", invoiceId, invoiceNumber: invoice?.number ?? null, customer: customer?.name ?? null, amountCents: amount, by };
+  return { id: event._id, at: event.at, title: EVENT_WORDS[event.type] ?? "Finance updated", invoiceId, invoiceNumber: invoice?.number ?? null, customer: customer?.name ?? cleaner, amountCents: amount, by };
 }
 
 /** The invoice list, with the filters the Invoices & Payments tab offers. */
@@ -556,7 +629,12 @@ export const settings = ownerQuery({
   handler: async (ctx) => {
     requireFinance(ctx, "read");
     const services = businessSettingsOf(ctx.company).services.filter((s) => s.status === "active").map((s) => ({ id: s.id, name: s.name, startingPriceCents: s.startingPriceCents ?? null }));
-    return { settings: settingsOf(await settingsRow(ctx, ctx.companyId)), services, stripe: await stripeState(ctx, ctx.companyId), payLinksConfigured: payLinksConfigured(), cardsConfigured: stripeConfig() !== null };
+    const cleaners = await ctx.db
+      .query("cleaners")
+      .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "ready"))
+      .take(500);
+    const tiers = (ctx.company.payTiers ?? []).filter((t) => !t.archived).map((t) => ({ ...t, cleaners: cleaners.filter((c) => c.pay?.kind === "tier" && c.pay.tierId === t.id).length }));
+    return { settings: settingsOf(await settingsRow(ctx, ctx.companyId)), services, tiers, stripe: await stripeState(ctx, ctx.companyId), payLinksConfigured: payLinksConfigured(), cardsConfigured: stripeConfig() !== null };
   },
 });
 

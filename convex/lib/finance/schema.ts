@@ -64,6 +64,19 @@ export const FINANCE_MESSAGE_STAGES = ["invoice", "before_due", "overdue_1", "ov
 export type FinanceMessageStage = (typeof FINANCE_MESSAGE_STAGES)[number];
 export const financeMessageStageValidator = literals(FINANCE_MESSAGE_STAGES);
 
+/**
+ * A cleaner's earnings for one job, kept apart at every step (owner's decision, phase 3):
+ * calculated → needs_review → approved → payment_started → paid. Approval is never proof of payment;
+ * "paid" needs an explicit confirmation from the Owner. "void" is a job whose assignment was undone.
+ */
+export const EARNING_STATUSES = ["calculated", "needs_review", "approved", "payment_started", "paid", "void"] as const;
+export type EarningStatus = (typeof EARNING_STATUSES)[number];
+export const earningStatusValidator = literals(EARNING_STATUSES);
+
+export const TEAM_PAY_METHODS = ["zelle", "venmo", "cash", "check", "bank_transfer", "payroll", "other"] as const;
+export type TeamPayMethod = (typeof TEAM_PAY_METHODS)[number];
+export const teamPayMethodValidator = literals(TEAM_PAY_METHODS);
+
 export const STRIPE_ACCOUNT_STATUSES = ["onboarding", "active", "restricted", "disconnected"] as const;
 export type StripeAccountStatus = (typeof STRIPE_ACCOUNT_STATUSES)[number];
 export const stripeAccountStatusValidator = literals(STRIPE_ACCOUNT_STATUSES);
@@ -124,6 +137,8 @@ export const financeTables = {
     remindersOn: v.optional(v.boolean()),
     /** Where customers' replies to invoice and reminder emails go. Absent means the Owner's email. */
     replyTo: v.optional(v.string()),
+    /** Customers may add a tip on the pay page, all of it for the job's cleaners. Absent means on. */
+    tipsOn: v.optional(v.boolean()),
     /** The next number to give an invoice when it is issued. Drafts have no number. */
     nextInvoiceNumber: v.number(),
     invoicePrefix: v.string(),
@@ -267,6 +282,8 @@ export const financeTables = {
     problem: v.optional(v.string()),
     /** Refunds that went through, so the payment shows what is left to refund. */
     refundedCents: v.number(),
+    /** A tip paid with this payment, on top of `amountCents`. It is the cleaners', never the invoice's. */
+    tipCents: v.optional(v.number()),
     dispute: v.optional(v.object({ status: v.string(), amountCents: v.number(), at: v.number() })),
     voided: v.optional(v.object({ at: v.number(), by: v.id("members"), reason: v.string() })),
     succeededAt: v.optional(v.number()),
@@ -343,6 +360,136 @@ export const financeTables = {
     .index("by_company_status", ["companyId", "status", "createdAt"])
     .index("by_company_invoice", ["companyId", "invoiceId", "createdAt"])
     .index("by_status_updated", ["status", "updatedAt"]),
+
+  /**
+   * One cleaner's earnings for one job. Worked out by code from the cleaner's pay method, the job's price
+   * and the hours they worked (check-in to submitting the job complete). The Owner's corrections and
+   * adjustments are kept with their reasons. After approval, a change that would alter the total sends
+   * it back to review; once a payment is started nothing here changes.
+   */
+  earnings: defineTable({
+    companyId: v.id("companies"),
+    cleanerId: v.id("cleaners"),
+    jobId: v.id("jobs"),
+    assignmentId: v.id("assignments"),
+    status: earningStatusValidator,
+    method: v.union(v.literal("share"), v.literal("tier"), v.literal("fixed"), v.literal("hourly"), v.literal("none")),
+    /**
+     * The pay method as it was when this job was first worked out, kept so a later change to the
+     * cleaner's rate or to a tier's share never rewrites past pay. Absent until a method applied.
+     */
+    payUsed: v.optional(
+      v.union(
+        v.object({ kind: v.literal("share"), shareBps: v.number(), tierName: v.optional(v.string()) }),
+        v.object({ kind: v.literal("hourly"), hourlyCents: v.number() }),
+        v.object({ kind: v.literal("fixed"), perJobCents: v.number() }),
+      ),
+    ),
+    /** How the pay was worked out, in words: "Proven tier, 40% of the $240.00 job price". */
+    basis: v.string(),
+    facts: v.object({
+      priceCents: v.union(v.number(), v.null()),
+      crewSize: v.number(),
+      lead: v.boolean(),
+      scheduledMinutes: v.number(),
+      /** From check-in to submitting the job complete. Null when either is missing. */
+      workedMinutes: v.union(v.number(), v.null()),
+      /** The minutes the pay used, and where they came from. */
+      paidMinutes: v.number(),
+      minutesSource: v.union(v.literal("worked"), v.literal("scheduled"), v.literal("corrected")),
+      /** What the cleaner was told when they took the job. */
+      offeredCents: v.number(),
+      checkInAt: v.union(v.number(), v.null()),
+      completedAt: v.union(v.number(), v.null()),
+    }),
+    /** Null when it can't be worked out (no pay method, no job price). Never a guessed zero. */
+    baseCents: v.union(v.number(), v.null()),
+    hoursCorrection: v.optional(v.object({ minutes: v.number(), reason: v.string(), by: v.id("members"), at: v.number() })),
+    adjustments: v.array(v.object({ id: v.string(), cents: v.number(), reason: v.string(), by: v.id("members"), at: v.number(), reversed: v.optional(v.object({ at: v.number(), by: v.id("members"), reason: v.string() })) })),
+    /** Tips allocated to this cleaner for this job, from tips that were received. */
+    tipCents: v.number(),
+    /** The tips covered by payments already recorded. A tip that arrives later is owed on its own. */
+    tipsPaidCents: v.optional(v.number()),
+    totalCents: v.union(v.number(), v.null()),
+    /** Why it needs the Owner's review, in words. Empty means it can be approved as calculated. */
+    flags: v.array(v.string()),
+    approved: v.optional(v.object({ by: v.id("members"), at: v.number(), totalCents: v.number() })),
+    paymentId: v.optional(v.id("teamPayments")),
+    voidReason: v.optional(v.string()),
+    jobStartsAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company_status", ["companyId", "status", "jobStartsAt"])
+    .index("by_company_cleaner", ["companyId", "cleanerId", "jobStartsAt"])
+    .index("by_company_job", ["companyId", "jobId"])
+    .index("by_company_assignment", ["companyId", "assignmentId"]),
+
+  /**
+   * A payment to a cleaner, for one or more approved earnings. Recorded by the Owner: "started" when the
+   * money is on its way (a transfer sent, a check handed over, payroll run), "paid" only when they
+   * confirm it arrived. Selestial does not move this money.
+   */
+  teamPayments: defineTable({
+    companyId: v.id("companies"),
+    cleanerId: v.id("cleaners"),
+    /** What this payment covers: each earning's job pay and tips, so canceling it puts each back exactly. */
+    parts: v.array(v.object({ earningId: v.id("earnings"), jobCents: v.number(), tipCents: v.number() })),
+    amountCents: v.number(),
+    method: teamPayMethodValidator,
+    status: v.union(v.literal("started"), v.literal("paid"), v.literal("canceled")),
+    reference: v.optional(v.string()),
+    note: v.optional(v.string()),
+    startedAt: v.number(),
+    /** The day the Owner says it was paid, on the company's clock. */
+    paidOn: v.optional(v.string()),
+    paidAt: v.optional(v.number()),
+    canceled: v.optional(v.object({ at: v.number(), by: v.id("members"), reason: v.string() })),
+    recordedBy: v.id("members"),
+    clientKey: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company_status", ["companyId", "status", "createdAt"])
+    .index("by_company_cleaner", ["companyId", "cleanerId", "createdAt"])
+    .index("by_company_clientKey", ["companyId", "clientKey"]),
+
+  /**
+   * A tip for a job's cleaners: added by the customer on the pay page (counted once the card payment is
+   * received) or recorded by the Owner. All of it is the cleaners', split evenly across the crew.
+   */
+  tips: defineTable({
+    companyId: v.id("companies"),
+    jobId: v.id("jobs"),
+    invoiceId: v.optional(v.id("invoices")),
+    paymentId: v.optional(v.id("payments")),
+    amountCents: v.number(),
+    source: v.union(v.literal("pay_page"), v.literal("recorded")),
+    status: v.union(v.literal("pending"), v.literal("received"), v.literal("refunded")),
+    allocations: v.array(v.object({ cleanerId: v.id("cleaners"), cents: v.number() })),
+    note: v.optional(v.string()),
+    recordedBy: v.optional(v.id("members")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company_job", ["companyId", "jobId"])
+    .index("by_company_payment", ["companyId", "paymentId"]),
+
+  /**
+   * A cleaner's private link to their own earnings statement. The token is the public id plus a
+   * signature; it is never stored. Issuing a new link revokes the old one.
+   */
+  statementLinks: defineTable({
+    companyId: v.id("companies"),
+    cleanerId: v.id("cleaners"),
+    publicId: v.string(),
+    issuedBy: v.id("members"),
+    issuedAt: v.number(),
+    expiresAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_publicId", ["publicId"])
+    .index("by_company_cleaner", ["companyId", "cleanerId", "issuedAt"]),
 
   /**
    * An amount the customer no longer owes on an issued invoice, with the reason. No money moves. A

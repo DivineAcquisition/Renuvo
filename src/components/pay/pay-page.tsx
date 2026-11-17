@@ -143,6 +143,8 @@ function Pay({ token, view, onStarted }: { token: string; view: View; onStarted:
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [key] = useState(clientKey);
+  const [tipChoice, setTipChoice] = useState<"none" | 15 | 20 | 25 | "custom">("none");
+  const [customTip, setCustomTip] = useState("");
   if (!view.canPayByCard) {
     return (
       <Panel>
@@ -153,7 +155,12 @@ function Pay({ token, view, onStarted }: { token: string; view: View; onStarted:
     );
   }
   const amount = mode === "full" ? view.requestedCents : parseMoney(other);
-  const invalid = amount === null || amount < view.minCents || amount > view.requestedCents;
+  const tips = view.tips;
+  // A suggested tip is a share of what's being paid now, rounded to whole dollars. Nothing is chosen until the customer picks.
+  const suggested = (percent: number) => Math.max(100, Math.round(((amount ?? view.requestedCents) * percent) / 100 / 100) * 100);
+  const tipCents = !tips || tipChoice === "none" ? 0 : tipChoice === "custom" ? (parseMoney(customTip) ?? -1) : suggested(tipChoice);
+  const tipInvalid = tipCents < 0 || (tips !== null && tipCents > tips.maxCents);
+  const invalid = amount === null || amount < view.minCents || amount > view.requestedCents || tipInvalid;
   return (
     <Panel>
       <p className="text-sm font-semibold text-strong">Pay by card or bank</p>
@@ -180,10 +187,49 @@ function Pay({ token, view, onStarted }: { token: string; view: View; onStarted:
           </label>
         </div>
       ) : null}
+      {tips ? (
+        <fieldset className="mt-4 grid gap-2">
+          <legend className="text-sm font-medium text-strong">Add a tip for your crew?</legend>
+          <p className="-mt-1 text-xs text-muted-foreground">All of it goes to {crewWords(tips.crew)}, who cleaned for you. Optional.</p>
+          <div role="radiogroup" aria-label="Tip" className="grid grid-cols-5 gap-1.5">
+            {(["none", 15, 20, 25, "custom"] as const).map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                role="radio"
+                aria-checked={tipChoice === choice}
+                onClick={() => setTipChoice(choice)}
+                className={cn("grid min-h-12 place-items-center rounded-xl border px-1 text-sm leading-tight focus-visible:outline-2 focus-visible:outline-brand-500", tipChoice === choice ? "border-brand-500/60 bg-brand-500/6 font-semibold text-strong" : "border-border text-muted-foreground")}
+              >
+                {choice === "none" ? "No tip" : choice === "custom" ? "Other" : (
+                  <span>
+                    {choice}%<span className="block text-[11px] font-normal tabular-nums text-muted-foreground">{usd(suggested(choice))}</span>
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {tipChoice === "custom" ? (
+            <span className="relative">
+              <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">$</span>
+              <input aria-label="Tip amount" inputMode="decimal" autoFocus value={customTip} onChange={(e) => setCustomTip(e.target.value)} placeholder="20.00" className="h-11 w-full rounded-xl border border-border bg-card pr-3 pl-7 tabular-nums focus-visible:outline-2 focus-visible:outline-brand-500/40" />
+            </span>
+          ) : null}
+          {tipInvalid ? <p className="text-xs text-muted-foreground">Enter a tip up to {usd(tips.maxCents)}.</p> : null}
+        </fieldset>
+      ) : null}
       {problem ? (
         <p role="alert" className="mt-3 rounded-xl border border-destructive/40 bg-destructive/8 px-3 py-2 text-sm text-destructive-foreground">
           {problem}
         </p>
+      ) : null}
+      {tipCents > 0 && amount !== null && !invalid ? (
+        <dl className="mt-4 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
+          <dt className="text-muted-foreground">Invoice</dt>
+          <dd className="text-right tabular-nums text-strong">{usd(amount)}</dd>
+          <dt className="text-muted-foreground">Tip for your crew</dt>
+          <dd className="text-right tabular-nums text-strong">{usd(tipCents)}</dd>
+        </dl>
       ) : null}
       <button
         type="button"
@@ -193,7 +239,7 @@ function Pay({ token, view, onStarted }: { token: string; view: View; onStarted:
           setBusy(true);
           setProblem(null);
           try {
-            const result = await start({ token, amountCents: amount, clientKey: key });
+            const result = await start({ token, amountCents: amount, clientKey: key, tipCents: tipCents || undefined });
             if (result.paymentId) onStarted(result.paymentId);
             else setProblem(result.problem ?? "That didn't go through. Please try again.");
           } catch (error) {
@@ -204,11 +250,17 @@ function Pay({ token, view, onStarted }: { token: string; view: View; onStarted:
         }}
         className="mt-4 min-h-12 w-full rounded-xl bg-gradient-to-b from-brand-400 via-brand-500 to-brand-700 px-4 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] transition-opacity disabled:opacity-50"
       >
-        {busy ? "Preparing secure payment…" : `Continue to pay ${amount !== null && !invalid ? usd(amount) : ""}`}
+        {busy ? "Preparing secure payment…" : `Continue to pay ${amount !== null && !invalid ? usd(amount + tipCents) : ""}`}
       </button>
       {mode === "other" && invalid ? <p className="mt-2 text-xs text-muted-foreground">Enter between {usd(view.minCents)} and {usd(view.requestedCents)}.</p> : null}
     </Panel>
   );
+}
+
+function crewWords(names: string[]): string {
+  if (names.length === 0) return "your crew";
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
 const stripes = new Map<string, Promise<Stripe | null>>();
@@ -239,7 +291,8 @@ function Attempt({ token, paymentId, view, onRestart }: { token: string; payment
       <Panel className="border-success/40">
         <p className="text-lg font-semibold text-strong">Payment received. Thank you!</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {usd(attempt.amountCents)} {attempt.methodLabel ? `from your ${attempt.methodLabel}` : ""} reached {view.company}. A receipt is on its way if they have your email.
+          {usd(attempt.amountCents + attempt.tipCents)} {attempt.methodLabel ? `from your ${attempt.methodLabel}` : ""} reached {view.company}
+          {attempt.tipCents ? `, including your ${usd(attempt.tipCents)} tip for the crew` : ""}. A receipt is on its way if they have your email.
         </p>
       </Panel>
     );
@@ -279,10 +332,13 @@ function Attempt({ token, paymentId, view, onRestart }: { token: string; payment
     <Panel>
       <div className="mb-4 flex items-baseline justify-between">
         <p className="text-sm font-semibold text-strong">Payment details</p>
-        <p className="text-sm tabular-nums text-strong">{usd(attempt.amountCents)}</p>
+        <p className="text-sm tabular-nums text-strong">
+          {usd(attempt.amountCents + attempt.tipCents)}
+          {attempt.tipCents ? <span className="block text-right text-xs text-muted-foreground">includes {usd(attempt.tipCents)} tip</span> : null}
+        </p>
       </div>
       <Elements stripe={stripe} options={{ clientSecret: attempt.clientSecret, appearance: { theme: "stripe", variables: { colorPrimary: "#6838ef", borderRadius: "10px", fontFamily: "Inter, system-ui, sans-serif" } } }}>
-        <ConfirmForm token={token} paymentId={paymentId} amountCents={attempt.amountCents} />
+        <ConfirmForm token={token} paymentId={paymentId} amountCents={attempt.amountCents + attempt.tipCents} />
       </Elements>
     </Panel>
   );

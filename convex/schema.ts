@@ -54,11 +54,19 @@ export const addressValidator = v.object({
   lng: v.optional(v.number()),
 });
 
-/** How a cleaner is paid. Contractors get a share of the job (basis points); employees an hourly rate. */
+/**
+ * How a cleaner is paid. Contractors: a share of the job (basis points), a named tier's share (the
+ * company's `payTiers`), or a fixed amount per job. Employees: an hourly rate.
+ */
 export const payValidator = v.union(
   v.object({ kind: v.literal("share"), shareBps: v.number() }),
   v.object({ kind: v.literal("hourly"), hourlyCents: v.number() }),
+  v.object({ kind: v.literal("tier"), tierId: v.string() }),
+  v.object({ kind: v.literal("fixed"), perJobCents: v.number() }),
 );
+
+/** A named share of the job the Owner defines, for example "Proven, 40%". Archived tiers keep past pay readable. */
+export const payTierValidator = v.object({ id: v.string(), name: v.string(), shareBps: v.number(), archived: v.optional(v.boolean()) });
 
 /** What a task or approval is about. */
 export const aboutValidator = v.union(
@@ -218,6 +226,8 @@ export default defineSchema({
      * billing.clearLegacyPlans.
      */
     plan: v.optional(v.union(v.literal("operate"), v.literal("expand"), v.literal("growth"), v.literal("scale"))),
+    /** The Owner's named pay tiers (Finance › Team Pay). A job keeps the share that applied when it was worked. */
+    payTiers: v.optional(v.array(payTierValidator)),
     /** AI features the Owner switched off. Absent means on, within the plan's allowances. */
     aiFeatures: v.optional(v.object({ imageGeneration: v.optional(v.boolean()), videoGeneration: v.optional(v.boolean()), photoReview: v.optional(v.boolean()), documentSearch: v.optional(v.boolean()), otherChatModels: v.optional(v.boolean()) })),
     createdAt: v.number(),
@@ -519,6 +529,8 @@ export default defineSchema({
       // Finance, to customers: an invoice's pay link, and a reminder about what is due (convex/lib/finance/outbox.ts).
       v.literal("invoice_sent"),
       v.literal("payment_reminder"),
+      // Finance, to a cleaner: the private link to their own earnings statement.
+      v.literal("earnings_statement"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),

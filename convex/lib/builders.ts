@@ -17,6 +17,7 @@ import { notAllowed, notFound, userError } from "./errors";
 import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
 import { invitationForToken } from "./invitations";
 import { invoiceForToken } from "./finance/payLinks";
+import { linkForStatementToken } from "./finance/statementLinks";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -382,6 +383,35 @@ export function payMutation<V extends AnyValidators, R>(def: {
       const { pay } = await payAccess(ctx, token);
       if (!pay) notFound();
       return def.handler({ ...ctx, invoice: pay.invoice, company: pay.company, companyId: pay.company._id }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+// ── Statement links: a cleaner reading their own earnings without signing in ────────────────────
+
+export type StatementAccess = {
+  /** The cleaner the link was issued to and their company, or null when the token names nothing open. */
+  statement: { link: Doc<"statementLinks">; cleaner: Doc<"cleaners">; company: Doc<"companies"> } | null;
+};
+
+/**
+ * A read through a cleaner's statement link. The token is the only authorization; the handler is given
+ * that one cleaner and must show nothing about anyone else. A wrong, expired or revoked link arrives as
+ * null. Opening it changes nothing.
+ */
+export function statementQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & StatementAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const link = await linkForStatementToken(ctx, token);
+      const cleaner = link ? await ctx.db.get(link.cleanerId) : null;
+      const company = link ? await ctx.db.get(link.companyId) : null;
+      const statement = link && cleaner && company && cleaner.companyId === company._id ? { link, cleaner, company } : null;
+      return def.handler({ ...ctx, statement }, rest as ObjectType<V>);
     },
   } as any);
 }

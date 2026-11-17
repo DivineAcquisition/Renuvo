@@ -22,6 +22,7 @@ export type FinanceSettings = {
   invoiceNote: string | null;
   remindersOn: boolean;
   replyTo: string | null;
+  tipsOn: boolean;
   invoicePrefix: string;
   nextInvoiceNumber: number;
   revision: number;
@@ -44,6 +45,7 @@ export function settingsOf(row: Doc<"financeSettings"> | null): FinanceSettings 
     invoiceNote: row?.invoiceNote ?? null,
     remindersOn: row?.remindersOn ?? true,
     replyTo: row?.replyTo ?? null,
+    tipsOn: row?.tipsOn ?? true,
     invoicePrefix: row?.invoicePrefix ?? DEFAULTS.invoicePrefix,
     nextInvoiceNumber: row?.nextInvoiceNumber ?? DEFAULTS.nextInvoiceNumber,
     revision: row?.revision ?? 0,

@@ -158,7 +158,7 @@ Three states describe each destination:
 | Chat | `/app/chat` | **Live.** Under Company, for every department. The name opens the conversation workspace; a separate arrow lists New chat, Search chats, pinned and recent chats, and All chats. One conversation is `/app/chat/[id]`; the searchable, paged history is `/app/chats`. Each chat is private to the person who started it. See `docs/chat/00-architecture.md`. |
 | Customers & Properties | `/app/customers` | **Live.** A list and an add form; no page per customer yet. |
 | Cleaners | `/app/cleaners` | **Live.** A list and an add form; no page per cleaner yet. |
-| Finance | `/app/finance` | **Live** (November 17, 2026): Overview and Invoices & Payments, with Payments setup at `/app/finance/setup`. Expenses, Team Pay and Profitability show as not built yet. Owner only. See `docs/finance/00-plan.md`. |
+| Finance | `/app/finance` | **Live** (November 17, 2026): Overview, Invoices & Payments and Team Pay, with Payments setup at `/app/finance/setup`. Expenses and Profitability show as not built yet. Owner only. See `docs/finance/00-plan.md`. |
 | Reports | `/app/reports` | **Interim** at `/app/insights`. Weekly measures only. |
 | Integrations | `/app/integrations` | **Live** as a list of every integration, what it does and which agents use it. Each connection is built in phases (`docs/integrations/00-plan.md`); none connects yet. |
 | Agreements | `/app/agreements` | **Live.** The company's own customer, workforce and business agreements (`docs/agreements/00-architecture.md`). Selestial's own Terms are under Settings. |
@@ -296,7 +296,7 @@ shown, never a guessed one.
   shows them until its overview exists.
 - 45 of the 47 work tabs. Two (Dispatch's Schedule and Offers & Coverage) are
   served in the meantime by existing pages.
-- Search, Inbox. (Finance's Expenses, Team Pay and Profitability tabs.)
+- Search, Inbox. (Finance's Expenses and Profitability tabs.)
 - A page per customer and per cleaner.
 - Badges for the seven agents that have no workflow.
 - Moving Schedule and Reports to their own paths, with redirects.
