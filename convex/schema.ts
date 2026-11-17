@@ -334,6 +334,8 @@ export default defineSchema({
     statusChangedAt: v.optional(v.number()),
     /** Set by an approved rehire restriction. Shown to managers; never sent to the cleaner. */
     rehireRestriction: v.optional(v.object({ until: v.optional(v.number()), requestId: v.id("personnelRequests") })),
+    /** Their last answer to a check-in: still available, fewer jobs, a break until a date, or wanting to stop. */
+    checkIn: v.optional(v.object({ answer: v.union(v.literal("available"), v.literal("fewer"), v.literal("break"), v.literal("stop")), at: v.number(), until: v.optional(v.number()), note: v.optional(v.string()) })),
     updatedAt: v.optional(v.number()),
   })
     .index("by_company_status", ["companyId", "status"])

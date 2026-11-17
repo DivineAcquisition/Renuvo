@@ -90,7 +90,17 @@ export function eventText(event: Doc<"events">, labels: Map<string, string>): { 
     case "cleaner.personnel_decided":
       return { text: `had a ${str(data.kind)?.replace(/_/g, " ") ?? "personnel"} request ${str(data.decision) ?? "decided"}`, tone: "decision" };
     case "cleaner.coaching_added":
-      return { text: "had a note or coaching item added", tone: "decision" };
+      return { text: data.shared ? "was sent feedback in their portal" : "had an internal note added", tone: "decision" };
+    case "cleaner.coaching_drafted":
+      return { text: "had a coaching note drafted by Selestial for review", tone: "agent" };
+    case "cleaner.feedback_answered":
+      return { text: "replied to feedback", tone: "record" };
+    case "cleaner.record_disputed":
+      return { text: "had a performance record disputed", tone: "decision" };
+    case "cleaner.dispute_decided":
+      return { text: `had a disputed record ${data.decision === "corrected" ? "corrected" : "upheld"}`, tone: "decision" };
+    case "cleaner.checked_in":
+      return { text: `answered a check-in: ${data.answer === "available" ? "still available" : data.answer === "fewer" ? "available for fewer jobs" : data.answer === "break" ? "taking a break" : "wants to stop"}`, tone: "record" };
     case "cleaner.follow_up":
       return { text: str(data.words) ?? "had a routine follow-up", tone: "agent" };
     default:

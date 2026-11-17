@@ -58,9 +58,44 @@ export async function needFor(ctx: MutationCtx, company: Doc<"companies">, clean
     if (now - since <= settings.availabilityConfirmDays * DAY) return null;
     return { summary: cleaner.availabilityConfirmedAt ? `Weekly hours last confirmed more than ${settings.availabilityConfirmDays} days ago.` : "Weekly hours have never been confirmed with them.", items: [] };
   }
-  // idle_check_in: an active, eligible cleaner with no accepted work for the company's window. Phase 4 fills the measure.
-  return null;
+  // idle_check_in: active and ready, yet no accepted work, no answered offer and nothing done through their portal
+  // for the company's window. Silence after a check-in is never read as leaving: it goes to a person.
+  if (cleaner.status !== "ready") return null;
+  const window = settings.idleAfterDays * DAY;
+  if (now - cleaner.createdAt < window) return null;
+  if (cleaner.checkIn && (now - cleaner.checkIn.at < window || (cleaner.checkIn.until !== undefined && cleaner.checkIn.until > now))) return null;
+  if (cleaner.checkIn?.answer === "stop") return null;
+  const { readiness } = await cleanerReadiness(ctx, company, cleaner, now);
+  if (!readiness.eligible) return null;
+  const since = now - window;
+  for (const status of ["accepted", "declined", "offered"] as const) {
+    const recent = await ctx.db
+      .query("assignments")
+      .withIndex("by_company_cleaner_status", (q) => q.eq("companyId", company._id).eq("cleanerId", cleaner._id).eq("status", status))
+      .order("desc")
+      .take(20);
+    if (recent.some((row) => row.offeredAt >= since || (row.respondedAt ?? 0) >= since || (status === "accepted" && (row.jobStartsAt ?? 0) >= since))) return null;
+  }
+  const away = await ctx.db
+    .query("timeOff")
+    .withIndex("by_company_cleaner_end", (q) => q.eq("companyId", company._id).eq("cleanerId", cleaner._id).gt("endsAt", now))
+    .take(20);
+  if (away.some((row) => row.startsAt <= now)) return null;
+  const links = await ctx.db
+    .query("portalLinks")
+    .withIndex("by_company_cleaner", (q) => q.eq("companyId", company._id).eq("cleanerId", cleaner._id))
+    .order("desc")
+    .take(20);
+  if (links.some((row) => (row.lastActionAt ?? 0) >= since)) return null;
+  return { summary: `No accepted jobs, answered offers or portal activity in the last ${settings.idleAfterDays} days.`, items: [] };
 }
+
+/** What a reminder asks, in the message and in an approval. */
+const ASKS: Record<FollowUpTopic, { message: string; approval: string; subject: (company: string) => string }> = {
+  onboarding: { message: "", approval: "a reminder about onboarding", subject: (company) => `Finish your onboarding with ${company}` },
+  availability: { message: "to confirm the days and hours you can work", approval: "a reminder to confirm their hours", subject: () => "Are your working hours still right?" },
+  idle_check_in: { message: "we have not had work with you for a while. Are you still looking for jobs with us? Tell us in one tap", approval: "a check-in: are they still available for work?", subject: () => "Still available for work?" },
+};
 
 async function latestFor(ctx: MutationCtx, companyId: Id<"companies">, key: string): Promise<Doc<"followUps"> | null> {
   return ctx.db
@@ -111,7 +146,7 @@ export async function ensureFollowUp(ctx: MutationCtx, company: Doc<"companies">
     updatedAt: now,
   });
   const row = (await ctx.db.get(id))!;
-  await note(ctx, row, `${topic === "onboarding" ? "Recruiter" : "Dispatch"} scheduled a reminder: ${need.summary}`);
+  await note(ctx, row, `${topic === "onboarding" ? "Recruiter scheduled a reminder" : topic === "availability" ? "Dispatch scheduled a reminder" : "Dispatch scheduled a check-in"}: ${need.summary}`);
   return row;
 }
 
@@ -152,14 +187,21 @@ async function send(ctx: MutationCtx, company: Doc<"companies">, cleaner: Doc<"c
   const actor: Actor = { kind: "agent", agent: followUp.agent };
   const link = await issuePortalLink(ctx, { companyId: company._id, holder: { cleanerId: cleaner._id }, purpose: LINK_PURPOSE[followUp.topic], expiresAt: now + 7 * DAY, followUpId: followUp._id, issuedBy: { kind: "agent", agent: followUp.agent }, actor });
   const attempt = followUp.attempt + 1;
-  const what = followUp.topic === "onboarding" ? `to finish onboarding: ${need.items.map((item) => item.label.toLowerCase()).join(", ")}` : "to confirm the days and hours you can work";
-  const body = channel === "sms" ? `${company.name}: Hi ${firstName(cleaner.name)}, a reminder ${what}. It takes a few minutes: {link}` : `Hi ${firstName(cleaner.name)},\n\nA reminder ${what}.\n\nYou can do it here, on your phone: {link}\n\nThis link is only for you and works for 7 days.\n\n${company.name}`;
+  const what = followUp.topic === "onboarding" ? `to finish onboarding: ${need.items.map((item) => item.label.toLowerCase()).join(", ")}` : ASKS[followUp.topic].message;
+  const body =
+    followUp.topic === "idle_check_in"
+      ? channel === "sms"
+        ? `${company.name}: Hi ${firstName(cleaner.name)}, ${what}: {link}`
+        : `Hi ${firstName(cleaner.name)},\n\n${what.charAt(0).toUpperCase()}${what.slice(1)} here: {link}\n\nYou can also take a break or change your hours there. This link is only for you and works for 7 days.\n\n${company.name}`
+      : channel === "sms"
+        ? `${company.name}: Hi ${firstName(cleaner.name)}, a reminder ${what}. It takes a few minutes: {link}`
+        : `Hi ${firstName(cleaner.name)},\n\nA reminder ${what}.\n\nYou can do it here, on your phone: {link}\n\nThis link is only for you and works for 7 days.\n\n${company.name}`;
   const message = await queueCleanerMessage(ctx, {
     company,
     cleaner,
     channel,
     purpose: PURPOSE[followUp.topic],
-    subject: followUp.topic === "onboarding" ? `Finish your onboarding with ${company.name}` : `Are your working hours still right?`,
+    subject: ASKS[followUp.topic].subject(company.name),
     body,
     dedupeKey: `${followUp.key}:${followUp._id}:${attempt}`,
     link,
@@ -259,7 +301,7 @@ export async function runFollowUp(ctx: MutationCtx, followUpId: Id<"followUps">,
         const approvalId = await requestApproval(ctx, {
           companyId: company._id,
           action: TOPIC_ACTION[followUp.topic],
-          summary: `Send ${cleaner.name} a reminder ${followUp.topic === "onboarding" ? "about onboarding" : "to confirm their hours"}`,
+          summary: `Send ${cleaner.name} ${ASKS[followUp.topic].approval}`,
           reason: need.summary,
           authorizes: `One ${channelsFor(cleaner, settings.followUpChannels)[0] === "email" ? "email" : "text"} to ${cleaner.name} with a link to do it. It is checked again before it goes.`,
           ifWaiting: "Nothing is sent. The reminder stays prepared until you decide or it expires.",
@@ -309,7 +351,7 @@ export async function sweep(ctx: MutationCtx, now: number): Promise<{ opened: nu
         .withIndex("by_company_status", (q) => q.eq("companyId", company._id).eq("status", status))
         .take(300);
       for (const cleaner of cleaners) {
-        for (const topic of ["onboarding", "availability"] as const) {
+        for (const topic of ["onboarding", "availability", "idle_check_in"] as const) {
           const before = await latestFor(ctx, company._id, followUpKey(topic, cleaner._id));
           const row = await ensureFollowUp(ctx, company, cleaner, topic, now);
           if (row && row._id !== before?._id) opened += 1;

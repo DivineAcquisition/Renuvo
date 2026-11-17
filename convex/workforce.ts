@@ -11,18 +11,18 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { owned } from "./lib/access";
-import { availabilityFor, type Span } from "./lib/availability";
 import { companyQuery, managerMutation, managerQuery, type MemberAccess } from "./lib/builders";
 import { attentionFor, conflictsOf, sortAttention, weekSummary, type AttentionItem } from "./lib/cleaners/attention";
 import { matchesFor, WHY_WORDS, type Match } from "./lib/cleaners/duplicates";
 import { applyTemplate, createWorker, ENGAGEMENT_WORDS, STATUS_WORDS } from "./lib/cleaners/enroll";
 import { companyCleaners, companyFacts, DIRECTORY_CAP, initialsOf, readinessOf } from "./lib/cleaners/records";
 import { engagementValidator } from "./lib/cleaners/schema";
+import { whoIsFree } from "./lib/cleaners/free";
 import { commitmentsBetween, companyTime } from "./lib/cleaners/schedule";
 import { cleanersSettings, DAY } from "./lib/cleaners/settings";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
-import { isOwner } from "./lib/roles";
+import { isManager, isOwner } from "./lib/roles";
 import { tags } from "./lib/text";
 import { clock, dayName } from "./lib/time";
 import { addLocalDays, startOfLocalDay } from "./lib/time";
@@ -94,6 +94,29 @@ export const directory = companyQuery({
         .take(1000);
       for (const row of open) followUps.set(row.cleanerId, [...(followUps.get(row.cleanerId) ?? []), row]);
     }
+    // Check-ins that ran out without a reply and went to a person.
+    const unanswered = new Map<string, Doc<"followUps">>();
+    for (const row of await ctx.db
+      .query("followUps")
+      .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "stopped"))
+      .order("desc")
+      .take(500)) {
+      if (row.topic === "idle_check_in" && row.taskId && now - row.updatedAt < 30 * 86_400_000 && !unanswered.has(row.cleanerId)) unanswered.set(row.cleanerId, row);
+    }
+    // Coaching and disputes are for Owners and Managers.
+    const coaching = new Map<string, { drafts: number; followUpsDue: { title: string; at: number }[]; openDisputes: number }>();
+    if (isManager(ctx.role)) {
+      const entry = (id: string) => coaching.get(id) ?? (coaching.set(id, { drafts: 0, followUpsDue: [], openDisputes: 0 }), coaching.get(id)!);
+      for (const status of ["draft", "awaiting_review"] as const) {
+        for (const row of await ctx.db.query("coachingNotes").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", status)).take(500)) entry(row.cleanerId).drafts += 1;
+      }
+      for (const row of await ctx.db.query("coachingNotes").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "active")).take(1000)) {
+        if (row.followUpAt !== undefined && row.followUpAt <= now) entry(row.cleanerId).followUpsDue.push({ title: row.title, at: row.followUpAt });
+      }
+      for (const row of await ctx.db.query("recordDisputes").withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId)).take(2000)) {
+        if (row.status === "open") entry(row.cleanerId).openDisputes += 1;
+      }
+    }
     const attention: AttentionItem[] = [];
     const rows = [];
     for (const cleaner of cleaners) {
@@ -112,9 +135,13 @@ export const directory = companyQuery({
         timezone: tz,
         settings,
         viewerIsOwner: isOwner(ctx.role),
+        performance: coaching.get(cleaner._id),
+        checkIn: cleaner.checkIn ? { answer: cleaner.checkIn.answer, at: cleaner.checkIn.at } : null,
+        checkInsUnanswered: unanswered.has(cleaner._id) ? { attempts: unanswered.get(cleaner._id)!.attempt, at: unanswered.get(cleaner._id)!.updatedAt } : null,
       });
       for (const item of items) {
         const topic = item.kind === "missing_requirements" ? "onboarding" : item.kind === "availability_unconfirmed" ? "availability" : null;
+        // A check-in in progress is said on the profile; once unanswered it is its own item above.
         const row = topic ? followUps.get(cleaner._id)?.find((entry) => entry.topic === topic) : undefined;
         if (row) item.selestial = followUpWords(row, tz);
       }
@@ -173,14 +200,6 @@ export const directory = companyQuery({
   },
 });
 
-const REASON_WORDS = {
-  outside_hours: "has not said they can work then",
-  time_off: "has time away then",
-  already_booked: "already has work then",
-  exception: "said they cannot work that day",
-  not_active: "is not active",
-} as const;
-
 /**
  * Who can work in a window, cleaner by cleaner, with the reason for each who cannot. It answers only for
  * time: it says nothing about a particular job's skills or area, which Dispatch checks per job.
@@ -189,26 +208,7 @@ export const availableIn = companyQuery({
   args: { from: v.number(), to: v.number() },
   handler: async (ctx, args) => {
     if (!(args.to > args.from) || args.to - args.from > 14 * DAY) throw userError("Choose a window of up to two weeks, with the end after the start.");
-    const company = ctx.company;
-    const span: Span = { startsAt: args.from, endsAt: args.to };
-    const cleaners = await companyCleaners(ctx, ctx.companyId);
-    const facts = await companyFacts(ctx, company);
-    const commitments = await commitmentsBetween(ctx, company, startOfLocalDay(args.from, company.timezone) - DAY, args.to + DAY);
-    const time = await companyTime(ctx, company, args.from - DAY);
-    return cleaners.map((cleaner) => {
-      const windows = (facts.windows.get(cleaner._id) ?? []).map((row) => ({ weekday: row.weekday, startMinute: row.startMinute, endMinute: row.endMinute }));
-      const own = time.get(cleaner._id) ?? { absences: [], extraAvailable: [] };
-      const held = (commitments.get(cleaner._id) ?? []).map((row) => ({ startsAt: row.startsAt, endsAt: row.endsAt }));
-      if (cleaner.status !== "ready") return { cleanerId: cleaner._id, available: false, reason: REASON_WORDS.not_active };
-      if (own.absences.some((row) => row.kind === "exception" && row.span.startsAt < span.endsAt && span.startsAt < row.span.endsAt)) return { cleanerId: cleaner._id, available: false, reason: REASON_WORDS.exception };
-      const extra = own.extraAvailable.some((row) => row.startsAt <= span.startsAt && span.endsAt <= row.endsAt);
-      const answer = availabilityFor({ windows: extra ? [] : windows, timeOff: own.absences.filter((row) => row.kind === "time_off").map((row) => row.span), booked: held, span, timezone: company.timezone });
-      if (extra && !answer.available && answer.reason === "outside_hours") {
-        const booked = held.some((row) => row.startsAt < span.endsAt && span.startsAt < row.endsAt);
-        return booked ? { cleanerId: cleaner._id, available: false, reason: REASON_WORDS.already_booked } : { cleanerId: cleaner._id, available: true, reason: null };
-      }
-      return answer.available ? { cleanerId: cleaner._id, available: true, reason: null } : { cleanerId: cleaner._id, available: false, reason: REASON_WORDS[answer.reason] };
-    });
+    return (await whoIsFree(ctx, ctx.company, { startsAt: args.from, endsAt: args.to })).map((row) => ({ cleanerId: row.cleanerId, available: row.available, reason: row.reason }));
   },
 });
 

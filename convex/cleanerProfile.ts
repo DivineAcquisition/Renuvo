@@ -184,6 +184,8 @@ export const profile = companyQuery({
 });
 
 /** The person's history: what happened to their record, what they were sent and whether it arrived, and their offers. */
+const PERFORMANCE_EVENTS = ["cleaner.coaching_added", "cleaner.coaching_drafted", "cleaner.feedback_answered", "cleaner.record_disputed", "cleaner.dispute_decided"];
+
 export const activity = companyQuery({
   args: { cleanerId: v.id("cleaners"), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -205,6 +207,8 @@ export const activity = companyQuery({
     for (const event of events) {
       // Pay is the Owner's: other roles see neither pay changes nor pay requests in the history.
       if (!isOwner(ctx.role) && (event.type === "cleaner.pay_changed" || event.data?.kind === "pay_change")) continue;
+      // Coaching, feedback and disputed records are for Owners and Managers.
+      if (!isManager(ctx.role) && PERFORMANCE_EVENTS.includes(event.type)) continue;
       const words = eventText(event, labels);
       entries.push({ id: event._id, at: event.at, ...actorWords(event.actor, members, cleaner.name), text: words.text, tone: words.tone });
     }

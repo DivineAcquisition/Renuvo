@@ -192,7 +192,7 @@ export const view = portalQuery({
       past: past.slice(0, 15),
       crews: await crewsOf(ctx, cleaner),
       agreements,
-      feedback: shared.filter((row) => row.visibility === "shared" && row.sharedAt).map((row) => ({ id: row._id, title: row.title, body: row.body, at: row.sharedAt!, response: row.response?.text ?? null, actions: row.actions.map((item) => item.text) })),
+      feedback: shared.filter((row) => row.visibility === "shared" && row.sharedAt && row.status !== "withdrawn" && row.status !== "draft").map((row) => ({ id: row._id, title: row.title, body: row.body, at: row.sharedAt!, response: row.response?.text ?? null, actions: row.actions.map((item) => item.text) })),
       verified: isVerified(ctx.link, now),
       codeTo: contact[0] ? maskAddress(contact[0], contact[0] === "sms" ? cleaner.phone! : cleaner.email!) : null,
     };
@@ -524,9 +524,77 @@ export const respondToFeedback = portalMutation({
   handler: async (ctx, args) => {
     const cleaner = cleanerOf(ctx);
     const note = await ctx.db.get(args.noteId);
-    if (!note || note.companyId !== ctx.companyId || note.cleanerId !== cleaner._id || note.visibility !== "shared" || !note.sharedAt) throw userError("That feedback is not yours to answer.", "not_found");
+    if (!note || note.companyId !== ctx.companyId || note.cleanerId !== cleaner._id || note.visibility !== "shared" || !note.sharedAt || note.status === "withdrawn") throw userError("That feedback is not yours to answer.", "not_found");
     await ctx.db.patch(note._id, { response: { text: text(args.text, "Your reply", 2000), at: Date.now() }, updatedAt: Date.now() });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "cleaner.feedback_answered", actor: actorOf(ctx), subject: { table: "cleaners", id: cleaner._id }, data: { noteId: note._id } });
     return null;
+  },
+});
+
+// ── Check-ins and their own record ───────────────────────────────────────────────────────────────
+
+const CHECK_IN_WORDS = { available: "still available for work", fewer: "available, for fewer jobs", break: "taking a break", stop: "wanting to stop working with the company" } as const;
+
+/**
+ * Their answer to "are you still available?". A break is recorded as time away, so no work is offered then.
+ * Wanting to stop opens a task for a person: the engagement is never ended by an answer here.
+ */
+export const respondCheckIn = portalMutation({
+  action: "respond_check_in",
+  args: { answer: v.union(v.literal("available"), v.literal("fewer"), v.literal("break"), v.literal("stop")), until: v.optional(v.number()), note: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const cleaner = cleanerOf(ctx);
+    const now = Date.now();
+    const note = optionalText(args.note, "Note", 500);
+    if (args.answer === "break") {
+      if (args.until === undefined || !Number.isSafeInteger(args.until) || args.until <= now) throw userError("Say when you expect to be back.");
+      if (args.until - now > 365 * DAY) throw userError("For more than a year away, talk to the office.");
+    }
+    await ctx.db.patch(cleaner._id, { checkIn: { answer: args.answer, at: now, until: args.answer === "break" ? args.until : undefined, note }, updatedAt: now });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "cleaner.checked_in", actor: actorOf(ctx), subject: { table: "cleaners", id: cleaner._id }, data: { answer: args.answer, until: args.until ?? null } });
+    let impact: string[] = [];
+    if (args.answer === "break") {
+      await ctx.db.insert("timeOff", { companyId: ctx.companyId, cleanerId: cleaner._id, startsAt: now, endsAt: args.until!, note: note ?? "Taking a break", source: "cleaner", createdAt: now });
+      impact = await impactOf(ctx, cleaner);
+    }
+    if (args.answer === "stop" || impact.length > 0) {
+      await openTask(ctx, {
+        companyId: ctx.companyId,
+        agent: "dispatch",
+        title: args.answer === "stop" ? `${cleaner.name} said they want to stop working with you` : `${cleaner.name} is taking a break during accepted work`,
+        nextAction:
+          args.answer === "stop"
+            ? `They answered a check-in from their portal${note ? `: "${note.slice(0, 300)}"` : ""}. Talk with them. Ending the engagement is a request the Owner decides; nothing has changed yet.`
+            : `They are taking a break until ${new Date(args.until!).toISOString().slice(0, 10)}, which clashes with: ${impact.join("; ")}. Keep or cover each job in Dispatch.`,
+        dueAt: now + DAY,
+        completionCondition: args.answer === "stop" ? "A person has spoken with them" : "Each clashing job is kept or covered by a person",
+        about: { table: "cleaners", id: cleaner._id },
+        key: `cleaners.check_in:${cleaner._id}:${now}`,
+        actor: actorOf(ctx),
+      });
+    }
+    return { words: `Thanks. The office knows you are ${CHECK_IN_WORDS[args.answer]}.`, impact };
+  },
+});
+
+/** "This record is wrong." The record is left out of their measures until a person decides. */
+export const disputeRecord = portalMutation({
+  action: "dispute",
+  args: { assignmentId: v.id("assignments"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const cleaner = cleanerOf(ctx);
+    const assignment = await ctx.db.get(args.assignmentId);
+    if (!assignment || assignment.companyId !== ctx.companyId || assignment.cleanerId !== cleaner._id) throw userError("Not found.", "not_found");
+    const reason = text(args.reason, "What is wrong", 1000);
+    const open = (
+      await ctx.db
+        .query("recordDisputes")
+        .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id))
+        .take(200)
+    ).find((row) => row.assignmentId === assignment._id && row.status === "open");
+    if (open) return { disputeId: open._id, already: true };
+    const disputeId = await ctx.db.insert("recordDisputes", { companyId: ctx.companyId, cleanerId: cleaner._id, assignmentId: assignment._id, measure: "all", raisedBy: { kind: "cleaner", linkId: ctx.link._id }, reason, status: "open", createdAt: Date.now() });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "cleaner.record_disputed", actor: actorOf(ctx), subject: { table: "cleaners", id: cleaner._id }, data: { assignmentId: assignment._id, measure: "all" } });
+    return { disputeId, already: false };
   },
 });

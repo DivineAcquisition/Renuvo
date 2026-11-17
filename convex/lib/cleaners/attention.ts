@@ -21,6 +21,8 @@ export type AttentionKind =
   | "no_pay"
   | "check_in_unanswered"
   | "coaching_review"
+  | "record_disputed"
+  | "wants_to_stop"
   | "skill_claims";
 
 export type Severity = "urgent" | "decide" | "look";
@@ -83,6 +85,11 @@ export type CleanerAttentionInput = {
   settings: { availabilityConfirmDays: number };
   /** Pay is the Owner's: the item is shown only to the Owner. */
   viewerIsOwner: boolean;
+  /** Coaching and disputed records, for Owners and Managers only. */
+  performance?: { drafts: number; followUpsDue: { title: string; at: number }[]; openDisputes: number };
+  /** Their last answer to a check-in, and whether Dispatch's check-ins went unanswered and were handed to a person. */
+  checkIn?: { answer: "available" | "fewer" | "break" | "stop"; at: number } | null;
+  checkInsUnanswered?: { attempts: number; at: number } | null;
 };
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
@@ -149,6 +156,21 @@ export function attentionFor(input: CleanerAttentionInput): AttentionItem[] {
 
   if (input.viewerIsOwner && cleaner.status === "ready" && !cleaner.hasPay) {
     items.push({ ...base, id: `pay:${cleaner.id}`, kind: "no_pay", severity: "look", title: "No pay arrangement", detail: "Dispatch cannot state their pay in an offer, so they are left out of offers.", section: "pay", evidence: [] });
+  }
+
+  if (working && input.checkIn?.answer === "stop") {
+    items.push({ ...base, id: `stop:${cleaner.id}`, kind: "wants_to_stop", severity: "decide", title: "Said they want to stop", detail: `They answered a check-in on ${day(input.checkIn.at, input.timezone)}. Talk with them; ending the engagement is a request the Owner decides, and nothing has changed yet.`, section: "overview", evidence: [], at: input.checkIn.at });
+  }
+
+  if (working && input.checkInsUnanswered) {
+    items.push({ ...base, id: `checkin:${cleaner.id}`, kind: "check_in_unanswered", severity: "look", title: "No answer to check-ins", detail: `Dispatch sent ${plural(input.checkInsUnanswered.attempts, "check-in")} without a reply and asked a person to reach out. Not answering is not the same as leaving.`, section: "overview", evidence: [], at: input.checkInsUnanswered.at });
+  }
+
+  if (input.performance) {
+    const { drafts, followUpsDue, openDisputes } = input.performance;
+    if (drafts > 0) items.push({ ...base, id: `drafts:${cleaner.id}`, kind: "coaching_review", severity: "decide", title: `${plural(drafts, "coaching draft")} to review`, detail: "Selestial drafted it from their records. Nobody sees it until a person publishes it.", section: "performance", evidence: [] });
+    for (const due of followUpsDue) items.push({ ...base, id: `followup:${cleaner.id}:${due.at}`, kind: "coaching_review", severity: "look", title: `Coaching follow-up due: ${due.title}`, detail: `The follow-up date was ${day(due.at, input.timezone)}. See how it went, then close it or set a new date.`, section: "performance", evidence: [], at: due.at });
+    if (openDisputes > 0) items.push({ ...base, id: `disputes:${cleaner.id}`, kind: "record_disputed", severity: "decide", title: `${plural(openDisputes, "disputed record")} to decide`, detail: "Each is left out of their measures until a person upholds or corrects it.", section: "performance", evidence: [] });
   }
 
   if (input.skillClaims > 0) {
