@@ -11,11 +11,14 @@
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MemberAccess } from "../builders";
 import type { MutationCtx } from "../../_generated/server";
+import { recordEvent } from "../events";
 import { isManager, isOwner } from "../roles";
 import { checkSpec, priceSummary, quote, type QuoteInput } from "../services/engine";
 import { emptyCosts, profitability } from "../services/profit";
 import { blankSpec, CATEGORIES, defaultPricing, METHOD_LABELS, PRICING_METHODS, SCHEDULES, type Category, type PricingMethod, type Spec } from "../services/spec";
 import { draftOf, normalizeSpec, publishedCatalog, publishedSpec } from "../services/store";
+import { BASIS_LABELS } from "../services/research";
+import { startBrief } from "../services/researchStart";
 import { templateById, TEMPLATES } from "../services/templates";
 import { createDraft, submitDraft, writeDraft } from "../services/workflow";
 import { formatCents } from "../services/words";
@@ -54,6 +57,17 @@ async function findService(ctx: ToolCtx, ref: unknown): Promise<Doc<"services"> 
     if (match) return match;
   }
   return null;
+}
+
+/** Where research looks: what the person said, or the areas served from pricing setup. */
+async function researchArea(ctx: ToolCtx, given: unknown): Promise<string> {
+  const said = String(given ?? "").trim().slice(0, 200);
+  if (said) return said;
+  const profile = await ctx.db
+    .query("pricingProfiles")
+    .withIndex("by_company", (q) => q.eq("companyId", ctx.company._id))
+    .first();
+  return (profile?.context.serviceAreas ?? "").trim().slice(0, 200);
 }
 
 /** A spec in the words and units a person reads, for the model to explain. */
@@ -511,6 +525,108 @@ export const SERVICE_TOOLS: ChatTool[] = [
       } catch (error) {
         return refused(say(error, "It could not be submitted."));
       }
+    },
+  },
+  {
+    name: "start_research",
+    label: "Starting research",
+    description:
+      "Start a research brief in Services & Pricing › Research & Insights that answers one pricing or market question. web: true searches public web pages (up to 5 searches) and costs 10 Selestial Credits, charged only if it finishes. web: false uses only the company's own completed visits and sources, free. The person approves first. A web brief runs in the background and this conversation is told when it is ready. It never changes a price.",
+    kind: "write",
+    minimumRole: "manager",
+    confirm: true,
+    input: {
+      type: "object",
+      properties: {
+        question: { type: "string", max: 500, description: "One question, in the person's words where possible." },
+        area: { type: "string", max: 200, optional: true, description: "Where to look, for example 'Austin, TX'. Leave out to use the areas served in pricing setup." },
+        service: { ...SERVICE, optional: true, description: "One of the company's services the question is about, if any." },
+        web: { type: "boolean", description: "Search public web pages (10 credits) or use only the company's records (free)." },
+      },
+    },
+    preview: async (ctx, args) => {
+      const question = String(args.question ?? "").trim();
+      if (!question) return refused("Say what the research should answer.");
+      const service = args.service ? await findService(ctx, args.service) : null;
+      if (args.service && !service) return refused("No such service.");
+      const area = await researchArea(ctx, args.area);
+      const web = args.web === true;
+      return {
+        status: "needs_approval",
+        preview: {
+          summary: web ? "Start web research (10 Selestial Credits)" : "Make a research brief from your records (free)",
+          lines: [
+            `Question: ${question}`,
+            `Where: ${area || "no area given"}`,
+            ...(service ? [`About: ${service.name}`] : []),
+            web ? "Up to 5 web searches. Charged only if it finishes; this chat is told when it is ready." : "Uses only your completed visits and the sources you added. No web search.",
+            "Research proposes. It changes no price.",
+          ],
+          bindsTo: stableHash({ question, area, service: service?._id ?? null, web }),
+        },
+      };
+    },
+    run: async (ctx, args) => {
+      const question = String(args.question ?? "").trim();
+      const service = args.service ? await findService(ctx, args.service) : null;
+      if (args.service && !service) return refused("No such service.");
+      const area = await researchArea(ctx, args.area);
+      try {
+        const started = await startBrief(ctx, { company: ctx.company, member: ctx.member, actor: CHAT(ctx), question, geography: area, ...(service ? { serviceId: service._id } : {}), origin: "chat", web: args.web === true, sources: [], conversationId: ctx.conversationId });
+        await recordEvent(ctx, { companyId: ctx.company._id, type: "service.research_started", actor: CHAT(ctx), subject: { table: "researchBriefs", id: started.briefId }, data: { web: started.web } });
+        const brief = (await ctx.db.get(started.briefId))!;
+        return {
+          status: "done",
+          summary: started.web ? "Research started; this chat is told when it is ready" : started.blocked ? `Made a brief from your records. ${started.blocked}` : "Made a research brief from your records",
+          data: { briefId: started.briefId, state: brief.state, web: started.web, blocked: started.blocked, area, findings: brief.findings.length, next: started.web ? "It runs in the background. Do not wait for it in this reply." : "Read it with read_research_brief." },
+          link: { href: `/app/services/research/${started.briefId}`, label: "Open the brief" },
+        };
+      } catch (error) {
+        return refused(say(error, "The research could not be started."));
+      }
+    },
+  },
+  {
+    name: "read_research_brief",
+    label: "Reading research",
+    description: "Read a research brief: whether it is ready, its summary, each finding with the kind of evidence it is, and its sources. Without briefId, lists the company's most recent briefs.",
+    kind: "read",
+    minimumRole: "office",
+    input: { type: "object", properties: { briefId: { type: "string", max: 64, optional: true } } },
+    run: async (ctx, args) => {
+      if (!args.briefId) {
+        const rows = await ctx.db
+          .query("researchBriefs")
+          .withIndex("by_company_created", (q) => q.eq("companyId", ctx.company._id))
+          .order("desc")
+          .take(10);
+        return { status: "done", summary: `${rows.length} recent brief${rows.length === 1 ? "" : "s"}`, data: { briefs: rows.map((row) => ({ briefId: row._id, question: row.question, area: row.geography, mode: row.mode, state: row.state, findings: row.findings.length, startedHere: row.conversationId === ctx.conversationId })) }, link: { href: "/app/services/research", label: "Research & Insights" } };
+      }
+      const id = ctx.db.normalizeId("researchBriefs", String(args.briefId));
+      const brief = id ? await ctx.db.get(id) : null;
+      if (!brief || brief.companyId !== ctx.company._id) return refused("No such research brief.");
+      const sources = await ctx.db
+        .query("researchSources")
+        .withIndex("by_company_brief", (q) => q.eq("companyId", ctx.company._id).eq("briefId", brief._id))
+        .take(40);
+      const number = (sourceId: Id<"researchSources">) => sources.findIndex((row) => row._id === sourceId) + 1;
+      return {
+        status: "done",
+        summary: brief.state === "ready" ? `Read "${brief.question.slice(0, 80)}": ${brief.findings.length} findings` : `"${brief.question.slice(0, 80)}" is ${brief.state === "queued" || brief.state === "running" ? "still researching" : brief.state}`,
+        data: {
+          briefId: brief._id,
+          question: brief.question,
+          area: brief.geography,
+          mode: brief.mode,
+          state: brief.state,
+          note: brief.blocked ?? null,
+          summary: brief.summary ?? null,
+          findings: brief.findings.slice(0, 30).map((f) => ({ id: f.id, statement: f.statement, kind: BASIS_LABELS[f.basis].label, price: f.priceCents === null ? null : `${formatCents(f.priceCents)} ${f.unit}`, area: f.geography, scope: f.scope, limitation: f.limitation, comparable: f.comparable, sources: f.sourceIds.map(number).filter((n) => n > 0) })),
+          sources: sources.slice(0, 15).map((row, i) => ({ number: i + 1, title: row.title, url: row.url ?? null, publisher: row.publisher ?? null, read: new Date(row.retrievedAt).toISOString().slice(0, 10), limitation: row.limitation })),
+          reminder: "Advertised prices are what businesses publish, not what customers pay. A few prices are not a market average.",
+        },
+        link: { href: `/app/services/research/${brief._id}`, label: "Open the brief" },
+      };
     },
   },
 ];

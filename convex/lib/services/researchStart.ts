@@ -92,7 +92,7 @@ export async function refreshSourcesSummary(ctx: MutationCtx, brief: Doc<"resear
  */
 export async function startBrief(
   ctx: MutationCtx,
-  input: { company: Doc<"companies">; member: Doc<"members"> | null; actor: Actor; question: string; geography: string; category?: Category; serviceId?: Id<"services">; origin: "setup" | "member" | "chat"; web: boolean; sources: OwnerSource[] },
+  input: { company: Doc<"companies">; member: Doc<"members"> | null; actor: Actor; question: string; geography: string; category?: Category; serviceId?: Id<"services">; origin: "setup" | "member" | "chat"; web: boolean; sources: OwnerSource[]; conversationId?: Id<"conversations"> },
 ): Promise<{ briefId: Id<"researchBriefs">; web: boolean; blocked: string | null }> {
   const now = Date.now();
   const question = input.question.trim().slice(0, 500);
@@ -111,6 +111,7 @@ export async function startBrief(
     createdBy: input.actor,
     createdAt: now,
     ...(input.web ? {} : { finishedAt: now }),
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
   });
   for (const source of input.sources) await insertOwnerSource(ctx, input.company._id, briefId, source);
 

@@ -9,8 +9,9 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { finishExecution } from "./lib/billing/executions";
+import { postToConversation } from "./lib/chat/state";
 import { reserveExecution } from "./lib/billing/reserve";
 import { companyQuery, managerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
@@ -83,6 +84,8 @@ export const brief = companyQuery({
       createdAt: row.createdAt,
       finishedAt: row.finishedAt ?? null,
       canEdit: isManager(ctx.role),
+      /** The conversation that started it, when it is this member's own (conversations are private). */
+      conversationId: row.conversationId && (await ctx.db.get(row.conversationId))?.createdBy === ctx.member._id ? row.conversationId : null,
     };
   },
 });
@@ -177,6 +180,22 @@ export const markRunning = internalMutation({
 });
 
 /** Ends a brief that could not search: the free parts stay, the hold is released, and the reason is shown. */
+/** The conversation that started a brief hears how it ended, so the person can carry on there. */
+async function tellConversation(ctx: MutationCtx, briefId: Id<"researchBriefs">) {
+  const brief = await ctx.db.get(briefId);
+  if (!brief?.conversationId) return;
+  const open = `[open the brief](/app/services/research/${brief._id})`;
+  if (brief.state === "ready" && brief.mode === "web") {
+    const range = brief.findings.find((f) => f.id === "range");
+    const text = `**Research ready:** ${brief.question}\n\n${brief.findings.length} finding${brief.findings.length === 1 ? "" : "s"}${range ? `. ${range.statement}` : "."}\n\nAsk me what it means for your prices, or ${open}.`;
+    await postToConversation(ctx, brief.conversationId, [{ kind: "text", text }]);
+  } else {
+    const why = brief.blocked ?? "The research did not finish.";
+    await postToConversation(ctx, brief.conversationId, [{ kind: "notice", tone: "warning", text: `Research on "${brief.question.slice(0, 120)}" did not search the web: ${why}` }]);
+    await postToConversation(ctx, brief.conversationId, [{ kind: "text", text: `What it has from your own records is in the brief: ${open}.` }]);
+  }
+}
+
 export const endWithout = internalMutation({
   args: { briefId: v.id("researchBriefs"), reason: v.string(), failed: v.boolean() },
   handler: async (ctx, args) => {
@@ -186,6 +205,7 @@ export const endWithout = internalMutation({
     await ctx.db.patch(brief._id, { state: args.failed ? "failed" : "ready", mode: "sources", blocked: `${args.reason} This brief uses your sources and your own records only.`, finishedAt: Date.now() });
     await refreshSourcesSummary(ctx, (await ctx.db.get(brief._id))!);
     await recordEvent(ctx, { companyId: brief.companyId, type: "service.research_failed", actor: { kind: "system" }, subject: { table: "researchBriefs", id: brief._id } });
+    await tellConversation(ctx, brief._id);
     return null;
   },
 });
@@ -201,6 +221,7 @@ export const complete = internalMutation({
       if (brief.executionId) await finishExecution(ctx, brief.executionId, { ended: "failed" });
       await ctx.db.patch(brief._id, { state: "failed", mode: "sources", blocked: "The research answer could not be read, so nothing from it was kept. Nothing was charged.", finishedAt: Date.now() });
       await refreshSourcesSummary(ctx, (await ctx.db.get(brief._id))!);
+      await tellConversation(ctx, brief._id);
       return null;
     }
     const now = Date.now();
@@ -217,6 +238,7 @@ export const complete = internalMutation({
     await ctx.db.patch(brief._id, { state: "ready", findings, summary: { ...screened.summary, comparable: range ? [rangeStatement(range), ...screened.summary.comparable] : screened.summary.comparable, uncertain }, finishedAt: now });
     if (brief.executionId) await finishExecution(ctx, brief.executionId, { completedUnits: 1 });
     await recordEvent(ctx, { companyId: brief.companyId, type: "service.research_ready", actor: { kind: "system" }, subject: { table: "researchBriefs", id: brief._id }, data: { sources: screened.sources.length, findings: web.length } });
+    await tellConversation(ctx, brief._id);
     return null;
   },
 });

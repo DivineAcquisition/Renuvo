@@ -115,6 +115,8 @@ export const chatTables = {
     shelf: v.union(v.literal("active"), v.literal("archived"), v.literal("deleted")),
     messageCount: v.number(),
     /** The model the person chose for this chat (lib/ai/chatModels.ts). Unset: the default. */
+    /** Where the conversation started, kept for every reply so it is never lost (lib/chat/business.ts). */
+    origin: v.optional(v.object({ kind: v.literal("research"), question: v.string() })),
     modelKey: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

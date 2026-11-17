@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
-import { ArrowLeft, ExternalLink, Plus, Trash2 } from "@/components/icons";
+import { useChat } from "@/components/app/chat/chat-context";
+import { Composer, type Outgoing } from "@/components/app/chat/composer";
+import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
+import { ArrowLeft, ArrowRight, ChatIcon, ExternalLink, Plus, Search, Sparkles, Trash2 } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +20,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { startingCents } from "../../../../convex/lib/services/engine";
 import { BASIS_LABELS, comparableRange } from "../../../../convex/lib/services/research";
-import { Empty, formatCents, Notice, SectionTitle, Toggle, when } from "./shared";
+import { Empty, formatCents, InfoTip, Notice, SectionTitle, when } from "./shared";
 import { PriceStrip } from "./visuals";
 
 const BASIS_TONE: Record<string, "info" | "warning" | "success" | "outline"> = { advertised_starting: "warning", estimated: "info", firm_published: "success", company_data: "success", ai_inference: "outline" };
@@ -28,44 +30,137 @@ const STATE_WORDS: Record<string, string> = { queued: "Waiting to start", runnin
 type OwnerSource = { url: string; title: string; price: string; priceKind: "advertised_starting" | "estimated" | "firm_published"; unit: string; geography: string; excerpt: string; comparable: boolean };
 const blankSource = (): OwnerSource => ({ url: "", title: "", price: "", priceKind: "advertised_starting", unit: "per visit", geography: "", excerpt: "", comparable: true });
 
-/** Research briefs, newest first, and how to start one. */
+/** Ideas to start from, using the company's own area when setup gave one. Picking one fills the box; the person still sends it. */
+function researchStarters(area: string): string[] {
+  const near = area && area.length <= 40 ? ` near ${area}` : " near me";
+  return [
+    `What do cleaning businesses${near} publish for a standard home clean?`,
+    "Do companies near me price deep cleans by size, or by bedrooms and bathrooms?",
+    `Is there demand for short-term rental turnovers${near}, and how are they priced?`,
+    "What do commercial cleaners publish for small office cleaning?",
+  ];
+}
+
+const BRIEF_ORIGIN: Record<string, string> = { setup: "started by setup", chat: "started in Chat", member: "started by your team" };
+
+/**
+ * Research starts as a real Chat conversation: Chat's own box, centered on the page. Sending opens the
+ * conversation in Chat, which knows the business and the person for every reply and can start a research
+ * brief when one is worth running. Earlier research chats and briefs are listed underneath.
+ */
 export function ResearchHome() {
   const { companyId } = useCompany();
   const data = useQuery(api.servicesResearch.briefs, { companyId });
-  const [starting, setStarting] = useState(false);
+  const profile = useQuery(api.services.profile, { companyId });
+  const chats = useQuery(api.chat.researchChats, { companyId });
+  const send = useMutation(api.chat.send);
+  const router = useRouter();
+  const { page, setConversationId } = useChat();
+  const [seed, setSeed] = useState("");
+  const [model, setModel] = useState<string | null>(null);
   if (!data) return <Skeleton className="h-64 rounded-2xl" />;
+  const area = profile?.context.serviceAreas.trim() ?? "";
+
+  const start = async (outgoing: Outgoing) => {
+    const result = await send({
+      companyId,
+      text: outgoing.text,
+      clientKey: outgoing.clientKey,
+      page: outgoing.includePage && page ? page.path : undefined,
+      context: outgoing.records.map((record) => ({ table: record.table, id: record.id })),
+      attachments: outgoing.files.map((file) => ({ storageId: file.storageId as Id<"_storage">, name: file.name })),
+      model: model ?? undefined,
+      origin: { kind: "research" },
+    });
+    setConversationId(result.conversationId);
+    router.push(`/app/chat/${result.conversationId}`);
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionTitle title="Research & Insights" tip="Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price. If you already have reliable job data, you can skip it.">Ask one question. Nothing here changes a price.</SectionTitle>
-        {data.canStart && !starting ? (
-          <Button variant="primary" size="sm" onClick={() => setStarting(true)}>
-            <Plus aria-hidden /> New research
-          </Button>
+    <div className="grid grid-cols-1 gap-10">
+      {data.canStart ? (
+        <section aria-labelledby="research-ask" className="mx-auto flex min-h-[min(36rem,calc(100dvh-18rem))] w-full max-w-3xl flex-col items-center justify-center gap-6 py-6 text-center">
+          <span aria-hidden className="inline-flex size-12 items-center justify-center rounded-full border border-brand-500/30 bg-card shadow-[0_12px_32px_-14px_rgba(104,56,239,0.8)]">
+            <Search className="size-5 text-brand-300" />
+          </span>
+          <div className="grid gap-1.5">
+            <h2 id="research-ask" className="flex items-center justify-center gap-0.5 font-heading text-2xl tracking-tight text-strong sm:text-3xl">
+              What do you want to find out?
+              <InfoTip label="Research & Insights">This opens a Chat conversation that already knows your business: where you work, what you sell and how your team works. Chat can start a research brief that searches public web pages (10 Selestial Credits, with your approval) and tells the conversation when it is ready. Research proposes; it never changes a price.</InfoTip>
+            </h2>
+            <p className="text-sm text-muted-foreground">Ask about prices, demand or your area. Selestial answers in Chat and can research it for you.</p>
+          </div>
+          <div className="w-full text-left">
+            <Composer working={false} stopping={false} seed={seed} autoFocus placeholder="Ask a pricing or market question…" onSend={start} onStop={async () => undefined} model={model} onModel={async (key) => setModel(key)} />
+          </div>
+          <ul aria-label="Ideas to start from" className="grid w-full gap-2 text-left sm:grid-cols-2">
+            {researchStarters(area).map((starter) => (
+              <li key={starter}>
+                <button type="button" onClick={() => setSeed(starter)} className="group flex h-full w-full items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-3 text-left text-sm text-strong hover:border-brand-500/50 hover:bg-brand-500/[0.04] focus-visible:outline-2 focus-visible:outline-brand-500">
+                  <Sparkles className="size-4 shrink-0 text-brand-300" aria-hidden />
+                  <span className="flex-1">{starter}</span>
+                  <ArrowRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
+        <SectionTitle title="Research & Insights" tip="Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price.">Briefs your Owner and Managers started.</SectionTitle>
+      )}
+
+      <div className="mx-auto grid w-full max-w-3xl grid-cols-1 gap-8">
+        {chats && chats.length ? (
+          <section aria-labelledby="research-chats" className="grid grid-cols-1 gap-2">
+            <h2 id="research-chats" className="font-heading text-base tracking-tight text-strong">
+              Your research chats <span className="text-sm font-normal text-muted-foreground">· {chats.length}</span>
+            </h2>
+            <ul className="grid grid-cols-1 gap-2">
+              {chats.map((chat) => (
+                <li key={chat.id}>
+                  <Link href={`/app/chat/${chat.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <ChatIcon aria-hidden className="size-4 shrink-0 text-brand-300" />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-strong">{chat.title}</span>
+                        <span className="block text-xs text-muted-foreground">{chat.state === "working" ? "Answering now" : `Updated ${when(chat.updatedAt)}`}</span>
+                      </span>
+                    </span>
+                    <ArrowRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         ) : null}
+
+        <section aria-labelledby="research-list" className="grid grid-cols-1 gap-2">
+          <h2 id="research-list" className="font-heading text-base tracking-tight text-strong">
+            Research briefs {data.briefs.length ? <span className="text-sm font-normal text-muted-foreground">· {data.briefs.length}</span> : null}
+          </h2>
+          {data.briefs.length === 0 ? <Empty title="No briefs yet">{data.canStart ? "Ask in the box above. When a question needs current prices from the web, Chat offers to start a brief." : "Briefs appear here once someone starts one."}</Empty> : null}
+          <ul className="grid grid-cols-1 gap-2">
+            {data.briefs.map((b) => (
+              <li key={b.id}>
+                <Link href={briefPath(b.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
+                  <span className="min-w-0">
+                    <span className="block font-medium text-strong">{b.question}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {b.geography || "No area given"} · {b.mode === "web" ? "Web research" : "Your sources and records"} · {BRIEF_ORIGIN[b.origin] ?? BRIEF_ORIGIN.member} · {when(b.createdAt)}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">{b.findings} findings</span>
+                    <Badge variant={b.state === "ready" ? "success" : b.state === "failed" ? "error" : "info"} size="sm">
+                      {STATE_WORDS[b.state]}
+                    </Badge>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
-      {starting ? <NewBrief onDone={() => setStarting(false)} /> : null}
-      {data.briefs.length === 0 && !starting ? <Empty title="No research yet">Start one when a decision needs it. Your own completed visits are always included, free.</Empty> : null}
-      <ul className="grid grid-cols-1 gap-2">
-        {data.briefs.map((b) => (
-          <li key={b.id}>
-            <Link href={briefPath(b.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
-              <span className="min-w-0">
-                <span className="block font-medium text-strong">{b.question}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {b.geography || "No area given"} · {b.mode === "web" ? "Web research" : "Your sources and records"} · {b.origin === "setup" ? "started by setup" : "started by your team"} · {when(b.createdAt)}
-                </span>
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{b.findings} findings</span>
-                <Badge variant={b.state === "ready" ? "success" : b.state === "failed" ? "error" : "info"} size="sm">
-                  {STATE_WORDS[b.state]}
-                </Badge>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -129,63 +224,6 @@ function SourceRows({ sources, setSources }: { sources: OwnerSource[]; setSource
 
 const toOwner = (s: OwnerSource) => ({ ...(s.url.trim() ? { url: s.url.trim() } : {}), title: s.title, geography: s.geography, excerpt: s.excerpt, priceCents: s.price.trim() ? centsFrom(s.price) : null, priceKind: s.price.trim() ? s.priceKind : null, unit: s.unit, comparable: s.comparable, limitation: "" });
 
-function NewBrief({ onDone }: { onDone: () => void }) {
-  const { companyId } = useCompany();
-  const router = useRouter();
-  const start = useMutation(api.servicesResearch.start);
-  const catalog = useQuery(api.services.catalog, { companyId });
-  const { busy, error, run } = useRun();
-  const [question, setQuestion] = useState("");
-  const [geography, setGeography] = useState("");
-  const [serviceId, setServiceId] = useState("");
-  const [web, setWeb] = useState(true);
-  const [sources, setSources] = useState<OwnerSource[]>([]);
-  return (
-    <div className="grid grid-cols-1 gap-4 rounded-2xl border border-brand-500/25 bg-gradient-to-b from-brand-500/[0.05] to-card p-4 sm:p-6">
-      <Field label="What should it answer?" hint="One decision at a time works best.">
-        <TextArea rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="What do comparable businesses in north Austin publish for move-out cleans, and do they quote by size or after a walkthrough?" />
-      </Field>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Where">
-          <TextInput value={geography} onChange={(e) => setGeography(e.target.value)} placeholder="Austin, TX (78701–78759)" />
-        </Field>
-        <label className="grid grid-cols-1 gap-1.5 text-sm">
-          <span className="font-medium text-strong">About one of your services (optional)</span>
-          <SelectInput value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-            <option value="">None</option>
-            {catalog?.services.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </SelectInput>
-        </label>
-      </div>
-      <Toggle label="Search public web pages" description="Up to 5 searches and one written brief: 10 Selestial Credits, charged only if it finishes. Without it, the brief uses only the sources you add and your own completed visits, free." checked={web} onChange={setWeb} />
-      <SourceRows sources={sources} setSources={setSources} />
-      <FormError message={error} />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="primary"
-          loading={busy}
-          disabled={!question.trim()}
-          onClick={() =>
-            void run(async () => {
-              const result = await start({ companyId, question, geography, web, sources: sources.filter((s) => s.title.trim()).map(toOwner), ...(serviceId ? { serviceId: serviceId as Id<"services"> } : {}) });
-              router.push(briefPath(result.briefId));
-            })
-          }
-        >
-          {web ? "Start research (10 credits)" : "Make the brief"}
-        </Button>
-        <Button variant="ghost" onClick={onDone}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 /** A brief: what was found, what is comparable, what is uncertain, options, and every finding with its kind and sources. */
 export function BriefView({ briefId }: { briefId: string }) {
   const { companyId } = useCompany();
@@ -208,9 +246,16 @@ export function BriefView({ briefId }: { briefId: string }) {
   return (
     <div className="grid grid-cols-1 gap-5">
       <div>
-        <Link href={`${SERVICES_ROOT}/research`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-strong">
-          <ArrowLeft aria-hidden className="size-4" /> All research
-        </Link>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <Link href={`${SERVICES_ROOT}/research`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-strong">
+            <ArrowLeft aria-hidden className="size-4" /> All research
+          </Link>
+          {brief.conversationId ? (
+            <Link href={`/app/chat/${brief.conversationId}`} className="inline-flex items-center gap-1 text-sm font-medium text-brand-300 hover:underline">
+              <ChatIcon aria-hidden className="size-4" /> Back to the conversation
+            </Link>
+          ) : null}
+        </div>
         <h2 className="mt-1 font-heading text-xl tracking-tight text-strong">{brief.question}</h2>
         <p className="text-sm text-muted-foreground">
           {brief.geography || "No area given"} · {brief.mode === "web" ? "Web research" : "Your sources and your records"} · {STATE_WORDS[brief.state]} · started {when(brief.createdAt)}

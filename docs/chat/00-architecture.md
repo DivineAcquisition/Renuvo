@@ -37,6 +37,27 @@ has no tool, chat says what blocks it and does not pretend.
 There is no cross-chat memory. The model sees the current conversation only, and the system prompt says
 so.
 
+### Context that is never lost
+
+Only the last 40 messages of a conversation reach the model (`HISTORY_MESSAGES`, `chatRuns.ts`). The system
+prompt is rebuilt from live records for every reply (`convex/lib/chat/business.ts`), so three blocks hold
+however long a conversation runs:
+
+- **`<business>`**:
+  - areas served, from pricing setup and booking postal codes;
+  - customers;
+  - every live service with its price summary, crew and usual labor, plus drafts not yet live;
+  - the team: crews, cleaners on record and the pay model;
+  - typical work, notes and "I'm not sure" answers from setup;
+  - the pricing approach;
+  - which costs are entered, never their amounts. The Owner's own margin targets go to the Owner only.
+- **`<person>`**: who is asking, their role, and what that role can and cannot do.
+- **`<conversation>`**: where the conversation started (a conversation opened from Research & Insights
+  keeps its first question) and every research brief it started, with its state now.
+
+All three are company data, marked as data by the Safety rules. Tests check that the first question is
+still in the prompt after 44 more messages have pushed it out of the history.
+
 ## A run, start to finish
 
 1. `chat.send` checks membership, the attached records and files, the monthly allowance and a per-person

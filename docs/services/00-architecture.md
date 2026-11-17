@@ -86,6 +86,19 @@ The screens keep configuration copy short. These rules apply to every Services s
   amounts in a draft that still exactly match its template's illustrative numbers. Review groups them by
   step, each with a way to change it, so the owner confirms specific prices rather than "every amount".
   Times and counts are not listed: they describe the work, not a market's prices.
+- **Research starts a real Chat conversation.**
+  - Research & Insights opens on Chat's own composer, centered on the page, with four starter ideas built
+    from the company's area.
+  - Sending creates a conversation with `origin: research` (`chat.send`) and opens it in Chat. The first
+    question is kept with the conversation for every reply (`<conversation>`), alongside the business and
+    the person (`docs/chat/00-architecture.md`).
+  - In the conversation, Chat can start a brief with `start_research`, after the person approves. Web
+    research costs 10 credits; without it, the brief uses the company's own records, free. When a web brief
+    finishes, the conversation gets a "Research ready" message with a link, and `read_research_brief` reads
+    it.
+  - The page lists the person's research chats and every brief, with where each started. A brief started
+    in a chat links back to it.
+  - Office sees the briefs without the box.
 - **Research draws its range.** Comparable prices that share the range's unit are dots on one line, with
   the computed range as a band. The service's own starting price (`startingCents`, `engine.ts`) is marked
   only when the range is of advertised starting prices per visit, so like is compared with like.
@@ -255,6 +268,8 @@ member chatting, with their role as it is now:
 | `list_services`, `read_service`, `quote_service`, `run_pricing_scenarios` | read | everyone; draft prices and costs only for Managers and the Owner, costs only for the Owner |
 | `start_service_draft`, `edit_service_draft`, `attach_research` | draft | Owner, Manager |
 | `submit_service_for_review` | write, approved in chat first | Owner, Manager |
+| `start_research` | write, approved in chat first (shows the 10-credit cost for web research) | Owner, Manager |
+| `read_research_brief` | read | everyone |
 | `update_price_book` | unavailable | says publishing is the Owner's, in Changes |
 
 **Rules Chat works under:**

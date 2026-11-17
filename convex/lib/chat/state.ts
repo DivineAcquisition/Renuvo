@@ -97,3 +97,15 @@ export async function usageRow(ctx: Ctx, companyId: Id<"companies">, month: stri
     .withIndex("by_company_month", (q) => q.eq("companyId", companyId).eq("month", month))
     .unique();
 }
+
+/**
+ * A message from Selestial outside any answer: for example, that research this conversation started is
+ * ready. It is appended after everything already there, does not start an answer, and is not billed.
+ */
+export async function postToConversation(ctx: MutationCtx, conversationId: Id<"conversations">, parts: Part[]): Promise<void> {
+  const conversation = await ctx.db.get(conversationId);
+  if (!conversation || conversation.shelf === "deleted") return;
+  const now = Date.now();
+  await ctx.db.insert("chatMessages", { companyId: conversation.companyId, conversationId, seq: (await lastSeq(ctx, conversation)) + 1, role: "assistant", status: "complete", parts, createdAt: now });
+  await ctx.db.patch(conversation._id, { updatedAt: now, messageCount: conversation.messageCount + 1 });
+}
