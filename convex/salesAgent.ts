@@ -98,7 +98,7 @@ export const begin = internalMutation({
     let executionId: Id<"aiExecutions"> | null = null;
     let billingNote: string | null = null;
     if (read && salesModel().name !== "rules") {
-      const opened = await openExecution(ctx, { company, key: `sales-read:${run._id}`, agent: "sales", task: "sales_message_reading", units: 1, autonomous: true, origin: "automatic", source: { table: "salesOpportunities", id: opportunity._id }, link: { label: "Sales", path: `/app/agents/sales/pipeline?open=${opportunity._id}` } });
+      const opened = await openExecution(ctx, { company, key: `sales-read:${run._id}`, agent: "sales", task: "sales_message_reading", units: 1, autonomous: true, origin: "automatic", source: { table: "salesOpportunities", id: opportunity._id }, link: { label: "Sales", path: `/app/agents/sales/pipeline?opp=${opportunity._id}` } });
       if (opened.ok && !opened.repeated) executionId = opened.executionId;
       else if (!opened.ok) billingNote = opened.message;
       if (executionId) await ctx.db.patch(run._id, { executionId });

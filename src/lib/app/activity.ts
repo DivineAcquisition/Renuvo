@@ -5,7 +5,7 @@
  * title, and an unknown area to a neutral one: nothing is invented and nothing internal is shown.
  */
 
-export type ActivityArea = "business" | "team" | "agents" | "dispatch" | "jobs" | "hiring" | "customers" | "messages" | "apps" | "billing" | "privacy" | "agreements" | "other";
+export type ActivityArea = "business" | "team" | "agents" | "dispatch" | "jobs" | "hiring" | "customers" | "messages" | "apps" | "billing" | "privacy" | "agreements" | "sales" | "other";
 
 export const AREA_LABEL: Record<ActivityArea, string> = {
   business: "Business",
@@ -20,6 +20,7 @@ export const AREA_LABEL: Record<ActivityArea, string> = {
   billing: "Billing",
   privacy: "Privacy",
   agreements: "Agreements",
+  sales: "Sales",
   other: "Other",
 };
 
@@ -126,6 +127,38 @@ const TITLES: Record<string, [string, ActivityArea]> = {
   "agreement.completed": ["Agreement signed", "agreements"],
   "agreement.accepted": ["Selestial terms accepted", "agreements"],
   "agreement.archived": ["Agreement archived", "agreements"],
+
+  "opportunity.created": ["Inquiry received", "sales"],
+  "opportunity.stage_changed": ["Opportunity moved to a new stage", "sales"],
+  "opportunity.reply_received": ["Prospect replied", "sales"],
+  "opportunity.taken_over": ["A person took over a sales conversation", "sales"],
+  "opportunity.handed_back": ["Sales conversation handed back to Sales", "sales"],
+  "opportunity.details_changed": ["Opportunity details corrected", "sales"],
+  "opportunity.match_resolved": ["Prospect matched to a customer record", "sales"],
+  "opportunity.booked": ["Booking confirmed from an inquiry", "sales"],
+  "opportunity.run_failed": ["Sales could not finish a step", "sales"],
+  "quote.version_saved": ["Quote prepared", "sales"],
+  "quote.approved": ["Quote approved", "sales"],
+  "quote.sent": ["Quote sent", "sales"],
+  "quote.accepted": ["Quote accepted by the customer", "sales"],
+  "quote.declined": ["Quote declined by the customer", "sales"],
+  "quote.expired": ["Quote expired", "sales"],
+  "quote.revoked": ["Quote withdrawn", "sales"],
+  "follow_up.scheduled": ["Follow-up planned", "sales"],
+  "follow_up.sent": ["Follow-up sent", "sales"],
+  "follow_up.stopped": ["Follow-up stopped", "sales"],
+  "follow_up.cancelled": ["Follow-up cancelled", "sales"],
+  "follow_up.skipped": ["Follow-up skipped", "sales"],
+  "follow_up.failed": ["Follow-up did not go through", "sales"],
+  "sales_action.prepared": ["Sales prepared a message", "sales"],
+  "sales_action.sent": ["Sales sent a message", "sales"],
+  "sales.reported": ["Sales acted and reported it", "sales"],
+  "sales.first_batch_decided": ["Sales’s first messages reviewed", "sales"],
+  "sales.playbook_changed": ["Sales Playbook changed", "sales"],
+  "sales_form.created": ["Booking form created", "sales"],
+  "sales_form.published": ["Booking form published", "sales"],
+  "sales_form.unpublished": ["Booking form taken offline", "sales"],
+  "sales_form.archived": ["Booking form archived", "sales"],
 };
 
 /** General titles by the first part of an event's name, used when the exact event isn't listed. */
@@ -142,6 +175,12 @@ const AREAS: Record<string, [string, ActivityArea]> = {
   onboarding: ["New hire progress", "hiring"],
   hiring_need: ["Hiring need updated", "hiring"],
   recruiter: ["Recruiting updated", "hiring"],
+  opportunity: ["Opportunity updated", "sales"],
+  quote: ["Quote updated", "sales"],
+  follow_up: ["Follow-up updated", "sales"],
+  sales: ["Sales update", "sales"],
+  sales_action: ["Sales update", "sales"],
+  sales_form: ["Booking form updated", "sales"],
   mailbox: ["Hiring inbox updated", "apps"],
   job: ["Job updated", "jobs"],
   assignment: ["Job assignment updated", "dispatch"],

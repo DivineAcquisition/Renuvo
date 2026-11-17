@@ -338,13 +338,15 @@ export const AGENTS: readonly AgentNav[] = [
     responsibility: "Turns inquiries into confirmed bookings.",
     backendAgent: "sales",
     workflow: "built",
+    overview: LIVE,
     tabs: [
-      ["pipeline", "Pipeline"],
-      ["quotes-proposals", "Quotes & Proposals"],
-      ["follow-ups", "Follow-ups"],
-      ["calls-messages", "Calls & Messages"],
-      ["booking-forms", "Booking Forms"],
-      ["playbook", "Playbook"],
+      ["pipeline", "Pipeline", LIVE],
+      ["quotes-proposals", "Quotes & Proposals", LIVE],
+      ["follow-ups", "Follow-ups", LIVE],
+      // Texts and emails only. The address keeps its first name so links already shared still open.
+      ["calls-messages", "Conversations", LIVE],
+      ["booking-forms", "Booking Forms", LIVE],
+      ["playbook", "Playbook", LIVE],
     ],
   }),
   agent({

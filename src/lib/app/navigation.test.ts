@@ -53,7 +53,7 @@ const hasPage = (concrete: string) => PAGES.some((pattern) => served(concrete, p
 const SPEC: Record<string, Record<string, string[]>> = {
   Growth: {
     Marketing: ["Campaigns", "Content & Creative", "Promotions", "Lead Sources", "Performance", "Playbook"],
-    Sales: ["Pipeline", "Quotes & Proposals", "Follow-ups", "Calls & Messages", "Booking Forms", "Playbook"],
+    Sales: ["Pipeline", "Quotes & Proposals", "Follow-ups", "Conversations", "Booking Forms", "Playbook"],
     Retention: ["Recurring Customers", "Customer Health", "Feedback & Reviews", "Recurring Offers", "Win-back", "Referrals", "Playbook"],
   },
   Operations: {

@@ -55,7 +55,7 @@ export const knowledgeStatusValidator = literals(KNOWLEDGE_STATUSES);
 
 /** A business record a person attached to a message. Checked against the company and their role when sent. */
 export const contextRefValidator = v.object({
-  table: v.union(v.literal("customers"), v.literal("properties"), v.literal("cleaners"), v.literal("jobs"), v.literal("tasks"), v.literal("applications"), v.literal("hiringNeeds"), v.literal("chatArtifacts"), v.literal("invoices")),
+  table: v.union(v.literal("customers"), v.literal("properties"), v.literal("cleaners"), v.literal("jobs"), v.literal("tasks"), v.literal("applications"), v.literal("hiringNeeds"), v.literal("chatArtifacts"), v.literal("invoices"), v.literal("salesOpportunities")),
   id: v.string(),
   label: v.string(),
 });

@@ -70,6 +70,10 @@ export function checklistOf(opportunity: Doc<"salesOpportunities">, requirements
       label: requirement.label,
       why: requirement.why,
       phase: requirement.phase,
+      // How a person fills it in by hand: the kind of answer, and the choices when there are some.
+      type: requirement.type,
+      options: requirement.options ?? null,
+      raw: fact ? fact.value : null,
       state: has ? ("known" as const) : fact ? ("unverified" as const) : ("missing" as const),
       value: fact ? factWords(fact, requirements) : null,
       status: fact?.status ?? null,

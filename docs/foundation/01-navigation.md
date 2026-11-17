@@ -82,7 +82,7 @@ Names and order are the owner's. Playbook is always last. Chat is never a tab: i
 | Agent | Tabs |
 |---|---|
 | Marketing | Campaigns · Content & Creative · Promotions · Lead Sources · Performance · Playbook |
-| Sales | Pipeline · Quotes & Proposals · Follow-ups · Calls & Messages · Booking Forms · Playbook |
+| Sales | Pipeline · Quotes & Proposals · Follow-ups · Conversations · Booking Forms · Playbook |
 | Retention | Recurring Customers · Customer Health · Feedback & Reviews · Recurring Offers · Win-back · Referrals · Playbook |
 | Dispatch | Dispatch Board · Schedule · Offers & Coverage · Live Jobs · Action Links · Playbook |
 | Quality | Completion Review · Checklists & Photos · Service Issues · Re-cleans · Playbook |

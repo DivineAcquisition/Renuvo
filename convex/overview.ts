@@ -384,6 +384,11 @@ export const sidebar = companyQuery({
     const ahead = await visitsBetween(ctx, args.asOf, args.asOf + dispatchSettings(ctx.company).lookAheadDays * DAY);
     const unfilled = ahead.filter((visit) => visit.state === "needs_coverage" || visit.state === "partly_staffed");
     const work = await agentWork(ctx, "dispatch");
+    const salesWork = await agentWork(ctx, "sales");
+    const salesRunning = await ctx.db
+      .query("salesRuns")
+      .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "running"))
+      .take(20);
     return {
       /** Approvals and handed-over tasks waiting on this person. */
       decisions: approvals.length + tasks.length,
@@ -398,6 +403,15 @@ export const sidebar = companyQuery({
         unfilledWithinDay: unfilled.filter((visit) => visit.startsAt < args.asOf + DAY).length,
         /** Visits with an offer out and no answer yet. */
         awaitingAnswer: ahead.filter((visit) => visit.state === "awaiting_acceptance").length,
+      },
+      sales: {
+        paused: ctx.company.pausedAgents.includes("sales"),
+        /** Opportunities whose next step is a person's. */
+        withYou: salesWork.counts.needsDecision,
+        /** Opportunities Sales is working on at this moment: a run is in progress. */
+        running: salesRunning.length,
+        /** Opportunities waiting on a customer's reply. */
+        waiting: salesWork.counts.waiting,
       },
     };
   },

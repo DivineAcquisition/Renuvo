@@ -39,6 +39,7 @@ import { CLEANER_TOOLS } from "./cleanerTools";
 import { SERVICE_TOOLS } from "./serviceTools";
 import { GOOGLE_TOOLS } from "./googleTools";
 import { FINANCE_TOOLS } from "./financeTools";
+import { describeOpportunity, opportunityLink, SALES_TOOLS } from "./salesTools";
 import { localDay } from "./localDay";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
@@ -918,7 +919,7 @@ const TOOLS: ChatTool[] = [
   },
 ];
 
-export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "invoices";
+export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "invoices" | "salesOpportunities";
 
 /** A short, role-appropriate description of one record. Null when it is not this company's. Used for tools and attached context. */
 export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: Doc<"companies">; role: Role }, table: RecordTable, id: string): Promise<{ label: string; data: Record<string, unknown>; record?: RecordRef; link?: Link } | null> {
@@ -992,6 +993,11 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
         link: { href: `/app/finance?tab=invoices&invoice=${invoice._id}`, label: `Open ${invoice.number ?? "the invoice"}` },
       };
     }
+    case "salesOpportunities": {
+      const opportunity = row as Doc<"salesOpportunities">;
+      const described = await describeOpportunity(ctx, opportunity, "full");
+      return { label: `the sales opportunity for ${described.customer}`, data: described, link: opportunityLink(opportunity._id, described.customer) };
+    }
     case "hiringNeeds": {
       const need = row as Doc<"hiringNeeds">;
       return { label: `the role "${need.title}"`, data: { needId: need._id, title: need.title, status: need.status, openings: need.openings, engagement: need.engagement, location: need.location, payApproved: Boolean(need.compensation), pay: isOwner(ctx.role) ? (need.compensation?.pay ?? null) : need.compensation ? "Approved; shown to the Owner." : null }, link: { href: "/app/agents/recruiter/hiring-needs", label: "Hiring Needs" } };
@@ -1006,7 +1012,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...SALES_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

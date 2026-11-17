@@ -8,12 +8,24 @@ import { topBadge } from "./navigation-helpers";
 export type SidebarFacts = {
   decisions: number;
   dispatch: { paused: boolean; withYou: number; inProgress: number; waiting: number; unfilled: number; unfilledWithinDay: number; awaitingAnswer: number };
+  sales: { paused: boolean; withYou: number; running: number; waiting: number };
 };
 
 const count = (n: number, label: string): string => `${n} ${label}`;
 
-/** Every badge that applies to an agent right now. Only Dispatch has facts so far. */
+/** Sales: a person's decision first, then paused. "Working" only while a run is really in progress. */
+function salesBadges(s: SidebarFacts["sales"]): Badge[] {
+  const badges: Badge[] = [];
+  if (s.withYou > 0) badges.push({ kind: "decision", label: count(s.withYou, "for you"), count: s.withYou });
+  if (s.paused) badges.push({ kind: "attention", label: "Paused" });
+  else if (s.running > 0) badges.push({ kind: "working", label: "Working" });
+  else if (s.waiting > 0) badges.push({ kind: "working", label: "Waiting on replies" });
+  return badges;
+}
+
+/** Every badge that applies to an agent right now. Dispatch and Sales have facts so far. */
 export function agentBadges(agent: AgentId, facts: SidebarFacts | undefined): Badge[] {
+  if (facts && agent === "sales") return salesBadges(facts.sales);
   if (!facts || agent !== "dispatch") return [];
   const d = facts.dispatch;
   const badges: Badge[] = [];
@@ -28,6 +40,7 @@ export function agentBadges(agent: AgentId, facts: SidebarFacts | undefined): Ba
 
 /** Every badge that applies to one of an agent's work tabs. */
 export function tabBadges(agent: AgentId, tab: string, facts: SidebarFacts | undefined): Badge[] {
+  if (facts && agent === "sales") return tab === "pipeline" && facts.sales.withYou > 0 ? [{ kind: "decision", label: count(facts.sales.withYou, "for you"), count: facts.sales.withYou }] : [];
   if (!facts || agent !== "dispatch") return [];
   const d = facts.dispatch;
   if (tab === "offers-coverage") {
