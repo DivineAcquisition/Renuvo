@@ -511,6 +511,7 @@ export function portalMutation<V extends AnyValidators, R>(def: {
       if (!access.link.allowed.includes(def.action)) notAllowed();
       // An ended engagement keeps its history, and its links do nothing more.
       if (access.cleaner?.status === "ended") throw userError("This engagement has ended, so this link no longer changes anything.", "not_allowed");
+      if (access.subcontractor?.status === "ended") throw userError("This working relationship has ended, so this link no longer changes anything.", "not_allowed");
       const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
       await notePortalAction(ctx, access.link, def.action);
       return result;

@@ -40,13 +40,15 @@ export function eventText(event: Doc<"events">, labels: Map<string, string>): { 
     case "cleaner.availability_set":
       return { text: `had their weekly availability set (${data.windows ?? 0} window${data.windows === 1 ? "" : "s"})`, tone: "record" };
     case "cleaner.availability_confirmed":
-      return { text: "confirmed their weekly availability is still right", tone: "record" };
+      return { text: str(data.how) ? `had their weekly availability confirmed as still right (${str(data.how)})` : "confirmed their weekly availability is still right", tone: "record" };
     case "cleaner.time_off_added":
       return { text: "had time away recorded", tone: "record" };
     case "cleaner.time_off_removed":
       return { text: "had time away removed", tone: "record" };
     case "cleaner.exception_added":
       return { text: `had a date exception recorded (${data.kind === "available" ? "can work" : "cannot work"} ${str(data.date) ?? ""})`, tone: "record" };
+    case "cleaner.exception_removed":
+      return { text: `had a date exception removed (${str(data.date) ?? ""})`, tone: "record" };
     case "cleaner.requirements_assigned":
       return { text: `was given ${data.count ?? 0} onboarding requirement${data.count === 1 ? "" : "s"}`, tone: "requirement" };
     case "cleaner.requirement_submitted":

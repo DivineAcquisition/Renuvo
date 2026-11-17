@@ -354,8 +354,8 @@ export default defineSchema({
     startsAt: v.number(),
     endsAt: v.number(),
     note: v.optional(v.string()),
-    /** Who recorded it: a person, or the cleaner from their portal. Absent on older rows (a person). */
-    source: v.optional(v.union(v.literal("member"), v.literal("cleaner"))),
+    /** Who recorded it: a person, the cleaner from their portal, or their subcontractor company. Absent on older rows (a person). */
+    source: v.optional(v.union(v.literal("member"), v.literal("cleaner"), v.literal("subcontractor"))),
     createdAt: v.optional(v.number()),
   }).index("by_company_cleaner_end", ["companyId", "cleanerId", "endsAt"]),
 

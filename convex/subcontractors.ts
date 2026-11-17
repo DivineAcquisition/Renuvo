@@ -10,6 +10,7 @@ import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
 import { STATUS_WORDS } from "./lib/cleaners/enroll";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
+import { portalLinkState, revokePortalLink, subcontractorLinks } from "./lib/cleaners/portal";
 import { isManager, isOwner } from "./lib/roles";
 import { optionalEmail, optionalText, tags, text } from "./lib/text";
 
@@ -129,6 +130,8 @@ export const setStatus = ownerMutation({
     if (sub.status === args.status) return null;
     if (sub.status === "ended") throw userError("This relationship has ended. Add the company again to work with it.");
     await ctx.db.patch(sub._id, { status: args.status, ...(args.status === "ended" ? { endedAt: Date.now() } : {}) });
+    // Ending the relationship ends the contact's portal access. Their workers keep their own records and links.
+    if (args.status === "ended") for (const link of await subcontractorLinks(ctx, ctx.companyId, sub._id)) if (portalLinkState(link, Date.now()) === "active") await revokePortalLink(ctx, link, "The working relationship ended.", byMember(ctx));
     await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.status_changed", actor: byMember(ctx), subject: { table: "subcontractors", id: sub._id }, data: { from: sub.status, to: args.status, reason } });
     return null;
   },

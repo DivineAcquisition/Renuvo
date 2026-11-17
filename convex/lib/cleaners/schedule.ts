@@ -7,7 +7,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { localParts, type Span } from "../availability";
 import { addLocalDays, clock, dayName, startOfLocalDay } from "../time";
-import type { Absence, Commitment } from "./attention";
+import { conflictsOf, type Absence, type Commitment } from "./attention";
 
 type Ctx = QueryCtx | MutationCtx;
 const MINUTE = 60_000;
@@ -104,4 +104,24 @@ export async function cleanerTime(ctx: Ctx, company: Doc<"companies">, cleanerId
     ],
     extraAvailable: exceptions.filter((row) => row.kind === "available").map((row) => exceptionSpan(row, company.timezone)),
   };
+}
+
+/**
+ * Booked and offered work in the next 60 days that clashes with this cleaner's time as it stands now, in
+ * words for a task or a reply. A clash is reported, never resolved here: a person keeps or covers the job.
+ */
+export async function currentClashes(ctx: Ctx, company: Doc<"companies">, cleanerId: Id<"cleaners">): Promise<string[]> {
+  const tz = company.timezone;
+  const now = Date.now();
+  const today = startOfLocalDay(now, tz);
+  const commitments = ((await commitmentsBetween(ctx, company, today, addLocalDays(today, 60, tz))).get(cleanerId) ?? []).filter((row) => row.endsAt > now);
+  if (commitments.length === 0) return [];
+  const time = await cleanerTime(ctx, company, cleanerId, today);
+  const windows = (
+    await ctx.db
+      .query("availabilityWindows")
+      .withIndex("by_company_cleaner", (q) => q.eq("companyId", company._id).eq("cleanerId", cleanerId))
+      .take(100)
+  ).map((row) => ({ weekday: row.weekday, startMinute: row.startMinute, endMinute: row.endMinute }));
+  return conflictsOf({ commitments, absences: time.absences, windows, extraAvailable: time.extraAvailable, timezone: tz }).map((row) => `${row.commitment.label} ${row.reason}`);
 }

@@ -8,7 +8,7 @@ import { v } from "convex/values";
 import { owned } from "./lib/access";
 import { managerMutation, managerQuery } from "./lib/builders";
 import { channelsFor, cleanerMessages, queueCleanerMessage } from "./lib/cleaners/outbox";
-import { cleanerLinks, issuePortalLink, portalLinksConfigured, portalLinkState, portalTokenFor, portalUrl, revokePortalLink } from "./lib/cleaners/portal";
+import { cleanerLinks, issuePortalLink, portalLinksConfigured, portalLinkState, portalTokenFor, portalUrl, revokePortalLink, subcontractorLinks } from "./lib/cleaners/portal";
 import { cleanersSettings, DAY } from "./lib/cleaners/settings";
 import { MESSAGE_STATE_WORDS, PURPOSE_WORDS } from "./lib/cleaners/words";
 import { userError } from "./lib/errors";
@@ -122,5 +122,54 @@ export const revoke = managerMutation({
     const link = await owned(ctx, args.linkId);
     await revokePortalLink(ctx, link, args.reason?.trim().slice(0, 200) || "Ended by the office.", byMember(ctx));
     return null;
+  },
+});
+
+// ── A subcontractor company's contact ─────────────────────────────────────────────────────────────
+
+/** The contact's links: which is live, when each was made and last used, and why any was ended. */
+export const contactAccess = managerQuery({
+  args: { subcontractorId: v.id("subcontractors") },
+  handler: async (ctx, args) => {
+    const sub = await owned(ctx, args.subcontractorId);
+    const now = Date.now();
+    const links = await subcontractorLinks(ctx, ctx.companyId, sub._id);
+    return {
+      configured: portalLinksConfigured(),
+      contact: sub.contact.name,
+      links: links.slice(0, 10).map((link) => ({
+        linkId: link._id,
+        state: portalLinkState(link, now),
+        issuedAt: link.issuedAt,
+        expiresAt: link.expiresAt,
+        revokeReason: link.revokeReason ?? null,
+        lastActionAt: link.lastActionAt ?? null,
+      })),
+    };
+  },
+});
+
+/**
+ * Gives the subcontractor company's authorized contact a link to their own workers and upcoming work. One
+ * live link per company: a new one ends the old. Selestial does not send it: the send policy needs a
+ * recorded permission for every address, and a subcontractor contact is not yet a person the compliance
+ * records can hold permission for. The office copies the link and sends it themselves, and that is recorded.
+ * A second press within minutes returns the link already made.
+ */
+export const inviteContact = managerMutation({
+  args: { subcontractorId: v.id("subcontractors") },
+  handler: async (ctx, args) => {
+    const sub = await owned(ctx, args.subcontractorId);
+    if (sub.status === "ended") throw userError("This working relationship has ended.");
+    if (!portalLinksConfigured()) throw userError("Portal links are not set up on this deployment, so there is no link to give. Selestial needs ACTION_LINK_SECRET set.");
+    const now = Date.now();
+    const live = (await subcontractorLinks(ctx, ctx.companyId, sub._id)).filter((link) => portalLinkState(link, now) === "active");
+    const fresh = live.find((link) => now - link.issuedAt < REPEAT_WINDOW);
+    if (fresh) return { status: "already" as const, linkId: fresh._id, words: "A link was made a few minutes ago. Copy that one." };
+    for (const link of live) await revokePortalLink(ctx, link, "A new link replaced it.", byMember(ctx));
+    const settings = cleanersSettings(ctx.company);
+    const link = await issuePortalLink(ctx, { companyId: ctx.companyId, holder: { subcontractorId: sub._id }, purpose: "portal", expiresAt: now + settings.portalLinkDays * DAY, issuedBy: { kind: "member", memberId: ctx.member._id }, actor: byMember(ctx) });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.portal_invited", actor: byMember(ctx), subject: { table: "subcontractors", id: sub._id }, data: { sent: false } });
+    return { status: "link_ready" as const, linkId: link!._id, words: `Copy the link and send it to ${sub.contact.name} yourself. Selestial does not text or email subcontractor contacts yet. It works for ${settings.portalLinkDays} days.` };
   },
 });

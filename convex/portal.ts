@@ -14,10 +14,12 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { portalMutation, portalQuery, type PortalAccess } from "./lib/builders";
 import { cleanersSettings, DAY, HOUR } from "./lib/cleaners/settings";
 import { cleanerReadiness } from "./lib/cleaners/records";
-import { cleanerTime, commitmentsBetween } from "./lib/cleaners/schedule";
+import { cleanerTime, commitmentsBetween, currentClashes } from "./lib/cleaners/schedule";
 import { queueCleanerMessage, channelsFor } from "./lib/cleaners/outbox";
 import { CODE_ATTEMPTS, CODE_LIFETIME, CODE_WINDOW, CODES_PER_WINDOW, codeHash, isVerified, maskAddress, newCode, VERIFIED_FOR } from "./lib/cleaners/portal";
 import { setPermission } from "./lib/compliance/permissions";
+import { requiredCrew, staffing } from "./lib/dispatch/crew";
+import { jobAssignments } from "./lib/dispatch/facts";
 import { linkPath, liveLink, siteOrigin, tokenFor } from "./lib/dispatch/links";
 import { userError } from "./lib/errors";
 import { recordEvent, type Actor } from "./lib/events";
@@ -33,6 +35,40 @@ import { conflictsOf } from "./lib/cleaners/attention";
 type Ctx = (QueryCtx | MutationCtx) & PortalAccess;
 
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+/** "Maria S.": enough for a teammate to know who they are working with, and no more. */
+function shortName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : parts[0];
+}
+
+/** The permanent crews they are in now, with their crewmates by short name. */
+async function crewsOf(ctx: Ctx, cleaner: Doc<"cleaners">) {
+  const mine = (
+    await ctx.db
+      .query("crewMemberships")
+      .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id))
+      .take(50)
+  ).filter((row) => row.to === undefined);
+  const out = [];
+  for (const row of mine) {
+    const crew = await ctx.db.get(row.crewId);
+    if (!crew || crew.status !== "active" || crew.kind !== "permanent") continue;
+    const members = (
+      await ctx.db
+        .query("crewMemberships")
+        .withIndex("by_company_crew", (q) => q.eq("companyId", ctx.companyId).eq("crewId", crew._id))
+        .take(50)
+    ).filter((item) => item.to === undefined && item.cleanerId !== cleaner._id);
+    const names = [];
+    for (const item of members) {
+      const person = await ctx.db.get(item.cleanerId);
+      if (person && person.status !== "ended") names.push(`${shortName(person.name)}${item.role === "lead" ? " (lead)" : ""}`);
+    }
+    out.push({ name: crew.name, lead: row.role === "lead", with: names });
+  }
+  return out;
+}
 
 function actorOf(ctx: Ctx): Actor {
   return { kind: "cleaner_portal", cleanerId: ctx.cleaner!._id, linkId: ctx.link._id };
@@ -70,6 +106,18 @@ export const view = portalQuery({
         const token = link ? await tokenFor(link) : null;
         if (link && token) page = `${siteOrigin()}${linkPath("job", token)}`;
       }
+      // Who else is on it, by first name and initial, once the job is theirs. A lead also sees the open places.
+      let team: { with: string[]; lead: boolean; open: number; offersOut: number } | null = null;
+      if (assignment && assignment.status === "accepted" && requiredCrew(job) > 1) {
+        const all = await jobAssignments(ctx, job);
+        const others = [];
+        for (const other of all.filter((item) => item.status === "accepted" && item.cleanerId !== cleaner._id)) {
+          const person = await ctx.db.get(other.cleanerId);
+          if (person) others.push(`${shortName(person.name)}${other.role === "lead" ? " (lead)" : ""}`);
+        }
+        const staff = staffing(job, all);
+        team = { with: others, lead: assignment.role === "lead", open: staff.open, offersOut: staff.offersOut };
+      }
       jobs.push({
         id: row.assignmentId,
         startsAt: job.startsAt,
@@ -79,6 +127,7 @@ export const view = portalQuery({
         /** The area for an offer; the street only once they have accepted and the job is still theirs. */
         where: row.status === "accepted" && property ? `${property.address.line1}, ${property.address.city}` : property ? `${property.address.city} ${property.address.postalCode}` : null,
         page,
+        team,
       });
     }
     const past = [];
@@ -141,6 +190,7 @@ export const view = portalQuery({
       claimedSkills: claims.filter((row) => row.status === "claimed").map((row) => row.skill),
       jobs,
       past: past.slice(0, 15),
+      crews: await crewsOf(ctx, cleaner),
       agreements,
       feedback: shared.filter((row) => row.visibility === "shared" && row.sharedAt).map((row) => ({ id: row._id, title: row.title, body: row.body, at: row.sharedAt!, response: row.response?.text ?? null, actions: row.actions.map((item) => item.text) })),
       verified: isVerified(ctx.link, now),
@@ -291,17 +341,7 @@ export const confirmAvailability = portalMutation({
 
 /** Accepted jobs that the cleaner's new hours or time away would clash with. Nothing is changed: the office decides. */
 async function impactOf(ctx: MutationCtx & PortalAccess, cleaner: Doc<"cleaners">): Promise<string[]> {
-  const tz = ctx.company.timezone;
-  const today = startOfLocalDay(Date.now(), tz);
-  const commitments = (await commitmentsBetween(ctx, ctx.company, today, addLocalDays(today, 60, tz))).get(cleaner._id) ?? [];
-  const time = await cleanerTime(ctx, ctx.company, cleaner._id, today);
-  const windows = (
-    await ctx.db
-      .query("availabilityWindows")
-      .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id))
-      .take(100)
-  ).map((row) => ({ weekday: row.weekday, startMinute: row.startMinute, endMinute: row.endMinute }));
-  return conflictsOf({ commitments, absences: time.absences, windows, extraAvailable: time.extraAvailable, timezone: tz }).map((row) => `${row.commitment.label} ${row.reason}`);
+  return currentClashes(ctx, ctx.company, cleaner._id);
 }
 
 export const addTimeAway = portalMutation({

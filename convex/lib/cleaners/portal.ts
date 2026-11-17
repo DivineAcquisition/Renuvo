@@ -22,7 +22,8 @@ export type PortalAction = (typeof PORTAL_ACTIONS)[number];
 const TASK_ACTIONS: PortalAction[] = ["confirm_contact", "submit_requirement", "acknowledge", "set_availability", "confirm_availability", "ask_for_help"];
 const AVAILABILITY_ACTIONS: PortalAction[] = ["set_availability", "confirm_availability", "add_time_away", "add_exception", "ask_for_help"];
 const CHECK_IN_ACTIONS: PortalAction[] = ["respond_check_in", "confirm_availability", "set_availability", "add_time_away", "ask_for_help"];
-const CONTACT_ACTIONS: PortalAction[] = ["request_code", "verify_code", "ask_for_help"];
+/** A subcontractor contact tells the office a worker will be away, and asks for help. Pay is not shown to contacts yet. */
+const CONTACT_ACTIONS: PortalAction[] = ["add_time_away", "ask_for_help"];
 
 export type PortalLinkState = "active" | "expired" | "revoked";
 
@@ -147,6 +148,14 @@ export async function cleanerLinks(ctx: Ctx, companyId: Id<"companies">, cleaner
     .withIndex("by_company_cleaner", (q) => q.eq("companyId", companyId).eq("cleanerId", cleanerId))
     .order("desc")
     .take(100);
+}
+
+export async function subcontractorLinks(ctx: Ctx, companyId: Id<"companies">, subcontractorId: Id<"subcontractors">): Promise<Doc<"portalLinks">[]> {
+  return ctx.db
+    .query("portalLinks")
+    .withIndex("by_company_subcontractor", (q) => q.eq("companyId", companyId).eq("subcontractorId", subcontractorId))
+    .order("desc")
+    .take(50);
 }
 
 /** Records an action carried out through a link. Views are never recorded: only what the person did. */
