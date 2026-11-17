@@ -16,6 +16,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { jobAssignments } from "../dispatch/facts";
 import { money, payFor } from "../dispatch/pay";
+import { payWords } from "../recruiter/offers";
 import { crewPayOf } from "../dispatch/policy";
 import { recordEvent, type Actor } from "../events";
 
@@ -119,7 +120,15 @@ export async function syncJobEarnings(ctx: MutationCtx, job: Doc<"jobs">, actor:
     const totalCents = baseCents === null ? null : baseCents + adjustmentCents + tipCents;
 
     const flags: string[] = [];
-    if (!answer.ok) flags.push(cleaner.pay?.kind === "tier" && !used ? `${cleaner.name} is on a pay tier that no longer exists, so their pay can't be worked out.` : `${cleaner.name} ${answer.reason}.`);
+    const supplier = !answer.ok && cleaner.engagement === "subcontractor" && cleaner.subcontractorId ? await ctx.db.get(cleaner.subcontractorId) : null;
+    if (!answer.ok)
+      flags.push(
+        cleaner.engagement === "subcontractor"
+          ? `${cleaner.name} works through ${supplier?.name ?? "a subcontractor company"}, which is paid for their work; Team Pay doesn't work out that company's pay yet.`
+          : cleaner.pay?.kind === "tier" && !used
+            ? `${cleaner.name} is on a pay tier that no longer exists, so their pay can't be worked out.`
+            : `${cleaner.name} ${answer.reason}.`,
+      );
     if (method === "hourly" && source === "scheduled") flags.push("No check-in or completion time, so the scheduled hours were used.");
     if (method === "hourly" && source === "worked" && Math.abs(paidMinutes - scheduled) > Math.max(30, scheduled * 0.25)) flags.push(`Worked ${hoursWords(paidMinutes)}; ${hoursWords(scheduled)} was scheduled.`);
     // An offer of $0 means no amount was recorded with the offer, not that the cleaner agreed to nothing.
@@ -204,4 +213,20 @@ export function owedOn(earning: Doc<"earnings">): { jobCents: number; lateTipCen
   if (earning.status === "approved") return { jobCents: earning.totalCents ?? 0, lateTipCents: 0 };
   if (earning.status === "payment_started" || earning.status === "paid") return { jobCents: 0, lateTipCents: Math.max(0, earning.tipCents - (earning.tipsPaidCents ?? 0)) };
   return { jobCents: 0, lateTipCents: 0 };
+}
+
+/** The cleaner's pay method in words, with a tier's name and share: "Proven tier · 40% of each job". */
+export function payMethodWords(pay: Doc<"cleaners">["pay"], tiers: Doc<"companies">["payTiers"]): string {
+  if (!pay) return "No pay set";
+  switch (pay.kind) {
+    case "share":
+    case "hourly":
+      return payWords(pay);
+    case "tier": {
+      const tier = (tiers ?? []).find((t) => t.id === pay.tierId);
+      return tier ? `${tier.name} tier · ${payWords({ kind: "share", shareBps: tier.shareBps })}` : "A pay tier that no longer exists";
+    }
+    case "fixed":
+      return `${money(pay.perJobCents)} per job`;
+  }
 }

@@ -20,6 +20,7 @@ import { optionalText } from "./lib/text";
 export const board = companyQuery({
   args: {},
   handler: async (ctx) => {
+    const ownerSees = ctx.role === "owner";
     const rows = [];
     for (const stage of ["decision_pending", "offer_sent", "accepted", "onboarding_handoff"] as const) {
       const applications = await ctx.db
@@ -43,8 +44,9 @@ export const board = companyQuery({
           applicant: applicant?.name ?? null,
           role: need?.title ?? null,
           stage,
-          approvedTerms: need?.compensation ? { engagement: need.engagement, pay: payWords(need.compensation.pay), approvedAt: need.compensation.approvedAt } : null,
-          offers: offers.map((offer) => ({ offerId: offer._id, status: offer.status, pay: payWords(offer.terms.pay), terms: offer.terms, approvalId: offer.approvalId ?? null, sentAt: offer.sentAt ?? null, expiresAt: offer.expiresAt ?? null, respondedAt: offer.respondedAt ?? null, agreement: offer.agreement })),
+          // Pay is the Owner's: other roles see that terms are approved, not what they are.
+          approvedTerms: need?.compensation ? { engagement: need.engagement, pay: ownerSees ? payWords(need.compensation.pay) : "pay shown to the Owner", approvedAt: need.compensation.approvedAt } : null,
+          offers: offers.map((offer) => ({ offerId: offer._id, status: offer.status, pay: ownerSees ? payWords(offer.terms.pay) : "Shown to the Owner", terms: { ...offer.terms, pay: ownerSees ? offer.terms.pay : null }, approvalId: offer.approvalId ?? null, sentAt: offer.sentAt ?? null, expiresAt: offer.expiresAt ?? null, respondedAt: offer.respondedAt ?? null, agreement: offer.agreement })),
           handoff: handoff ? { handoffId: handoff._id, status: handoff.status, outstanding: handoff.requirements.filter((row) => row.status === "outstanding").map((row) => row.label), dueAt: handoff.dueAt } : null,
           nextAction: application.nextAction ?? null,
         });

@@ -21,7 +21,7 @@ import { bindsTo, requireSame } from "./lib/finance/confirm";
 import { endOfLocalDate, localDateKey, settingsOf, settingsRow } from "./lib/finance/settings";
 import { TEAM_PAY_METHODS, teamPayMethodValidator, type TeamPayMethod } from "./lib/finance/schema";
 import { issueStatementLink, liveStatementLink, statementLinksConfigured, statementToken, statementUrl } from "./lib/finance/statementLinks";
-import { jobCrew, liveAdjustments, owedOn, payUsedFor, splitEvenly, syncJobEarnings } from "./lib/finance/teamPay";
+import { jobCrew, liveAdjustments, owedOn, payMethodWords, payUsedFor, splitEvenly, syncJobEarnings } from "./lib/finance/teamPay";
 import { canSendTo, queueCleanerStatement } from "./lib/finance/cleanerOutbox";
 import { allow } from "./lib/rateLimit";
 
@@ -39,21 +39,6 @@ const STATUS_WORDS: Record<Doc<"earnings">["status"], string> = {
 
 const METHOD_WORDS: Record<TeamPayMethod, string> = { zelle: "Zelle", venmo: "Venmo", cash: "Cash", check: "Check", bank_transfer: "Bank transfer", payroll: "Payroll", other: "Other" };
 
-export function payMethodWords(pay: Doc<"cleaners">["pay"], tiers: Doc<"companies">["payTiers"]): string {
-  if (!pay) return "No pay set";
-  switch (pay.kind) {
-    case "share":
-      return `${pay.shareBps / 100}% of each job`;
-    case "tier": {
-      const tier = (tiers ?? []).find((t) => t.id === pay.tierId);
-      return tier ? `${tier.name} tier · ${tier.shareBps / 100}% of each job` : "A pay tier that no longer exists";
-    }
-    case "fixed":
-      return `${money(pay.perJobCents)} per job`;
-    case "hourly":
-      return `${money(pay.hourlyCents)} an hour`;
-  }
-}
 
 /** Whether the pay an earning was worked out with matches the cleaner's pay method now. */
 function samePay(a: NonNullable<Doc<"earnings">["payUsed"]>, b: Doc<"earnings">["payUsed"]): boolean {
@@ -179,7 +164,8 @@ export const overview = ownerQuery({
         paidThisMonthCents: paidThisMonth.filter((p) => (p.paidAt ?? p.createdAt) >= monthStart).reduce((s, p) => s + p.amountCents, 0),
       },
       owed: [...owedBy.values()].sort((a, b) => b.cents - a.cents),
-      noPay: cleaners.filter((c) => !c.pay).map((c) => ({ id: c._id, name: c.name })),
+      // Workers supplied by a subcontractor company carry no pay terms of their own, so they aren't "missing" pay.
+      noPay: cleaners.filter((c) => !c.pay && c.engagement !== "subcontractor").map((c) => ({ id: c._id, name: c.name })),
       hasEmployees: cleaners.some((c) => c.engagement === "employee"),
       tiers: (ctx.company.payTiers ?? []).filter((t) => !t.archived),
     };

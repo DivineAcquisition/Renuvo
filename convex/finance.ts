@@ -133,18 +133,20 @@ async function teamPayWaiting(ctx: QueryCtx & { companyId: Id<"companies">; comp
     .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "paid").gte("createdAt", range.from - 62 * DAY))
     .take(1000);
   const paidInPeriod = paid.filter((p) => (p.paidAt ?? p.createdAt) >= range.from && (p.paidAt ?? p.createdAt) <= range.to);
-  const cleaners = new Map<string, string>();
-  const cleanerName = async (id: Id<"cleaners">) => {
-    if (!cleaners.has(id)) cleaners.set(id, (await ctx.db.get(id))?.name ?? "Cleaner");
+  const cleaners = new Map<string, Doc<"cleaners"> | null>();
+  const cleanerRow = async (id: Id<"cleaners">) => {
+    if (!cleaners.has(id)) cleaners.set(id, await ctx.db.get(id));
     return cleaners.get(id)!;
   };
+  const cleanerName = async (id: Id<"cleaners">) => (await cleanerRow(id))?.name ?? "Cleaner";
   const describe = async (earning: Doc<"earnings">) => {
     const job = await ctx.db.get(earning.jobId);
     return { earning, cleaner: await cleanerName(earning.cleanerId), job: job ? jobLabel(job, tz) : "Job" };
   };
   const unpaid = approved.filter((e) => e.approved && now - e.approved.at > 2 * DAY);
   const noPay = new Map<Id<"cleaners">, number>();
-  for (const e of review) if (e.method === "none") noPay.set(e.cleanerId, (noPay.get(e.cleanerId) ?? 0) + 1);
+  // A worker supplied by a subcontractor company has no pay terms of their own; that isn't "no pay set".
+  for (const e of review) if (e.method === "none" && (await cleanerRow(e.cleanerId))?.engagement !== "subcontractor") noPay.set(e.cleanerId, (noPay.get(e.cleanerId) ?? 0) + 1);
   const reviewRows = [];
   for (const e of review.slice(0, 50)) reviewRows.push(await describe(e));
   const unpaidRows = [];

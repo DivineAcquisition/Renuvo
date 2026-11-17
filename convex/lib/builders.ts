@@ -18,6 +18,7 @@ import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type Ap
 import { invitationForToken } from "./invitations";
 import { invoiceForToken } from "./finance/payLinks";
 import { linkForStatementToken } from "./finance/statementLinks";
+import { notePortalAction, portalLinkForToken, portalLinkState, type PortalAction, type PortalLinkState } from "./cleaners/portal";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -522,4 +523,76 @@ export function signedFileRoute(def: { verify: (request: Request, now: number) =
     if (!(await def.verify(request, now))) return new Response("Not found.", { status: 404 });
     return (await def.handler(ctx, request, now)) ?? new Response("Not found.", { status: 404 });
   });
+}
+
+// ── Portal links: a cleaner, or a subcontractor company's contact, acting on their own records ────
+
+export type PortalAccess = {
+  link: Doc<"portalLinks">;
+  linkState: PortalLinkState;
+  company: Doc<"companies">;
+  companyId: Id<"companies">;
+  /** Set for a cleaner's link. */
+  cleaner: Doc<"cleaners"> | null;
+  /** Set for a subcontractor contact's link. */
+  subcontractor: Doc<"subcontractors"> | null;
+};
+
+async function portalAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PortalAccess> {
+  const link = await portalLinkForToken(ctx, token);
+  const company = link ? await ctx.db.get(link.companyId) : null;
+  const cleaner = link?.cleanerId ? await ctx.db.get(link.cleanerId) : null;
+  const subcontractor = link?.subcontractorId ? await ctx.db.get(link.subcontractorId) : null;
+  // A token that names nothing, or whose person left its company, gets the same "Not found." whatever was wrong.
+  if (!link || !company) notFound();
+  if (link.holder === "cleaner" && (!cleaner || cleaner.companyId !== link.companyId)) notFound();
+  if (link.holder === "subcontractor" && (!subcontractor || subcontractor.companyId !== link.companyId)) notFound();
+  return { link, linkState: portalLinkState(link, Date.now()), company, companyId: link.companyId, cleaner, subcontractor };
+}
+
+/**
+ * A read through a portal link. The token is the only authorization: no id in the arguments is trusted, and
+ * everything the handler reads must hang off `ctx.link` and its person. Reading changes nothing, so opening
+ * a link (or a phone or mail scanner previewing it) does nothing. An expired or revoked link still reaches
+ * the handler so the page can say so; the handler decides what such a link may still see (nothing private).
+ */
+export function portalQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & PortalAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await portalAccess(ctx, token)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+const PORTAL_CLOSED: Record<Exclude<PortalLinkState, "active">, string> = {
+  expired: "This link has expired. Ask the office for a new one.",
+  revoked: "This link is no longer active.",
+};
+
+/** One named action through a portal link. Refused unless the link is active right now and lists the action. */
+export function portalMutation<V extends AnyValidators, R>(def: {
+  action: PortalAction;
+  args: V;
+  handler: (ctx: MutationCtx & PortalAccess, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const access = await portalAccess(ctx, token);
+      if (access.linkState !== "active") throw userError(PORTAL_CLOSED[access.linkState], "not_allowed");
+      if (!access.link.allowed.includes(def.action)) notAllowed();
+      // An ended engagement keeps its history, and its links do nothing more.
+      if (access.cleaner?.status === "ended") throw userError("This engagement has ended, so this link no longer changes anything.", "not_allowed");
+      if (access.subcontractor?.status === "ended") throw userError("This working relationship has ended, so this link no longer changes anything.", "not_allowed");
+      const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
+      await notePortalAction(ctx, access.link, def.action);
+      return result;
+    },
+  } as any);
 }

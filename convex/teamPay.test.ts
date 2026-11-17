@@ -286,3 +286,22 @@ describe("team pay on the Overview", () => {
     expect((await s.as.query(api.teamPay.earning, { companyId: s.companyId, earningId: row.id })).payUsedDiffers).toBe(true);
   });
 });
+
+describe("workers supplied by a subcontractor company", () => {
+  it("explains that their pay goes through the company instead of calling it missing", async () => {
+    const s = await setup();
+    const worker = await s.t.run(async (ctx) => {
+      const sub = await ctx.db.insert("subcontractors", { companyId: s.companyId, name: "Sparkle Partners LLC", status: "active", contact: { name: "Lee Chan" }, serviceAreas: [], pay: { kind: "share", shareBps: 5500 }, createdAt: NOW });
+      return ctx.db.insert("cleaners", { companyId: s.companyId, name: "Sam Ortiz", engagement: "subcontractor", subcontractorId: sub, status: "ready", skills: [], serviceAreas: [], createdAt: NOW });
+    });
+    await workedJob(s.t, s.as, s.companyId, [{ cleanerId: worker }]);
+    await s.as.mutation(api.teamPay.refresh, { companyId: s.companyId });
+    const row = (await rowsFor(s)).find((r) => r.cleaner === "Sam Ortiz")!;
+    expect(row).toMatchObject({ totalCents: null, status: "needs_review" });
+    expect(row.flags[0]).toMatch(/works through Sparkle Partners LLC/);
+    expect((await s.as.query(api.teamPay.overview, { companyId: s.companyId, filter: "review" })).noPay).toEqual([]);
+    const overview = await s.as.query(api.finance.overview, { companyId: s.companyId, period: "this_month" });
+    expect(overview.findings.find((f) => f.id === "team_nopay")).toBeUndefined();
+    expect(await refusal(s.as.mutation(api.cleaners.setPay, { companyId: s.companyId, cleanerId: worker, pay: { kind: "fixed", perJobCents: 9000 } }))).toMatch(/contractors/);
+  });
+});

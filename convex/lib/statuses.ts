@@ -37,8 +37,13 @@ export const recordStatusValidator = literals(RECORD_STATUSES);
 export const WORK_KINDS = ["home", "short_term_rental", "property_manager", "commercial"] as const;
 export const workKindValidator = literals(WORK_KINDS);
 
-/** Only a person moves a cleaner between these. No agent changes one. */
-export const CLEANER_STATUSES = ["onboarding", "ready", "paused", "ended"] as const;
+/**
+ * A cleaner's engagement status. Only a person moves a cleaner between these; no agent changes one.
+ * "ready" is the stored word for an active engagement, kept for the records and indexes that already use it.
+ * Active is not eligible: job eligibility also needs every assignment-blocking requirement accepted
+ * (lib/cleaners/readiness.ts). "paused" is a routine break; "suspended" follows an approved personnel request.
+ */
+export const CLEANER_STATUSES = ["onboarding", "ready", "paused", "suspended", "ended"] as const;
 export type CleanerStatus = (typeof CLEANER_STATUSES)[number];
 export const cleanerStatusValidator = literals(CLEANER_STATUSES);
 

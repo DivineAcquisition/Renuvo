@@ -141,7 +141,7 @@ Screenshots: `docs/screenshots/finance/09`–`12`.
 
 ## Tests
 
-`convex/teamPay.test.ts` (10 tests):
+`convex/teamPay.test.ts` (11 tests):
 
 - Pay worked out by a share, a tier, a fixed amount and an hourly rate from check-in to completion; a tier's
   rate going up leaves the job already worked at the old rate until the Owner asks for the current one.
@@ -154,9 +154,13 @@ Screenshots: `docs/screenshots/finance/09`–`12`.
 - A statement link shows only that cleaner; a new link closes the old one.
 - Overview: team pay waiting, records named, approved pay unpaid after two days; "pay changed since" shown
   on an earning and cleaners counted per tier in setup.
+- A worker supplied by a subcontractor company: explained ("works through …"), not reported as "no pay set",
+  and can't be given a contractor's pay.
+
+With main merged in (the Cleaners workspace, #95, and Next.js 16.4.6):
 
 ```
-npm test            # 62 files, 663 passed, 19 skipped
+npm test            # 69 files, 717 passed, 19 skipped
 npm run typecheck   # passes
 npx eslint .        # 0 errors (1 warning in an existing file, not this work)
 npx next build      # passes
@@ -174,7 +178,16 @@ Fixed from looking: hourly basis read "4.08 hours" (now "4 h 5 min"); a $0 offer
 every job; rows too tall on a phone; the pay text repeated on the cleaner panel; "Paid hours" shown for
 cleaners not paid by the hour; setup columns unbalanced.
 
-Screenshots: `docs/screenshots/finance/13`–`23`.
+Screenshots: `docs/screenshots/finance/13`–`24`.
+
+### Fitting with the Cleaners workspace
+
+Main's Cleaners workspace arrived while this was built. The cleaner profile's Pay section said Finance wasn't
+built; it now shows To review, Approved not paid and Paid from Team Pay's records, links to Team Pay, and
+names tiers ("Proven tier · 40% of each job's price"). The cleaner portal names tiers too and points to the
+earnings statement. Workers supplied by a subcontractor company are explained rather than flagged as missing
+pay. Loading both Finance's and Cleaners' Chat tools exposed an import cycle (a tool set importing a value back
+from the tool registry); the shared date helper moved to `convex/lib/chat/localDay.ts`.
 
 ## Not verified
 

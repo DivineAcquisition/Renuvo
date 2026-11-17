@@ -75,6 +75,7 @@ const CLEANER_STATUS: Record<Doc<"cleaners">["status"], { label: string; variant
   ready: { label: "Ready for work", variant: "success" },
   onboarding: { label: "Onboarding", variant: "info" },
   paused: { label: "Paused", variant: "warning" },
+  suspended: { label: "Suspended", variant: "warning" },
   ended: { label: "Ended", variant: "outline" },
 };
 
@@ -161,16 +162,6 @@ export function CustomersScreen() {
       <PageHeader title="Customers & Properties" lead="The customers of this company and the properties they have service at. Every department and every agent reads these same records." />
       <CustomersPanel />
       <p className="mt-4 text-xs text-muted-foreground">A page for each customer, with their properties, preferences and service history, is not built yet.</p>
-    </>
-  );
-}
-
-export function CleanersScreen() {
-  return (
-    <>
-      <PageHeader title="Cleaners" lead="The people who do the work: their standing, skills, areas and the hours they said they can work. Dispatch reads these same records." />
-      <CleanersPanel />
-      <p className="mt-4 text-xs text-muted-foreground">A page for each cleaner, with availability, time off and documents, is not built yet.</p>
     </>
   );
 }

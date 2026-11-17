@@ -294,7 +294,7 @@ function EarningBody({ earningId, onOpenCleaner }: { earningId: Id<"earnings">; 
           {e.cleaner}
         </button>
         <p className="text-sm text-muted-foreground">
-          {e.service} for {e.customer} · {e.engagement === "employee" ? "Employee" : "Contractor"}
+          {e.service} for {e.customer} · {e.engagement === "employee" ? "Employee" : e.engagement === "subcontractor" ? "Through a subcontractor company" : "Contractor"}
         </p>
       </header>
 
@@ -740,7 +740,7 @@ function CleanerBody({ cleanerId, onOpenEarning }: { cleanerId: Id<"cleaners">; 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5 px-5 pt-6 pb-10 sm:px-7">
       <header className="pr-10">
-        <p className={eyebrow}>{c.engagement === "employee" ? "Employee" : "Contractor"}</p>
+        <p className={eyebrow}>{c.engagement === "employee" ? "Employee" : c.engagement === "subcontractor" ? "Through a subcontractor company" : "Contractor"}</p>
         <h2 className="mt-1 font-heading text-2xl tracking-tight text-strong">{c.name}</h2>
       </header>
       <PayMethod cleaner={c} />
@@ -912,6 +912,17 @@ function ReasonDialog({ open, onClose, title, description, label, action, onSubm
 }
 
 function PayMethod({ cleaner }: { cleaner: NonNullable<FunctionReturnType<typeof api.teamPay.cleaner>> }) {
+  if (cleaner.engagement === "subcontractor") {
+    return (
+      <p className="rounded-xl border border-border px-3.5 py-2.5 text-sm text-muted-foreground">
+        Supplied by a subcontractor company. Their pay goes to that company, under its arrangement in Cleaners › Subcontractor companies.
+      </p>
+    );
+  }
+  return <PayMethodEditor cleaner={cleaner} />;
+}
+
+function PayMethodEditor({ cleaner }: { cleaner: NonNullable<FunctionReturnType<typeof api.teamPay.cleaner>> }) {
   const { companyId } = useCompany();
   const setPay = useMutation(api.cleaners.setPay);
   const { busy, error, run } = useRun();
