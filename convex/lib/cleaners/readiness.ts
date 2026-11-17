@@ -98,6 +98,15 @@ function fromRecord(def: Definition, facts: ReadinessFacts): RequirementState | 
   return null;
 }
 
+/**
+ * Whether an accepted acknowledgment covers the words in force now: the words stored with it, or, for one
+ * made before words were stored, no change to them since it was made.
+ */
+export function acknowledgmentHolds(def: Pick<Definition, "description" | "wordsChangedAt">, row: Pick<RequirementRow, "acknowledged" | "acceptedAt">): boolean {
+  if (row.acknowledged) return row.acknowledged.words.trim() === (def.description ?? "").trim();
+  return def.wordsChangedAt === undefined || (row.acceptedAt ?? 0) >= def.wordsChangedAt;
+}
+
 export function viewOf(def: Definition, row: RequirementRow, facts: ReadinessFacts, now: number, warningDays: number): RequirementView {
   const recorded = fromRecord(def, facts);
   let state: RequirementState = row.status;
@@ -106,7 +115,7 @@ export function viewOf(def: Definition, row: RequirementRow, facts: ReadinessFac
   // For an agreement, a signed one in Agreements answers; without one, a person's record of a paper copy stands.
   else if (row.status !== "waived" && recorded !== null && (recorded === "accepted" || row.status === "not_started")) state = recorded;
   // An acknowledgment is of the words it was given to. When the company changes them, it is asked again.
-  if (def.kind === "acknowledgment" && state === "accepted" && row.acknowledged && row.acknowledged.words.trim() !== (def.description ?? "").trim()) state = "not_started";
+  if (def.kind === "acknowledgment" && state === "accepted" && !acknowledgmentHolds(def, row)) state = "not_started";
   if (state === "accepted" && row.expiresAt !== undefined && row.expiresAt <= now) state = "expired";
   const met = MET.includes(state);
   return {

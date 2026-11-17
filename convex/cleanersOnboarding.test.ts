@@ -164,6 +164,22 @@ describe("the cleaner portal", () => {
         await s.t.mutation(api.portal.acknowledge, { token, key: "policies", words: "Read and acknowledge how the company works, including the new key-handling policy." });
         profile = await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() });
         expect(profile.readiness).toMatchObject({ state: "ready", blockers: [] });
+        // Renaming the step leaves the words alone, so nothing is asked again.
+        const policies = (words: string, label = "Company policies") => s.as.mutation(api.requirements.saveDefinition, { companyId: s.companyId, key: "policies", label, description: words, kind: "acknowledgment", effect: "blocks_assignments", appliesTo: ["employee", "contractor", "subcontractor"], reviewer: "manager", cleanerCompletes: true });
+        vi.setSystemTime(Date.now() + HOUR);
+        await policies("Read and acknowledge how the company works, including the new key-handling policy.", "House rules");
+        expect((await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() })).readiness.blockers).toEqual([]);
+        // An agreement made before the words were stored with it still counts until the words change, then is asked again.
+        await s.t.run(async (ctx) => {
+          const row = (await ctx.db.query("workerRequirements").withIndex("by_company_cleaner", (q) => q.eq("companyId", s.companyId).eq("cleanerId", s.cleanerId).eq("key", "policies")).unique())!;
+          await ctx.db.patch(row._id, { acknowledged: undefined });
+        });
+        expect((await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() })).readiness.blockers).toEqual([]);
+        vi.setSystemTime(Date.now() + HOUR);
+        await policies("Read and acknowledge how the company works. Keys are returned the same day.");
+        expect((await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() })).readiness.blockers.map((row) => row.key)).toEqual(["policies"]);
+        await s.t.mutation(api.portal.acknowledge, { token, key: "policies", words: "Read and acknowledge how the company works. Keys are returned the same day." });
+        expect((await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleanerId, asOf: Date.now() })).readiness).toMatchObject({ state: "ready", blockers: [] });
         // Each act is in their history, as theirs.
         const history = await s.as.query(api.cleanerProfile.activity, { companyId: s.companyId, cleanerId: s.cleanerId });
         expect(history.filter((row) => row.whoKind === "cleaner").map((row) => row.text)).toEqual(expect.arrayContaining(["submitted Identity documents", "had their weekly availability set (1 window)"]));

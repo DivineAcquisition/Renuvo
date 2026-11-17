@@ -14,6 +14,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { portalMutation, portalQuery, type PortalAccess } from "./lib/builders";
 import { cleanersSettings, DAY, HOUR } from "./lib/cleaners/settings";
 import { helpKey } from "./lib/cleaners/followUps";
+import { acknowledgmentHolds } from "./lib/cleaners/readiness";
 import { cleanerReadiness } from "./lib/cleaners/records";
 import { cleanerTime, commitmentsBetween, currentClashes } from "./lib/cleaners/schedule";
 import { queueCleanerMessage, channelsFor } from "./lib/cleaners/outbox";
@@ -293,8 +294,8 @@ export const acknowledge = portalMutation({
     if (def?.kind !== "acknowledgment") throw userError("This step is not an acknowledgment.");
     const current = (def.description ?? "").trim();
     if (args.words.trim() !== current) throw userError("What you are agreeing to changed since this page opened. Read it again, then agree.");
-    if (row.status === "accepted" && (row.acknowledged?.words ?? current) === current) return null;
     const now = Date.now();
+    if (row.status === "accepted" && acknowledgmentHolds(def, row) && (row.expiresAt === undefined || row.expiresAt > now)) return null;
     await ctx.db.patch(row._id, { status: "accepted", submittedAt: now, submittedBy: { kind: "cleaner", linkId: ctx.link._id }, acceptedAt: now, acknowledged: { words: current, at: now }, reviewNote: "Acknowledged by the cleaner through their own link.", expiresAt: def.validForDays ? now + def.validForDays * DAY : undefined, updatedAt: now });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "cleaner.requirement_accepted", actor: actorOf(ctx), subject: { table: "cleaners", id: row.cleanerId }, data: { key: args.key } });
     await syncHandoffRequirement(ctx, cleanerOf(ctx), args.key, true, actorOf(ctx), "Acknowledged by the cleaner.");

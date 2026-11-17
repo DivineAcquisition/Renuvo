@@ -185,6 +185,8 @@ export const cleanersTables = {
     cleanerCompletes: v.boolean(),
     /** For an agreement: the Agreements document type that satisfies it once signed. */
     agreementDocType: v.optional(v.string()),
+    /** For an acknowledgment: when its words last changed. Agreements from before then are asked again. */
+    wordsChangedAt: v.optional(v.number()),
     order: v.number(),
     status: v.union(v.literal("active"), v.literal("retired")),
     updatedBy: v.optional(v.id("members")),
