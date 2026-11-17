@@ -131,6 +131,8 @@ import {
   X as PhX,
   XCircle as PhXCircle,
   CalendarCheck as PhNCalendarCheck,
+  Camera as PhNCamera,
+  Receipt as PhNReceipt,
   CalendarDots as PhNCalendarDots,
   ChartLine as PhNChartLine,
   ChatCircleText as PhNChatCircleText,
@@ -348,6 +350,8 @@ export const Zap = wrap(PhLightning, "Zap", true);
 export const HouseIcon = wrap(PhNHouse, "HouseIcon", true);
 export const DashboardIcon = wrap(PhNSquaresFour, "DashboardIcon", true);
 export const ScheduleIcon = wrap(PhNCalendarDots, "ScheduleIcon", true);
+export const CameraIcon = wrap(PhNCamera, "CameraIcon", true);
+export const ReceiptIcon = wrap(PhNReceipt, "ReceiptIcon", true);
 export const CalendarCheckIcon = wrap(PhNCalendarCheck, "CalendarCheckIcon", true);
 export const TeamIcon = wrap(PhNUsersThree, "TeamIcon", true);
 export const HandshakeIcon = wrap(PhNHandshake, "HandshakeIcon", true);

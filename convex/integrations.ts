@@ -17,6 +17,7 @@ import { enabledFeatures, type Feature } from "./lib/google/features";
 import { activeConnections } from "./lib/google/connection";
 import type { Doc } from "./_generated/dataModel";
 import { secretsConfigured } from "./lib/recruiter/secrets";
+import { stripeState } from "./lib/finance/stripeState";
 
 export type LiveState = "connected" | "in_progress" | "ready" | "not_set_up";
 
@@ -55,12 +56,18 @@ export const overview = companyQuery({
       return verified.length ? { state: "connected", detail: verified.map((r) => r.label).slice(0, 2).join(", ") } : { state: "in_progress", detail: `${tool.connection.email} · choose what Selestial may use` };
     };
 
+    // Stripe is the company's own account (Finance › Payments setup). Only its state is shown here, never amounts.
+    const stripe = await stripeState(ctx, ctx.companyId);
+    const stripeCard: { state: LiveState; detail: string | null } =
+      stripe.state === "active" ? { state: "connected", detail: stripe.businessName } : stripe.state === "onboarding" || stripe.state === "restricted" ? { state: "in_progress", detail: null } : stripe.state === "not_available" ? { state: "not_set_up", detail: null } : { state: "ready", detail: null };
+
     const requests = await ctx.db
       .query("integrationRequests")
       .withIndex("by_company_integration", (q) => q.eq("companyId", ctx.companyId))
       .take(100);
     return {
       live: {
+        stripe: stripeCard,
         gmail: { state: gmailState, detail: gmail ? gmail.address : null },
         "google-drive": googleCard("drive", ["drive_source", "drive_output"]),
         "google-calendar": googleCard("calendar", ["calendar_sync", "calendar_busy"]),

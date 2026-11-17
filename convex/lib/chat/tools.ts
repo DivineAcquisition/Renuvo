@@ -29,7 +29,7 @@ import { runTool as recruiterTool, type ToolInput as RecruiterInput, type ToolNa
 import { isManager, isOwner, type Role } from "../roles";
 import { AGENTS, type Agent } from "../statuses";
 import { liveTaskByKey, openTask } from "../taskState";
-import { addLocalDays, clock, dayName, startOfLocalDay } from "../time";
+import { addLocalDays, clock, dayName } from "../time";
 import { createArtifact, readableArtifact, reviseArtifact, setArtifactState, STATE_WORDS, unresolvedFields, versionOf } from "./artifacts";
 import { CalcError, evaluate } from "./calc";
 import { check, jsonSchema, stableHash, type Field } from "./fields";
@@ -38,6 +38,8 @@ import { AGREEMENT_TOOLS } from "./agreementTools";
 import { CLEANER_TOOLS } from "./cleanerTools";
 import { SERVICE_TOOLS } from "./serviceTools";
 import { GOOGLE_TOOLS } from "./googleTools";
+import { FINANCE_TOOLS } from "./financeTools";
+import { localDay } from "./localDay";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
 import { featureOn, ownedAsset, queueGeneration, settingFor, capabilityFor, checkedParams } from "../ai/media";
@@ -46,6 +48,7 @@ import { allowanceRow, mediaAllowance, monthKey } from "../ai/usage";
 import { priceSummary, scheduleFacts } from "../services/engine";
 import type { Schedule } from "../services/spec";
 import { publishedCatalog } from "../services/store";
+import { amountRequested, invoiceState, STATE_WORDS as FINANCE_STATE_WORDS } from "../finance/invoiceState";
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -98,14 +101,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 // ── Small helpers ────────────────────────────────────────────────────────────────────────────────
 
-/** "2027-03-02" on the company's clock, as the instant that day begins. */
-export function localDay(date: string, timezone: string): number {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) throw userError(`"${date}" is not a date written as YYYY-MM-DD.`);
-  const noon = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
-  if (Number.isNaN(noon)) throw userError(`"${date}" is not a date.`);
-  return startOfLocalDay(noon, timezone);
-}
+export { localDay };
 
 /** "2027-03-02" or "2027-03-02T15:30" on the company's clock. */
 function localInstant(value: string, timezone: string): number {
@@ -914,20 +910,21 @@ const TOOLS: ChatTool[] = [
   {
     name: "issue_refund_or_credit",
     label: "Issuing a refund or credit",
-    description: "Refund or credit a customer. NOT AVAILABLE: call it only to learn the blocker.",
+    description: "Refund or credit a customer. NOT AVAILABLE in chat: call it only to learn where to do it.",
     kind: "unavailable",
     minimumRole: "owner",
-    specialist: "retention",
     input: { type: "object", properties: { customerId: { ...ID("The customer's id."), optional: true } } },
-    run: async () => unavailable("Selestial does not hold payments, and refunds or compensation are a person's decision. Record what you decide as a task if you want it tracked."),
+    run: async () => unavailable("Refunds and credits are the Owner's decision and are made in Finance, where the exact amount, customer and effect are shown before anything happens: open the invoice and choose Refund on a payment, or Add credit."),
   },
 ];
 
-export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds";
+export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "invoices";
 
 /** A short, role-appropriate description of one record. Null when it is not this company's. Used for tools and attached context. */
 export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: Doc<"companies">; role: Role }, table: RecordTable, id: string): Promise<{ label: string; data: Record<string, unknown>; record?: RecordRef; link?: Link } | null> {
   const tz = ctx.company.timezone;
+  // Finance is the Owner's: anyone else gets nothing about an invoice, as if it were not there.
+  if (table === "invoices" && !isOwner(ctx.role)) return null;
   const normalized = ctx.db.normalizeId(table, id);
   const row = normalized ? ((await ctx.db.get(normalized)) as (Doc<RecordTable> & { companyId: Id<"companies"> }) | null) : null;
   if (!row || row.companyId !== ctx.company._id) return null;
@@ -986,6 +983,15 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
       const need = application.needId ? await ctx.db.get(application.needId) : null;
       return { label: `the application from ${applicant?.name ?? "an applicant"}`, data: { applicationId: application._id, applicant: applicant?.name ?? null, role: need?.title ?? application.roleSeen ?? null, stage: application.stage, nextAction: application.nextAction ?? null }, link: { href: "/app/agents/recruiter/applicants", label: "Applicants" } };
     }
+    case "invoices": {
+      const invoice = row as Doc<"invoices">;
+      const now = Date.now();
+      return {
+        label: `invoice ${invoice.number ?? "(draft)"}`,
+        data: { invoiceId: invoice._id, number: invoice.number ?? null, customer: await nameOf(ctx, invoice.customerId), state: FINANCE_STATE_WORDS[invoiceState(invoice, now)], total: money(invoice.totals.totalCents), balance: money(invoice.totals.balanceCents), askingFor: money(amountRequested(invoice)), processing: money(invoice.totals.processingCents), due: invoice.dueAt ? when(invoice.dueAt, tz) : null, note: "Use explain_invoice for payments, credits and messages." },
+        link: { href: `/app/finance?tab=invoices&invoice=${invoice._id}`, label: `Open ${invoice.number ?? "the invoice"}` },
+      };
+    }
     case "hiringNeeds": {
       const need = row as Doc<"hiringNeeds">;
       return { label: `the role "${need.title}"`, data: { needId: need._id, title: need.title, status: need.status, openings: need.openings, engagement: need.engagement, location: need.location, payApproved: Boolean(need.compensation), pay: isOwner(ctx.role) ? (need.compensation?.pay ?? null) : need.compensation ? "Approved; shown to the Owner." : null }, link: { href: "/app/agents/recruiter/hiring-needs", label: "Hiring Needs" } };
@@ -1000,7 +1006,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...CLEANER_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

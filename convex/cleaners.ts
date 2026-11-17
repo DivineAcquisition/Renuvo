@@ -119,8 +119,15 @@ export const setPay = ownerMutation({
     if (pay.kind === "share") {
       if (cleaner.engagement !== "contractor") throw userError("A share of the job is for contractors. Employees are paid hourly.");
       if (!Number.isInteger(pay.shareBps) || pay.shareBps < 0 || pay.shareBps > 10000) throw userError("The share must be between 0% and 100%.");
+    } else if (pay.kind === "tier") {
+      if (cleaner.engagement !== "contractor") throw userError("Pay tiers are for contractors. Employees are paid hourly.");
+      const tier = (ctx.company.payTiers ?? []).find((row) => row.id === pay.tierId && !row.archived);
+      if (!tier) throw userError("Choose one of your current pay tiers.");
+    } else if (pay.kind === "fixed") {
+      if (cleaner.engagement !== "contractor") throw userError("A fixed amount per job is for contractors. Employees are paid hourly.");
+      if (!Number.isSafeInteger(pay.perJobCents) || pay.perJobCents < 0 || pay.perJobCents > 1_000_000) throw userError("Enter the amount per job, up to $10,000.");
     } else {
-      if (cleaner.engagement !== "employee") throw userError("An hourly rate is for employees. Contractors are paid a share of the job.");
+      if (cleaner.engagement !== "employee") throw userError("An hourly rate is for employees. Contractors are paid a share of the job, a tier, or a fixed amount.");
       if (!Number.isSafeInteger(pay.hourlyCents) || pay.hourlyCents < 0) throw userError("The hourly rate must be a whole number of cents, zero or more.");
     }
     await ctx.db.patch(cleaner._id, { pay });

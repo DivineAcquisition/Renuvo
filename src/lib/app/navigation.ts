@@ -186,9 +186,9 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     section: "shared",
     purpose: "The cleaning company's own money: customer payments, balances, cleaner pay. Not Selestial's subscription.",
     path: `${APP_ROOT}/finance`,
-    availability: PLANNED,
+    availability: LIVE,
     minimumRole: "owner",
-    accessNote: "The Owner only, by the owner's decision on November 15, 2026.",
+    accessNote: "The Owner only, by the owner's decision on November 15, 2026. Invoices, payments, credits, refunds, Team Pay and Expenses are built; Profitability is shown as not built yet.",
   },
   {
     id: "reports",
@@ -243,6 +243,11 @@ export const SERVICES_PAGES: readonly { path: string; label: string; purpose: st
   { path: `${APP_ROOT}/services/setup`, label: "Pricing setup", purpose: "What the company told setup: areas, team, costs, margin and strategy." },
   { path: `${APP_ROOT}/services/imports/[id]`, label: "Import review", purpose: "Rows read from a spreadsheet or pasted text, each reviewed before it becomes a draft." },
   { path: `${APP_ROOT}/services/[id]`, label: "Service", purpose: "One service: the guided builder for its draft, its live version and its history." },
+];
+
+/** Pages inside Finance, reached from it. They have no sidebar entry of their own. */
+export const FINANCE_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account, its invoice settings (tax, terms, numbering), pay tiers, tips and expense categories." },
 ];
 
 /** Pages inside Cleaners. They have no sidebar entry of their own: the directory links to them. */

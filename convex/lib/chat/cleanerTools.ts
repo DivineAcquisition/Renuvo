@@ -18,7 +18,8 @@ import { cleanersSettings } from "../cleaners/settings";
 import { isOwner } from "../roles";
 import { clock, dayName } from "../time";
 import { type Field, stableHash } from "./fields";
-import { localDay, type ChatTool, type Outcome, type ToolCtx } from "./tools";
+import { localDay } from "./localDay";
+import type { ChatTool, Outcome, ToolCtx } from "./tools";
 
 const ID = (description: string): Field => ({ type: "string", description, max: 64 });
 const refused = (why: string, data?: Record<string, unknown>): Outcome => ({ status: "refused", why, data });

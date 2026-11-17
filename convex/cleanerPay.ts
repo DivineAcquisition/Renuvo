@@ -1,8 +1,8 @@
 /**
  * A worker's pay, for the Owner. It keeps no ledger of its own: the arrangement and its history are the
  * Owner's decisions (payArrangements, personnelRequests), and the pay for each job is what Dispatch stated
- * on the assignment when it was offered. Approved earnings, adjustments and payments belong to Finance,
- * which is not built, so this says so instead of showing a number it does not have.
+ * on the assignment when it was offered. Earnings worked out per job, approvals, adjustments, tips and
+ * payments belong to Finance › Team Pay (convex/teamPay.ts); this shows their totals, read from there.
  */
 import { v } from "convex/values";
 
@@ -10,6 +10,7 @@ import { owned } from "./lib/access";
 import { ownerQuery } from "./lib/builders";
 import { DAY } from "./lib/cleaners/settings";
 import { jobLabel } from "./lib/cleaners/schedule";
+import { owedOn, payMethodWords } from "./lib/finance/teamPay";
 import { payWords } from "./lib/recruiter/offers";
 
 export const summary = ownerQuery({
@@ -51,10 +52,23 @@ export const summary = ownerQuery({
     }
     jobs.sort((a, b) => b.startsAt - a.startsAt);
     const completed = jobs.filter((row) => row.jobStatus === "completed");
+    // Finance › Team Pay's own records for the same 90 days.
+    const earnings = (
+      await ctx.db
+        .query("earnings")
+        .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id).gte("jobStartsAt", args.asOf - 90 * DAY))
+        .take(300)
+    ).filter((e) => e.status !== "void");
+    const paid = (
+      await ctx.db
+        .query("teamPayments")
+        .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id).gte("createdAt", args.asOf - 90 * DAY))
+        .take(200)
+    ).filter((p) => p.status === "paid");
 
     return {
       paidThrough: sub ? { subcontractorId: sub._id, name: sub.name, pay: sub.pay ? payWords(sub.pay) : null } : null,
-      current: cleaner.pay ? { words: payWords(cleaner.pay), pay: cleaner.pay } : null,
+      current: cleaner.pay ? { words: payMethodWords(cleaner.pay, ctx.company.payTiers), pay: cleaner.pay } : null,
       history: await Promise.all(
         arrangements.map(async (row) => ({
           id: row._id,
@@ -70,7 +84,14 @@ export const summary = ownerQuery({
         .map((row) => ({ requestId: row._id, words: row.details.pay ? payWords(row.details.pay) : "", effectiveAt: row.details.effectiveAt ?? null, reason: row.reason, requestedAt: row.requestedAt })),
       jobs: jobs.slice(0, 40),
       stated: { completedJobs: completed.length, completedCents: completed.reduce((sum, row) => sum + row.payCents, 0) },
-      finance: { built: false, words: "Finance is not built yet, so no approved earnings, adjustments or payments are recorded. The amounts below are what each job's offer stated, not what was approved or paid." },
+      finance: {
+        built: true,
+        words: "Worked out from each completed job in Finance › Team Pay, where you review, approve and record payments. The amounts listed below are what each job's offer stated.",
+        reviewCents: earnings.filter((e) => e.status === "calculated" || e.status === "needs_review").reduce((sum, e) => sum + (e.totalCents ?? 0), 0),
+        approvedUnpaidCents: earnings.reduce((sum, e) => sum + owedOn(e).jobCents + owedOn(e).lateTipCents, 0),
+        paidCents: paid.reduce((sum, p) => sum + p.amountCents, 0),
+        paidCount: paid.length,
+      },
     };
   },
 });

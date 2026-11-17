@@ -23,7 +23,7 @@ import { jobAssignments } from "./lib/dispatch/facts";
 import { linkPath, liveLink, siteOrigin, tokenFor } from "./lib/dispatch/links";
 import { userError } from "./lib/errors";
 import { recordEvent, type Actor } from "./lib/events";
-import { payWords } from "./lib/recruiter/offers";
+import { payMethodWords } from "./lib/finance/teamPay";
 import { recordSubmission } from "./requirements";
 import { openTask } from "./lib/taskState";
 import { optionalEmail, optionalText, tags, text } from "./lib/text";
@@ -508,9 +508,9 @@ export const earnings = portalQuery({
     }
     return {
       locked: false as const,
-      arrangement: sub ? `Paid through ${sub.name}` : cleaner.pay ? payWords(cleaner.pay) : "Not set yet. Ask the office.",
+      arrangement: sub ? `Paid through ${sub.name}` : cleaner.pay ? payMethodWords(cleaner.pay, ctx.company.payTiers) : "Not set yet. Ask the office.",
       jobs,
-      note: "These are the amounts each job's offer stated. The office approves and pays them; payments are not shown here yet.",
+      note: "These are the amounts each job's offer stated. The office reviews, approves and pays each job; ask them for your earnings statement link to see what was approved and paid.",
     };
   },
 });

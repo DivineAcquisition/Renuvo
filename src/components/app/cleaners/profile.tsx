@@ -897,10 +897,25 @@ export function PaySection({ profile }: { profile: Profile }) {
         ) : null}
       </Card>
       <Card title="Earnings and payments">
-        <p className="text-sm text-muted-foreground">{pay.finance.words}</p>
-        <p className="mt-3 text-sm text-strong">
+        <dl className="grid grid-cols-3 gap-2">
+          {[
+            { label: "To review", cents: pay.finance.reviewCents },
+            { label: "Approved, not paid", cents: pay.finance.approvedUnpaidCents },
+            { label: `Paid · ${plural(pay.finance.paidCount, "payment")}`, cents: pay.finance.paidCents },
+          ].map((cell) => (
+            <div key={cell.label} className="rounded-xl border border-border px-2.5 py-2">
+              <dt className="text-[11px] leading-tight text-muted-foreground">{cell.label}</dt>
+              <dd className="mt-1 text-sm font-semibold tabular-nums text-strong">{money(cell.cents)}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="mt-3 text-sm text-muted-foreground">{pay.finance.words}</p>
+        <p className="mt-2 text-sm text-strong">
           {plural(pay.stated.completedJobs, "completed job")} in the last 90 days, stated at {money(pay.stated.completedCents)} in total.
         </p>
+        <Link href={`/app/finance?tab=team-pay&cleaner=${profile.cleanerId}`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-info-foreground underline-offset-4 hover:underline">
+          Open in Team Pay
+        </Link>
       </Card>
       <Card title="Pay stated on each job" className="@3xl:col-span-2">
         {pay.jobs.length === 0 ? (

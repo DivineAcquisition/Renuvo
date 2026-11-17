@@ -18,6 +18,8 @@
     "@base-ui/react": "^1.7.0",
     "@clerk/nextjs": "^7.10.0",
     "@phosphor-icons/react": "^2.1.10",
+    "@stripe/react-stripe-js": "^7.0.1",
+    "@stripe/stripe-js": "^10.2.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.47.0",

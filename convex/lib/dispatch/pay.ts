@@ -3,7 +3,8 @@
  * This is the pay snapshot an offer states. Nothing here guesses: with a missing price or a missing
  * rate there is no number, and the answer says which is missing.
  */
-export type PaySetting = { kind: "share"; shareBps: number } | { kind: "hourly"; hourlyCents: number };
+export type PaySetting = { kind: "share"; shareBps: number } | { kind: "hourly"; hourlyCents: number } | { kind: "tier"; tierId: string } | { kind: "fixed"; perJobCents: number };
+export type PayTier = { id: string; name: string; shareBps: number; archived?: boolean };
 
 export type PayAnswer =
   | { ok: true; payCents: number; basis: string }
@@ -26,7 +27,7 @@ function hoursWords(minutes: number): string {
  * the job needs. The lead may get a premium on top, as a percentage of what they would otherwise get.
  * Hourly pay is for the cleaner's own hours either way, so it is never split.
  */
-export type CrewPay = { mode: "share_of_whole" | "split_by_crew"; leadPremiumPercent: number };
+export type CrewPay = { mode: "share_of_whole" | "split_by_crew"; leadPremiumPercent: number; tiers?: readonly PayTier[] };
 export const CREW_PAY_DEFAULT: CrewPay = { mode: "share_of_whole", leadPremiumPercent: 0 };
 
 export function payFor(
@@ -34,8 +35,12 @@ export function payFor(
   job: { priceCents?: number; startsAt: number; endsAt: number; requiredCrew?: number },
   crew: { rule: CrewPay; role: "lead" | "support" } = { rule: CREW_PAY_DEFAULT, role: "lead" },
 ): PayAnswer {
-  const pay = cleaner.pay;
-  if (!pay) return { ok: false, code: "no_pay_set", reason: "has no pay set, so their pay for this visit cannot be worked out" };
+  const setting = cleaner.pay;
+  if (!setting) return { ok: false, code: "no_pay_set", reason: "has no pay set, so their pay for this visit cannot be worked out" };
+  // A tier is a share with a name; it is read from the company's tiers at the moment pay is worked out.
+  const tier = setting.kind === "tier" ? (crew.rule.tiers ?? []).find((row) => row.id === setting.tierId) : undefined;
+  if (setting.kind === "tier" && !tier) return { ok: false, code: "no_pay_set", reason: "is on a pay tier that no longer exists, so their pay cannot be worked out" };
+  const pay: Exclude<PaySetting, { kind: "tier" }> = tier ? { kind: "share", shareBps: tier.shareBps } : (setting as Exclude<PaySetting, { kind: "tier" }>);
   const size = Math.max(1, Math.trunc(job.requiredCrew ?? 1));
   let exact: number;
   let basis: string;
@@ -46,7 +51,11 @@ export function payFor(
     const percent = Math.round(pay.shareBps) / 100;
     const split = crew.rule.mode === "split_by_crew" && size > 1;
     exact = (job.priceCents * pay.shareBps) / 10000 / (split ? size : 1);
-    basis = split ? `${percent}% of the ${money(job.priceCents)} job price, split ${size} ways` : `${percent}% of the ${money(job.priceCents)} job price`;
+    const named = tier ? `${tier.name} tier, ` : "";
+    basis = split ? `${named}${percent}% of the ${money(job.priceCents)} job price, split ${size} ways` : `${named}${percent}% of the ${money(job.priceCents)} job price`;
+  } else if (pay.kind === "fixed") {
+    exact = pay.perJobCents;
+    basis = `${money(pay.perJobCents)} for the job`;
   } else {
     const minutes = Math.round((job.endsAt - job.startsAt) / 60000);
     exact = (pay.hourlyCents * minutes) / 60;

@@ -88,6 +88,21 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("serviceChanges"), id: v.id("serviceChanges") }),
   v.object({ table: v.literal("serviceImports"), id: v.id("serviceImports") }),
   v.object({ table: v.literal("researchBriefs"), id: v.id("researchBriefs") }),
+  // Finance: the company's own money (convex/lib/finance/schema.ts).
+  v.object({ table: v.literal("invoices"), id: v.id("invoices") }),
+  v.object({ table: v.literal("payments"), id: v.id("payments") }),
+  v.object({ table: v.literal("refunds"), id: v.id("refunds") }),
+  v.object({ table: v.literal("invoiceCredits"), id: v.id("invoiceCredits") }),
+  v.object({ table: v.literal("stripeAccounts"), id: v.id("stripeAccounts") }),
+  v.object({ table: v.literal("financeSettings"), id: v.id("financeSettings") }),
+  v.object({ table: v.literal("financeMessages"), id: v.id("financeMessages") }),
+  v.object({ table: v.literal("earnings"), id: v.id("earnings") }),
+  v.object({ table: v.literal("teamPayments"), id: v.id("teamPayments") }),
+  v.object({ table: v.literal("tips"), id: v.id("tips") }),
+  v.object({ table: v.literal("statementLinks"), id: v.id("statementLinks") }),
+  v.object({ table: v.literal("expenses"), id: v.id("expenses") }),
+  v.object({ table: v.literal("expenseRules"), id: v.id("expenseRules") }),
+  v.object({ table: v.literal("expenseImports"), id: v.id("expenseImports") }),
 );
 export type Subject = typeof subjectValidator.type;
 

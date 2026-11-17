@@ -11,6 +11,7 @@ import { aiTables } from "./lib/ai/schema";
 import { billingTables } from "./lib/billing/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
+import { financeTables } from "./lib/finance/schema";
 import { trustTables } from "./lib/trust/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
@@ -55,11 +56,19 @@ export const addressValidator = v.object({
   lng: v.optional(v.number()),
 });
 
-/** How a cleaner is paid. Contractors get a share of the job (basis points); employees an hourly rate. */
+/**
+ * How a cleaner is paid. Contractors: a share of the job (basis points), a named tier's share (the
+ * company's `payTiers`), or a fixed amount per job. Employees: an hourly rate.
+ */
 export const payValidator = v.union(
   v.object({ kind: v.literal("share"), shareBps: v.number() }),
   v.object({ kind: v.literal("hourly"), hourlyCents: v.number() }),
+  v.object({ kind: v.literal("tier"), tierId: v.string() }),
+  v.object({ kind: v.literal("fixed"), perJobCents: v.number() }),
 );
+
+/** A named share of the job the Owner defines, for example "Proven, 40%". Archived tiers keep past pay readable. */
+export const payTierValidator = v.object({ id: v.string(), name: v.string(), shareBps: v.number(), archived: v.optional(v.boolean()) });
 
 /** What a task or approval is about. */
 export const aboutValidator = v.union(
@@ -229,6 +238,8 @@ export default defineSchema({
      * billing.clearLegacyPlans.
      */
     plan: v.optional(v.union(v.literal("operate"), v.literal("expand"), v.literal("growth"), v.literal("scale"))),
+    /** The Owner's named pay tiers (Finance › Team Pay). A job keeps the share that applied when it was worked. */
+    payTiers: v.optional(v.array(payTierValidator)),
     /** AI features the Owner switched off. Absent means on, within the plan's allowances. */
     aiFeatures: v.optional(v.object({ imageGeneration: v.optional(v.boolean()), videoGeneration: v.optional(v.boolean()), photoReview: v.optional(v.boolean()), documentSearch: v.optional(v.boolean()), otherChatModels: v.optional(v.boolean()) })),
     createdAt: v.number(),
@@ -557,6 +568,11 @@ export default defineSchema({
       v.literal("hiring_offer"),
       v.literal("application_decline"),
       v.literal("urgent_outreach"),
+      // Finance, to customers: an invoice's pay link, and a reminder about what is due (convex/lib/finance/outbox.ts).
+      v.literal("invoice_sent"),
+      v.literal("payment_reminder"),
+      // Finance, to a cleaner: the private link to their own earnings statement.
+      v.literal("earnings_statement"),
       // Cleaners workspace, to cleaners and subcontractor contacts.
       v.literal("portal_invitation"),
       v.literal("onboarding_reminder"),
@@ -574,6 +590,9 @@ export default defineSchema({
     /** The provider reported that the address rejected the message. */
     bouncedAt: v.optional(v.number()),
     cleanerId: v.optional(v.id("cleaners")),
+    /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
+    customerId: v.optional(v.id("customers")),
+    invoiceId: v.optional(v.id("invoices")),
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
     linkId: v.optional(v.id("actionLinks")),
@@ -605,6 +624,7 @@ export default defineSchema({
     .index("by_company_job", ["companyId", "jobId"])
     .index("by_company_queued", ["companyId", "queuedAt"])
     .index("by_company_application", ["companyId", "applicationId"])
+    .index("by_company_invoice", ["companyId", "invoiceId"])
     .index("by_company_cleaner", ["companyId", "cleanerId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
@@ -783,6 +803,9 @@ export default defineSchema({
   ...billingTables,
   // Services & Pricing (convex/lib/services/schema.ts).
   ...servicesTables,
+
+  // ── Finance: the cleaning company's own money, never Selestial's subscription (convex/lib/finance) ─
+  ...financeTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({
