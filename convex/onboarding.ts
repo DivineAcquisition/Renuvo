@@ -27,7 +27,8 @@ export const queue = companyQuery({
         applicationId: handoff.applicationId,
         applicant: applicant?.name ?? cleaner?.name ?? null,
         role: handoff.terms.role,
-        approvedTerms: { ...handoff.terms, payWords: payWords(handoff.terms.pay) },
+        // Pay is the Owner's. Everyone else sees the role and the relationship, never the terms.
+        approvedTerms: ctx.role === "owner" ? { ...handoff.terms, payWords: payWords(handoff.terms.pay) } : { role: handoff.terms.role, engagement: handoff.terms.engagement },
         /** What the applicant told us. None of it is verified by being here. */
         information: handoff.information,
         requirements: handoff.requirements,

@@ -25,6 +25,8 @@ import type * as billingUsage from "../billingUsage.js";
 import type * as chat from "../chat.js";
 import type * as chatArtifacts from "../chatArtifacts.js";
 import type * as chatRuns from "../chatRuns.js";
+import type * as cleanerPay from "../cleanerPay.js";
+import type * as cleanerProfile from "../cleanerProfile.js";
 import type * as cleaners from "../cleaners.js";
 import type * as companies from "../companies.js";
 import type * as companyAgreements from "../companyAgreements.js";
@@ -118,6 +120,15 @@ import type * as lib_chat_steps from "../lib/chat/steps.js";
 import type * as lib_chat_titles from "../lib/chat/titles.js";
 import type * as lib_chat_tools from "../lib/chat/tools.js";
 import type * as lib_chat_work from "../lib/chat/work.js";
+import type * as lib_cleaners_attention from "../lib/cleaners/attention.js";
+import type * as lib_cleaners_duplicates from "../lib/cleaners/duplicates.js";
+import type * as lib_cleaners_enroll from "../lib/cleaners/enroll.js";
+import type * as lib_cleaners_personnel from "../lib/cleaners/personnel.js";
+import type * as lib_cleaners_readiness from "../lib/cleaners/readiness.js";
+import type * as lib_cleaners_records from "../lib/cleaners/records.js";
+import type * as lib_cleaners_schedule from "../lib/cleaners/schedule.js";
+import type * as lib_cleaners_settings from "../lib/cleaners/settings.js";
+import type * as lib_cleaners_words from "../lib/cleaners/words.js";
 import type * as lib_compliance_agreements from "../lib/compliance/agreements.js";
 import type * as lib_compliance_ledger from "../lib/compliance/ledger.js";
 import type * as lib_compliance_permissions from "../lib/compliance/permissions.js";
@@ -234,6 +245,7 @@ import type * as messaging from "../messaging.js";
 import type * as onboarding from "../onboarding.js";
 import type * as overview from "../overview.js";
 import type * as permissions from "../permissions.js";
+import type * as personnel from "../personnel.js";
 import type * as properties from "../properties.js";
 import type * as recruiter from "../recruiter.js";
 import type * as recruiterGmailWatch from "../recruiterGmailWatch.js";
@@ -244,9 +256,11 @@ import type * as requests from "../requests.js";
 import type * as retention from "../retention.js";
 import type * as settings from "../settings.js";
 import type * as staff from "../staff.js";
+import type * as subcontractors from "../subcontractors.js";
 import type * as tasks from "../tasks.js";
 import type * as texting from "../texting.js";
 import type * as trust from "../trust.js";
+import type * as workforce from "../workforce.js";
 
 import type {
   ApiFromModules,
@@ -272,6 +286,8 @@ declare const fullApi: ApiFromModules<{
   chat: typeof chat;
   chatArtifacts: typeof chatArtifacts;
   chatRuns: typeof chatRuns;
+  cleanerPay: typeof cleanerPay;
+  cleanerProfile: typeof cleanerProfile;
   cleaners: typeof cleaners;
   companies: typeof companies;
   companyAgreements: typeof companyAgreements;
@@ -365,6 +381,15 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/titles": typeof lib_chat_titles;
   "lib/chat/tools": typeof lib_chat_tools;
   "lib/chat/work": typeof lib_chat_work;
+  "lib/cleaners/attention": typeof lib_cleaners_attention;
+  "lib/cleaners/duplicates": typeof lib_cleaners_duplicates;
+  "lib/cleaners/enroll": typeof lib_cleaners_enroll;
+  "lib/cleaners/personnel": typeof lib_cleaners_personnel;
+  "lib/cleaners/readiness": typeof lib_cleaners_readiness;
+  "lib/cleaners/records": typeof lib_cleaners_records;
+  "lib/cleaners/schedule": typeof lib_cleaners_schedule;
+  "lib/cleaners/settings": typeof lib_cleaners_settings;
+  "lib/cleaners/words": typeof lib_cleaners_words;
   "lib/compliance/agreements": typeof lib_compliance_agreements;
   "lib/compliance/ledger": typeof lib_compliance_ledger;
   "lib/compliance/permissions": typeof lib_compliance_permissions;
@@ -481,6 +506,7 @@ declare const fullApi: ApiFromModules<{
   onboarding: typeof onboarding;
   overview: typeof overview;
   permissions: typeof permissions;
+  personnel: typeof personnel;
   properties: typeof properties;
   recruiter: typeof recruiter;
   recruiterGmailWatch: typeof recruiterGmailWatch;
@@ -491,9 +517,11 @@ declare const fullApi: ApiFromModules<{
   retention: typeof retention;
   settings: typeof settings;
   staff: typeof staff;
+  subcontractors: typeof subcontractors;
   tasks: typeof tasks;
   texting: typeof texting;
   trust: typeof trust;
+  workforce: typeof workforce;
 }>;
 
 /**
