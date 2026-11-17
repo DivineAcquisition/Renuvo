@@ -45,7 +45,7 @@ export async function offerProblem(ctx: QueryCtx | MutationCtx, request: OfferRe
 
   // Standing and skills first, so a person is told the most basic reason.
   const exclusion = assess(facts, jobView, rules);
-  if (exclusion && (exclusion.code === "not_ready" || exclusion.code === "missing_skill")) return `This cleaner ${exclusion.reason}.`;
+  if (exclusion && (exclusion.code === "not_ready" || exclusion.code === "requirements" || exclusion.code === "missing_skill")) return `This cleaner ${exclusion.reason}.`;
   if (staffing(job, assignments).open === 0) return requiredCrew(job) === 1 ? "A cleaner has already accepted this job." : "This job already has every cleaner it needs.";
   if (assignments.some((row) => row.status === "accepted" && row.cleanerId === cleaner._id)) return "This cleaner has already accepted this job.";
   if (assignments.some((row) => row.status === "offered" && row.cleanerId === cleaner._id)) return "This cleaner already has an open offer for this job.";

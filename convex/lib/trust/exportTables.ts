@@ -101,6 +101,21 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "googleAdsSnapshots", index: "by_company_account" },
   { table: "googleDriveTexts", index: "by_company_resource" },
   { table: "googleSettings", index: "by_company" },
+  // Cleaners (convex/lib/cleaners/schema.ts). The export is the Owner's, so pay and personnel records are included.
+  { table: "subcontractors", index: "by_company_status" },
+  { table: "workerAffiliations", index: "by_company_cleaner" },
+  { table: "requirementDefinitions", index: "by_company_key" },
+  { table: "workerRequirements", index: "by_company_cleaner", omit: ["evidence"], why: "Internal file references for uploaded documents; the files themselves are not in the file. Each requirement's state, review and dates are." },
+  { table: "availabilityExceptions", index: "by_company_cleaner_date" },
+  { table: "skillClaims", index: "by_company_cleaner" },
+  { table: "crews", index: "by_company_status" },
+  { table: "crewMemberships", index: "by_company_crew" },
+  { table: "portalLinks", index: "by_company_issued", omit: ["publicId"], why: "Half of a portal link." },
+  { table: "followUps", index: "by_company_cleaner" },
+  { table: "coachingNotes", index: "by_company_cleaner" },
+  { table: "recordDisputes", index: "by_company_cleaner" },
+  { table: "personnelRequests", index: "by_company_status" },
+  { table: "payArrangements", index: "by_company_cleaner" },
 ];
 
 /** Company tables kept out of the export, and why. */
@@ -123,6 +138,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   googleChoices: "A short-lived copy of what Google listed for the Owner to choose from.",
   googleBusy: "A short-lived copy of busy times read from Google Calendar; the calendar itself is the record.",
   googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
+  portalCodes: "Hashes of one-time codes that unlock a portal for ten minutes; nothing in them is about the business.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 

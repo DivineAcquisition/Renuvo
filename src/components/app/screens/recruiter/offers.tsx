@@ -212,7 +212,7 @@ function Onboarding({ row }: { row: NonNullable<ReturnType<typeof useQuery<typeo
             {row.applicant ?? "New worker"}
           </Link>
           <p className="text-xs text-muted-foreground">
-            {row.role} · {row.approvedTerms.payWords} · {row.responsible ? `with ${row.responsible}` : "no one responsible yet"}
+            {row.role} · {"payWords" in row.approvedTerms ? row.approvedTerms.payWords : "pay shown to the Owner"} · {row.responsible ? `with ${row.responsible}` : "no one responsible yet"}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Next: {row.nextAction} · {until(row.dueAt, now).text}

@@ -50,4 +50,8 @@ crons.interval("google conversions for booked jobs", { minutes: 30 }, internal.g
 crons.interval("google drive times for coming visits", { minutes: 30 }, internal.googleRoutes.sweep, {});
 crons.daily("renew gmail push watches", { hourUTC: 9, minuteUTC: 41 }, internal.recruiterGmailWatch.sweep, {});
 
+// Cleaners: routine follow-ups (each re-checked before it goes) and requirements that pass their validity.
+crons.interval("cleaners follow-ups", { minutes: 30 }, internal.cleanerFollowUps.sweep, {});
+crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.requirements.expireDue, {});
+
 export default crons;
