@@ -41,7 +41,7 @@ export async function companyCleaners(ctx: Ctx, companyId: Id<"companies">, incl
 }
 
 export function toRow(row: Doc<"workerRequirements">): RequirementRow {
-  return { key: row.key, status: row.status, expiresAt: row.expiresAt, acceptedAt: row.acceptedAt, submittedAt: row.submittedAt, reviewNote: row.reviewNote, waiver: row.waiver ? { reason: row.waiver.reason, at: row.waiver.at } : undefined };
+  return { key: row.key, status: row.status, expiresAt: row.expiresAt, acceptedAt: row.acceptedAt, submittedAt: row.submittedAt, reviewNote: row.reviewNote, waiver: row.waiver ? { reason: row.waiver.reason, at: row.waiver.at } : undefined, acknowledged: row.acknowledged };
 }
 
 async function grouped<T extends { cleanerId: Id<"cleaners"> }>(rows: T[]): Promise<Map<string, T[]>> {

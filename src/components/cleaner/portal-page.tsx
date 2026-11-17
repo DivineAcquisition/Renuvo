@@ -429,7 +429,7 @@ function StepCard({ step, view, token, onTab }: { step: Step; view: View; token:
         <>
           <p className="text-sm">The office gives you the company&apos;s policies. Ask the office if you do not have them.</p>
           <Problem message={problem} />
-          <Action busy={busy} onPress={() => run(async () => { await acknowledge({ token, key: step.key }); return "Thank you."; })}>
+          <Action busy={busy} onPress={() => run(async () => { await acknowledge({ token, key: step.key, words: step.description ?? "" }); return "Thank you."; })}>
             I have read and agree to them
           </Action>
         </>

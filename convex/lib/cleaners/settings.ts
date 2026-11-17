@@ -46,6 +46,8 @@ export type Definition = {
   forServices: string[];
   cleanerCompletes: boolean;
   agreementDocType?: string;
+  /** For an acknowledgment: when its words last changed. */
+  wordsChangedAt?: number;
   order: number;
   /** True when this is the code's default, not a row the Owner saved. */
   isDefault: boolean;
@@ -97,6 +99,7 @@ export function definitionsOf(company: Pick<Doc<"companies">, "name" | "recruite
         forServices: row.forServices,
         cleanerCompletes: row.cleanerCompletes,
         agreementDocType: row.agreementDocType,
+        wordsChangedAt: row.wordsChangedAt,
         order: row.order,
         isDefault: false,
       }))
