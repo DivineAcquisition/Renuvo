@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CompanyProvider, type Role } from "@/components/app/company";
-import { SETTINGS_SECTIONS, sectionsFor } from "@/lib/app/settings";
+import { menuSections, SETTINGS_SECTIONS, sectionsFor } from "@/lib/app/settings";
 
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -33,7 +33,7 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/app/settings/business",
 const { BusinessDraftProvider } = await import("@/components/app/settings/business-draft");
 const { BusinessSection } = await import("@/components/app/settings/business-sections");
 const { PlanBilling } = await import("@/components/app/settings/billing");
-const { OverviewGrid } = await import("@/components/app/settings/overview");
+const { OverviewGrid, commonTasksFor } = await import("@/components/app/settings/overview");
 const { SettingsNavList } = await import("@/components/app/settings/nav");
 
 const companyId = "company1" as Id<"companies">;
@@ -69,25 +69,39 @@ describe("business settings forms", () => {
     expect(html).toContain("Elm Cleaning");
     expect(html).toContain("78701");
     expect(html).toContain("Save changes");
-    expect(html).not.toContain("Only the Owner changes these");
+    expect(html).toContain("All changes saved.");
     expect(html).not.toMatch(/<input[^>]*disabled=""[^>]*value="Elm Cleaning"/);
+    // The time zone is shown by its place, never as its identifier alone.
+    expect(html).toContain("Central Time (Chicago, Dallas, Houston)");
+    expect(html).not.toContain("IANA");
   });
 
   it("shows everyone else the same values, read only", () => {
     data["settings:business"] = business({ canEdit: false });
     const html = page("office", <BusinessSection />);
     expect(html).toContain("Elm Cleaning");
-    expect(html).toContain("Only the Owner changes these");
     expect(html).not.toContain("Save changes");
     expect(html).toMatch(/<input[^>]*disabled=""[^>]*value="Elm Cleaning"/);
     expect(html).toContain("Monday: 8:00 AM to 5:00 PM");
   });
 
-  it("says empty hours are no limit, not closed", () => {
+  it("says empty hours and areas mean no limit, not closed", () => {
     data["settings:business"] = business({ hours: [], serviceAreas: [], configured: false });
     const html = page("owner", <BusinessSection />);
-    expect(html).toContain("No hours set. Visits can be booked at any time.");
-    expect(html).toContain("not closed");
+    expect(html).toMatch(/<input[^>]*type="radio"[^>]*checked=""[^>]*>[\s\S]*?Customers can book at any time/);
+    expect(html).toContain("You serve every ZIP code.");
+    data["settings:business"] = business({ hours: [], serviceAreas: [], configured: false, canEdit: false });
+    const readOnly = page("office", <BusinessSection />);
+    expect(readOnly).toContain("Customers can book at any time. There is no company-wide limit.");
+  });
+
+  it("shows set hours by day, with closed days said plainly", () => {
+    data["settings:business"] = business();
+    const html = page("owner", <BusinessSection />);
+    expect(html).toContain("Only during the hours below");
+    expect(html).toContain("Monday");
+    expect(html).toContain("Closed for booking");
+    expect(html).toContain('aria-label="Monday opens"');
   });
 });
 
@@ -129,7 +143,8 @@ describe("plan and usage", () => {
     );
     expect(html).toContain("$299<");
     expect(html).toContain("$499<");
-    expect(html).toContain("Billing is not connected");
+    expect(html).toContain("available for your account yet");
+    expect(html).not.toContain("deployment");
     expect(html).toContain("not released yet");
     expect(html).toContain("Included when released");
     expect(html).toContain("not available yet");
@@ -205,7 +220,7 @@ describe("the Usage tab", () => {
     data["billing:planAndUsage"] = connected;
     data["billingUsage:usage"] = { ...base, overview: { updating: false, syncedAt: 1, available: 4994, usedThisCycle: 6, reserved: 2, nextResetAt: Date.UTC(2026, 11, 1), monthly: { granted: 5000, remaining: 4994 }, purchased: { granted: 0, remaining: 0, expiresAt: null }, plan: "operate", zero: false } };
     const html = render();
-    for (const text of ["Available credits", "4,994", "Used this cycle", "Reserved credits", "Next reset", "Monthly credits", "Purchased credits", "Buy credits", "Manage spending", "Usage over time", "Where credits went", "Work delivered", "Activity and credit history", "Recruiting workflow", "Spending controls", "Hard limits", "What costs credits?", "From 200 credits", "Texts, email and calls"]) expect(html, text).toContain(text);
+    for (const text of ["Available", "4,994", "credits left", "Used this cycle", "Reserved", "Resets", "Monthly credits", "Purchased credits", "Buy credits", "Manage spending", "Usage over time", "Agents at work", "Company Chat", "Recruiter", "Work delivered", "Activity and credit history", "Recruiting workflow", "Spending controls", "Hard limits", "What costs credits?", "From 200 credits", "Texts, email and calls"]) expect(html, text).toContain(text);
     // Credits and money are never added together.
     expect(html).not.toMatch(/\$\d/);
     search = "";
@@ -237,7 +252,7 @@ describe("the overview and navigation", () => {
 
   it("links every section the Owner may open, and each one is a real page", () => {
     const html = renderToStaticMarkup(<OverviewGrid sections={sectionsFor("owner")} />);
-    expect(SETTINGS_SECTIONS).toHaveLength(12);
+    expect(SETTINGS_SECTIONS).toHaveLength(12); // Services & pricing moved to Company → Services & Pricing.
     for (const section of SETTINGS_SECTIONS) {
       expect(html, section.id).toContain(`href="${section.path}"`);
       expect(html, section.id).toContain(section.label.replace("&", "&amp;"));
@@ -255,19 +270,35 @@ describe("the overview and navigation", () => {
   });
 
   it("marks the current page and says when a search finds nothing", () => {
-    const html = renderToStaticMarkup(<SettingsNavList sections={SETTINGS_SECTIONS} activePath="/app/settings/dispatch" />);
-    expect(html).toMatch(/href="\/app\/settings\/dispatch"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/app\/settings\/dispatch"/);
-    expect(renderToStaticMarkup(<SettingsNavList sections={[]} activePath="/" />)).toContain("Nothing in Settings matches");
+    const html = renderToStaticMarkup(<SettingsNavList sections={SETTINGS_SECTIONS} activeId="people" />);
+    expect(html).toMatch(/href="\/app\/settings\/people"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/app\/settings\/people"/);
+    expect(renderToStaticMarkup(<SettingsNavList sections={[]} activeId={undefined} />)).toContain("No settings match that");
+  });
+
+  it("groups the menu the way owners think about it", () => {
+    const html = renderToStaticMarkup(<SettingsNavList sections={menuSections(SETTINGS_SECTIONS)} activeId={undefined} />);
+    for (const group of ["Company", "Your agents", "Apps &amp; billing", "Account &amp; privacy"]) expect(html).toContain(group);
+    for (const label of ["Business details", "Agent controls", "Connected apps", "Privacy &amp; messaging", "Selestial terms", "Activity"]) expect(html).toContain(label);
+    // Google and AI features are reached from their parent pages, not listed twice.
+    expect(html).not.toContain('href="/app/settings/google"');
+    expect(html).not.toContain('href="/app/settings/ai"');
+  });
+
+  it("offers owners the common tasks first, and only tasks a role can do", () => {
+    expect(commonTasksFor("owner").map((row) => row.section)).toEqual(["business", "services", "people", "agents", "integrations", "billing"]);
+    // Services left Settings: its task opens Company → Services & Pricing, and it is not a Settings page.
+    expect(commonTasksFor("owner").find((row) => row.section === "services")?.href).toBe("/app/services");
+    expect(SETTINGS_SECTIONS.some((row) => row.id === "services")).toBe(false);
+    expect(commonTasksFor("office")).toEqual([]);
   });
 });
 
 describe("when a part of Settings cannot load", () => {
-  it("says what is likely wrong instead of leaving a blank page", async () => {
+  it("says what to do, and never shows what went wrong inside", async () => {
     const { Unavailable } = await import("@/components/app/settings/guard");
     const html = renderToStaticMarkup(<Unavailable error={new Error("Could not find public function for 'settings:business'\nstack...")} />);
-    expect(html).toContain("could not load");
-    expect(html).toContain("Deploy the latest Convex functions");
-    expect(html).toContain("Could not find public function for &#x27;settings:business&#x27;");
-    expect(html).not.toContain("stack...");
+    expect(html).toContain("couldn&#x27;t load right now");
+    expect(html).toContain("Refresh the page");
+    expect(html).not.toMatch(/Convex|function|stack|deploy/i);
   });
 });

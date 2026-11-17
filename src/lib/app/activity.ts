@@ -1,0 +1,179 @@
+/**
+ * How a recorded event is shown in Settings › Activity: a short title in plain words, and the area it
+ * belongs to. This is a presentation mapping, kept apart from the event names the server records, so
+ * an internal name never reaches the page. An event not listed here falls back to its area's general
+ * title, and an unknown area to a neutral one: nothing is invented and nothing internal is shown.
+ */
+
+export type ActivityArea = "business" | "team" | "agents" | "dispatch" | "jobs" | "hiring" | "customers" | "messages" | "apps" | "billing" | "privacy" | "agreements" | "other";
+
+export const AREA_LABEL: Record<ActivityArea, string> = {
+  business: "Business",
+  team: "Team",
+  agents: "Agents",
+  dispatch: "Dispatch",
+  jobs: "Jobs",
+  hiring: "Hiring",
+  customers: "Customers",
+  messages: "Messages",
+  apps: "Connected apps",
+  billing: "Billing",
+  privacy: "Privacy",
+  agreements: "Agreements",
+  other: "Other",
+};
+
+const TITLES: Record<string, [string, ActivityArea]> = {
+  "company.created": ["Company created", "business"],
+  "company.updated": ["Company details updated", "business"],
+  "company.business_settings_changed": ["Business hours, areas or services updated", "business"],
+  "company.dispatch_settings_changed": ["Dispatch rules changed", "dispatch"],
+  "company.dispatch_policy_changed": ["Dispatch rules changed", "dispatch"],
+  "company.agents_paused_changed": ["Agents paused or resumed", "agents"],
+  "company.ai_features_changed": ["AI features changed", "agents"],
+  "company.plan_changed": ["Plan changed", "billing"],
+  "company.deletion_requested": ["Company deletion requested", "privacy"],
+  "company.checklist_template_saved": ["Job checklist saved", "dispatch"],
+  "company.checklist_template_retired": ["Job checklist retired", "dispatch"],
+  "recruiter.playbook_changed": ["Recruiting rules changed", "hiring"],
+  "permission.changed": ["Agent permission changed", "agents"],
+
+  "member.invited": ["Team member invited", "team"],
+  "member.joined": ["Team member joined", "team"],
+  "member.role_changed": ["Team member's role changed", "team"],
+  "member.removed": ["Team member removed", "team"],
+  "invitation.revoked": ["Invitation cancelled", "team"],
+  "invitation.reissued": ["Invitation sent again", "team"],
+  "invitation.email_sent": ["Invitation emailed", "team"],
+  "invitation.email_failed": ["Invitation email not delivered", "team"],
+  "invitation.link_copied": ["Invitation link copied", "team"],
+  "invitation.accepted": ["Invitation accepted", "team"],
+
+  "application.received": ["Application received", "hiring"],
+  "application.form_submitted": ["Application form submitted", "hiring"],
+  "application.screened": ["Application reviewed", "hiring"],
+  "application.declined": ["Applicant declined", "hiring"],
+  "application.reply_received": ["Applicant replied", "hiring"],
+  "applicant.recorded": ["Applicant added", "hiring"],
+  "interview.requested": ["Interview requested", "hiring"],
+  "interview.confirmed": ["Interview confirmed", "hiring"],
+  "interview.cancelled": ["Interview cancelled", "hiring"],
+  "offer.sent": ["Job offer sent", "hiring"],
+  "offer.withdrawn": ["Job offer withdrawn", "hiring"],
+  "onboarding.completed": ["New hire ready to work", "hiring"],
+  "mailbox.connected": ["Hiring inbox connected", "apps"],
+  "mailbox.disconnected": ["Hiring inbox disconnected", "apps"],
+  "mailbox.sync_failed": ["Hiring inbox couldn't be checked", "apps"],
+
+  "job.created": ["Job scheduled", "jobs"],
+  "job.rescheduled": ["Job moved", "jobs"],
+  "job.edited": ["Job details changed", "jobs"],
+  "job.in_progress": ["Job started", "jobs"],
+  "job.completion_reported": ["Job reported done", "jobs"],
+  "job.closed_without_review": ["Job closed", "jobs"],
+  "assignment.offered": ["Job offered to a cleaner", "dispatch"],
+  "assignment.accepted": ["Cleaner accepted a job", "dispatch"],
+  "assignment.declined": ["Cleaner declined a job", "dispatch"],
+  "assignment.checked_in": ["Cleaner checked in", "dispatch"],
+  "assignment.no_show_confirmed": ["No-show confirmed", "dispatch"],
+  "cleaner.created": ["Cleaner added", "team"],
+  "cleaner.updated": ["Cleaner details updated", "team"],
+  "cleaner.pay_changed": ["Cleaner pay changed", "team"],
+
+  "customer.created": ["Customer added", "customers"],
+  "customer.updated": ["Customer updated", "customers"],
+  "customer.erased": ["Customer details erased", "privacy"],
+  "property.created": ["Property added", "customers"],
+  "property.updated": ["Property updated", "customers"],
+
+  "approval.requested": ["Approval requested", "agents"],
+  "approval.approved": ["Approved", "agents"],
+  "approval.changed": ["Approved with changes", "agents"],
+  "approval.skipped": ["Skipped", "agents"],
+  "approval.expired": ["Approval request closed", "agents"],
+
+  "message.delivered": ["Message delivered", "messages"],
+  "message.failed": ["Message not delivered", "messages"],
+  "message.bounced": ["Email bounced", "messages"],
+  "message.received": ["Message received", "messages"],
+  "suppression.added": ["Added to people who shouldn't receive messages", "privacy"],
+  "suppression.lifted": ["Removed from people who shouldn't receive messages", "privacy"],
+  "consent.disclosure_added": ["Consent wording added", "privacy"],
+  "compliance.identity_updated": ["Business identity updated", "privacy"],
+  "compliance.messaging_updated": ["Messaging settings updated", "privacy"],
+  "export.requested": ["Data export requested", "privacy"],
+  "export.ready": ["Data export ready", "privacy"],
+  "export.downloaded": ["Data export downloaded", "privacy"],
+
+  "texting.requested": ["Texting number requested", "apps"],
+  "texting.approved": ["Texting number approved", "apps"],
+  "texting.active": ["Texting number ready", "apps"],
+  "texting.failed": ["Texting number setup failed", "apps"],
+  "google.connected": ["Google connected", "apps"],
+  "google.disconnected": ["Google disconnected", "apps"],
+  "google.expired": ["Google access ended", "apps"],
+  "google.resource_added": ["Google item shared with Selestial", "apps"],
+  "google.resource_removed": ["Google item removed", "apps"],
+  "google.lead_received": ["Google lead received", "customers"],
+  "integration.requested": ["App requested", "apps"],
+
+  "billing.updated": ["Billing updated", "billing"],
+  "billing.controls_changed": ["Spending controls changed", "billing"],
+  "billing.usage_alert": ["Credit usage alert", "billing"],
+
+  "agreement.created": ["Agreement created", "agreements"],
+  "agreement.sent": ["Agreement sent", "agreements"],
+  "agreement.completed": ["Agreement signed", "agreements"],
+  "agreement.accepted": ["Selestial terms accepted", "agreements"],
+  "agreement.archived": ["Agreement archived", "agreements"],
+};
+
+/** General titles by the first part of an event's name, used when the exact event isn't listed. */
+const AREAS: Record<string, [string, ActivityArea]> = {
+  company: ["Company settings changed", "business"],
+  member: ["Team updated", "team"],
+  invitation: ["Invitation updated", "team"],
+  cleaner: ["Cleaner updated", "team"],
+  application: ["Application updated", "hiring"],
+  applicant: ["Applicant updated", "hiring"],
+  applicant_link: ["Applicant link updated", "hiring"],
+  interview: ["Interview updated", "hiring"],
+  offer: ["Job offer updated", "hiring"],
+  onboarding: ["New hire progress", "hiring"],
+  hiring_need: ["Hiring need updated", "hiring"],
+  recruiter: ["Recruiting updated", "hiring"],
+  mailbox: ["Hiring inbox updated", "apps"],
+  job: ["Job updated", "jobs"],
+  assignment: ["Job assignment updated", "dispatch"],
+  coverage: ["Job coverage updated", "dispatch"],
+  dispatch: ["Dispatch update", "dispatch"],
+  link: ["Cleaner link used", "dispatch"],
+  customer: ["Customer updated", "customers"],
+  property: ["Property updated", "customers"],
+  task: ["Task updated", "agents"],
+  approval: ["Approval updated", "agents"],
+  permission: ["Agent permission changed", "agents"],
+  message: ["Message update", "messages"],
+  email: ["Email update", "messages"],
+  suppression: ["Contact preferences updated", "privacy"],
+  consent: ["Consent updated", "privacy"],
+  compliance: ["Privacy settings updated", "privacy"],
+  export: ["Data export update", "privacy"],
+  texting: ["Texting number update", "apps"],
+  google: ["Google update", "apps"],
+  integration: ["Apps updated", "apps"],
+  billing: ["Billing update", "billing"],
+  agreement: ["Agreement updated", "agreements"],
+  agreement_template: ["Agreement template updated", "agreements"],
+  agreement_file: ["Agreement file updated", "agreements"],
+};
+
+export type ActivityTitle = { title: string; area: ActivityArea; known: boolean };
+
+export function activityTitle(type: string): ActivityTitle {
+  const exact = TITLES[type];
+  if (exact) return { title: exact[0], area: exact[1], known: true };
+  const area = AREAS[type.split(".")[0]];
+  if (area) return { title: area[0], area: area[1], known: false };
+  return { title: "Change recorded", area: "other", known: false };
+}

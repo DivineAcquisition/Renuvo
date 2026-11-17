@@ -25,7 +25,8 @@ export type RecruitingSettings = {
 
 export type RecruitingForm = {
   invitationMode: "review" | "auto";
-  followUpHours: string;
+  /** One entry per reminder, in hours after the invitation, as typed. */
+  followUpHours: string[];
   maxFollowUps: string;
   sendFrom: string;
   sendUntil: string;
@@ -56,7 +57,7 @@ function minuteOf(value: string, end = false): number {
 export function formFrom(settings: RecruitingSettings): RecruitingForm {
   return {
     invitationMode: settings.invitationMode,
-    followUpHours: settings.followUpHours.join(", "),
+    followUpHours: settings.followUpHours.map(String),
     maxFollowUps: String(settings.maxFollowUps),
     sendFrom: time(settings.sendFromMinute),
     sendUntil: settings.sendUntilMinute >= 1440 ? "00:00" : time(settings.sendUntilMinute),
@@ -82,7 +83,7 @@ const number = (value: string) => (value.trim() === "" ? Number.NaN : Number(val
 export function settingsFrom(form: RecruitingForm) {
   return {
     invitationMode: form.invitationMode,
-    followUpHours: form.followUpHours.split(/[\s,;]+/).filter(Boolean).map(Number),
+    followUpHours: form.followUpHours.map((value) => value.trim()).filter(Boolean).map(Number),
     maxFollowUps: number(form.maxFollowUps),
     sendFromMinute: minuteOf(form.sendFrom),
     sendUntilMinute: minuteOf(form.sendUntil, true),
@@ -107,15 +108,24 @@ export function recruitingProblems(form: RecruitingForm): string[] {
   const out: string[] = [];
   const settings = settingsFrom(form);
   const reminders = settings.followUpHours;
-  if (reminders.some((hours) => !Number.isFinite(hours))) out.push("Reminder delays must be numbers of hours.");
-  if (new Set(reminders).size !== reminders.length) out.push("Two reminders are set for the same time.");
-  if (reminders.length > 5) out.push("There can be at most five reminders.");
-  if (Number.isFinite(settings.maxFollowUps) && settings.maxFollowUps > reminders.length) out.push("The number of reminders sent cannot be more than the reminders scheduled.");
-  if (!(settings.sendFromMinute < settings.sendUntilMinute)) out.push("Sending hours must end after they start.");
-  if (settings.sendDays.length === 0) out.push("Choose at least one day messages may be sent.");
-  if (form.requirements.length === 0) out.push("A new worker needs at least one onboarding requirement.");
+  if (reminders.some((hours) => !Number.isInteger(hours))) out.push("Follow-ups: enter each reminder as a whole number of hours, like 48.");
+  else if (reminders.some((hours) => hours < 12 || hours > 720)) out.push("Follow-ups: each reminder must be between 12 hours and 720 hours (30 days) after the invitation.");
+  if (new Set(reminders).size !== reminders.length) out.push("Follow-ups: two reminders are set for the same time.");
+  if (reminders.length > 5) out.push("Follow-ups: there can be at most five reminders.");
+  if (Number.isFinite(settings.maxFollowUps) && settings.maxFollowUps > reminders.length) out.push("Follow-ups: you can't send more reminders than you've scheduled.");
+  if (!(settings.sendFromMinute < settings.sendUntilMinute)) out.push("Messages: the sending window must end after it starts.");
+  if (settings.sendDays.length === 0) out.push("Messages: choose at least one day messages can be sent.");
+  if (form.requirements.length === 0) out.push("New hires: add at least one requirement.");
   const keys = form.requirements.map((row) => row.key.trim().toLowerCase());
-  if (new Set(keys).size !== keys.length) out.push("Two onboarding requirements share a key.");
-  if (form.requirements.some((row) => !row.key.trim() || !row.label.trim())) out.push("Each onboarding requirement needs a key and a label.");
+  if (new Set(keys).size !== keys.length) out.push("New hires: two requirements have the same name.");
+  if (form.requirements.some((row) => !row.label.trim())) out.push("New hires: give every requirement a name.");
   return out;
+}
+
+/** A stable key for a new requirement, from its name. Existing requirements keep theirs. */
+export function requirementKey(label: string, taken: readonly string[]): string {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 36) || "requirement";
+  let key = base;
+  for (let n = 2; taken.includes(key); n += 1) key = `${base}_${n}`;
+  return key;
 }

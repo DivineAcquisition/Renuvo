@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { SETTINGS_PAGES } from "./navigation";
 import { legacyTarget, mayOpen, searchSections, sectionById, sectionForPath, SETTINGS_SECTIONS, sectionsFor } from "./settings";
-import { blankService, draftFrom, hoursSummary, isDirty, leavesSettings, localProblems, parseDollars, payloadFrom, type SavedBusiness } from "./settings-draft";
+import { activityTitle } from "./activity";
+import { addPostalCodes, blankService, draftFrom, hoursProblems, hoursSummary, isDirty, leavesSettings, localProblems, parseDollars, payloadFrom, postalCodeProblem, type SavedBusiness, serviceErrors } from "./settings-draft";
+import { filterTimeZones, timeZoneLabel, timeZoneOptions } from "./timezones";
 
 const saved: SavedBusiness = {
   revision: 2,
@@ -54,7 +56,8 @@ describe("the business draft", () => {
   it("round trips the saved record, and is clean until something changes", () => {
     const draft = draftFrom(saved);
     expect(isDirty(draft, saved)).toBe(false);
-    expect(draft.areas).toBe("78701, 78702");
+    expect(draft.areas).toEqual(["78701", "78702"]);
+    expect(draft.hoursMode).toBe("set");
     expect(draft.services[0].price).toBe("150.00");
     expect(isDirty({ ...draft, name: "Elm & Co" }, saved)).toBe(true);
     expect(payloadFrom(draft)).toMatchObject({ serviceAreas: ["78701", "78702"], services: [{ id: "std-clean", durationMinutes: 120, startingPriceCents: 15000, skills: ["standard"] }] });
@@ -102,10 +105,72 @@ describe("recruiting rules form", () => {
     const { formFrom, recruitingProblems } = await import("./recruiting-form");
     const base = formFrom({ invitationMode: "review", followUpHours: [48, 120], maxFollowUps: 2, sendFromMinute: 540, sendUntilMinute: 1080, sendDays: [1, 2], fromName: "Hiring", replyTo: null, linkTtlDays: 14, offerTtlDays: 7, retentionDays: 365, interviewMinutes: 30, interviewReminderHours: 24, decideWithinHours: 48, onboardingRequirements: [{ key: "agreement", label: "Agreement" }], recruitingRules: null, communicationPolicy: null, escalationRules: null });
     expect(recruitingProblems(base)).toEqual([]);
-    expect(recruitingProblems({ ...base, followUpHours: "48, 48" }).join(" ")).toMatch(/same time/);
-    expect(recruitingProblems({ ...base, sendFrom: "18:00", sendUntil: "09:00" }).join(" ")).toMatch(/end after they start/);
+    expect(recruitingProblems({ ...base, followUpHours: ["48", "48"] }).join(" ")).toMatch(/same time/);
+    expect(recruitingProblems({ ...base, sendFrom: "18:00", sendUntil: "09:00" }).join(" ")).toMatch(/end after it starts/);
     expect(recruitingProblems({ ...base, requirements: [] }).join(" ")).toMatch(/at least one/);
     expect(recruitingProblems({ ...base, sendDays: [] }).join(" ")).toMatch(/at least one day/);
-    expect(recruitingProblems({ ...base, maxFollowUps: "3" }).join(" ")).toMatch(/cannot be more/);
+    expect(recruitingProblems({ ...base, maxFollowUps: "3" }).join(" ")).toMatch(/more reminders than/);
+  });
+});
+
+describe("service area, hours and services in plain words", () => {
+  it("adds ZIP codes one at a time or pasted together, in the server's spelling", () => {
+    expect(addPostalCodes(["78701"], "78702, 78703-1234").areas).toEqual(["78701", "78702", "78703"]);
+    expect(addPostalCodes(["78701"], "78701").added).toBe(0);
+    expect(addPostalCodes([], "m5v 2t6").areas).toEqual(["M5V 2T6"]);
+    expect(addPostalCodes([], "!!").problems).toHaveLength(1);
+    expect(postalCodeProblem("7")).toMatch(/doesn.t look like/);
+  });
+
+  it("sends no hours for 'any time', keeps the windows meanwhile, and refuses 'set' with nothing open", () => {
+    const draft = draftFrom(saved);
+    const any = { ...draft, hoursMode: "any" as const };
+    expect(payloadFrom(any).hours).toEqual([]);
+    expect(any.hours).toHaveLength(1);
+    expect(isDirty(any, saved)).toBe(true);
+    expect(localProblems({ ...draft, hours: [] }).join(" ")).toMatch(/open at least one day/);
+    expect(hoursProblems([{ weekday: 1, startMinute: 600, endMinute: 540 }])[0]).toMatch(/closing time must be after opening time/);
+    expect(hoursProblems([{ weekday: 1, startMinute: 480, endMinute: 720 }, { weekday: 1, startMinute: 700, endMinute: 900 }])[0]).toMatch(/overlap/);
+  });
+
+  it("names a service's problems beside the field they belong to", () => {
+    const service = { ...blankService(() => 0.5), name: "", scope: "", duration: "5", crew: "20", price: "ten" };
+    expect(Object.keys(serviceErrors(service)).sort()).toEqual(["crew", "duration", "name", "price", "scope"]);
+    expect(serviceErrors({ ...service, name: "Standard", scope: "All rooms", duration: "120", crew: "2", price: "150" })).toEqual({});
+  });
+
+  it("is not dirty when only the way a price is typed differs", () => {
+    const draft = draftFrom(saved);
+    draft.services[0] = { ...draft.services[0], price: "150" };
+    expect(isDirty(draft, saved)).toBe(false);
+  });
+});
+
+describe("time zones", () => {
+  it("names zones by their places and finds them by a city", () => {
+    expect(timeZoneLabel("America/Chicago")).toBe("Central Time (Chicago, Dallas, Houston)");
+    expect(timeZoneLabel("Europe/London")).toBe("London");
+    const options = timeZoneOptions("America/Chicago");
+    expect(options[0].region).toBe("Common in the US and Canada");
+    expect(filterTimeZones(options, "dallas").map((row) => row.id)).toContain("America/Chicago");
+    expect(filterTimeZones(options, "zzzz", "America/Chicago").map((row) => row.id)).toEqual(["America/Chicago"]);
+  });
+
+  it("keeps a saved zone even if the browser does not list it", () => {
+    expect(timeZoneOptions("Etc/GMT+5").some((row) => row.id === "Etc/GMT+5")).toBe(true);
+  });
+});
+
+describe("activity in plain words", () => {
+  it("maps known events to titles, and falls back without showing internal names", () => {
+    expect(activityTitle("company.business_settings_changed").title).toBe("Business hours, areas or services updated");
+    expect(activityTitle("company.dispatch_policy_changed").title).toBe("Dispatch rules changed");
+    expect(activityTitle("member.invited").title).toBe("Team member invited");
+    expect(activityTitle("application.received").title).toBe("Application received");
+    const near = activityTitle("agreement.some_future_thing");
+    expect(near).toMatchObject({ title: "Agreement updated", known: false });
+    const unknown = activityTitle("zzz.internal_event_name");
+    expect(unknown.title).toBe("Change recorded");
+    expect(JSON.stringify(unknown)).not.toMatch(/zzz|internal_event/);
   });
 });

@@ -8,7 +8,7 @@ import { AddressField } from "@/components/app/address-field";
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { TextingSetup } from "@/components/app/screens/texting-setup";
-import { PageHeader, Panel } from "@/components/app/shell";
+import { Panel } from "@/components/app/shell";
 import { AlertTriangle, ArrowRight, CircleCheckIcon, Download, ShieldCheck } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,18 +25,13 @@ import type { Id } from "../../../../convex/_generated/dataModel";
  */
 export function ComplianceScreen() {
   return (
-    <>
-      <PageHeader title="Trust & Compliance" lead="Who your business is, how it contacts people, what it has agreed to, and what it is ready to do." />
-      <div className="grid gap-5">
-        <Readiness />
-        <Identity />
-        <Messaging />
-        <Disclosures />
-        <AgentAuthority />
-        <DataAndConnections />
-        <AgreementsPanel />
-      </div>
-    </>
+    <div className="grid gap-5">
+      <Readiness />
+      <Identity />
+      <Messaging />
+      <Disclosures />
+      <DataAndConnections />
+    </div>
   );
 }
 
@@ -478,31 +473,6 @@ function Disclosures() {
         ) : null}
       </Panel>
     </section>
-  );
-}
-
-function AgentAuthority() {
-  return (
-    <Panel title="Agent authority">
-      <div className="grid gap-2 text-sm">
-        <p className="text-muted-foreground">What each agent may do on its own, what needs a person to approve, and what it never does, is set per agent in Settings. Whatever is set there, the sending checks above still apply to every message an agent sends.</p>
-        <ul className="grid gap-1.5 text-strong">
-          <li className="flex gap-2">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />A paused agent sends nothing. A person can still send.
-          </li>
-          <li className="flex gap-2">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />A message is checked when it is planned and again at the moment it is sent, so a STOP that arrives in between still stops it.
-          </li>
-          <li className="flex gap-2">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />Every action an agent takes is written to the activity log with what it was based on.
-          </li>
-        </ul>
-        <Link href="/app/settings/agents" className="inline-flex items-center gap-1 font-medium text-brand-600 underline-offset-2 hover:underline">
-          Open agent permissions
-          <ArrowRight className="size-3.5" aria-hidden />
-        </Link>
-      </div>
-    </Panel>
   );
 }
 

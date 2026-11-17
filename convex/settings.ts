@@ -89,10 +89,18 @@ export const connections = companyQuery({
       .query("mailboxConnections")
       .withIndex("by_company", (q) => q.eq("companyId", ctx.companyId))
       .take(20);
+    // Evidence that sending really works: a recent message the provider confirmed as delivered.
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_company_queued", (q) => q.eq("companyId", ctx.companyId))
+      .order("desc")
+      .take(300);
+    const deliveredAt = (channel: "sms" | "email") => recent.find((row) => (row.channel ?? "sms") === channel && row.status === "delivered")?.deliveredAt ?? null;
     return {
       checkedLive: false as const,
       note: "This shows what the deployment is set up to use. It does not test any outside service.",
       connections: connectionList({ mailboxes: mailboxes.map((row) => ({ provider: row.provider, status: row.status })) }),
+      delivered: { email: deliveredAt("email"), sms: deliveredAt("sms") },
     };
   },
 });
@@ -109,7 +117,7 @@ export const activity = ownerQuery({
     const described = await describeEvents(ctx, ctx.company, result.page, Date.now());
     return {
       ...result,
-      page: described.map((row) => ({ id: row.id, at: row.at, type: row.type, actor: row.actor.label, actorKind: row.actor.kind, text: row.text })),
+      page: described.map((row) => ({ id: row.id, at: row.at, type: row.type, actor: row.actor.label, actorKind: row.actor.kind, text: row.text, described: row.described })),
     };
   },
 });

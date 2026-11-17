@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import { motion } from "motion/react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -9,6 +10,8 @@ import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/a
 import { Panel } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AgentRoster, CreditRing, HeroCard, HeroStat, type RosterRow } from "@/components/app/billing/visuals";
+import { MessageSquareText, Sparkles, TrendingUp, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
@@ -27,7 +30,7 @@ const TASK_SLOT: Record<string, number> = { chat_response_standard: 1, chat_resp
 const color = (slot: number | undefined) => (slot ? `var(--viz-${slot})` : "var(--viz-other)");
 
 /** Settings → Plan & Usage → Usage. The Owner only; the query is never sent for anyone else. */
-export function UsageDashboard() {
+export function UsageDashboard({ afterOverview }: { afterOverview?: React.ReactNode } = {}) {
   const { companyId } = useCompany();
   const [range, setRange] = useState<{ from?: number; to?: number }>({});
   const [filters, setFilters] = useState<{ agent?: string; task?: string; status?: string; memberId?: Id<"members">; search?: string }>({});
@@ -35,13 +38,17 @@ export function UsageDashboard() {
   if (data === undefined) return <Skeleton className="h-[40rem] rounded-2xl" />;
   if (!data.connected)
     return (
-      <Panel title="Usage">
-        <p className="text-sm text-muted-foreground">{data.message}</p>
-      </Panel>
+      <>
+        <Panel title="Usage">
+          <p className="text-sm text-muted-foreground">{data.message}</p>
+        </Panel>
+        {afterOverview}
+      </>
     );
   return (
     <div className="usage-viz grid gap-5">
       <Overview data={data} />
+      {afterOverview}
       <UsageOverTime data={data} range={range} onRange={setRange} />
       <WhereCreditsWent data={data} />
       <WorkDelivered data={data} />
@@ -98,42 +105,42 @@ function Overview({ data }: { data: Usage }) {
           </p>
         </div>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Available credits" value={value(overview.available)} hint="Ready to start new work" />
-        <Stat label="Used this cycle" value={value(overview.usedThisCycle)} hint="Completed, charged work" />
-        <Stat label="Reserved credits" value={n(overview.reserved)} hint="Held for work running now" />
-        <Stat label="Next reset" value={overview.nextResetAt ? date(overview.nextResetAt) : "—"} hint={monthly ? `${n(monthly.granted)} monthly credits` : "Comes with a plan"} />
-      </div>
-      <div className="grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-[2fr_1fr] sm:p-5">
-        <div>
-          <div className="flex items-baseline justify-between gap-2 text-sm">
-            <span className="font-medium text-strong">Monthly credits</span>
-            <span className="tabular-nums text-muted-foreground">{monthly && !overview.updating ? `${n(used)} of ${n(monthly.granted)} used · ${n(monthly.remaining)} left` : "Updating usage"}</span>
+      <HeroCard>
+        <div className="grid items-center gap-6 md:grid-cols-[auto_1fr]">
+          <CreditRing left={overview.updating ? null : overview.available} total={monthly ? monthly.granted + (overview.purchased?.granted ?? 0) : 0} low={share > 0.9} empty={overview.zero} />
+          <div className="grid min-w-0 gap-4">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <HeroStat label="Available" value={value(overview.available)} hint="Ready for new work" tone={overview.zero ? "danger" : share > 0.9 ? "warning" : undefined} />
+              <HeroStat label="Used this cycle" value={value(overview.usedThisCycle)} hint="Completed work" />
+              <HeroStat label="Reserved" value={n(overview.reserved)} hint="Held for work running now" />
+              <HeroStat label="Resets" value={overview.nextResetAt ? date(overview.nextResetAt) : "—"} hint={monthly ? `${n(monthly.granted)} monthly credits` : "Comes with a plan"} />
+            </dl>
+            <div>
+              <div className="flex items-baseline justify-between gap-2 text-xs">
+                <span className="font-medium text-strong">Monthly credits</span>
+                <span className="tabular-nums text-muted-foreground">{monthly && !overview.updating ? `${n(used)} of ${n(monthly.granted)} used` : "Updating usage"}</span>
+              </div>
+              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Monthly credits used" aria-valuemin={0} aria-valuemax={monthly?.granted ?? 0} aria-valuenow={used}>
+                <motion.div className={cn("h-full rounded-full", share >= 1 ? "bg-destructive" : share > 0.8 ? "bg-warning" : "bg-gradient-to-r from-[#b39eff] to-brand-500")} initial={{ width: 0 }} animate={{ width: `${share * 100}%` }} transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }} />
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Unused monthly credits don&apos;t roll over. Purchased credits: {overview.purchased && !overview.updating ? n(overview.purchased.remaining) : "0"} left
+                {overview.purchased?.expiresAt ? `, first expiry ${date(overview.purchased.expiresAt)}` : ""}, used after monthly credits.
+              </p>
+            </div>
+            {data.forecast ? (
+              <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                <TrendingUp aria-hidden className="mt-0.5 size-4 shrink-0 text-brand-600" />
+                <span>{data.forecast}</span>
+              </p>
+            ) : null}
           </div>
-          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Monthly credits used" aria-valuemin={0} aria-valuemax={monthly?.granted ?? 0} aria-valuenow={used}>
-            <div className={cn("h-full rounded-full", share >= 1 ? "bg-destructive" : share > 0.8 ? "bg-warning" : "bg-brand-500")} style={{ width: `${share * 100}%` }} />
-          </div>
-          <p className="mt-1.5 text-xs text-muted-foreground">Resets {date(overview.nextResetAt)}. Unused monthly credits do not roll over.</p>
         </div>
-        <div className="border-t border-border pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4">
-          <p className="text-sm font-medium text-strong">Purchased credits</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums text-strong">{overview.purchased && !overview.updating ? n(overview.purchased.remaining) : overview.updating ? "Updating usage" : "0"}</p>
-          <p className="text-xs text-muted-foreground">{overview.purchased?.expiresAt ? `First expiry ${date(overview.purchased.expiresAt)}` : "No expiry date"} · used after monthly credits</p>
-        </div>
-      </div>
+      </HeroCard>
     </section>
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-strong tabular-nums">{value}</p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
-    </div>
-  );
-}
 
 // ── 2. Usage over time ───────────────────────────────────────────────────────────────────────────
 
@@ -185,12 +192,6 @@ function UsageOverTime({ data, range, onRange }: { data: Usage; range: { from?: 
       ) : (
         <UsageChart data={data} keys={keys} group={group} compare={compare} />
       )}
-      {data.forecast ? (
-        <p className="mt-3 text-sm text-strong">
-          <span className="mr-1.5 rounded bg-muted px-1.5 py-0.5 text-xs font-medium">Estimate</span>
-          {data.forecast}
-        </p>
-      ) : null}
     </Panel>
   );
 }
@@ -312,12 +313,17 @@ function UsageTable({ data, keys, group, compare }: { data: Usage; keys: Key[]; 
 
 // ── 3. Where credits went, 4. Work delivered ─────────────────────────────────────────────────────
 
+/** Which agents (and Company Chat or Creative Studio) did the work, with their live state. */
+const NOT_AGENTS: Record<string, { icon: LucideIcon }> = { chat: { icon: MessageSquareText }, studio: { icon: Sparkles } };
+
 function WhereCreditsWent({ data }: { data: Usage }) {
+  const { companyId } = useCompany();
+  const team = useQuery(api.overview.agents, { companyId });
   const [view, setView] = useState<"agent" | "task">("agent");
   const rows = view === "agent" ? data.byAgent.map((row) => ({ ...row, slot: AGENT_SLOT[row.key] })) : data.byTask.map((row) => ({ ...row, slot: TASK_SLOT[row.key] }));
   return (
     <Panel
-      title="Where credits went"
+      title="Agents at work"
       action={
         <div role="group" aria-label="View" className="flex rounded-lg border border-border p-0.5 text-sm">
           {(["agent", "task"] as const).map((value) => (
@@ -328,10 +334,27 @@ function WhereCreditsWent({ data }: { data: Usage }) {
         </div>
       }
     >
+      {view === "agent" ? (
+        <AgentRoster
+          rows={data.byAgent
+            .filter((row) => row.credits > 0 || row.units > 0)
+            .map((row) => ({
+              key: row.key,
+              label: row.label,
+              agent: NOT_AGENTS[row.key] ? null : (row.key as RosterRow["agent"]),
+              icon: NOT_AGENTS[row.key]?.icon ?? Sparkles,
+              state: team?.agents.find((agent) => agent.agent === row.key)?.state,
+              credits: row.credits,
+              units: row.units,
+              share: row.share,
+              color: color(AGENT_SLOT[row.key]),
+            }))}
+        />
+      ) : (
       <table className="w-full text-sm">
         <thead className="text-left text-xs text-muted-foreground">
           <tr>
-            <th className="py-1 font-medium">{view === "agent" ? "Agent" : "Action"}</th>
+            <th className="py-1 font-medium">Action</th>
             <th className="py-1 text-right font-medium">Completed</th>
             <th className="py-1 text-right font-medium">Credits</th>
             <th className="w-1/3 py-1 pl-4 font-medium">Share of usage</th>
@@ -358,6 +381,7 @@ function WhereCreditsWent({ data }: { data: Usage }) {
           ))}
         </tbody>
       </table>
+      )}
       {view === "agent" ? <p className="mt-2 text-xs text-muted-foreground">Company Chat answers count under Company Chat. Work an agent does is counted once, under that agent, even when it was asked for in Chat.</p> : null}
     </Panel>
   );

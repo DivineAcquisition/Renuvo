@@ -1,6 +1,7 @@
 /**
  * Turns events into sentences a person can check. The words come from the event's type and the records
- * it points at; nothing here is written by a model. An event type without words is shown by its name.
+ * it points at; nothing here is written by a model. An event type without words reads "made a change",
+ * never its internal name.
  */
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
@@ -18,6 +19,8 @@ export type Described = {
   actor: { kind: "member" | "agent" | "system"; label: string; agent: Agent | null };
   /** What happened, without the actor: "offered the visit to Rosa". */
   text: string;
+  /** False when there are no words for this event yet, and `text` is only a neutral "made a change". */
+  described: boolean;
   ref: EventRef | null;
 };
 
@@ -55,7 +58,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
     let text: string | null = null;
     let ref: EventRef | null = null;
     const subject = event.subject;
-    const [thing, what] = event.type.split(".");
+    const what = event.type.split(".")[1];
 
     if (subject.table === "jobs") {
       ref = { kind: "job", id: subject.id };
@@ -153,7 +156,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
       text = { created: "created the company", updated: "updated the company's details", agents_paused_changed: data.paused ? `paused ${String(data.paused)}` : "resumed every agent", dispatch_settings_changed: "changed how Dispatch works", dispatch_policy_changed: "changed Dispatch's day-of and evidence rules", business_settings_changed: data.sections ? `changed business settings (${String(data.sections)})` : "changed business settings", playbook_changed: "changed the recruiting rules" }[what] ?? null;
     }
 
-    out.push({ id: event._id, at: event.at, type: event.type, actor, text: text ?? `${thing} ${what?.replace(/_/g, " ") ?? ""}`.trim(), ref });
+    out.push({ id: event._id, at: event.at, type: event.type, actor, text: text ?? "made a change", described: text !== null, ref });
   }
   return out;
 }

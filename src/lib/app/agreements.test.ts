@@ -17,8 +17,8 @@ describe("Agreements in the navigation", () => {
     expect(item.availability.status).toBe("live");
     for (const tab of AGREEMENT_TABS) expect(existsSync(pageFile(tab.href)), tab.href).toBe(true);
     for (const page of AGREEMENT_PAGES) expect(existsSync(pageFile(page.path)), page.path).toBe(true);
-    expect(sectionById("agreements")?.label).toBe("Selestial Terms & Agreements");
-    expect(sectionById("agreements")?.purpose).toMatch(/Selestial's own Terms/);
+    expect(sectionById("agreements")?.label).toBe("Selestial terms");
+    expect(sectionById("agreements")?.purpose).toMatch(/Selestial terms your company has accepted/);
   });
 
   it("words states and readiness consistently", () => {

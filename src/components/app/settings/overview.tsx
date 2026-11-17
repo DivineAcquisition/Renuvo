@@ -5,35 +5,53 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { AgentAvatar, STATE } from "@/components/app/agent";
+import { ChevronRight } from "@/components/icons";
 import { SectionMark } from "@/components/app/settings/marks";
-import { AGENTS } from "@/lib/app/navigation";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import { legacyTarget, SETTINGS_GROUPS, SETTINGS_ROOT, sectionsFor, type SettingsSection } from "@/lib/app/settings";
+import { legacyTarget, mayOpen, menuSections, sectionById, SETTINGS_GROUPS, sectionsFor, type SettingsRole, type SettingsSection } from "@/lib/app/settings";
 
-/** The overview's cards, without hooks. */
+/** The jobs owners come to Settings for most, in their words, each pointing at the page that does it. */
+const COMMON_TASKS: readonly { section: string; task: string; detail: string; ownerOnly?: boolean; hash?: string; href?: string }[] = [
+  { section: "business", task: "Change your booking hours", detail: "Set the days and times customers can book.", ownerOnly: true },
+  // Services moved out of Settings to Company → Services & Pricing; the task still starts here.
+  { section: "services", href: "/app/services", task: "Update services and prices", detail: "Under Company → Services & Pricing.", ownerOnly: true },
+  { section: "people", task: "Invite a team member", detail: "Give someone in your office access.", ownerOnly: true },
+  { section: "agents", task: "Decide what your agents may do", detail: "Choose what needs your approval first.", ownerOnly: true },
+  { section: "integrations", task: "Connect Google or Gmail", detail: "Calendar, reviews, ads leads and your hiring inbox.", ownerOnly: true },
+  { section: "billing", task: "Check your plan and credits", detail: "Credits left, usage and invoices." },
+];
+
+/** What a role sees first: the common tasks it can actually do. */
+export function commonTasksFor(role: SettingsRole) {
+  return COMMON_TASKS.filter((row) => {
+    if (row.href) return !row.ownerOnly || role === "owner";
+    const section = sectionById(row.section);
+    if (!section || !mayOpen(section, role)) return false;
+    return !row.ownerOnly || role === "owner";
+  });
+}
+
+/** The overview's grouped list, without hooks. Compact rows, not a wall of cards. */
 export function OverviewGrid({ sections }: { sections: readonly SettingsSection[] }) {
   return (
-    <div className="grid gap-6">
+    <div className="grid items-start gap-5 md:grid-cols-2">
       {SETTINGS_GROUPS.map((group) => {
         const rows = sections.filter((row) => row.group === group.id);
         if (rows.length === 0) return null;
         return (
-          <section key={group.id} aria-labelledby={`group-${group.id}`}>
-            <h2 id={`group-${group.id}`} className="mb-2 text-sm font-semibold text-strong">
+          <section key={group.id} aria-labelledby={`group-${group.id}`} className="rounded-2xl border border-border bg-card">
+            <h2 id={`group-${group.id}`} className="border-b border-border px-4 py-2.5 text-sm font-semibold text-strong">
               {group.label}
             </h2>
-            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <ul className="divide-y divide-border">
               {rows.map((row) => (
                 <li key={row.id}>
-                  <Link href={row.path} className="group flex h-full gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 transition-all hover:-translate-y-px hover:border-brand-500/40 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-brand-500/40">
-                    <SectionMark id={row.id} />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-strong">{row.label}</span>
-                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{row.purpose}</span>
-                      <span className="mt-2 block text-xs text-muted-foreground/80">{row.access}</span>
+                  <Link href={row.path} className="group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500">
+                    <SectionMark id={row.id} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-strong">{row.label}</span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{row.purpose}</span>
                     </span>
+                    <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                   </Link>
                 </li>
               ))}
@@ -57,49 +75,53 @@ function useLegacyHash() {
   }, [router]);
 }
 
-/** The eight agents and where each stands. The four not built yet are shown as they are: faded, with nothing to configure. */
-function AgentCrew() {
-  const { companyId } = useCompany();
-  const team = useQuery(api.overview.agents, { companyId });
-  return (
-    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Your agents">
-      {AGENTS.map((agent) => {
-        const live = agent.backendAgent ? team?.agents.find((row) => row.agent === agent.backendAgent) : undefined;
-        const state = agent.backendAgent === null ? "not_built" : live?.state;
-        const words = state ? STATE[state].label : null;
-        return (
-          <li key={agent.id}>
-            <Link href={`${SETTINGS_ROOT}/agents`} className="flex items-center gap-2.5 rounded-xl border border-border bg-card/80 px-2.5 py-2 transition-colors hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/40">
-              <AgentAvatar agent={agent.id} state={state} size="md" />
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-strong">{agent.label}</span>
-                <span className="block truncate text-[0.6875rem] text-muted-foreground">{words ?? (agent.backendAgent && !team ? "Loading…" : "")}</span>
-              </span>
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 export function SettingsOverview() {
-  const { role, name } = useCompany();
+  const { role } = useCompany();
   useLegacyHash();
+  const tasks = commonTasksFor(role);
   return (
     <div className="grid gap-6">
-      <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 sm:p-6">
-        <div aria-hidden className="pointer-events-none absolute -top-24 -right-16 size-64 rounded-full bg-brand-500/10 blur-3xl" />
-        <p className="text-[11px] font-semibold tracking-[0.14em] text-brand-600 uppercase">Settings</p>
-        <h1 className="mt-1 font-heading text-2xl tracking-tight text-strong">How {name} runs, and what its agents may do</h1>
-        <p className="mt-1.5 max-w-2xl text-sm text-muted-foreground">
-          Your rules live here, and the agents follow them. Everyone can read; the Owner makes changes. Agents only act inside the permissions you set, and anything not built yet says so.
+      <header>
+        <h1 className="font-heading text-2xl tracking-tight text-strong">Settings</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          {role === "owner" ? "Set up how your business runs and what your agents may do. Changes take effect once you save them." : "See how your business is set up. Only the Owner can change most settings."}
         </p>
-        <div className="mt-4">
-          <AgentCrew />
-        </div>
+      </header>
+
+      {tasks.length > 0 ? (
+        <section aria-labelledby="common-tasks">
+          <h2 id="common-tasks" className="mb-2 text-sm font-semibold text-strong">
+            Common tasks
+          </h2>
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {tasks.map((row) => {
+              const section = sectionById(row.section);
+              return (
+                <li key={row.task}>
+                  <Link
+                    href={row.href ?? section!.path}
+                    className="group flex h-full items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 transition-colors hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
+                  >
+                    <SectionMark id={section?.id ?? row.section} size="md" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-strong">{row.task}</span>
+                      <span className="block text-xs text-muted-foreground">{row.detail}</span>
+                    </span>
+                    <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
+      <section aria-labelledby="all-settings">
+        <h2 id="all-settings" className="mb-2 text-sm font-semibold text-strong">
+          All settings
+        </h2>
+        <OverviewGrid sections={menuSections(sectionsFor(role))} />
       </section>
-      <OverviewGrid sections={sectionsFor(role)} />
     </div>
   );
 }
