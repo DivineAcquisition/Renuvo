@@ -9,6 +9,7 @@ import { owned } from "./lib/access";
 import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
 import { payWords } from "./lib/recruiter/offers";
 import { completeHandoff, recordRequirement } from "./lib/recruiter/handoff";
+import { cleanerReadiness } from "./lib/cleaners/records";
 
 export const queue = companyQuery({
   args: { status: v.optional(v.union(v.literal("open"), v.literal("complete"), v.literal("cancelled"))) },
@@ -27,7 +28,8 @@ export const queue = companyQuery({
         applicationId: handoff.applicationId,
         applicant: applicant?.name ?? cleaner?.name ?? null,
         role: handoff.terms.role,
-        approvedTerms: { ...handoff.terms, payWords: payWords(handoff.terms.pay) },
+        // Pay is the Owner's. Everyone else sees the role and the relationship, never the terms.
+        approvedTerms: ctx.role === "owner" ? { ...handoff.terms, payWords: payWords(handoff.terms.pay) } : { role: handoff.terms.role, engagement: handoff.terms.engagement },
         /** What the applicant told us. None of it is verified by being here. */
         information: handoff.information,
         requirements: handoff.requirements,
@@ -36,9 +38,9 @@ export const queue = companyQuery({
         dueAt: handoff.dueAt,
         status: handoff.status,
         cleanerId: handoff.cleanerId,
-        /** Dispatch reads this, and only this, before offering work. */
         workerStatus: cleaner?.status ?? null,
-        dispatchReady: cleaner?.status === "ready",
+        /** Ready for assignments: an active engagement with every requirement for work met (lib/cleaners/readiness.ts). */
+        dispatchReady: cleaner ? (await cleanerReadiness(ctx, ctx.company, cleaner, Date.now())).readiness.eligible : false,
       });
     }
     return out;

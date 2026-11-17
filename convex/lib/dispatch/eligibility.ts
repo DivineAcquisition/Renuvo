@@ -33,6 +33,12 @@ export type CleanerFacts = {
   timeOff: Span[];
   /** Other jobs this cleaner has an offer on or has accepted. */
   held: Span[];
+  /** Requirements that block work and are not met for this job's service, by name (lib/cleaners/readiness.ts). */
+  blockers?: string[];
+  /** Dates the cleaner said they cannot work, outside their weekly pattern. */
+  exceptionsOff?: Span[];
+  /** Times the cleaner said they can work on a date, outside their weekly pattern. */
+  extraAvailable?: Span[];
   endedForJob: Ended | null;
   /** Visits for this customer the cleaner accepted before. */
   priorVisitsForCustomer: number;
@@ -45,6 +51,8 @@ export const DISPATCH_RULES: Rules = { serviceArea: true, travelBuffer: true, en
 
 export type ExclusionCode =
   | "not_ready"
+  | "requirements"
+  | "date_exception"
   | "already_asked"
   | "missing_skill"
   | "outside_area"
@@ -70,13 +78,17 @@ const ENDED_WORDS: Record<Ended, string> = {
 /** The first rule this cleaner fails for this job, or null when they can be asked. */
 export function assess(cleaner: CleanerFacts, job: JobFacts, rules: Rules = DISPATCH_RULES): Exclusion | null {
   if (cleaner.status !== "ready") return { code: "not_ready", reason: "is not marked ready for work" };
+  // Active is not eligible: every requirement for work must be met, the same readiness the Cleaners workspace shows.
+  if (cleaner.blockers && cleaner.blockers.length > 0) return { code: "requirements", reason: `has not met what is needed before work: ${cleaner.blockers.map((label) => label.toLowerCase()).join(", ")}` };
   if (rules.ended && cleaner.endedForJob) return { code: "already_asked", reason: ENDED_WORDS[cleaner.endedForJob], ended: cleaner.endedForJob };
   const missing = job.requiredSkills.filter((skill) => !cleaner.skills.includes(skill));
   if (missing.length > 0) return { code: "missing_skill", reason: `does not have a skill the job needs: ${missing.join(", ")}` };
   if (rules.serviceArea && !cleaner.serviceAreas.includes(job.postalCode)) {
     return { code: "outside_area", reason: cleaner.serviceAreas.length === 0 ? "has no service area set" : `does not work in ${job.postalCode}` };
   }
-  if (!withinWeeklyWindows(cleaner.windows, job.span, job.timezone)) return { code: "outside_hours", reason: "has not said they can work at that time" };
+  const extra = (cleaner.extraAvailable ?? []).some((span) => span.startsAt <= job.span.startsAt && job.span.endsAt <= span.endsAt);
+  if (!extra && !withinWeeklyWindows(cleaner.windows, job.span, job.timezone)) return { code: "outside_hours", reason: "has not said they can work at that time" };
+  if ((cleaner.exceptionsOff ?? []).some((off) => overlaps(off, job.span))) return { code: "date_exception", reason: "said they cannot work that day" };
   if (cleaner.timeOff.some((off) => overlaps(off, job.span))) return { code: "time_off", reason: "has time off then" };
   if (cleaner.held.some((other) => overlaps(other, job.span))) return { code: "already_booked", reason: "already has an offer or a job that overlaps this one" };
   if (rules.travelBuffer && job.travelBufferMinutes > 0) {

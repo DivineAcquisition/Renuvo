@@ -7,6 +7,9 @@ import { nextRole } from "./crew";
 import { CREW_PAY_DEFAULT, payFor, type CrewPay } from "./pay";
 import { crewPayOf } from "./policy";
 import { dispatchSettings } from "./settings";
+import { localParts } from "../availability";
+import { cleanerReadiness, companyFacts, readinessOf, type CompanyFacts } from "../cleaners/records";
+import { exceptionSpan } from "../cleaners/schedule";
 
 type Db = QueryCtx | MutationCtx;
 
@@ -93,7 +96,26 @@ export async function jobHistory(ctx: Db, job: Doc<"jobs">, assignments: Doc<"as
   return { prior, ended, crewPay: { rule: company ? crewPayOf(company) : CREW_PAY_DEFAULT, role: nextRole(assignments) } };
 }
 
-export async function cleanerFacts(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"cleaners">, history: JobHistory): Promise<CleanerFacts> {
+/** Readiness for this job: its service and skills, judged at the job's start, so a document that lapses before then counts as lapsed. */
+async function jobBlockers(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"cleaners">, known?: { company: Doc<"companies">; facts: CompanyFacts }): Promise<string[]> {
+  const company = known?.company ?? (await ctx.db.get(job.companyId));
+  if (!company) return [];
+  const service = { name: job.serviceType, skills: job.requiredSkills };
+  const at = Math.max(job.startsAt, Date.now());
+  const readiness = known ? readinessOf(cleaner, known.facts, company, at, service) : (await cleanerReadiness(ctx, company, cleaner, at, service)).readiness;
+  return readiness.blockers.map((view) => view.label);
+}
+
+async function exceptionsAround(ctx: Db, job: Doc<"jobs">, cleanerId: Id<"cleaners">, timezone: string): Promise<{ off: Span[]; extra: Span[] }> {
+  const day = localParts(job.startsAt, timezone).day;
+  const rows = await ctx.db
+    .query("availabilityExceptions")
+    .withIndex("by_company_cleaner_date", (q) => q.eq("companyId", job.companyId).eq("cleanerId", cleanerId).gte("date", day).lte("date", localParts(job.endsAt, timezone).day))
+    .take(20);
+  return { off: rows.filter((row) => row.kind === "unavailable").map((row) => exceptionSpan(row, timezone)), extra: rows.filter((row) => row.kind === "available").map((row) => exceptionSpan(row, timezone)) };
+}
+
+export async function cleanerFacts(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"cleaners">, history: JobHistory, known?: { company: Doc<"companies">; facts: CompanyFacts }): Promise<CleanerFacts> {
   const windows = await ctx.db
     .query("availabilityWindows")
     .withIndex("by_company_cleaner", (q) => q.eq("companyId", job.companyId).eq("cleanerId", cleaner._id))
@@ -111,6 +133,12 @@ export async function cleanerFacts(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"clea
     windows: windows.map((row) => ({ weekday: row.weekday, startMinute: row.startMinute, endMinute: row.endMinute })),
     timeOff: timeOff.map((row) => ({ startsAt: row.startsAt, endsAt: row.endsAt })),
     held: await heldSpans(ctx, job.companyId, cleaner._id, job._id),
+    blockers: await jobBlockers(ctx, job, cleaner, known),
+    ...(await (async () => {
+      const timezone = known?.company.timezone ?? (await ctx.db.get(job.companyId))?.timezone ?? "UTC";
+      const around = await exceptionsAround(ctx, job, cleaner._id, timezone);
+      return { exceptionsOff: around.off, extraAvailable: around.extra };
+    })()),
     endedForJob: history.ended.get(cleaner._id) ?? null,
     priorVisitsForCustomer: history.prior.get(cleaner._id) ?? 0,
     pay: payFor(cleaner, job, history.crewPay),
@@ -123,7 +151,10 @@ export async function readyCleanerFacts(ctx: Db, job: Doc<"jobs">, history: JobH
     .query("cleaners")
     .withIndex("by_company_status", (q) => q.eq("companyId", job.companyId).eq("status", "ready"))
     .take(200);
+  // The company's requirement records are read once for every cleaner, not once each.
+  const company = (await ctx.db.get(job.companyId))!;
+  const known = { company, facts: await companyFacts(ctx, company) };
   const facts: CleanerFacts[] = [];
-  for (const cleaner of cleaners) facts.push(await cleanerFacts(ctx, job, cleaner, history));
+  for (const cleaner of cleaners) facts.push(await cleanerFacts(ctx, job, cleaner, history, known));
   return { cleaners, facts };
 }

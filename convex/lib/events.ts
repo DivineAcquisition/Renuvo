@@ -17,6 +17,10 @@ export const actorValidator = v.union(
   v.object({ kind: v.literal("cleaner"), cleanerId: v.id("cleaners"), linkId: v.id("actionLinks") }),
   /** An applicant acting through an applicant link. */
   v.object({ kind: v.literal("applicant"), applicantId: v.id("applicants"), linkId: v.id("applicantLinks") }),
+  /** A cleaner acting through their Cleaners portal or a task link. */
+  v.object({ kind: v.literal("cleaner_portal"), cleanerId: v.id("cleaners"), linkId: v.id("portalLinks") }),
+  /** A subcontractor company's authorized contact acting through their portal link. */
+  v.object({ kind: v.literal("subcontractor_contact"), subcontractorId: v.id("subcontractors"), linkId: v.id("portalLinks") }),
 );
 export type Actor = typeof actorValidator.type;
 
@@ -58,6 +62,17 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("agreementTemplates"), id: v.id("agreementTemplates") }),
   v.object({ table: v.literal("agreementSignatureRequests"), id: v.id("agreementSignatureRequests") }),
   v.object({ table: v.literal("agreementFiles"), id: v.id("agreementFiles") }),
+  // Cleaners (convex/lib/cleaners/schema.ts).
+  v.object({ table: v.literal("subcontractors"), id: v.id("subcontractors") }),
+  v.object({ table: v.literal("requirementDefinitions"), id: v.id("requirementDefinitions") }),
+  v.object({ table: v.literal("workerRequirements"), id: v.id("workerRequirements") }),
+  v.object({ table: v.literal("crews"), id: v.id("crews") }),
+  v.object({ table: v.literal("portalLinks"), id: v.id("portalLinks") }),
+  v.object({ table: v.literal("followUps"), id: v.id("followUps") }),
+  v.object({ table: v.literal("coachingNotes"), id: v.id("coachingNotes") }),
+  v.object({ table: v.literal("recordDisputes"), id: v.id("recordDisputes") }),
+  v.object({ table: v.literal("personnelRequests"), id: v.id("personnelRequests") }),
+  v.object({ table: v.literal("skillClaims"), id: v.id("skillClaims") }),
   // Company Chat (convex/lib/chat/schema.ts).
   v.object({ table: v.literal("chatArtifacts"), id: v.id("chatArtifacts") }),
   v.object({ table: v.literal("companyKnowledge"), id: v.id("companyKnowledge") }),

@@ -89,13 +89,17 @@ export const update = managerMutation({
   },
 });
 
-/** A person decides a cleaner's standing: ready for work, paused, or ended. */
+/** A person decides routine changes to a cleaner's engagement: active ("ready") or paused. */
 export const setStatus = managerMutation({
   args: { cleanerId: v.id("cleaners"), status: cleanerStatusValidator },
   handler: async (ctx, args) => {
     const cleaner = await owned(ctx, args.cleanerId);
     if (cleaner.status === args.status) return null;
-    await ctx.db.patch(cleaner._id, { status: args.status });
+    // Suspending, ending, and leaving a suspension or an ending are personnel decisions (convex/personnel.ts).
+    if (args.status === "suspended" || args.status === "ended" || cleaner.status === "suspended" || cleaner.status === "ended") {
+      throw userError("Suspending or ending an engagement, and undoing either, is a personnel request an authorized person decides.");
+    }
+    await ctx.db.patch(cleaner._id, { status: args.status, statusChangedAt: Date.now() });
     await recordEvent(ctx, {
       companyId: ctx.companyId,
       type: "cleaner.status_changed",

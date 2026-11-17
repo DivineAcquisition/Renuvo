@@ -264,7 +264,8 @@ describe("Recruiter: screening, interviews, offers and the handoff to onboarding
     expect(detail.offers[0]).toMatchObject({ status: "accepted", agreement: { status: "not_started" } });
     const [handoff] = await s.as.query(api.onboarding.queue, { companyId: s.companyId });
     expect(handoff).toMatchObject({ applicant: "Maria Lopez", role: "House Cleaner", responsible: "owner-a", status: "open", workerStatus: "onboarding", dispatchReady: false, approvedTerms: { payWords: "45% of each job's price", engagement: "contractor" } });
-    expect(handoff.requirements.map((row) => [row.key, row.status])).toEqual([["agreement", "outstanding"], ["documents", "outstanding"], ["training", "outstanding"], ["equipment", "outstanding"], ["payment_setup", "outstanding"]]);
+    // The checklist is the company's onboarding template, the same list the cleaner's profile shows (weekly hours and areas stay on the record).
+    expect(handoff.requirements.map((row) => [row.key, row.status])).toEqual([["contact", "outstanding"], ["agreement", "outstanding"], ["documents", "outstanding"], ["policies", "outstanding"], ["training", "outstanding"], ["equipment", "outstanding"], ["tax_form", "outstanding"], ["payment_setup", "outstanding"]]);
     expect(handoff.information.every((fact) => fact.from === "form")).toBe(true);
     expect((await s.tasks()).some((task) => task.title === "Onboard Maria Lopez (House Cleaner)" && task.handoffTo === "team_coordinator")).toBe(true);
 
@@ -278,8 +279,14 @@ describe("Recruiter: screening, interviews, offers and the handoff to onboarding
 
     // Requirements are recorded one by one, by a named person. The handoff cannot be closed early, and only the Owner closes it.
     const manager = await s.manager();
-    expect(await refusal(s.as.mutation(api.onboarding.complete, { companyId: s.companyId, handoffId: handoff.handoffId }))).toContain("Still outstanding: agreement completed");
-    for (const row of handoff.requirements) await manager.mutation(api.onboarding.record, { companyId: s.companyId, handoffId: handoff.handoffId, requirement: row.key, done: true });
+    expect(await refusal(s.as.mutation(api.onboarding.complete, { companyId: s.companyId, handoffId: handoff.handoffId }))).toContain("Still outstanding: contact details");
+    // The template names who reviews each step: the Owner records the agreement, tax form and payment details.
+    expect(await refusal(manager.mutation(api.onboarding.record, { companyId: s.companyId, handoffId: handoff.handoffId, requirement: "tax_form", done: true }))).toBe("Not allowed.");
+    for (const row of handoff.requirements) await (["agreement", "tax_form", "payment_setup"].includes(row.key) ? s.as : manager).mutation(api.onboarding.record, { companyId: s.companyId, handoffId: handoff.handoffId, requirement: row.key, done: true });
+    // Recorded once, seen in both places: the cleaner's profile has the same steps met.
+    const profile = await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: handoff.cleanerId, asOf: Date.now() });
+    expect(profile.requirements.filter((row) => row.key !== "availability" && row.key !== "service_areas").every((row) => row.met)).toBe(true);
+    expect(profile.hiredFrom?.applicationId).toBe(applicationId);
     expect(await refusal(manager.mutation(api.onboarding.complete, { companyId: s.companyId, handoffId: handoff.handoffId }))).toBe("Not allowed.");
     await s.as.mutation(api.onboarding.complete, { companyId: s.companyId, handoffId: handoff.handoffId });
     expect(await s.detail(applicationId)).toMatchObject({ stage: "closed", closure: { reason: "hired" } });
@@ -287,6 +294,9 @@ describe("Recruiter: screening, interviews, offers and the handoff to onboarding
     const [done] = await s.as.query(api.onboarding.queue, { companyId: s.companyId, status: "complete" });
     expect(done).toMatchObject({ workerStatus: "onboarding", dispatchReady: false });
     await s.as.mutation(api.cleaners.setStatus, { companyId: s.companyId, cleanerId: handoff.cleanerId, status: "ready" });
+    // Active is not ready: their weekly hours are still missing, and Dispatch never offers a time they did not give.
+    expect((await s.as.query(api.onboarding.queue, { companyId: s.companyId, status: "complete" }))[0].dispatchReady).toBe(false);
+    await s.as.mutation(api.availability.setWeek, { companyId: s.companyId, cleanerId: handoff.cleanerId, windows: [{ weekday: 2, startMinute: 480, endMinute: 1020 }] });
     expect((await s.as.query(api.onboarding.queue, { companyId: s.companyId, status: "complete" }))[0].dispatchReady).toBe(true);
   });
 

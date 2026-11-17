@@ -23,10 +23,13 @@ import { unseal } from "./lib/recruiter/secrets";
 import { messagingProvider } from "./lib/messaging/provider";
 import { afterApplicantMessage } from "./lib/recruiter/delivery";
 import { applicantLinkPath, applicantLinkState } from "./lib/recruiter/links";
+import { cleanerMessageAtSend } from "./lib/cleaners/outbox";
+import { portalUrl } from "./lib/cleaners/portal";
 import { sendProblem, type ApplicantPurpose } from "./lib/recruiter/outbox";
 import { recruiterSettings } from "./lib/recruiter/settings";
 
 const MAX_ATTEMPTS = 3;
+const ROUTINE_CLEANER: readonly Doc<"messages">["purpose"][] = ["portal_invitation", "onboarding_reminder", "availability_check", "idle_check_in", "verification_code"];
 const STUCK_AFTER = 5 * 60 * 1000;
 
 /**
@@ -47,7 +50,7 @@ async function intentOf(ctx: MutationCtx, message: Doc<"messages">): Promise<Sen
  * it was withdrawn, or the sending policy refused it or held it again.
  */
 export const claim = internalMutation({
-  args: { messageId: v.id("messages") },
+  args: { messageId: v.id("messages"), code: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const message = await ctx.db.get(args.messageId);
     if (!message || (message.status !== "queued" && message.status !== "held") || !message.to) return null;
@@ -85,6 +88,22 @@ export const claim = internalMutation({
     }
     let fromName = "";
     let via: { connectionId: Id<"mailboxConnections">; address: string } | null = null;
+    if (message.portalLinkId || message.followUpId || ROUTINE_CLEANER.includes(message.purpose)) {
+      // A Cleaners message is checked once more as it goes: the link still open, the follow-up still needed.
+      const checked = await cleanerMessageAtSend(ctx, message, (token) => portalUrl(token));
+      if (!checked.ok) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: checked.problem });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        return null;
+      }
+      body = checked.body;
+    }
+    // A sign-in code travels only in the scheduled call, never in the stored message.
+    if (args.code && message.purpose === "verification_code") body = body.replace("{code}", args.code);
+    if (!message.applicationId && (message.channel ?? "sms") === "email") {
+      const company = await ctx.db.get(message.companyId);
+      fromName = (await readProfile(ctx, message.companyId)).messaging.senderName ?? company?.name ?? "";
+    }
     if (message.applicationId) {
       // A message to an applicant passes the send gate again at the moment it goes: they may have submitted, withdrawn or asked a question since it was planned.
       const application = await ctx.db.get(message.applicationId);
@@ -191,9 +210,9 @@ async function sendThroughMailbox(
 }
 
 export const deliver = internalAction({
-  args: { messageId: v.id("messages") },
+  args: { messageId: v.id("messages"), code: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const claimed = await ctx.runMutation(internal.messaging.claim, { messageId: args.messageId });
+    const claimed = await ctx.runMutation(internal.messaging.claim, { messageId: args.messageId, code: args.code });
     if (!claimed) return null;
     if (claimed.channel === "email" && claimed.via) {
       const result = await sendThroughMailbox(ctx, args.messageId, claimed.via, claimed);
