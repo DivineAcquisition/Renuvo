@@ -29,7 +29,7 @@ import { runTool as recruiterTool, type ToolInput as RecruiterInput, type ToolNa
 import { isManager, isOwner, type Role } from "../roles";
 import { AGENTS, type Agent } from "../statuses";
 import { liveTaskByKey, openTask } from "../taskState";
-import { addLocalDays, clock, dayName, startOfLocalDay } from "../time";
+import { addLocalDays, clock, dayName } from "../time";
 import { createArtifact, readableArtifact, reviseArtifact, setArtifactState, STATE_WORDS, unresolvedFields, versionOf } from "./artifacts";
 import { CalcError, evaluate } from "./calc";
 import { check, jsonSchema, stableHash, type Field } from "./fields";
@@ -37,6 +37,7 @@ import { compareScenarios, PricingError, type PricingInput } from "./pricing";
 import { AGREEMENT_TOOLS } from "./agreementTools";
 import { CLEANER_TOOLS } from "./cleanerTools";
 import { GOOGLE_TOOLS } from "./googleTools";
+import { localDay } from "./days";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
 import { featureOn, ownedAsset, queueGeneration, settingFor, capabilityFor, checkedParams } from "../ai/media";
@@ -95,14 +96,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 // ── Small helpers ────────────────────────────────────────────────────────────────────────────────
 
-/** "2027-03-02" on the company's clock, as the instant that day begins. */
-export function localDay(date: string, timezone: string): number {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) throw userError(`"${date}" is not a date written as YYYY-MM-DD.`);
-  const noon = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
-  if (Number.isNaN(noon)) throw userError(`"${date}" is not a date.`);
-  return startOfLocalDay(noon, timezone);
-}
+export { localDay };
 
 /** "2027-03-02" or "2027-03-02T15:30" on the company's clock. */
 function localInstant(value: string, timezone: string): number {
