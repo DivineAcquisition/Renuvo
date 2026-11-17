@@ -839,6 +839,27 @@ export function priceSummary(spec: Spec): string {
   }
 }
 
+/**
+ * The lowest price a customer could see advertised for this service, in cents, when the method has one:
+ * a fixed price, the base of bedrooms and bathrooms, the smallest size band, or a walkthrough's "from"
+ * price. Rates (hourly, per area, per unit) and monthly packages have no single starting price: null.
+ */
+export function startingCents(spec: Spec): number | null {
+  const p = spec.pricing;
+  switch (p.method) {
+    case "fixed":
+      return p.amountCents;
+    case "bed_bath":
+      return p.baseCents;
+    case "size_bands":
+      return p.bands.reduce<number | null>((min, b) => (min === null || b.amountCents < min ? b.amountCents : min), null);
+    case "custom_quote":
+      return p.fromCents;
+    default:
+      return null;
+  }
+}
+
 /** Minutes of labor for a usual visit, for scheduling defaults. */
 export function usualLaborMinutes(spec: Spec): number {
   const p = spec.pricing;

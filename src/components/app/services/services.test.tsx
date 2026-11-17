@@ -28,7 +28,8 @@ const { ChangeReview, beforeAfter } = await import("./changes");
 const { QuoteLines, ProfitPanel, CustomerView, TeamView } = await import("./preview");
 const { MoneyInput, Toggle, Stepper, InfoTip } = await import("./shared");
 const { PricingStep, ExtrasStep } = await import("./steps");
-const { marginStanding } = await import("./visuals");
+const { marginStanding, PriceStrip } = await import("./visuals");
+const { setupSteps } = await import("./home");
 
 const companyId = "company1" as Id<"companies">;
 function render(role: Role, node: React.ReactNode) {
@@ -226,6 +227,68 @@ describe("pricing shown, not described", () => {
     expect(html).toContain("+25%");
     expect(html).toContain("Off: prices never change with demand");
     expect(html).toContain('aria-label="About Demand pricing"');
+  });
+});
+
+describe("phase two: less to scan", () => {
+  const edit = () => undefined;
+
+  it("folds each extra into a row with its price, or Included when the service already covers it", () => {
+    const html = renderToStaticMarkup(<ExtrasStep spec={spec({ addOns: [{ id: "oven-extra", label: "Oven interior", priceCents: 3500, per: "visit", laborMinutes: 30, maxQuantity: 1, coversItemId: "oven" }, { id: "fridge", label: "Inside the fridge", priceCents: 3500, per: "visit", laborMinutes: 30, maxQuantity: 1 }] })} edit={edit} disabled={false} />);
+    expect(html).toMatch(/aria-expanded="false"[^>]*>.*?Inside the fridge.*?\$35\.00 per visit/);
+    expect(html).toMatch(/Oven interior.*?>Included</);
+    expect(html).not.toContain(">Already included as<");
+  });
+
+  it("counts the way to a first live service, and says what is next", () => {
+    const steps = setupSteps(catalog({ setupDone: true, services: [{ id: "a", key: "a", name: "A", category: "residential", status: "draft", origin: "manual", live: null, draft: { revision: 1, updatedAt: 1, by: "Dana", step: "basics", name: "A", summary: "", illustrative: false, blockers: 0 }, openChange: null }] }) as never);
+    expect(steps.map((s) => s.done)).toEqual([true, true, false, false]);
+    data["services:catalog"] = catalog({ setupDone: false });
+    const html = render("owner", <ServicesHome />);
+    expect(html).toContain('aria-label="0 of 4 done"');
+    expect(html).toContain("next: tell Selestial your costs");
+  });
+
+  it("draws comparable prices on one line, named in full, with the company's starting price marked", () => {
+    const html = renderToStaticMarkup(<PriceStrip points={[{ key: "a", cents: 12900, label: "North" }, { key: "b", cents: 14500, label: "East" }, { key: "c", cents: 16900, label: "South" }]} low={12900} high={16900} unit="per visit" kind="Advertised starting prices" mine={{ cents: 13500, label: "Your starting price" }} />);
+    expect(html).toContain('aria-label="Advertised starting prices per visit: $129.00, $145.00, $169.00. Range $129.00 to $169.00. Your starting price: $135.00."');
+    expect(html).toContain("Your starting price $135.00");
+  });
+
+  it("lists the prices still the template's on the Review step, each with a way to change it", () => {
+    const standard = TEMPLATES.find((t) => t.id === "res-standard")!.spec;
+    data["services:service"] = {
+      service: { id: "svc1", key: "standard-clean", name: "Standard clean", category: "residential", status: "draft", origin: "template", templateId: "res-standard", publishedVersion: null, publishedAt: null },
+      live: null,
+      draft: { spec: { ...standard, illustrative: true }, revision: 1, baseVersion: null, step: "review", updatedAt: 1, by: "Dana", rollbackOf: null },
+      versions: [],
+      changes: [],
+      canDraft: true,
+      canPublish: true,
+    };
+    data["services:profile"] = { costs: emptyCosts() };
+    const html = render("owner", <ServiceBuilder serviceId="svc1" />);
+    expect(html).toContain('aria-label="Prices still from the template"');
+    expect(html).toMatch(/Base price <span[^>]*>\$120\.00/);
+    expect(html).toContain("Change in Pricing");
+    expect(html).toContain("These prices are right for my market");
+    expect(html).toMatch(/\d+ prices are still the template&#x27;s example/);
+  });
+
+  it("marks steps with nothing to fix, and shows phone progress", () => {
+    data["services:service"] = {
+      service: { id: "svc1", key: "standard-clean", name: "Standard clean", category: "residential", status: "draft", origin: "manual", templateId: null, publishedVersion: null, publishedAt: null },
+      live: null,
+      draft: { spec: spec(), revision: 1, baseVersion: null, step: "pricing", updatedAt: 1, by: "Dana", rollbackOf: null },
+      versions: [],
+      changes: [],
+      canDraft: true,
+      canPublish: true,
+    };
+    data["services:profile"] = { costs: emptyCosts() };
+    const html = render("owner", <ServiceBuilder serviceId="svc1" />);
+    expect(html).toContain('Basics</span><span class="sr-only">, nothing to fix</span>');
+    expect(html).toMatch(/role="progressbar"[^>]*aria-valuetext="Step 3 of 6: Pricing"/);
   });
 });
 

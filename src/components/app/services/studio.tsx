@@ -69,7 +69,7 @@ function Studio({ services, costs, canSeeCosts }: { services: Services; costs: C
   return (
     <div className="grid grid-cols-1 gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionTitle title="Pricing Studio">Try example jobs. Nothing here changes a price: it shows what your services would charge and what each job would leave you.</SectionTitle>
+        <SectionTitle title="Pricing Studio" tip="It shows what your services would charge for an example job and what each job would leave you. Nothing here changes a price.">Try example jobs side by side.</SectionTitle>
         <div className="flex flex-wrap gap-2">
           {presets.map((p) => (
             <Button key={p.label} size="sm" variant="secondary" onClick={p.run}>

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { checkSpec, quote, sumOfLines } from "./engine";
 import { CATEGORIES } from "./spec";
-import { sampleInputs, normalizeSpec } from "./store";
+import { keptTemplateAmounts, sampleInputs, normalizeSpec } from "./store";
 import { TEMPLATES } from "./templates";
 
 const answer = (kind: string, options: string[]) => (kind === "number" ? 1 : kind === "yes_no" ? "no" : kind === "choice" ? options[0] : "Front door code");
@@ -39,5 +39,24 @@ describe("templates", () => {
     const result = quote(move.spec, { area: 1500, addOns: move.spec.addOns.map((a) => ({ id: a.id, quantity: 1 })), answers: { "home-size-sq-ft": 1500, "will-the-home-be-empty": "yes" } });
     expect(result.extras.every((e) => e.included && e.amountCents === 0)).toBe(true);
     expect(result.totalCents).toBe(35000);
+  });
+
+  it("names the prices still exactly the template's, and drops each one the owner changes", () => {
+    const standard = TEMPLATES.find((t) => t.id === "res-standard")!.spec;
+    const kept = keptTemplateAmounts(standard, standard);
+    expect(kept.length).toBeGreaterThan(0);
+    expect(kept.every((k) => k.value.length > 0 && (k.step === "pricing" || k.step === "extras"))).toBe(true);
+    const first = kept.find((k) => k.step === "pricing")!;
+    const key = first.key.replace("pricing.", "");
+    const changed = { ...standard, pricing: { ...standard.pricing, [key]: (standard.pricing as unknown as Record<string, number>)[key] + 500 } } as typeof standard;
+    expect(keptTemplateAmounts(changed, standard).map((k) => k.key)).not.toContain(first.key);
+    // Another method entirely shares none of the template's pricing amounts.
+    expect(keptTemplateAmounts({ ...standard, pricing: { method: "fixed", amountCents: 15000, laborMinutes: 120 } }, standard).some((k) => k.step === "pricing")).toBe(false);
+  });
+
+  it("never lists an extra the service already includes, since it is never charged", () => {
+    const move = TEMPLATES.find((t) => t.id === "res-move")!.spec;
+    const kept = keptTemplateAmounts(move, move);
+    for (const addOn of move.addOns.filter((a) => a.coversItemId && move.included.some((i) => i.id === a.coversItemId))) expect(kept.map((k) => k.key)).not.toContain(`addOns.${addOn.id}`);
   });
 });

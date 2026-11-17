@@ -16,8 +16,10 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { BASIS_LABELS } from "../../../../convex/lib/services/research";
+import { startingCents } from "../../../../convex/lib/services/engine";
+import { BASIS_LABELS, comparableRange } from "../../../../convex/lib/services/research";
 import { Empty, formatCents, Notice, SectionTitle, Toggle, when } from "./shared";
+import { PriceStrip } from "./visuals";
 
 const BASIS_TONE: Record<string, "info" | "warning" | "success" | "outline"> = { advertised_starting: "warning", estimated: "info", firm_published: "success", company_data: "success", ai_inference: "outline" };
 
@@ -35,7 +37,7 @@ export function ResearchHome() {
   return (
     <div className="grid grid-cols-1 gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionTitle title="Research & Insights">Research answers a specific question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price. If you already have reliable job data, you can skip it.</SectionTitle>
+        <SectionTitle title="Research & Insights" tip="Research answers one question: a new kind of service, an unfamiliar area, or where to position. It proposes; it never changes a price. If you already have reliable job data, you can skip it.">Ask one question. Nothing here changes a price.</SectionTitle>
         {data.canStart && !starting ? (
           <Button variant="primary" size="sm" onClick={() => setStarting(true)}>
             <Plus aria-hidden /> New research
@@ -262,8 +264,10 @@ export function BriefView({ briefId }: { briefId: string }) {
       ) : null}
       <FormError message={error} />
 
+      <ComparablePrices findings={brief.findings} serviceId={serviceFor} />
+
       <section>
-        <SectionTitle title="Findings">Each says what kind of evidence it is. A few advertised prices are not a market average, and nothing here knows a competitor&apos;s costs or margins.</SectionTitle>
+        <SectionTitle title="Findings" tip="Each finding says what kind of evidence it is. A few advertised prices are not a market average, and nothing here knows a competitor's costs or margins." />
         {brief.findings.length === 0 ? <p className="text-sm text-muted-foreground">No findings yet.</p> : null}
         <ul className="grid grid-cols-1 gap-2">
           {brief.findings.map((f) => (
@@ -299,7 +303,7 @@ export function BriefView({ briefId }: { briefId: string }) {
       </section>
 
       <section>
-        <SectionTitle title="Sources">Where each finding came from, when it was read, and what it could not show.</SectionTitle>
+        <SectionTitle title="Sources" tip="Where each finding came from, when it was read, and what it could not show." />
         <ol className="grid grid-cols-1 gap-2">
           {brief.sources.map((s) => (
             <li key={s.id} id={`source-${s.number}`} className={cn("rounded-xl border border-border bg-card p-3 text-sm scroll-mt-20")}>
@@ -349,6 +353,32 @@ export function BriefView({ briefId }: { briefId: string }) {
         ) : null}
       </section>
     </div>
+  );
+}
+
+type Finding = NonNullable<ReturnType<typeof useQuery<typeof api.servicesResearch.brief>>>["findings"][number];
+
+/**
+ * The comparable prices behind the brief's typical range, drawn on one line. The company's own starting
+ * price is marked only when the range is of starting prices per visit, so like is compared with like.
+ */
+function ComparablePrices({ findings, serviceId }: { findings: Finding[]; serviceId: string }) {
+  const { companyId } = useCompany();
+  const view = useQuery(api.services.service, serviceId ? { companyId, serviceId: serviceId as Id<"services"> } : "skip");
+  const range = comparableRange(findings);
+  if (!range) return null;
+  const points = findings
+    .filter((f) => f.comparable && f.priceCents !== null && f.unit.toLowerCase() === range.unit.toLowerCase() && f.basis !== "ai_inference" && f.basis !== "company_data")
+    .map((f) => ({ key: f.id, cents: f.priceCents!, label: [f.geography, f.scope].filter(Boolean).join(" · ") || f.basisLabel }));
+  const spec = view?.live?.spec ?? null;
+  const ownStart = spec ? startingCents(spec) : null;
+  const sameKind = range.basis === "advertised_starting" && /visit|clean|job|turnover/.test(range.unit.toLowerCase());
+  const kind = range.basis === "advertised_starting" ? "Advertised starting prices" : range.basis === "estimated" ? "Published estimates" : "Published prices";
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <SectionTitle title="Comparable prices" tip="What comparable businesses publish, drawn on one line. Not what customers paid, and not a market average." />
+      <PriceStrip points={points} low={range.low} high={range.high} unit={range.unit} kind={kind} mine={ownStart !== null && sameKind && spec ? { cents: ownStart, label: `Your starting price (${spec.name})` } : null} />
+    </section>
   );
 }
 

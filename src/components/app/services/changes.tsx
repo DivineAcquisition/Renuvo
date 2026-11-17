@@ -33,7 +33,7 @@ export function ChangesList() {
       </section>
       {past.length ? (
         <section aria-labelledby="history">
-          <SectionTitle title="History">Published, returned, withdrawn and replaced changes, newest first.</SectionTitle>
+          <SectionTitle title="History" />
           <List rows={past} />
         </section>
       ) : null}

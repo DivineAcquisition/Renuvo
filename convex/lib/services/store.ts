@@ -323,6 +323,45 @@ function pricingDetail(before: Spec["pricing"], after: Spec["pricing"]): string[
   return out;
 }
 
+export type KeptAmount = { key: string; label: string; value: string; step: "pricing" | "extras" };
+
+const adjustmentText = (a: { kind: "percent" | "fixed"; value: number }) => (a.kind === "percent" ? `${a.value}%` : formatCents(a.value));
+
+/**
+ * The money amounts in a draft that are still exactly the template's illustrative numbers, so an owner
+ * can see which to check instead of confirming "every amount" blind. Times and counts are left out:
+ * they describe the work, while these are prices for a market the template knows nothing about.
+ */
+export function keptTemplateAmounts(spec: Spec, template: Spec): KeptAmount[] {
+  const out: KeptAmount[] = [];
+  const same = (a: unknown, b: unknown) => canonical(a) === canonical(b);
+  if (spec.pricing.method === template.pricing.method) {
+    const now = spec.pricing as Record<string, unknown>;
+    const was = template.pricing as Record<string, unknown>;
+    for (const key of Object.keys(now)) {
+      const value = now[key];
+      if (typeof value !== "number" || value <= 0 || !(key.endsWith("Cents") || key === "rateMillicents") || value !== was[key]) continue;
+      out.push({ key: `pricing.${key}`, label: PRICING_WORDS[key] ?? key, value: key === "rateMillicents" ? `$${(value / 100_000).toFixed(3).replace(/0$/, "")}` : formatCents(value), step: "pricing" });
+    }
+    if ("bands" in now && Array.isArray(now.bands) && now.bands.length && same(now.bands, was.bands)) out.push({ key: "pricing.bands", label: "Size band prices", value: `${now.bands.length} band${now.bands.length === 1 ? "" : "s"}`, step: "pricing" });
+  }
+  for (const addOn of spec.addOns) {
+    const original = template.addOns.find((a) => a.id === addOn.id);
+    const covered = addOn.coversItemId && spec.included.some((i) => i.id === addOn.coversItemId);
+    if (original && !covered && addOn.priceCents > 0 && addOn.priceCents === original.priceCents) out.push({ key: `addOns.${addOn.id}`, label: addOn.label, value: formatCents(addOn.priceCents), step: "extras" });
+  }
+  const m = spec.modifiers;
+  const t = template.modifiers;
+  if (m.minimumCents !== null && m.minimumCents === t.minimumCents) out.push({ key: "modifiers.minimumCents", label: "Minimum charge", value: formatCents(m.minimumCents), step: "extras" });
+  if (m.recurring.enabled && m.recurring.options.length && same(m.recurring.options, t.recurring.options)) out.push({ key: "modifiers.recurring", label: "Recurring discounts", value: m.recurring.options.map((o) => `${scheduleLabel(o.schedule)} ${adjustmentText(o.discount)}`).join(", "), step: "extras" });
+  if (m.condition.enabled && same(m.condition.levels, t.condition.levels)) out.push({ key: "modifiers.condition", label: "Condition levels", value: `${m.condition.levels.length} levels`, step: "extras" });
+  if (m.firstClean.enabled && same(m.firstClean.price, t.firstClean.price)) out.push({ key: "modifiers.firstClean", label: "First-clean reset", value: `+${adjustmentText(m.firstClean.price)}`, step: "extras" });
+  if (m.rush.enabled && same(m.rush.adjustment, t.rush.adjustment)) out.push({ key: "modifiers.rush", label: "Rush", value: `+${adjustmentText(m.rush.adjustment)}`, step: "extras" });
+  if (m.afterHours.enabled && same(m.afterHours.adjustment, t.afterHours.adjustment)) out.push({ key: "modifiers.afterHours", label: "After hours", value: `+${adjustmentText(m.afterHours.adjustment)}`, step: "extras" });
+  if (m.area.enabled && m.area.zones.length && same(m.area.zones.map((z) => z.adjustment), t.area.zones.map((z) => z.adjustment))) out.push({ key: "modifiers.area", label: "Travel fees", value: `${m.area.zones.length} area${m.area.zones.length === 1 ? "" : "s"}`, step: "extras" });
+  return out;
+}
+
 /** What differs between two versions, in sentences an owner can check. */
 export function describeChanges(before: Spec | null, after: Spec): string[] {
   if (!before) return [`New service: ${after.name || "unnamed"} (${CATEGORY_LABELS[after.category]}), ${priceSummary(after)}.`];

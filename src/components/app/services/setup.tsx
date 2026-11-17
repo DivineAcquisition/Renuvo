@@ -72,7 +72,7 @@ function SetupForm({ profile }: { profile: NonNullable<ReturnType<typeof useQuer
     });
   return (
     <div className="grid grid-cols-1 gap-6">
-      <SectionTitle title="Pricing setup">Tell Selestial about the business so every price can be checked against what it costs you. Answer what you know; &ldquo;I&apos;m not sure&rdquo; becomes a stated assumption, never a made-up number.</SectionTitle>
+      <SectionTitle title="Pricing setup" tip="Every price is checked against what a visit costs you. An answer of “I'm not sure” becomes a stated assumption, never a made-up number.">Answer what you know. &ldquo;I&apos;m not sure&rdquo; is fine.</SectionTitle>
 
       <section className="grid grid-cols-1 gap-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
         <h3 className="font-heading text-base tracking-tight text-strong">Your business</h3>

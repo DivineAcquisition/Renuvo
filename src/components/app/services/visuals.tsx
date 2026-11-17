@@ -154,3 +154,60 @@ export function MarginMeter({ percent, floor, target, tip }: { percent: number |
     </div>
   );
 }
+
+export type StripPoint = { key: string; cents: number; label: string };
+
+/**
+ * Comparable prices on one line: a dot for each, the computed range as a band, and, when it compares
+ * like with like, the company's own starting price as a marker. The dots carry their source in a
+ * tooltip; the whole strip is named in full for screen readers, and the findings list stays the table
+ * view.
+ */
+export function PriceStrip({ points, low, high, unit, kind, mine }: { points: StripPoint[]; low: number; high: number; unit: string; kind: string; mine: { cents: number; label: string } | null }) {
+  const values = [...points.map((p) => p.cents), ...(mine ? [mine.cents] : [])];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = Math.max((max - min) * 0.08, 500);
+  const from = Math.max(0, min - pad);
+  const to = max + pad;
+  const at = (cents: number) => `${((cents - from) / (to - from)) * 100}%`;
+  const seen = new Map<number, number>();
+  const name = `${kind} ${unit}: ${points.map((p) => formatCents(p.cents)).join(", ")}. Range ${formatCents(low)} to ${formatCents(high)}.${mine ? ` ${mine.label}: ${formatCents(mine.cents)}.` : ""}`;
+  return (
+    <figure className="grid grid-cols-1 gap-2">
+      <div role="img" aria-label={name} className="relative mx-2 h-16">
+        <span aria-hidden className="absolute inset-x-0 top-8 h-px bg-border" />
+        <span aria-hidden className="absolute top-5 h-6 rounded-md bg-brand-500/10" style={{ left: at(low), width: `calc(${at(high)} - ${at(low)})` }} />
+        {points.map((p) => {
+          const stack = seen.get(p.cents) ?? 0;
+          seen.set(p.cents, stack + 1);
+          return <span key={p.key} title={`${formatCents(p.cents)} · ${p.label}`} className="absolute size-2.5 -translate-x-1/2 rounded-full bg-brand-500 ring-2 ring-card" style={{ left: at(p.cents), top: `${27 - stack * 11}px` }} />;
+        })}
+        {mine ? (
+          <span aria-hidden className="absolute top-1 bottom-1 w-0.5 -translate-x-1/2 rounded-full bg-strong" style={{ left: at(mine.cents) }}>
+            <span className="absolute -top-1 left-1.5 whitespace-nowrap text-[11px] font-medium text-strong">You</span>
+          </span>
+        ) : null}
+        <span aria-hidden className="absolute top-12 -translate-x-1/2 text-[11px] tabular-nums text-muted-foreground" style={{ left: at(low) }}>
+          {formatCents(low)}
+        </span>
+        <span aria-hidden className="absolute top-12 -translate-x-1/2 text-[11px] tabular-nums text-muted-foreground" style={{ left: at(high) }}>
+          {formatCents(high)}
+        </span>
+      </div>
+      <figcaption className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="size-2.5 rounded-full bg-brand-500" /> {kind} {unit}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="h-2.5 w-4 rounded-sm bg-brand-500/15" /> Range
+        </span>
+        {mine ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="h-3 w-0.5 rounded-full bg-strong" /> {mine.label} {formatCents(mine.cents)}
+          </span>
+        ) : null}
+      </figcaption>
+    </figure>
+  );
+}

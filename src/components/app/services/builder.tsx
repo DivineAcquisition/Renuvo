@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
 import { Field, FormError, TextArea, TextInput, useRun } from "@/components/app/form";
-import { ArrowLeft, ArrowRight, RollbackIcon, Sparkles } from "@/components/icons";
+import { ArrowLeft, ArrowRight, Check, RollbackIcon, Sparkles } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -19,7 +19,8 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { checkSpec, priceSummary } from "../../../../convex/lib/services/engine";
 import { CATEGORY_LABELS, type Spec } from "../../../../convex/lib/services/spec";
-import { canonical, describeChanges } from "../../../../convex/lib/services/store";
+import { canonical, describeChanges, keptTemplateAmounts, type KeptAmount } from "../../../../convex/lib/services/store";
+import { TEMPLATES } from "../../../../convex/lib/services/templates";
 import { ServicePreview } from "./preview";
 import { ChangeBadge, day, Empty, Notice, SectionTitle, Toggle, when } from "./shared";
 import { BasicsStep, ExtrasStep, PricingStep, ScopeStep, TeamStep, type StepProps } from "./steps";
@@ -128,6 +129,8 @@ function DraftEditor({ view, costs, canSeeCosts }: { view: View; costs: Paramete
   };
   const problems = useMemo(() => checkSpec(spec), [spec]);
   const blockers = problems.filter((p) => p.severity === "blocker");
+  const template = useMemo(() => TEMPLATES.find((t) => t.id === view.service.templateId)?.spec ?? null, [view.service.templateId]);
+  const kept = useMemo(() => (spec.illustrative && template ? keptTemplateAmounts(spec, template) : []), [spec, template]);
   const index = BUILDER_STEPS.findIndex((s) => s.id === step);
   const props: StepProps = { spec, edit, disabled: state.kind === "conflict" };
 
@@ -163,7 +166,18 @@ function DraftEditor({ view, costs, canSeeCosts }: { view: View; costs: Paramete
           }}
         />
       ) : null}
-      {spec.illustrative ? <Notice tone="warning" title="Illustrative amounts">Some amounts came from a template or an import and are not confirmed for your market. Replace or confirm them; the Review step asks you to confirm before it can be submitted.</Notice> : null}
+      {spec.illustrative ? (
+        <Notice tone="warning" title="Illustrative amounts">
+          <span className="flex flex-wrap items-center justify-between gap-2">
+            <span>{kept.length ? `${kept.length} price${kept.length === 1 ? " is" : "s are"} still the template's example.` : "Some amounts came from a template or an import."} Check them for your market before review.</span>
+            {step !== "review" ? (
+              <Button size="xs" variant="secondary" onClick={() => goTo("review")}>
+                See which
+              </Button>
+            ) : null}
+          </span>
+        </Notice>
+      ) : null}
 
       {/* On a phone: one column, with a switch between editing and the preview. */}
       <div role="tablist" aria-label="Builder view" className="flex rounded-lg border border-border bg-card p-1 lg:hidden">
@@ -176,15 +190,34 @@ function DraftEditor({ view, costs, canSeeCosts }: { view: View; costs: Paramete
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[10.5rem_minmax(0,1fr)_minmax(0,20rem)] xl:grid-cols-[11rem_minmax(0,1fr)_minmax(0,22rem)] 2xl:grid-cols-[12rem_minmax(0,1fr)_minmax(0,26rem)]">
         <nav aria-label="Builder steps" className={cn("lg:sticky lg:top-4 lg:self-start", pane === "preview" && "hidden lg:block")}>
+          <div className="mb-2 grid grid-cols-1 gap-1.5 lg:hidden">
+            <p className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+              <span>
+                Step {index + 1} of {BUILDER_STEPS.length} · <span className="font-medium text-strong">{BUILDER_STEPS[index].label}</span>
+              </span>
+              <span>{blockers.length ? `${blockers.length} to fix` : "Nothing to fix"}</span>
+            </p>
+            <div role="progressbar" aria-label="Builder progress" aria-valuemin={1} aria-valuemax={BUILDER_STEPS.length} aria-valuenow={index + 1} aria-valuetext={`Step ${index + 1} of ${BUILDER_STEPS.length}: ${BUILDER_STEPS[index].label}`} className="h-1.5 w-full rounded-full bg-brand-500/15">
+              <span className="block h-full rounded-full bg-brand-500 transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${((index + 1) / BUILDER_STEPS.length) * 100}%` }} />
+            </div>
+          </div>
           <ol className="flex gap-1 overflow-x-auto pb-1 lg:grid lg:gap-0.5 lg:overflow-visible">
             {BUILDER_STEPS.map((s, i) => {
               const issues = problems.filter((p) => p.severity === "blocker" && fieldStep(p.field) === s.id).length;
+              const current = step === s.id;
               return (
                 <li key={s.id} className="shrink-0">
-                  <button type="button" aria-current={step === s.id ? "step" : undefined} onClick={() => goTo(s.id)} className={cn("flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-500/40", step === s.id ? "bg-brand-500/[0.08] font-medium text-strong" : "text-muted-foreground hover:bg-overlay/[0.04] hover:text-strong")}>
-                    <span className={cn("grid size-6 shrink-0 place-items-center rounded-full text-xs tabular-nums", step === s.id ? "bg-brand-500 text-white" : "bg-muted text-strong")}>{i + 1}</span>
+                  <button type="button" aria-current={current ? "step" : undefined} onClick={() => goTo(s.id)} className={cn("relative flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-500/40", current ? "bg-brand-500/[0.08] font-medium text-strong" : "text-muted-foreground hover:bg-overlay/[0.04] hover:text-strong")}>
+                    <span aria-hidden className={cn("grid size-6 shrink-0 place-items-center rounded-full text-xs tabular-nums", current ? "bg-brand-500 text-white" : issues ? "bg-destructive/10 text-destructive-foreground ring-1 ring-destructive/30" : s.id === "review" ? "bg-muted text-strong" : "bg-success/10 text-success-foreground")}>
+                      {current || issues || s.id === "review" ? i + 1 : <Check className="size-3.5" />}
+                    </span>
                     <span className="whitespace-nowrap">{s.label}</span>
-                    {issues ? <span className="ml-auto rounded-full bg-destructive/10 px-1.5 text-[11px] text-destructive-foreground">{issues}</span> : null}
+                    <span className="sr-only">{issues ? `, ${issues} to fix` : s.id === "review" ? "" : ", nothing to fix"}</span>
+                    {issues ? (
+                      <span aria-hidden className="ml-auto rounded-full bg-destructive/10 px-1.5 text-[11px] text-destructive-foreground">
+                        {issues}
+                      </span>
+                    ) : null}
                   </button>
                 </li>
               );
@@ -195,7 +228,7 @@ function DraftEditor({ view, costs, canSeeCosts }: { view: View; costs: Paramete
         </nav>
 
         <section aria-label={BUILDER_STEPS[index].label} className={cn("min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6", pane === "preview" && "hidden lg:block")}>
-          {step === "basics" ? <BasicsStep {...props} /> : step === "scope" ? <ScopeStep {...props} /> : step === "pricing" ? <PricingStep {...props} /> : step === "team" ? <TeamStep {...props} /> : step === "extras" ? <ExtrasStep {...props} /> : <ReviewStep view={view} spec={spec} edit={edit} revision={base.revision} dirty={dirty} blockers={blockers.map((b) => ({ message: b.message, step: fieldStep(b.field) }))} warnings={problems.filter((p) => p.severity === "warning").map((p) => p.message)} goTo={goTo} />}
+          {step === "basics" ? <BasicsStep {...props} /> : step === "scope" ? <ScopeStep {...props} /> : step === "pricing" ? <PricingStep {...props} /> : step === "team" ? <TeamStep {...props} /> : step === "extras" ? <ExtrasStep {...props} /> : <ReviewStep view={view} spec={spec} edit={edit} kept={kept} revision={base.revision} dirty={dirty} blockers={blockers.map((b) => ({ message: b.message, step: fieldStep(b.field) }))} warnings={problems.filter((p) => p.severity === "warning").map((p) => p.message)} goTo={goTo} />}
           <div className="mt-6 flex items-center justify-between gap-2 border-t border-border pt-4">
             <Button variant="ghost" size="sm" disabled={index === 0} onClick={() => goTo(BUILDER_STEPS[index - 1].id)}>
               <ArrowLeft aria-hidden /> Back
@@ -289,7 +322,7 @@ function AssistantCard({ serviceId, name }: { serviceId: string; name: string })
 
 // ── Review ──────────────────────────────────────────────────────────────────────────────────────────
 
-function ReviewStep({ view, spec, edit, revision, dirty, blockers, warnings, goTo }: { view: View; spec: Spec; edit: StepProps["edit"]; revision: number; dirty: boolean; blockers: { message: string; step: BuilderStep }[]; warnings: string[]; goTo: (step: BuilderStep) => void }) {
+function ReviewStep({ view, spec, edit, kept, revision, dirty, blockers, warnings, goTo }: { view: View; spec: Spec; edit: StepProps["edit"]; kept: KeptAmount[]; revision: number; dirty: boolean; blockers: { message: string; step: BuilderStep }[]; warnings: string[]; goTo: (step: BuilderStep) => void }) {
   const { companyId } = useCompany();
   const router = useRouter();
   const submit = useMutation(api.services.submit);
@@ -304,7 +337,7 @@ function ReviewStep({ view, spec, edit, revision, dirty, blockers, warnings, goT
   const onlyConfirmations = blockers.every((b) => b.step === "review" || /Confirm/.test(b.message));
   return (
     <div className="grid grid-cols-1 gap-6">
-      <SectionTitle title="Review">Check what changes, confirm what only you can, and send it for review. Nothing is live until the Owner publishes it.</SectionTitle>
+      <SectionTitle title="Review" tip="Check what changes, confirm what only you can, and send it for review. Nothing is live until the Owner publishes it." />
       <div>
         <p className="text-sm font-medium text-strong">{view.live ? `What changes from live version ${view.live.version}` : "What this adds"}</p>
         <ul className="mt-1 grid gap-0.5 text-sm text-muted-foreground">
@@ -314,7 +347,38 @@ function ReviewStep({ view, spec, edit, revision, dirty, blockers, warnings, goT
       {spec.illustrative || unconfirmed.length ? (
         <div className="grid grid-cols-1 gap-3 rounded-xl border border-warning/40 bg-warning/[0.07] p-4">
           <p className="text-sm font-medium text-strong">Only you can confirm these</p>
-          {spec.illustrative ? <Toggle label="I've replaced or confirmed every amount for my market" description="Template and imported amounts are illustrative until you say otherwise." checked={false} onChange={(on) => on && edit((s) => ({ ...s, illustrative: false }))} /> : null}
+          {kept.length ? (
+            <div className="grid grid-cols-1 gap-2">
+              <p className="text-xs text-muted-foreground">Still the template&apos;s example prices:</p>
+              <ul aria-label="Prices still from the template" className="grid grid-cols-1 gap-2">
+                {(["pricing", "extras"] as const).map((group) => {
+                  const items = kept.filter((k) => k.step === group);
+                  if (!items.length) return null;
+                  const label = BUILDER_STEPS.find((b) => b.id === group)?.label ?? group;
+                  return (
+                    <li key={group} className="rounded-lg border border-warning/30 bg-card p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {label} · {items.length}
+                        </span>
+                        <Button size="xs" variant="ghost" onClick={() => goTo(group)}>
+                          Change in {label}
+                        </Button>
+                      </div>
+                      <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                        {items.map((k) => (
+                          <li key={k.key} className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-xs text-strong">
+                            {k.label} <span className="tabular-nums text-muted-foreground">{k.value}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+          {spec.illustrative ? <Toggle label={kept.length ? "These prices are right for my market" : "I've replaced or confirmed every amount for my market"} tip="Template and imported amounts are examples until you say otherwise. Confirming is recorded with this version." checked={false} onChange={(on) => on && edit((s) => ({ ...s, illustrative: false }))} /> : null}
           {unconfirmed.map((r) => (
             <Toggle key={r.id} label={`My company has: ${r.label}`} description="Confirm only what is true today. It is recorded with this version." checked={false} onChange={(on) => on && edit((s) => ({ ...s, requirements: s.requirements.map((x) => (x.id === r.id ? { ...x, confirmed: true } : x)) }))} />
           ))}
@@ -452,23 +516,35 @@ function LiveService({ view, costs }: { view: View; costs: Parameters<typeof Ser
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
         <div className="grid grid-cols-1 gap-5">
           <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-            <SectionTitle title="Versions">Every published version is kept as it was. A rollback writes a new version from an old one, so history is never rewritten.</SectionTitle>
-            <ol className="grid grid-cols-1 gap-1.5">
+            <SectionTitle title="Versions" tip="Every published version is kept exactly as it was. Rolling back writes a new version from an old one, so history is never rewritten." />
+            <ol aria-label="Version history" className="relative grid grid-cols-1 gap-3 before:absolute before:top-2 before:bottom-2 before:left-[0.6875rem] before:w-px before:bg-border">
               {view.versions.map((v) => (
-                <li key={v.version} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm">
-                  <span className="min-w-0">
-                    <span className="font-medium text-strong">Version {v.version}</span> <span className="text-muted-foreground">· {v.summary}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {when(v.createdAt)} by {v.by}
-                      {v.source === "rollback" ? ` · rollback to version ${v.basedOn}` : v.source === "settings" ? " · moved from Settings" : v.basedOn ? ` · based on version ${v.basedOn}` : ""}
-                    </span>
+                <li key={v.version} className="relative flex items-start gap-3">
+                  <span aria-hidden className={cn("relative z-10 mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold tabular-nums ring-4 ring-card", v.live ? "bg-brand-500 text-white" : "border border-border bg-card text-muted-foreground")}>
+                    {v.version}
                   </span>
-                  <span className="flex items-center gap-2">
-                    {v.live ? (
-                      <Badge variant="success" size="sm">
-                        Live
-                      </Badge>
-                    ) : view.canDraft ? (
+                  <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="font-medium text-strong">Version {v.version}</span>
+                        {v.live ? (
+                          <Badge variant="success" size="sm">
+                            Live
+                          </Badge>
+                        ) : null}
+                        {v.source === "rollback" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                            <RollbackIcon aria-hidden className="size-3" /> from version {v.basedOn}
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="text-sm text-muted-foreground">{v.summary}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {when(v.createdAt)} · {v.by}
+                        {v.source === "settings" ? " · moved from Settings" : v.source !== "rollback" && v.basedOn ? ` · based on version ${v.basedOn}` : ""}
+                      </p>
+                    </div>
+                    {!v.live && view.canDraft ? (
                       <Button
                         size="xs"
                         variant="ghost"
@@ -481,7 +557,7 @@ function LiveService({ view, costs }: { view: View; costs: Parameters<typeof Ser
                         <RollbackIcon aria-hidden /> Roll back to this
                       </Button>
                     ) : null}
-                  </span>
+                  </div>
                 </li>
               ))}
             </ol>

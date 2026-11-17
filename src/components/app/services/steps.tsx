@@ -238,7 +238,8 @@ function MethodPicker({ value, onPick, disabled }: { value: PricingMethod; onPic
 function UsualJob({ spec }: { spec: Spec }) {
   const result = useMemo(() => quote(spec, defaultInput(spec)), [spec]);
   const base = result.lines.find((l) => l.kind === "base");
-  if (!base || !base.detail || base.amountCents <= 0) return null;
+  // A fixed price is its own working-out; saying "$150 per visit = $150" adds nothing.
+  if (!base || !base.detail || base.amountCents <= 0 || spec.pricing.method === "fixed") return null;
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg bg-brand-500/[0.06] px-3 py-2 text-sm" aria-live="polite">
       <Calculator aria-hidden className="size-4 text-brand-300" />
@@ -800,64 +801,105 @@ function AdjustmentCard({ icon: Icon, title, short, tip, on, onToggle, summary, 
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+type AddOn = Spec["addOns"][number];
+
+/**
+ * One extra as a row: its name, price and time at a glance, and its fields beneath it when opened. A new
+ * extra opens at once. An extra the service already includes shows "Included" instead of a price.
+ */
+function ExtraRow({ addOn: a, spec, disabled, startOpen, onChange, onRemove }: { addOn: AddOn; spec: Spec; disabled: boolean; startOpen: boolean; onChange: (patch: Partial<AddOn>) => void; onRemove: () => void }) {
+  const id = useId();
+  const [open, setOpen] = useState(startOpen);
+  const covered = Boolean(a.coversItemId && spec.included.some((i) => i.id === a.coversItemId));
+  const unit = a.per === "hour" ? "per hour" : a.per === "item" ? `per ${a.itemWord || "item"}` : "per visit";
+  return (
+    <li className="@container rounded-xl border border-border bg-card">
+      <div className="flex items-center gap-2 p-2 pl-3">
+        <button type="button" aria-expanded={open} aria-controls={open ? `${id}-body` : undefined} onClick={() => setOpen((v) => !v)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 text-left focus-visible:outline-2 focus-visible:outline-brand-500/40">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-strong">{a.label || "New extra"}</span>
+            <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
+              {covered ? <span className="rounded-full bg-success/10 px-2 py-0.5 font-medium text-success-foreground">Included</span> : <span className="rounded-full bg-brand-500/10 px-2 py-0.5 font-medium tabular-nums text-brand-300">{formatCents(a.priceCents)} {unit}</span>}
+              <span className="text-muted-foreground">
+                {a.laborMinutes} min{a.per === "visit" ? "" : " each"}
+                {a.maxQuantity > 1 ? ` · up to ${a.maxQuantity}` : ""}
+              </span>
+            </span>
+          </span>
+          <ChevronDown aria-hidden className={cn("size-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+        </button>
+        <Button size="icon-sm" variant="ghost" disabled={disabled} aria-label={`Remove ${a.label || "this extra"}`} onClick={onRemove}>
+          <Trash2 aria-hidden />
+        </Button>
+      </div>
+      {open ? (
+        <div id={`${id}-body`} className="grid grid-cols-1 gap-3 border-t border-border p-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end">
+            <Field label="Extra">
+              <TextInput value={a.label} disabled={disabled} placeholder="Inside the fridge" onChange={(e) => onChange({ label: e.target.value })} />
+            </Field>
+            <MoneyInput label="Price" unit={unit} cents={a.priceCents} disabled={disabled} onCents={(c) => onChange({ priceCents: c ?? 0 })} />
+          </div>
+          <div className="grid grid-cols-2 gap-3 @xl:grid-cols-4">
+            <label className="grid grid-cols-1 gap-1.5 text-sm">
+              <span className="font-medium text-strong">Charged</span>
+              <select disabled={disabled} className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={a.per} onChange={(e) => onChange({ per: e.target.value as AddOn["per"] })}>
+                <option value="visit">Once per visit</option>
+                <option value="item">Per item</option>
+                <option value="hour">Per hour</option>
+              </select>
+            </label>
+            {a.per === "item" ? (
+              <Field label="Item">
+                <TextInput disabled={disabled} value={a.itemWord ?? ""} onChange={(e) => onChange({ itemWord: e.target.value })} placeholder="window" />
+              </Field>
+            ) : null}
+            <NumberInput label="Time" unit="minutes each" disabled={disabled} value={a.laborMinutes} onValue={(v) => onChange({ laborMinutes: v ?? 0 })} />
+            <NumberInput label="Most per visit" min={1} disabled={disabled} value={a.maxQuantity} onValue={(v) => onChange({ maxQuantity: Math.max(1, v ?? 1) })} />
+          </div>
+          <LabeledField label="Already included as" tip="Link an extra to a task this service already includes and customers see it as included, never charged.">
+            {(fieldId) => (
+              <select id={fieldId} disabled={disabled} className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={a.coversItemId ?? ""} onChange={(e) => onChange({ coversItemId: e.target.value || undefined })}>
+                <option value="">Not included: charge it</option>
+                {spec.included.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.section ? `${i.section}: ` : ""}
+                    {i.label}
+                  </option>
+                ))}
+              </select>
+            )}
+          </LabeledField>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
 export function ExtrasStep({ spec, edit, disabled }: StepProps) {
   const m = spec.modifiers;
   const setM = (patch: Partial<Spec["modifiers"]>) => edit((s) => ({ ...s, modifiers: { ...s.modifiers, ...patch } }));
   const setAddOn = (id: string, patch: Partial<Spec["addOns"][number]>) => edit((s) => ({ ...s, addOns: s.addOns.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
+  const [fresh, setFresh] = useState<string[]>([]);
   return (
     <div className="grid grid-cols-1 gap-6">
-      <SectionTitle title="Extras" tip="Add-ons a customer can choose. Link an extra to a task this service already includes and it is shown as included, never charged." />
+      <SectionTitle title="Extras" tip="Add-ons a customer can choose. Open one to change it." />
       <ul className="grid grid-cols-1 gap-2">
-        {spec.addOns.map((a) => {
-          const covered = a.coversItemId && spec.included.some((i) => i.id === a.coversItemId);
-          return (
-            <li key={a.id} className="@container grid grid-cols-1 gap-3 rounded-xl border border-border p-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
-                <Field label="Extra">
-                  <TextInput value={a.label} disabled={disabled} onChange={(e) => setAddOn(a.id, { label: e.target.value })} />
-                </Field>
-                <MoneyInput label="Price" unit={a.per === "hour" ? "per hour" : a.per === "item" ? `per ${a.itemWord || "item"}` : "per visit"} cents={a.priceCents} disabled={disabled} onCents={(c) => setAddOn(a.id, { priceCents: c ?? 0 })} />
-                <Button size="icon-sm" variant="ghost" disabled={disabled} aria-label={`Remove ${a.label}`} onClick={() => edit((s) => ({ ...s, addOns: s.addOns.filter((x) => x.id !== a.id) }))}>
-                  <Trash2 aria-hidden />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-3 @xl:grid-cols-4">
-                <label className="grid grid-cols-1 gap-1.5 text-sm">
-                  <span className="font-medium text-strong">Charged</span>
-                  <select disabled={disabled} className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={a.per} onChange={(e) => setAddOn(a.id, { per: e.target.value as typeof a.per })}>
-                    <option value="visit">Once per visit</option>
-                    <option value="item">Per item</option>
-                    <option value="hour">Per hour</option>
-                  </select>
-                </label>
-                {a.per === "item" ? (
-                  <Field label="Item">
-                    <TextInput disabled={disabled} value={a.itemWord ?? ""} onChange={(e) => setAddOn(a.id, { itemWord: e.target.value })} placeholder="window" />
-                  </Field>
-                ) : null}
-                <NumberInput label="Time" unit="minutes each" disabled={disabled} value={a.laborMinutes} onValue={(v) => setAddOn(a.id, { laborMinutes: v ?? 0 })} />
-                <NumberInput label="Most per visit" min={1} disabled={disabled} value={a.maxQuantity} onValue={(v) => setAddOn(a.id, { maxQuantity: Math.max(1, v ?? 1) })} />
-              </div>
-              <label className="grid grid-cols-1 gap-1.5 text-sm">
-                <span className="font-medium text-strong">Already included as</span>
-                <select disabled={disabled} className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={a.coversItemId ?? ""} onChange={(e) => setAddOn(a.id, { coversItemId: e.target.value || undefined })}>
-                  <option value="">Not included: charge it</option>
-                  {spec.included.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.section ? `${i.section}: ` : ""}
-                      {i.label}
-                    </option>
-                  ))}
-                </select>
-                {covered ? <span className="text-xs text-success-foreground">Included in this service, so it is shown as included and never charged.</span> : null}
-              </label>
-            </li>
-          );
-        })}
+        {spec.addOns.map((a) => (
+          <ExtraRow key={a.id} addOn={a} spec={spec} disabled={disabled} startOpen={fresh.includes(a.id) || !a.label} onChange={(patch) => setAddOn(a.id, patch)} onRemove={() => edit((s) => ({ ...s, addOns: s.addOns.filter((x) => x.id !== a.id) }))} />
+        ))}
       </ul>
       {!disabled ? (
         <div>
-          <Button size="sm" variant="secondary" onClick={() => edit((s) => ({ ...s, addOns: [...s.addOns, { id: newId("extra", s.addOns.map((a) => a.id)), label: "", priceCents: 0, per: "visit", laborMinutes: 30, maxQuantity: 1 }] }))}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              const id = newId("extra", spec.addOns.map((a) => a.id));
+              setFresh((list) => [...list, id]);
+              edit((s) => ({ ...s, addOns: [...s.addOns, { id, label: "", priceCents: 0, per: "visit", laborMinutes: 30, maxQuantity: 1 }] }));
+            }}
+          >
             <Plus aria-hidden /> Add an extra
           </Button>
         </div>

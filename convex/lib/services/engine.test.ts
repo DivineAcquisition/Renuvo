@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkSpec, demandPercent, quote, roundCents, scheduleDates, scheduleFacts, sumOfLines, visitsByMonth, type QuoteInput } from "./engine";
+import { checkSpec, demandPercent, quote, roundCents, scheduleDates, scheduleFacts, startingCents, sumOfLines, visitsByMonth, type QuoteInput } from "./engine";
 import { emptyCosts, priceForMargin, profitability, type Costs } from "./profit";
 import { blankSpec, defaultModifiers, defaultStr, type Spec } from "./spec";
 import { formatCents, formatMillicents } from "./words";
@@ -401,5 +401,14 @@ describe("services that are not ready", () => {
     const spec = service({ pricing: { method: "fixed", amountCents: 1000, laborMinutes: 60 }, illustrative: true, requirements: [{ id: "ladder", label: "Ladder training for work above one story", confirmed: false }] });
     const codes = checkSpec(spec).filter((p) => p.severity === "blocker").map((p) => p.code);
     expect(codes).toEqual(["illustrative", "unconfirmed"]);
+  });
+});
+
+describe("a starting price only where one exists", () => {
+  it("reads the lowest advertised price from methods that have one, and none from rates", () => {
+    expect(startingCents(service({ pricing: { method: "fixed", amountCents: 15000, laborMinutes: 120 } }))).toBe(15000);
+    expect(startingCents(service({ pricing: { method: "size_bands", unit: "sq_ft", bands: [{ from: 1000, to: 2000, amountCents: 18000, laborMinutes: 180 }, { from: 0, to: 1000, amountCents: 12000, laborMinutes: 120 }] } }))).toBe(12000);
+    expect(startingCents(service({ pricing: { method: "custom_quote", fromCents: null, laborMinutes: null } }))).toBeNull();
+    expect(startingCents(service({ pricing: { method: "hourly_per_cleaner", rateCents: 4500, minimumHours: 2, incrementMinutes: 30, estimatedLaborMinutes: 240 } }))).toBeNull();
   });
 });

@@ -5,9 +5,8 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { ArrowRight, Settings2, Sparkles, TemplateIcon, Upload, Users } from "@/components/icons";
+import { ArrowRight, Check, Sparkles, TemplateIcon, Upload, Users } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button-variants";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SERVICES_ROOT, servicePath } from "@/lib/app/services";
 import { cn } from "@/lib/utils";
@@ -40,7 +39,7 @@ export function ServicesHome() {
   const shown = catalog.services.filter((row) => matches(row, filter));
   return (
     <div className="grid grid-cols-1 gap-5">
-      {!catalog.setupDone && catalog.canPublish ? <SetupPrompt /> : null}
+      <SetupChecklist catalog={catalog} />
       <div role="tablist" aria-label="Show" className="flex flex-wrap gap-1.5">
         {FILTERS.map((item) => {
           const count = catalog.services.filter((row) => matches(row, item.id)).length;
@@ -123,27 +122,76 @@ function ServiceCard({ row }: { row: Row }) {
   );
 }
 
-function SetupPrompt() {
+/** Where a company is in getting its first service live, as four checkable steps and a ring. */
+export function setupSteps(catalog: Catalog) {
+  const anyLive = catalog.services.some((row) => row.live !== null);
+  const anyWaiting = catalog.services.some((row) => row.openChange !== null);
+  return [
+    { id: "setup", label: "Tell Selestial your costs", detail: "And where you work. “I'm not sure” is fine.", done: catalog.setupDone, href: catalog.canPublish ? `${SERVICES_ROOT}/setup` : null },
+    { id: "draft", label: "Draft a service", detail: "From a template, an import or Chat.", done: catalog.services.length > 0, href: `${SERVICES_ROOT}/new` },
+    { id: "review", label: "Send it for review", detail: "From the builder's Review step.", done: anyWaiting || anyLive, href: null },
+    { id: "live", label: "Publish it", detail: catalog.canPublish ? "Approve it under Changes." : "The Owner approves it.", done: anyLive, href: catalog.canPublish ? `${SERVICES_ROOT}/changes` : null },
+  ];
+}
+
+function SetupChecklist({ catalog }: { catalog: Catalog }) {
+  if (!catalog.canDraft) return null;
+  const steps = setupSteps(catalog);
+  const done = steps.filter((s) => s.done).length;
+  if (done === steps.length) return null;
+  const next = steps.find((s) => !s.done)!;
+  const circumference = 2 * Math.PI * 16;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-500/25 bg-brand-500/[0.05] px-4 py-3">
-      <div className="flex items-start gap-3">
-        <Settings2 aria-hidden className="mt-0.5 size-5 text-brand-600" />
+    <section aria-labelledby="getting-started" className="flex flex-col gap-4 rounded-2xl border border-brand-500/25 bg-brand-500/[0.04] p-4 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
+        <svg role="img" aria-label={`${done} of ${steps.length} done`} viewBox="0 0 40 40" className="size-12 shrink-0 -rotate-90">
+          <circle cx="20" cy="20" r="16" fill="none" strokeWidth="4" className="stroke-brand-500/15" />
+          <circle cx="20" cy="20" r="16" fill="none" strokeWidth="4" strokeLinecap="round" className="stroke-brand-500 transition-[stroke-dashoffset] duration-500 motion-reduce:transition-none" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - done / steps.length)} />
+        </svg>
         <div>
-          <p className="text-sm font-medium text-strong">Tell Selestial about your costs and where you work</p>
-          <p className="text-sm text-muted-foreground">So each price can be checked against what a visit costs you, and research can look in the right place. &ldquo;I&apos;m not sure&rdquo; is a fine answer.</p>
+          <h2 id="getting-started" className="text-sm font-semibold text-strong">
+            Getting your first service live
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {done} of {steps.length} done · next: {next.label.charAt(0).toLowerCase() + next.label.slice(1)}
+          </p>
         </div>
       </div>
-      <Link href={`${SERVICES_ROOT}/setup`} className={buttonVariants({ variant: "secondary", size: "sm" })}>
-        Set up pricing
-      </Link>
-    </div>
+      <ol className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {steps.map((step) => {
+          const body = (
+            <>
+              <span aria-hidden className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full", step.done ? "bg-brand-500 text-white" : step === next ? "border-2 border-brand-500" : "border border-border")}>
+                {step.done ? <Check className="size-3" /> : null}
+              </span>
+              <span className="min-w-0">
+                <span className={cn("block text-sm", step.done ? "text-muted-foreground line-through decoration-muted-foreground/50" : "font-medium text-strong")}>{step.label}</span>
+                {!step.done ? <span className="block text-xs text-muted-foreground">{step.detail}</span> : null}
+              </span>
+              <span className="sr-only">{step.done ? ", done" : step === next ? ", next" : ""}</span>
+            </>
+          );
+          return (
+            <li key={step.id}>
+              {step.href && !step.done ? (
+                <Link href={step.href} className="flex h-full items-start gap-2 rounded-xl border border-transparent bg-card px-3 py-2 transition-colors hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50">
+                  {body}
+                </Link>
+              ) : (
+                <div className="flex h-full items-start gap-2 rounded-xl bg-card/60 px-3 py-2">{body}</div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
 const STARTS = [
-  { mode: "selestial", icon: Sparkles, title: "Help me build my services", body: "Tell Selestial about your business in a conversation. It asks a few questions at a time and writes structured drafts you review." },
-  { mode: "template", icon: TemplateIcon, title: "Start with a template", body: "Choose a kind of cleaning and shape its scope and pricing. Templates give structure, not your local rates." },
-  { mode: "import", icon: Upload, title: "Bring my existing pricing", body: "Upload a spreadsheet or paste your price list. You review every row before anything becomes a draft." },
+  { mode: "selestial", icon: Sparkles, title: "Help me build my services", body: "Answer a few questions in Chat. Selestial writes the drafts." },
+  { mode: "template", icon: TemplateIcon, title: "Start with a template", body: "Pick a kind of cleaning. You set your own rates." },
+  { mode: "import", icon: Upload, title: "Bring my existing pricing", body: "Upload or paste your price list. You check every row." },
 ] as const;
 
 /** The first visit: three ways to begin, and setup. Nothing is live until the Owner publishes. */
@@ -160,7 +208,7 @@ function FirstTime({ catalog }: { catalog: Catalog }) {
       {catalog.legacyWaiting > 0 ? <Notice title="Moving your services from Settings">Your {catalog.legacyWaiting} service{catalog.legacyWaiting === 1 ? "" : "s"} from Settings will appear here once the Owner opens this page.</Notice> : null}
       <div className="rounded-2xl border border-border bg-gradient-to-b from-brand-500/[0.06] to-card px-5 py-6 sm:px-7">
         <h2 className="font-heading text-xl tracking-tight text-strong">Set up what you sell</h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Each service ties its price to exactly what is included, so customers, your team and your margins all read from the same record. Pick how you&apos;d like to start.</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Pick how you&apos;d like to start. Nothing goes live until the Owner publishes it.</p>
         <ul className="mt-5 grid gap-3 md:grid-cols-3">
           {STARTS.map(({ mode, icon: Icon, title, body }) => (
             <li key={mode}>
@@ -185,7 +233,7 @@ function FirstTime({ catalog }: { catalog: Catalog }) {
           .
         </p>
       </div>
-      {!catalog.setupDone && catalog.canPublish ? <SetupPrompt /> : null}
+      <SetupChecklist catalog={catalog} />
     </div>
   );
 }

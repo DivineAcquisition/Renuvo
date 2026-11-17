@@ -73,6 +73,22 @@ The screens keep configuration copy short. These rules apply to every Services s
   - Each change reads as label, old value (struck through), then new value.
   - Example jobs whose price moves show the difference in dollars and percent; unchanged ones are folded.
   - What approving does is a short checked list.
+- **Long lists fold.**
+  - Each extra is one row showing its name, its price with unit (or "Included"), and its time. Its fields
+    open beneath it, and a new extra opens straight away.
+  - On a live service, versions read as a timeline, with "Roll back to this" on each earlier version.
+- **Progress is shown, not described.**
+  - The builder's step rail marks a step with a check when it has nothing to fix, or with a count when it
+    does. On a phone, a bar shows "Step 3 of 6".
+  - Owners and Managers see a four-step checklist with a ring on the Services home until a first service
+    is live: costs, a draft, review, publish.
+- **Template prices are named.** `keptTemplateAmounts` (`convex/lib/services/store.ts`) lists the money
+  amounts in a draft that still exactly match its template's illustrative numbers. Review groups them by
+  step, each with a way to change it, so the owner confirms specific prices rather than "every amount".
+  Times and counts are not listed: they describe the work, not a market's prices.
+- **Research draws its range.** Comparable prices that share the range's unit are dots on one line, with
+  the computed range as a band. The service's own starting price (`startingCents`, `engine.ts`) is marked
+  only when the range is of advertised starting prices per visit, so like is compared with like.
 - Motion respects reduced-motion settings, and screen readers hear the final price, never the frames in between.
 - Text uses `text-brand-300`, the app's deep violet on white. The light theme reverses the brand scale, so
   `text-brand-700` is pale there.
