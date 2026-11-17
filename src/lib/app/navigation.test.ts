@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { AGENT_PROFILES, DEPARTMENTS as BACKEND_DEPARTMENTS } from "../../../convex/lib/departments";
 import { AGENTS as BACKEND_AGENTS } from "../../../convex/lib/statuses";
-import { AGENT_IDS, AGREEMENT_PAGES, AGENTS, FINANCE_PAGES, CLEANER_PAGES, APP_ROOT, BADGE_KINDS, CHAT_PAGES, DEFAULT_DEPARTMENT, DEPARTMENT_IDS, DEPARTMENTS, EXISTING_ROUTES, FOOTER_ITEMS, LANDING_PATH, NAV_ITEMS, PERSISTENT_ITEMS, SETTINGS_PAGES, SHARED_ITEMS, SIDEBAR_SECTIONS, type Badge } from "./navigation";
+import { AGENT_IDS, AGREEMENT_PAGES, AGENTS, CLEANER_PAGES, APP_ROOT, BADGE_KINDS, CHAT_PAGES, SERVICES_PAGES, FINANCE_PAGES, DEFAULT_DEPARTMENT, DEPARTMENT_IDS, DEPARTMENTS, EXISTING_ROUTES, FOOTER_ITEMS, LANDING_PATH, NAV_ITEMS, PERSISTENT_ITEMS, SETTINGS_PAGES, SHARED_ITEMS, SIDEBAR_SECTIONS, type Badge } from "./navigation";
 import {
   activeFor,
   agentsIn,
@@ -84,7 +84,8 @@ describe("the navigation definition", () => {
     expect(SIDEBAR_SECTIONS).toEqual(["business", "departments", "persistent", "agents", "shared", "footer"]);
     expect(PERSISTENT_ITEMS.map((item) => item.label)).toEqual(["Home", "Approvals", "Inbox", "Search"]);
     // Chat leads Company (November 16, 2026). Integrations moved into Settings the same day, on the owner's request.
-    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Chat", "Customers & Properties", "Cleaners", "Agreements", "Finance", "Reports"]);
+    // Services & Pricing joined Company on November 16, 2026, moved out of Settings at the owner's request.
+    expect(SHARED_ITEMS.map((item) => item.label)).toEqual(["Chat", "Services & Pricing", "Customers & Properties", "Cleaners", "Agreements", "Finance", "Reports"]);
     expect(FOOTER_ITEMS.map((item) => item.label)).toEqual(["Settings"]);
   });
 
@@ -183,7 +184,7 @@ describe("what is available today", () => {
       .filter((row) => row.destination.availability.status === "live" || (row.destination.availability.status === "planned" && row.destination.availability.notice))
       .map((row) => row.destination.path);
     for (const pattern of APP_PAGES) {
-      const known = live.includes(pattern) || EXISTING_ROUTES.some((route) => route.pattern === pattern) || SETTINGS_PAGES.some((page) => page.path === pattern) || CHAT_PAGES.some((page) => page.path === pattern) || AGREEMENT_PAGES.some((page) => page.path === pattern) || FINANCE_PAGES.some((page) => page.path === pattern) || CLEANER_PAGES.some((page) => page.path === pattern);
+      const known = live.includes(pattern) || EXISTING_ROUTES.some((route) => route.pattern === pattern) || SETTINGS_PAGES.some((page) => page.path === pattern) || CHAT_PAGES.some((page) => page.path === pattern) || AGREEMENT_PAGES.some((page) => page.path === pattern) || SERVICES_PAGES.some((page) => page.path === pattern) || FINANCE_PAGES.some((page) => page.path === pattern) || CLEANER_PAGES.some((page) => page.path === pattern);
       expect(known, `${pattern} is a page that the navigation does not account for`).toBe(true);
     }
     for (const route of EXISTING_ROUTES) expect(APP_PAGES, route.pattern).toContain(route.pattern);
@@ -292,7 +293,16 @@ describe("navigation behavior", () => {
     for (const agent of AGENTS) expect(agent.tabs.some((tab) => /chat/i.test(tab.label))).toBe(false);
     for (const page of CHAT_PAGES) expect(APP_PAGES, page.path).toContain(page.path);
     for (const page of AGREEMENT_PAGES) expect(APP_PAGES, page.path).toContain(page.path);
+    for (const page of SERVICES_PAGES) expect(APP_PAGES, page.path).toContain(page.path);
     for (const page of CLEANER_PAGES) expect(APP_PAGES, page.path).toContain(page.path);
+  });
+
+  it("keeps every Services & Pricing page under its one Company entry", () => {
+    for (const path of ["/app/services", "/app/services/studio", "/app/services/research/abc", "/app/services/changes/abc", "/app/services/abc123", "/app/services/new?mode=template"]) expect(activeFor(path), path).toMatchObject({ item: "services", agent: null });
+    expect(breadcrumbsFor("/app/services/changes/abc")).toEqual([{ label: "Services & Pricing", href: "/app/services" }]);
+    // The old Settings page is a redirect, written down with what replaced it.
+    expect(EXISTING_ROUTES.find((route) => route.pattern === "/app/settings/services")?.today).toContain("Services & Pricing");
+    for (const role of ["owner", "manager", "office"] as const) expect(mayShow(SHARED_ITEMS.find((item) => item.id === "services")!, role)).toBe(true);
   });
 
   it("highlights the right thing on today's pages", () => {

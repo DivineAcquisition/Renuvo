@@ -83,6 +83,11 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("billingAccounts"), id: v.id("billingAccounts") }),
   v.object({ table: v.literal("aiExecutions"), id: v.id("aiExecutions") }),
   v.object({ table: v.literal("billingIntents"), id: v.id("billingIntents") }),
+  // Services & Pricing (convex/lib/services/schema.ts).
+  v.object({ table: v.literal("services"), id: v.id("services") }),
+  v.object({ table: v.literal("serviceChanges"), id: v.id("serviceChanges") }),
+  v.object({ table: v.literal("serviceImports"), id: v.id("serviceImports") }),
+  v.object({ table: v.literal("researchBriefs"), id: v.id("researchBriefs") }),
   // Finance: the company's own money (convex/lib/finance/schema.ts).
   v.object({ table: v.literal("invoices"), id: v.id("invoices") }),
   v.object({ table: v.literal("payments"), id: v.id("payments") }),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { AddressField } from "@/components/app/address-field";
 import { Guard } from "@/components/app/settings/guard";
@@ -10,8 +10,13 @@ import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/co
 import { Button } from "@/components/ui/button";
 import { centsFrom, zonedInstant } from "@/lib/app/format";
 
+import { defaultInput, JobInputs, QuoteLines } from "@/components/app/services/preview";
+
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { quote as runQuote, type QuoteInput } from "../../../../convex/lib/services/engine";
+import type { Spec } from "../../../../convex/lib/services/spec";
+import { visitScope } from "../../../../convex/lib/services/operations";
 
 const KINDS = [
   { id: "home", label: "Home" },
@@ -255,6 +260,34 @@ function TemplateField({ serviceId, onChoose }: { serviceId: string; onChoose: (
   );
 }
 
+type Live = { key: string; name: string; version: number; spec: Spec };
+
+/**
+ * The company's live services, from Services & Pricing. Choosing one fills the visit from its published
+ * version and prices it with the pricing engine from the job's facts. Until the Owner's services move out
+ * of Settings, the old templates still serve.
+ */
+function ServiceField({ value, onChoose, onLegacy }: { value: string; onChoose: (service: Live | null) => void; onLegacy: (template: Template | null) => void }) {
+  const { companyId } = useCompany();
+  const data = useQuery(api.services.studio, { companyId });
+  const catalog = useQuery(api.services.catalog, { companyId });
+  const live = (data?.services ?? []).filter((s) => s.live).map((s) => ({ key: s.key, name: s.name, version: s.live!.version, spec: s.live!.spec }));
+  if (live.length === 0) return catalog && catalog.legacyWaiting > 0 ? <TemplateField serviceId={value} onChoose={onLegacy} /> : null;
+  const picked = live.find((s) => s.key === value);
+  return (
+    <Field label="Service" hint={picked ? `Live version ${picked.version} from Services & Pricing. Its scope, crew and price are filled in; the visit keeps this version.` : "From Services & Pricing. Or leave it and type the service below."}>
+      <SelectInput value={value} onChange={(event) => onChoose(live.find((s) => s.key === event.target.value) ?? null)}>
+        <option value="">Type it instead</option>
+        {live.map((s) => (
+          <option key={s.key} value={s.key}>
+            {s.name}
+          </option>
+        ))}
+      </SelectInput>
+    </Field>
+  );
+}
+
 /** A visit for a customer at one of their properties, on the company's clock. */
 export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const { companyId, timezone } = useCompany();
@@ -262,6 +295,28 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const create = useMutation(api.jobs.create);
   const { busy, error, run, setError } = useRun();
   const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "", crew: "1", arrival: "0", deadlineDate: "", deadlineTime: "", instructions: "" });
+  /** A service from Services & Pricing, the job's facts for its price, and whether the person typed their own price. */
+  const [service, setService] = useState<Live | null>(null);
+  const [facts, setFacts] = useState<QuoteInput>({});
+  const [typedPrice, setTypedPrice] = useState(false);
+  const priced = useMemo(() => (service ? runQuote(service.spec, { ...facts, ...(form.date ? { date: form.date } : {}) }) : null), [service, facts, form.date]);
+  const engineTotal = priced && (priced.outcome === "firm" || priced.outcome === "estimate") ? priced.totalCents : null;
+  const pick = (next: Live | null) => {
+    setService(next);
+    setTypedPrice(false);
+    if (!next) return setForm((current) => ({ ...current, serviceId: "", duration: 0 }));
+    const input = defaultInput(next.spec);
+    const start = { ...(input.answers ? { answers: input.answers } : {}), ...(next.spec.str?.enabled ? { beds: input.beds } : {}) };
+    setFacts(start);
+    const first = runQuote(next.spec, start);
+    setForm((current) => ({ ...current, serviceId: next.key, duration: first.time.elapsedMinutes || 0, serviceType: next.spec.name, scope: visitScope(next.spec), skills: next.spec.team.skills.join(", "), crew: String(next.spec.team.crewSize), arrival: String(next.spec.team.arrivalWindowMinutes), price: "" }));
+  };
+  const setJobFacts = (input: QuoteInput) => {
+    setFacts(input);
+    if (!service) return;
+    const next = runQuote(service.spec, input);
+    setForm((current) => ({ ...current, duration: next.time.elapsedMinutes || current.duration, crew: String(next.time.crewSize) }));
+  };
   /** Fills the fields from the template. Everything stays editable; the visit keeps a copy of the template as it is now. */
   const choose = (picked: Template | null) =>
     setForm((current) =>
@@ -288,6 +343,10 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
         if (startsAt === null || endsAt === null) return setError("Choose the day, the start time and the end time.");
         const priceCents = form.price.trim() ? centsFrom(form.price) : undefined;
         if (priceCents === null) return setError("Enter the price as an amount in dollars and cents, or leave it empty.");
+        // A service from Services & Pricing is priced by the engine unless the person typed their own price.
+        const fromEngine = service !== null && !typedPrice;
+        if (fromEngine && priced && priced.outcome === "incomplete") return setError(`The price needs: ${priced.missing.join(", ")}. Answer them, or type a price.`);
+        if (fromEngine && priced && priced.outcome === "walkthrough") return setError("This job needs a walkthrough before a firm price. Type the price agreed after the walkthrough.");
         const [requiredCrew, arrivalWindowMinutes] = [Number(form.crew), Number(form.arrival || "0")];
         if (!Number.isInteger(requiredCrew) || requiredCrew < 1 || requiredCrew > 12) return setError("Cleaners needed is a whole number from 1 to 12.");
         if (!Number.isInteger(arrivalWindowMinutes) || arrivalWindowMinutes < 0) return setError("The arrival window is a whole number of minutes. Use 0 for an exact arrival time.");
@@ -303,7 +362,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
             serviceType: form.serviceType,
             scope: form.scope,
             requiredSkills: list(form.skills),
-            priceCents,
+            ...(fromEngine ? { quoteInput: facts, ...(engineTotal !== null ? { expectedTotalCents: engineTotal } : {}) } : { priceCents }),
             startsAt,
             endsAt,
             requiredCrew,
@@ -336,15 +395,30 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
           )}
         </Field>
         <Guard fallback={() => null}>
-          <TemplateField serviceId={form.serviceId} onChoose={choose} />
+          <ServiceField value={form.serviceId} onChoose={pick} onLegacy={choose} />
         </Guard>
-        <Field label="Service">
+        <Field label="Service name">
           <TextInput value={form.serviceType} onChange={set("serviceType")} required maxLength={80} />
         </Field>
-        <Field label="Price (optional)" hint="The price of the service. It is not a payment.">
-          <TextInput inputMode="decimal" value={form.price} onChange={set("price")} placeholder="0.00" />
+        <Field label={service ? "Your own price (optional)" : "Price (optional)"} hint={service ? (typedPrice ? "This typed price is used instead of the service's price, and recorded as yours." : "Leave empty to use the service's price below.") : "The price of the service. It is not a payment."}>
+          <TextInput
+            inputMode="decimal"
+            value={form.price}
+            onChange={(event) => {
+              setTypedPrice(event.target.value.trim() !== "");
+              set("price")(event);
+            }}
+            placeholder={service && engineTotal !== null ? (engineTotal / 100).toFixed(2) : "0.00"}
+          />
         </Field>
       </div>
+      {service && priced ? (
+        <div className="grid gap-3 rounded-xl border border-border bg-muted/20 p-3">
+          <p className="text-sm font-medium text-strong">The job, for its price</p>
+          <JobInputs spec={service.spec} input={facts} onInput={setJobFacts} compact />
+          {!typedPrice ? <QuoteLines result={priced} /> : null}
+        </div>
+      ) : null}
       <Field label="Scope" hint="What the cleaner will be told to do.">
         <TextArea value={form.scope} onChange={set("scope")} required rows={2} />
       </Field>

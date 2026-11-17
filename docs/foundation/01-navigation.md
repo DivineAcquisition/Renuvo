@@ -156,6 +156,7 @@ Three states describe each destination:
 | Inbox | `/app/inbox` | **Planned.** A page exists and says conversations are not built. |
 | Search | `/app/search` | **Planned.** |
 | Chat | `/app/chat` | **Live.** Under Company, for every department. The name opens the conversation workspace; a separate arrow lists New chat, Search chats, pinned and recent chats, and All chats. One conversation is `/app/chat/[id]`; the searchable, paged history is `/app/chats`. Each chat is private to the person who started it. See `docs/chat/00-architecture.md`. |
+| Services & Pricing | `/app/services` | **Live.** Under Company. Services, Pricing Studio, Research & Insights, Changes; the guided builder; templates, import and setup reached from them. Moved out of Settings on November 16, 2026; `/app/settings/services` redirects. See `docs/services/00-architecture.md`. |
 | Customers & Properties | `/app/customers` | **Live.** A list and an add form; no page per customer yet. |
 | Cleaners | `/app/cleaners` | **Live.** A list and an add form; no page per cleaner yet. |
 | Finance | `/app/finance` | **Live** (November 17, 2026): Overview, Invoices & Payments and Team Pay, with Payments setup at `/app/finance/setup`. Expenses and Profitability show as not built yet. Owner only. See `docs/finance/00-plan.md`. |

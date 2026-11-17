@@ -73,7 +73,8 @@ person's approval in chat.
 | Draft | `save_draft`, `revise_draft`, `propose_company_knowledge` | Run directly. A revision names its base version. |
 | Routine write | `create_task`, `prepare_hiring_offer` (Recruiter; a draft for the Approvals queue) | Run directly, once, under an idempotency key. |
 | Consequential write | `request_dispatch_offer` (Dispatch), `request_application_invitation` (Recruiter), `create_hiring_need` (Owner), `record_draft_status` | Shown as a preview; nothing happens until the person approves **in chat**. |
-| Not available | `send_customer_message`, `update_price_book`, `launch_campaign`, `send_for_signature`, `issue_refund_or_credit` | Always answer with the blocker. |
+| Services & Pricing | `list_services`, `read_service`, `quote_service`, `run_pricing_scenarios` (read); `start_service_draft`, `edit_service_draft`, `attach_research` (draft, Managers and the Owner); `submit_service_for_review` (approved in chat first) | Same functions as the workspace (`lib/services/workflow.ts`). Chat edits the one draft the workspace shows and never publishes. See `docs/services/00-architecture.md`. |
+| Not available | `send_customer_message`, `update_price_book`, `launch_campaign`, `send_for_signature`, `issue_refund_or_credit` | Always answer with the blocker. `update_price_book` says publishing is the Owner's, in Services & Pricing › Changes. |
 
 A specialist tool runs through the agent's own tool function (`lib/dispatch/tools.ts`,
 `lib/recruiter/tools.ts`), so the agent's authority level, pause state and hard rules apply exactly as
