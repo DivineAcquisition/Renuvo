@@ -54,6 +54,9 @@ export async function createHandoff(ctx: MutationCtx, application: Doc<"applicat
     status: "onboarding",
     skills: [],
     serviceAreas: Array.isArray(answers.serviceAreas) ? answers.serviceAreas : [],
+    // The hire this worker came from, so their profile keeps the hiring history and nobody is entered twice.
+    source: "hiring",
+    applicationId: application._id,
     createdAt: Date.now(),
   });
   await recordEvent(ctx, { companyId: company._id, type: "cleaner.created", actor, subject: { table: "cleaners", id: cleanerId }, data: { from: "hiring", applicationId: application._id } });

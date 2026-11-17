@@ -10,6 +10,7 @@ import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { cleanerStatusValidator } from "./lib/statuses";
+import { changeStatus } from "./lib/workforce/records";
 import { optionalEmail, optionalText, tags, text } from "./lib/text";
 import { payValidator } from "./schema";
 
@@ -89,20 +90,15 @@ export const update = managerMutation({
   },
 });
 
-/** A person decides a cleaner's standing: ready for work, paused, or ended. */
+/**
+ * A person decides a cleaner's standing: active (stored as "ready"), paused, or ended. Pausing or ending
+ * needs a reason. Visits they accepted are not touched (lib/workforce/records.ts).
+ */
 export const setStatus = managerMutation({
-  args: { cleanerId: v.id("cleaners"), status: cleanerStatusValidator },
+  args: { cleanerId: v.id("cleaners"), status: cleanerStatusValidator, reason: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const cleaner = await owned(ctx, args.cleanerId);
-    if (cleaner.status === args.status) return null;
-    await ctx.db.patch(cleaner._id, { status: args.status });
-    await recordEvent(ctx, {
-      companyId: ctx.companyId,
-      type: "cleaner.status_changed",
-      actor: byMember(ctx),
-      subject: { table: "cleaners", id: cleaner._id },
-      data: { from: cleaner.status, to: args.status },
-    });
+    await changeStatus(ctx, cleaner, args.status, args.reason, ctx.member);
     return null;
   },
 });
@@ -113,10 +109,10 @@ export const setPay = ownerMutation({
     const cleaner = await owned(ctx, args.cleanerId);
     const pay = args.pay;
     if (pay.kind === "share") {
-      if (cleaner.engagement !== "contractor") throw userError("A share of the job is for contractors. Employees are paid hourly.");
+      if (cleaner.engagement === "employee") throw userError("A share of the job is for contractors. Employees are paid hourly.");
       if (!Number.isInteger(pay.shareBps) || pay.shareBps < 0 || pay.shareBps > 10000) throw userError("The share must be between 0% and 100%.");
     } else {
-      if (cleaner.engagement !== "employee") throw userError("An hourly rate is for employees. Contractors are paid a share of the job.");
+      if (cleaner.engagement === "contractor") throw userError("An hourly rate is for employees. Contractors are paid a share of the job.");
       if (!Number.isSafeInteger(pay.hourlyCents) || pay.hourlyCents < 0) throw userError("The hourly rate must be a whole number of cents, zero or more.");
     }
     await ctx.db.patch(cleaner._id, { pay });

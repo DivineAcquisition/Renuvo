@@ -11,6 +11,7 @@ import { billingTables } from "./lib/billing/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
 import { trustTables } from "./lib/trust/schema";
+import { workforceTables, workerSourceValidator } from "./lib/workforce/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
 
@@ -54,6 +55,9 @@ export const addressValidator = v.object({
 });
 
 /** How a cleaner is paid. Contractors get a share of the job (basis points); employees an hourly rate. */
+/** How a person works with the company. Contractors and employees directly; a subcontracted worker through their company. */
+export const engagementValidator = v.union(v.literal("contractor"), v.literal("employee"), v.literal("subcontracted"));
+
 export const payValidator = v.union(
   v.object({ kind: v.literal("share"), shareBps: v.number() }),
   v.object({ kind: v.literal("hourly"), hourlyCents: v.number() }),
@@ -296,17 +300,35 @@ export default defineSchema({
   cleaners: defineTable({
     companyId: v.id("companies"),
     name: v.string(),
+    /** What they like to be called, when it differs from their name. */
+    preferredName: v.optional(v.string()),
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
-    engagement: v.union(v.literal("contractor"), v.literal("employee")),
+    /**
+     * The relationship type: how this person works with the company. "subcontracted" is a person supplied
+     * by a subcontractor company (workerAffiliations says which). Selestial never decides it; a person records it.
+     */
+    engagement: engagementValidator,
+    /** The engagement status. "ready" is shown as Active: a person cleared them for work. It is not readiness. */
     status: cleanerStatusValidator,
+    /** Why the status was last changed, and by whom, when a person gave a reason. */
+    statusNote: v.optional(v.string()),
+    statusChangedAt: v.optional(v.number()),
+    statusChangedBy: v.optional(v.id("members")),
     skills: v.array(v.string()),
     /** Postal codes the cleaner works in. Empty means not set yet, which matches nothing. */
     serviceAreas: v.array(v.string()),
     /** Set by the Owner only. No agent reads this to change it. */
     pay: v.optional(payValidator),
+    /** How the record came to exist, and the hire it came from. */
+    source: v.optional(workerSourceValidator),
+    applicationId: v.optional(v.id("applications")),
+    /** Chosen by the browser for one add, so the same add sent twice makes one record. */
+    addKey: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_company_status", ["companyId", "status"]),
+  })
+    .index("by_company_status", ["companyId", "status"])
+    .index("by_company_addKey", ["companyId", "addKey"]),
 
   /** A weekly window the cleaner said they can work, on the company's clock. Minutes from midnight. */
   availabilityWindows: defineTable({
@@ -723,6 +745,9 @@ export default defineSchema({
   ...chatTables,
   ...agreementTables,
   ...googleTables,
+
+  // ── The workforce beyond the cleaner row: subcontractors, affiliations, crews, imports ───────
+  ...workforceTables,
 
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,

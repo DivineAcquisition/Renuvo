@@ -67,6 +67,12 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "interviews", index: "by_company_application" },
   { table: "hiringOffers", index: "by_company_application" },
   { table: "onboardingHandoffs", index: "by_company_status" },
+  // The workforce beyond the cleaner row (convex/lib/workforce/schema.ts).
+  { table: "subcontractors", index: "by_company_status" },
+  { table: "workerAffiliations", index: "by_company_cleaner" },
+  { table: "crews", index: "by_company_status" },
+  { table: "crewMembers", index: "by_company_crew" },
+  { table: "workerImports", index: "by_company_key", omit: ["key"], why: "A one-time key the browser chose so the same import is not added twice." },
   { table: "integrationRequests", index: "by_company_integration" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },

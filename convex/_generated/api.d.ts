@@ -31,6 +31,7 @@ import type * as companyAgreements from "../companyAgreements.js";
 import type * as compliance from "../compliance.js";
 import type * as consent from "../consent.js";
 import type * as creative from "../creative.js";
+import type * as crews from "../crews.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as dataRights from "../dataRights.js";
@@ -227,6 +228,12 @@ import type * as lib_trust_exportTables from "../lib/trust/exportTables.js";
 import type * as lib_trust_requests from "../lib/trust/requests.js";
 import type * as lib_trust_seed from "../lib/trust/seed.js";
 import type * as lib_trust_staffSchema from "../lib/trust/staffSchema.js";
+import type * as lib_workforce_access from "../lib/workforce/access.js";
+import type * as lib_workforce_activity from "../lib/workforce/activity.js";
+import type * as lib_workforce_duplicates from "../lib/workforce/duplicates.js";
+import type * as lib_workforce_facts from "../lib/workforce/facts.js";
+import type * as lib_workforce_readiness from "../lib/workforce/readiness.js";
+import type * as lib_workforce_records from "../lib/workforce/records.js";
 import type * as links from "../links.js";
 import type * as media from "../media.js";
 import type * as members from "../members.js";
@@ -244,9 +251,11 @@ import type * as requests from "../requests.js";
 import type * as retention from "../retention.js";
 import type * as settings from "../settings.js";
 import type * as staff from "../staff.js";
+import type * as subcontractors from "../subcontractors.js";
 import type * as tasks from "../tasks.js";
 import type * as texting from "../texting.js";
 import type * as trust from "../trust.js";
+import type * as workforce from "../workforce.js";
 
 import type {
   ApiFromModules,
@@ -278,6 +287,7 @@ declare const fullApi: ApiFromModules<{
   compliance: typeof compliance;
   consent: typeof consent;
   creative: typeof creative;
+  crews: typeof crews;
   crons: typeof crons;
   customers: typeof customers;
   dataRights: typeof dataRights;
@@ -474,6 +484,12 @@ declare const fullApi: ApiFromModules<{
   "lib/trust/requests": typeof lib_trust_requests;
   "lib/trust/seed": typeof lib_trust_seed;
   "lib/trust/staffSchema": typeof lib_trust_staffSchema;
+  "lib/workforce/access": typeof lib_workforce_access;
+  "lib/workforce/activity": typeof lib_workforce_activity;
+  "lib/workforce/duplicates": typeof lib_workforce_duplicates;
+  "lib/workforce/facts": typeof lib_workforce_facts;
+  "lib/workforce/readiness": typeof lib_workforce_readiness;
+  "lib/workforce/records": typeof lib_workforce_records;
   links: typeof links;
   media: typeof media;
   members: typeof members;
@@ -491,9 +507,11 @@ declare const fullApi: ApiFromModules<{
   retention: typeof retention;
   settings: typeof settings;
   staff: typeof staff;
+  subcontractors: typeof subcontractors;
   tasks: typeof tasks;
   texting: typeof texting;
   trust: typeof trust;
+  workforce: typeof workforce;
 }>;
 
 /**

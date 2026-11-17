@@ -157,7 +157,7 @@ Three states describe each destination:
 | Search | `/app/search` | **Planned.** |
 | Chat | `/app/chat` | **Live.** Under Company, for every department. The name opens the conversation workspace; a separate arrow lists New chat, Search chats, pinned and recent chats, and All chats. One conversation is `/app/chat/[id]`; the searchable, paged history is `/app/chats`. Each chat is private to the person who started it. See `docs/chat/00-architecture.md`. |
 | Customers & Properties | `/app/customers` | **Live.** A list and an add form; no page per customer yet. |
-| Cleaners | `/app/cleaners` | **Live.** A list and an add form; no page per cleaner yet. |
+| Cleaners | `/app/cleaners` | **Live.** The workforce workspace: overview, attention, a card and table directory, and a page per person at `/app/cleaners/[id]` (`docs/cleaners/00-architecture.md`). |
 | Finance | `/app/finance` | **Planned.** Shown to the Owner only. |
 | Reports | `/app/reports` | **Interim** at `/app/insights`. Weekly measures only. |
 | Integrations | `/app/integrations` | **Live** as a list of every integration, what it does and which agents use it. Each connection is built in phases (`docs/integrations/00-plan.md`); none connects yet. |
@@ -297,7 +297,7 @@ shown, never a guessed one.
 - 45 of the 47 work tabs. Two (Dispatch's Schedule and Offers & Coverage) are
   served in the meantime by existing pages.
 - Search, Finance, Inbox.
-- A page per customer and per cleaner.
+- A page per customer.
 - Badges for the seven agents that have no workflow.
 - Moving Schedule and Reports to their own paths, with redirects.
 

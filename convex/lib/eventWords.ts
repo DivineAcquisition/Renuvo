@@ -24,6 +24,9 @@ export type Described = {
   ref: EventRef | null;
 };
 
+const STATUS_EVENT_WORDS: Record<string, string> = { ready: "active", onboarding: "onboarding", paused: "paused", ended: "ended" };
+const ENGAGEMENT_EVENT_WORDS: Record<string, string> = { employee: "an employee", contractor: "an independent contractor", subcontracted: "a subcontractor worker" };
+
 const LEVEL_WORDS: Record<string, string> = { off: "Off", propose: "Propose", execute_and_report: "Execute and report", execute: "Execute" };
 
 export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, events: Doc<"events">[], asOf: number): Promise<Described[]> {
@@ -128,7 +131,23 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
           availability_set: `updated the hours ${name} can work`,
           time_off_added: `added time off for ${name}`,
           time_off_removed: `removed time off for ${name}`,
+          engagement_changed: `recorded ${name} as ${ENGAGEMENT_EVENT_WORDS[String(data.to)] ?? "a different worker type"}`,
+          affiliation_changed: data.subcontractorId ? `recorded which company supplies ${name}` : `recorded that ${name} works directly for the company`,
+          crew_joined: `added ${name} to a crew${data.role === "lead" ? " as its lead" : ""}`,
+          crew_role_changed: data.role === "lead" ? `made ${name} a crew lead` : `changed ${name}'s role in a crew`,
+          crew_left: `took ${name} off a crew`,
         }[what] ?? null;
+      if (what === "created" && data.source === "import") text = `imported ${name} from a list`;
+      if (what === "created" && data.from === "hiring") text = `added ${name} from an accepted hiring offer`;
+      if (what === "status_changed") text = `marked ${name} as ${STATUS_EVENT_WORDS[String(data.to)] ?? "changed"}`;
+    } else if (subject.table === "subcontractors") {
+      text = { created: "added a subcontractor company", updated: "updated a subcontractor company", status_changed: `marked a subcontractor company ${String(data.to ?? "changed")}` }[what] ?? null;
+    } else if (subject.table === "crews") {
+      text = { created: "created a crew", archived: "archived a crew" }[what] ?? null;
+    } else if (subject.table === "workerImports") {
+      text = what === "imported" ? `imported ${String(data.created ?? "")} cleaners from a list` : null;
+    } else if (subject.table === "onboardingHandoffs") {
+      text = { handed_off: "handed a new hire to onboarding", requirement_recorded: data.done ? "recorded an onboarding item as done" : "marked an onboarding item outstanding again", completed: "completed onboarding from the hire" }[what] ?? null;
     } else if (subject.table === "customers") {
       const name = (await doc(subject.id))?.name ?? "a customer";
       text = { created: `added ${name} as a customer`, updated: `updated ${name}` }[what] ?? null;

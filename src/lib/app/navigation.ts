@@ -154,11 +154,11 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     id: "cleaners",
     label: "Cleaners",
     section: "shared",
-    purpose: "The people who do the work: standing, skills, areas and availability.",
+    purpose: "The workforce: who is ready to work, who needs attention, and what stands in the way, with a profile for each person.",
     path: `${APP_ROOT}/cleaners`,
     availability: LIVE,
     minimumRole: "office",
-    accessNote: "Pay rates are shown to the Owner only. A list and an add form so far; a page for each cleaner is still to build.",
+    accessNote: "Everyone sees the directory, contact details, availability and readiness. Managers add, import and change status. Pay and worker type are the Owner's alone, enforced in Convex.",
   },
   {
     id: "agreements",
@@ -221,6 +221,9 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
   { path: `${APP_ROOT}/agreements/new`, label: "New agreement", purpose: "Build with Selestial, use a template, or upload an agreement." },
   { path: `${APP_ROOT}/agreements/[id]`, label: "Agreement", purpose: "One agreement: its document, parties, terms, versions, review and signatures, and activity." },
 ];
+
+/** Pages inside Cleaners. They have no sidebar entry of their own: the directory links to them. */
+export const CLEANER_PAGES: readonly { path: string; label: string; purpose: string }[] = [{ path: `${APP_ROOT}/cleaners/[id]`, label: "Cleaner", purpose: "One person's profile: overview, availability and jobs, onboarding, skills, performance, pay and activity." }];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */
 export const CHAT_PAGES: readonly { path: string; label: string; purpose: string }[] = [
