@@ -6,10 +6,15 @@
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import { internalMutation, type QueryCtx } from "./_generated/server";
+import { authorityFor } from "./lib/authority";
+import { REMINDER_ACTION, reminderDays, reminderKey, reminderPlan, reminderSweep, sendOnboardingReminder } from "./lib/workforce/reminders";
 import { owned } from "./lib/access";
 import { availabilityFor, overlaps, type Span, type WeeklyWindow } from "./lib/availability";
-import { companyQuery, managerMutation, managerQuery, ownerMutation, ownerQuery } from "./lib/builders";
+import { companyMutation, companyQuery, managerMutation, managerQuery, ownerMutation, ownerQuery } from "./lib/builders";
+import { siteOrigin } from "./lib/dispatch/links";
+import { queueMessage } from "./lib/messaging/outbox";
+import { issuePortalLink, linksOf, portalConfigured, portalLinkState, portalPath, portalToken, revokePortal, sessionState } from "./lib/workforce/portal";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { describeEvents } from "./lib/eventWords";
@@ -605,3 +610,182 @@ export const commitImport = managerMutation({
   },
 });
 
+
+// ── The cleaner portal, from the office ──────────────────────────────────────────────────────────
+
+const DELIVERY_WORDS: Record<Doc<"messages">["status"], string> = {
+  queued: "Being prepared",
+  held: "Held until quiet hours end",
+  sending: "Sending",
+  sent: "Sent",
+  delivered: "Delivered",
+  failed: "Not delivered",
+  unconfirmed: "Sent, delivery not confirmed",
+  not_sent: "Not sent",
+};
+
+/**
+ * Where a cleaner's portal stands: the newest invitation, what became of its text (prepared, sent,
+ * delivered, failed), and whether the cleaner acted on it by confirming a code. Opening a link is never
+ * recorded, so it is never shown.
+ */
+export const portalStatus = managerQuery({
+  args: { cleanerId: v.id("cleaners"), asOf: v.number() },
+  handler: async (ctx, args) => {
+    const worker = await owned(ctx, args.cleanerId);
+    const now = instant(args.asOf, "The time");
+    const tz = ctx.company.timezone;
+    const links = (await linksOf(ctx, worker)).filter((link) => link.purpose === "portal");
+    const newest = links[0] ?? null;
+    let text: null | { status: Doc<"messages">["status"]; words: string; problem: string | null; at: number } = null;
+    if (newest) {
+      const message = await ctx.db
+        .query("messages")
+        .withIndex("by_company_dedupe", (q) => q.eq("companyId", ctx.companyId).eq("dedupeKey", `portal.invite:${newest._id}`))
+        .first();
+      if (message) text = { status: message.status, words: DELIVERY_WORDS[message.status], problem: message.problem ?? null, at: message.deliveredAt ?? message.sentAt ?? message.queuedAt };
+    }
+    const sessions = await ctx.db
+      .query("portalSessions")
+      .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", worker._id))
+      .take(100);
+    return {
+      configured: portalConfigured(),
+      phone: worker.phone ?? null,
+      invitation: newest
+        ? {
+            linkId: newest._id,
+            state: portalLinkState(newest, now),
+            issued: dayName(newest.issuedAt, tz),
+            expires: dayName(newest.expiresAt, tz),
+            revokeReason: newest.revokeReason ?? null,
+            usedWords: newest.verifiedAt ? `Confirmed their code ${when(newest.verifiedAt, now, tz)}` : "Has not confirmed a code yet",
+            text,
+          }
+        : null,
+      activeSessions: sessions.filter((session) => sessionState(session, now) === "active").length,
+      earlierInvitations: Math.max(0, links.length - 1),
+    };
+  },
+});
+
+/**
+ * Invites a cleaner to their portal: a new link (the earlier one stops working) and a text through the
+ * one send gate. A text the gate refuses is kept as not sent, with the reason; the office can then copy
+ * the link and give it to the cleaner directly.
+ */
+export const invitePortal = managerMutation({
+  args: { cleanerId: v.id("cleaners") },
+  handler: async (ctx, args) => {
+    const worker = await owned(ctx, args.cleanerId);
+    if (worker.status === "ended") throw userError("Their engagement has ended, so they have no portal.");
+    const link = await issuePortalLink(ctx, worker, { purpose: "portal", issuedBy: { kind: "member", memberId: ctx.member._id }, actor: byMember(ctx) });
+    if (!link) throw userError("Links are not set up on this deployment yet, so no portal link can be made.");
+    const message = await queueMessage(ctx, {
+      companyId: ctx.companyId,
+      purpose: "portal_invite",
+      cleaner: worker,
+      portalLinkId: link._id,
+      body: `${ctx.company.name}: your cleaner portal is ready for onboarding, your hours and your jobs. Open {link} and confirm it is you with a code we text you.`,
+      dedupeKey: `portal.invite:${link._id}`,
+      actor: byMember(ctx),
+    });
+    return { status: message.status, problem: message.problem ?? null };
+  },
+});
+
+/** The current link, for the office to give the cleaner by hand when a text cannot go. The cleaner still needs the code. */
+export const portalLink = managerMutation({
+  args: { cleanerId: v.id("cleaners") },
+  handler: async (ctx, args) => {
+    const worker = await owned(ctx, args.cleanerId);
+    const current = (await linksOf(ctx, worker)).find((row) => row.purpose === "portal" && portalLinkState(row, Date.now()) === "active");
+    if (!current) throw userError("There is no working portal link. Send a new invitation first.");
+    const token = await portalToken(current);
+    if (!token) throw userError("Links are not set up on this deployment yet.");
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "cleaner.portal_link_copied", actor: byMember(ctx), subject: { table: "cleaners", id: worker._id } });
+    return `${siteOrigin()}${portalPath(token)}`;
+  },
+});
+
+export const endPortalAccess = managerMutation({
+  args: { cleanerId: v.id("cleaners"), reason: v.string() },
+  handler: async (ctx, args) => {
+    const worker = await owned(ctx, args.cleanerId);
+    const reason = args.reason.trim();
+    if (reason.length < 3) throw userError("Say why their portal access is ending.");
+    await revokePortal(ctx, worker, reason.slice(0, 300), byMember(ctx));
+    return null;
+  },
+});
+
+/** Open questions cleaners sent from their portal. Everyone in the company may answer one. */
+export const helpRequests = companyQuery({
+  args: { cleanerId: v.optional(v.id("cleaners")), asOf: v.number() },
+  handler: async (ctx, args) => {
+    const now = instant(args.asOf, "The time");
+    const rows = await ctx.db
+      .query("helpRequests")
+      .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "open"))
+      .order("desc")
+      .take(200);
+    const out = [];
+    for (const row of rows) {
+      if (args.cleanerId && row.cleanerId !== args.cleanerId) continue;
+      const worker = await ctx.db.get(row.cleanerId);
+      out.push({ id: row._id, cleanerId: row.cleanerId, name: worker?.name ?? "A cleaner", topic: row.topic, text: row.text, when: when(row.createdAt, now, ctx.company.timezone) });
+    }
+    return out;
+  },
+});
+
+export const answerHelp = companyMutation({
+  args: { helpRequestId: v.id("helpRequests") },
+  handler: async (ctx, args) => {
+    const row = await owned(ctx, args.helpRequestId);
+    if (row.status === "answered") return null;
+    await ctx.db.patch(row._id, { status: "answered", answeredBy: ctx.member._id, answeredAt: Date.now() });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "helpRequests.answered", actor: byMember(ctx), subject: { table: "helpRequests", id: row._id } });
+    return null;
+  },
+});
+
+// ── Onboarding reminders ─────────────────────────────────────────────────────────────────────────
+
+export const reminders = internalMutation({ args: {}, handler: async (ctx) => reminderSweep(ctx, Date.now()) });
+
+/**
+ * Where reminders stand for one worker: what the next one would be about, or why none is due. The same
+ * check the sweep runs, so what a person reads is what Recruiter will do.
+ */
+export const reminderStatus = managerQuery({
+  args: { cleanerId: v.id("cleaners"), asOf: v.number() },
+  handler: async (ctx, args) => {
+    const worker = await owned(ctx, args.cleanerId);
+    const now = instant(args.asOf, "The time");
+    const days = reminderDays(ctx.company);
+    const sent = [];
+    for (let attempt = 1; attempt <= days.length; attempt += 1) {
+      const message = await ctx.db
+        .query("messages")
+        .withIndex("by_company_dedupe", (q) => q.eq("companyId", ctx.companyId).eq("dedupeKey", reminderKey(worker._id, attempt)))
+        .first();
+      if (!message) break;
+      sent.push({ attempt, status: message.status, words: DELIVERY_WORDS[message.status], when: when(message.queuedAt, now, ctx.company.timezone), problem: message.problem ?? null });
+    }
+    const authority = await authorityFor(ctx, ctx.companyId, REMINDER_ACTION);
+    const level = authority.kind === "level" ? authority.level : authority.kind;
+    return { sent, max: days.length, days, level };
+  },
+});
+
+/** A person sends the next reminder now, whatever the timing. Every other check still applies, and it is the same reminder the sweep would send. */
+export const remindNow = managerMutation({
+  args: { cleanerId: v.id("cleaners") },
+  handler: async (ctx, args) => {
+    const worker = await owned(ctx, args.cleanerId);
+    const plan = await reminderPlan(ctx, ctx.company, worker, Date.now(), { ignoreTiming: true });
+    if (!plan.due) throw userError(plan.why);
+    return sendOnboardingReminder(ctx, worker._id, plan.attempt, byMember(ctx), { ignoreTiming: true });
+  },
+});

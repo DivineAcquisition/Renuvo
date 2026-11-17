@@ -13,6 +13,7 @@ import { internalAction, internalMutation, type ActionCtx, type MutationCtx } fr
 import { readProfile } from "./lib/compliance/profile";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
 import { linkPath, linkState, siteOrigin, tokenFor } from "./lib/dispatch/links";
+import { codeFor, portalLinkState, portalPath, portalToken } from "./lib/workforce/portal";
 import { recordEvent } from "./lib/events";
 import type { SendIntent } from "./lib/messaging/outbox";
 import { checkSend } from "./lib/messaging/policy";
@@ -82,6 +83,27 @@ export const claim = internalMutation({
         return null;
       }
       body = body.replace("{link}", `${siteOrigin()}${linkPath(link.purpose, token, message.linkPath ?? "")}`);
+    }
+    if (message.portalLinkId) {
+      const link = await ctx.db.get(message.portalLinkId);
+      const token = link ? await portalToken(link) : null;
+      if (!link || !token || portalLinkState(link, Date.now()) !== "active") {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: "The link was closed before the text went out." });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        return null;
+      }
+      body = body.replace("{link}", `${siteOrigin()}${portalPath(token)}`);
+    }
+    if (message.portalCodeId) {
+      // The code is worked out now and never stored. A code that expired or was replaced is not sent.
+      const code = await ctx.db.get(message.portalCodeId);
+      const digits = code && code.usedAt === undefined && code.expiresAt > Date.now() ? await codeFor(code) : null;
+      if (!digits) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: "The code expired or was replaced before the text went out." });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        return null;
+      }
+      body = body.replace("{code}", digits);
     }
     let fromName = "";
     let via: { connectionId: Id<"mailboxConnections">; address: string } | null = null;

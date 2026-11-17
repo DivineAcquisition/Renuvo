@@ -7,6 +7,7 @@ import { nextRole } from "./crew";
 import { CREW_PAY_DEFAULT, payFor, type CrewPay } from "./pay";
 import { crewPayOf } from "./policy";
 import { dispatchSettings } from "./settings";
+import { assignmentBlockers } from "../workforce/requirements";
 
 type Db = QueryCtx | MutationCtx;
 
@@ -114,6 +115,7 @@ export async function cleanerFacts(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"clea
     endedForJob: history.ended.get(cleaner._id) ?? null,
     priorVisitsForCustomer: history.prior.get(cleaner._id) ?? 0,
     pay: payFor(cleaner, job, history.crewPay),
+    onboardingBlockers: await assignmentBlockers(ctx, cleaner, Date.now()),
   };
 }
 

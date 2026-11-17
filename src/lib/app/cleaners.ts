@@ -41,6 +41,8 @@ export type DirectoryState = {
   area: string[];
   skill: string[];
   subcontractor: string[];
+  /** Where the company's onboarding requirements stand. */
+  stage: string[];
   quick: QuickFilter | null;
   /** An availability window on the company's clock: a date and a start and end time. */
   window: { date: string; from: string; to: string } | null;
@@ -48,9 +50,9 @@ export type DirectoryState = {
   open: string | null;
 };
 
-export const EMPTY_STATE: DirectoryState = { q: "", view: "cards", type: [], status: [], readiness: [], crew: [], area: [], skill: [], subcontractor: [], quick: null, window: null, open: null };
+export const EMPTY_STATE: DirectoryState = { q: "", view: "cards", type: [], status: [], readiness: [], crew: [], area: [], skill: [], subcontractor: [], stage: [], quick: null, window: null, open: null };
 
-const LIST_KEYS = ["type", "status", "readiness", "crew", "area", "skill", "subcontractor"] as const;
+const LIST_KEYS = ["type", "status", "readiness", "crew", "area", "skill", "subcontractor", "stage"] as const;
 const READINESS: readonly ReadinessFilter[] = ["ready", "blocked", "onboarding", "paused", "ended"];
 const QUICK: readonly QuickFilter[] = ["attention", "working_today"];
 
@@ -96,6 +98,15 @@ export function activeFilterCount(state: DirectoryState): number {
 /** Where the list was, so a worker's own page can lead back to exactly that list. */
 export const LAST_LIST_KEY = "selestial.cleaners.list";
 
+export const STAGE_WORDS: Record<string, string> = {
+  none: "No requirements apply",
+  not_started: "Not started",
+  in_progress: "In progress",
+  awaiting_review: "Waiting for review",
+  needs_changes: "Needs changes",
+  complete: "Complete",
+};
+
 export type FilterableRow = {
   cleanerId: string;
   name: string;
@@ -111,6 +122,7 @@ export type FilterableRow = {
   email: string | null;
   attention: number;
   workingToday: boolean;
+  onboarding?: { stage: string };
 };
 
 const fold = (value: string) =>
@@ -139,6 +151,7 @@ export function filterRows<R extends FilterableRow>(rows: R[], state: DirectoryS
     if (state.area.length > 0 && !row.serviceAreas.some((area) => state.area.includes(area))) return false;
     if (state.skill.length > 0 && !state.skill.every((skill) => row.skills.includes(skill))) return false;
     if (state.subcontractor.length > 0 && !(row.subcontractor && state.subcontractor.includes(row.subcontractor.id))) return false;
+    if (state.stage.length > 0 && !state.stage.includes(row.onboarding?.stage ?? "none")) return false;
     if (state.quick === "attention" && row.attention === 0) return false;
     if (state.quick === "working_today" && !row.workingToday) return false;
     if (state.window && available && !available[row.cleanerId]?.available) return false;

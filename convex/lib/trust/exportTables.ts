@@ -73,6 +73,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "crews", index: "by_company_status" },
   { table: "crewMembers", index: "by_company_crew" },
   { table: "workerImports", index: "by_company_key", omit: ["key"], why: "A one-time key the browser chose so the same import is not added twice." },
+  { table: "onboardingRequirements", index: "by_company_status" },
+  { table: "workerRequirements", index: "by_company_cleaner" },
+  { table: "helpRequests", index: "by_company_status" },
+  { table: "workerDocuments", index: "by_company_cleaner", omit: ["storageId", "clientKey"], why: "Internal file references. The files themselves are not in the file." },
   { table: "integrationRequests", index: "by_company_integration" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
@@ -113,6 +117,9 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   numberSearches: "Lists of numbers that were for sale at the moment of a search; the number the company asked for is in its texting request.",
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
+  portalLinks: "Each row is half of a cleaner's portal link; a copy of it must never leave the record.",
+  portalCodes: "Ten-minute, single-use code records for portal sign-in; nothing in them is about the business.",
+  portalSessions: "Device sessions for the cleaner portal; a copy must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
   billingWebhooks: "Delivery references for Autumn's notices to Selestial; the plan and balances they point to are exported as billingAccounts.",
   mailboxCredentials: "A sealed authorization to read and send from the company's mailbox; it opens the mailbox, so a copy must never leave. The connection itself is exported.",

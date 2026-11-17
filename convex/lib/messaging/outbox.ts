@@ -23,6 +23,9 @@ export type PlannedMessage = {
   assignmentId?: Id<"assignments">;
   /** The link the text carries. `undefined` means the text has none. `null` means it needs one and none could be issued. */
   link?: Doc<"actionLinks"> | null;
+  /** A portal link or code the text carries instead (lib/workforce/portal.ts). `null`: one was needed and none could be issued. */
+  portalLinkId?: Id<"portalLinks"> | null;
+  portalCodeId?: Id<"portalCodes">;
   linkPath?: string;
   /** With "{link}" where the link goes. */
   body: string;
@@ -58,6 +61,8 @@ type Plan = {
   assignmentId?: Id<"assignments">;
   link?: Doc<"actionLinks"> | null;
   linkPath?: string;
+  portalLinkId?: Id<"portalLinks">;
+  portalCodeId?: Id<"portalCodes">;
   to: string | null;
   body: string;
   dedupeKey: string;
@@ -95,6 +100,8 @@ async function plan(ctx: MutationCtx, input: Plan): Promise<Doc<"messages">> {
     assignmentId: input.assignmentId,
     linkId: input.link?._id,
     linkPath: input.linkPath,
+    portalLinkId: input.portalLinkId,
+    portalCodeId: input.portalCodeId,
     to: input.to ?? undefined,
     body: input.body,
     dedupeKey: input.dedupeKey,
@@ -139,7 +146,7 @@ export async function queueMessage(ctx: MutationCtx, planned: PlannedMessage): P
   let problem: string | null = null;
   if (!planned.cleaner.phone) problem = "No phone number on file.";
   else if (!to) problem = "The phone number on file is not valid.";
-  else if (planned.link === null) problem = "Action links are not set up, so there was no link to send.";
+  else if (planned.link === null || planned.portalLinkId === null) problem = "Action links are not set up, so there was no link to send.";
 
   return plan(ctx, {
     companyId: planned.companyId,
@@ -149,6 +156,8 @@ export async function queueMessage(ctx: MutationCtx, planned: PlannedMessage): P
     assignmentId: planned.assignmentId,
     link: planned.link,
     linkPath: planned.linkPath,
+    portalLinkId: planned.portalLinkId ?? undefined,
+    portalCodeId: planned.portalCodeId,
     to,
     body: planned.body,
     dedupeKey: planned.dedupeKey,

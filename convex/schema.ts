@@ -99,6 +99,8 @@ export const proposalValidator = v.union(
   v.object({ kind: v.literal("send_hiring_offer"), offerId: v.id("hiringOffers") }),
   v.object({ kind: v.literal("decline_application"), applicationId: v.id("applications"), criterion: v.string() }),
   v.object({ kind: v.literal("urgent_outreach"), applicationId: v.id("applications"), taskId: v.id("tasks") }),
+  /** Text a new worker a reminder about onboarding items only they can do (convex/lib/workforce/reminders.ts). */
+  v.object({ kind: v.literal("send_onboarding_reminder"), cleanerId: v.id("cleaners"), attempt: v.number() }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -537,6 +539,10 @@ export default defineSchema({
       v.literal("hiring_offer"),
       v.literal("application_decline"),
       v.literal("urgent_outreach"),
+      // The Cleaners workspace, to workers.
+      v.literal("portal_invite"),
+      v.literal("portal_code"),
+      v.literal("onboarding_reminder"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -551,6 +557,10 @@ export default defineSchema({
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
     linkId: v.optional(v.id("actionLinks")),
+    /** A link into the cleaner's portal; filled in at sending time, never stored in the body. */
+    portalLinkId: v.optional(v.id("portalLinks")),
+    /** A portal code; the code is worked out at sending time and never stored. */
+    portalCodeId: v.optional(v.id("portalCodes")),
     /** Where on the cleaner pages the link opens, for example "/delay". */
     linkPath: v.optional(v.string()),
     to: v.optional(v.string()),

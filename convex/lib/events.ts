@@ -15,6 +15,8 @@ export const actorValidator = v.union(
   v.object({ kind: v.literal("system") }),
   /** A cleaner acting through an action link. The link is the authorization; the cleaner id says who it was issued to. */
   v.object({ kind: v.literal("cleaner"), cleanerId: v.id("cleaners"), linkId: v.id("actionLinks") }),
+  /** A cleaner acting in their own portal, after confirming a code sent to them (convex/portal.ts). */
+  v.object({ kind: v.literal("cleaner_portal"), cleanerId: v.id("cleaners") }),
   /** An applicant acting through an applicant link. */
   v.object({ kind: v.literal("applicant"), applicantId: v.id("applicants"), linkId: v.id("applicantLinks") }),
 );
@@ -57,6 +59,9 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("subcontractors"), id: v.id("subcontractors") }),
   v.object({ table: v.literal("crews"), id: v.id("crews") }),
   v.object({ table: v.literal("workerImports"), id: v.id("workerImports") }),
+  v.object({ table: v.literal("onboardingRequirements"), id: v.id("onboardingRequirements") }),
+  v.object({ table: v.literal("portalLinks"), id: v.id("portalLinks") }),
+  v.object({ table: v.literal("helpRequests"), id: v.id("helpRequests") }),
   // Company agreements (convex/lib/agreements/schema.ts).
   v.object({ table: v.literal("agreements"), id: v.id("agreements") }),
   v.object({ table: v.literal("agreementTemplates"), id: v.id("agreementTemplates") }),

@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Component, Suspense, useState } from "react";
 
-import { AgreementsForRecord } from "@/components/app/agreements/record";
 import { EditDetailsForm, HoursForm, PayForm, StatusForm, TimeOffForm, WorkerTypeForm } from "@/components/app/cleaners/forms";
+import { OnboardingSection, TextPermissionForm } from "@/components/app/cleaners/onboarding";
 import { Avatar, Chips, ReadinessLine, StatusBadge, TypeLabel, type Profile } from "@/components/app/cleaners/shared";
 import { canManage, useCompany } from "@/components/app/company";
 import { useDetail } from "@/components/app/detail-panel";
@@ -94,7 +94,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-type Open = "details" | "status" | "type" | "hours" | "timeoff" | "pay" | null;
+type Open = "details" | "status" | "type" | "hours" | "timeoff" | "pay" | "permission" | null;
 
 // ── The header ─────────────────────────────────────────────────────────────────────────────────
 
@@ -150,11 +150,42 @@ export function ProfileHeader({ profile, onEdit, compact }: { profile: Profile; 
 
 // ── Sections ───────────────────────────────────────────────────────────────────────────────────
 
+/** Questions the cleaner sent from their portal. A person answers them; marking one answered stops it being listed. */
+function HelpCard({ cleanerId }: { cleanerId: Id<"cleaners"> }) {
+  const company = useCompany();
+  const now = useNow();
+  const rows = useQuery(api.workforce.helpRequests, now ? { companyId: company.companyId, cleanerId, asOf: now } : "skip");
+  const answer = useMutation(api.workforce.answerHelp);
+  const { busy, error, run } = useRun();
+  if (!rows || rows.length === 0) return null;
+  return (
+    <Card title="Questions from them">
+      <ul className="grid gap-2">
+        {rows.map((row) => (
+          <li key={row.id} className="rounded-xl border border-brand-500/30 bg-brand-500/5 p-3">
+            <p className="text-sm text-strong">“{row.text}”</p>
+            <p className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>
+                About {row.topic}, {row.when}. Reply by text or call them.
+              </span>
+              <Button size="xs" variant="outline" loading={busy} onClick={() => void run(() => answer({ companyId: company.companyId, helpRequestId: row.id }))}>
+                Mark answered
+              </Button>
+            </p>
+          </li>
+        ))}
+      </ul>
+      <FormError message={error} />
+    </Card>
+  );
+}
+
 function OverviewSection({ profile, onSection, onEdit }: { profile: Profile; onSection: (section: ProfileSectionId) => void; onEdit: (what: Open) => void }) {
   const openJob = useDetail();
   return (
     <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
       <div className="grid content-start gap-4">
+        <HelpCard cleanerId={profile.cleanerId} />
         {profile.attentionItems.length > 0 ? (
           <Card title="Needs attention">
             <ul className="grid gap-3">
@@ -193,6 +224,11 @@ function OverviewSection({ profile, onSection, onEdit }: { profile: Profile; onS
                     : "Their engagement has ended. Their history is kept."}
           </p>
           <ReadinessChecklist checks={profile.readiness.checks} onSection={onSection} />
+          {canManage(profile.viewer.role) && profile.readiness.checks.some((check) => check.key === "work_texts" && check.state === "unmet") ? (
+            <Button className="mt-3" variant="outline" size="sm" onClick={() => onEdit("permission")}>
+              Record their permission for work texts
+            </Button>
+          ) : null}
           <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
             <Info className="mt-px size-3.5 shrink-0" aria-hidden />
             Payout readiness is kept by Finance, which is not built yet, so it is not shown here as ready or not ready.
@@ -443,61 +479,6 @@ function AvailabilitySection({ profile, onEdit }: { profile: Profile; onEdit: (w
   );
 }
 
-function OnboardingSection({ profile }: { profile: Profile }) {
-  const company = useCompany();
-  const record = useMutation(api.onboarding.record);
-  const { busy, error, run } = useRun();
-  const manager = canManage(company.role);
-  return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <div className="grid content-start gap-4">
-        {profile.hire ? (
-          <Card title={`From their hire: ${profile.hire.role}`}>
-            <p className="text-sm text-muted-foreground">
-              {profile.hire.handoffStatus === "open" ? `Due ${profile.hire.dueWords}. ${profile.hire.nextAction}` : profile.hire.handoffStatus === "complete" ? "Every item from the hire was recorded as done." : "The hire was cancelled."}
-            </p>
-            <ul className="mt-3 grid gap-1.5">
-              {profile.hire.requirements.map((item) => (
-                <li key={item.key} className="flex items-start gap-2.5 rounded-xl border border-border px-3 py-2">
-                  {item.done ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success-foreground" aria-hidden /> : <CircleDashed className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />}
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm text-strong">{item.label}</span>
-                    <span className="block text-xs text-muted-foreground">{item.done ? `Recorded as done${item.at ? ` on ${item.at}` : ""}` : "Not recorded yet"}{item.note ? ` · ${item.note}` : ""}</span>
-                  </span>
-                  {manager && profile.hire!.handoffStatus === "open" ? (
-                    <Button variant="ghost" size="xs" loading={busy} onClick={() => void run(() => record({ companyId: company.companyId, handoffId: profile.hire!.handoffId, requirement: item.key, done: !item.done }))}>
-                      {item.done ? "Undo" : "Record done"}
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-            <FormError message={error} />
-            <p className="mt-3 text-xs text-muted-foreground">An item is done because a named person recorded it. Being recorded does not verify a document.</p>
-          </Card>
-        ) : null}
-        <NotBuilt
-          title="Onboarding requirements and documents are next"
-          body="Your own onboarding templates by worker type, with each item submitted, reviewed and accepted, and documents with expiry dates, come in the next phase. Until then, readiness above shows only what the record holds today."
-        />
-      </div>
-      {manager ? (
-        <Card title="Workforce agreements">
-          <AgreementsForRecord table="cleaners" id={profile.cleanerId} title="Linked to this person" />
-          <p className="mt-3 text-xs text-muted-foreground">Signing and versions stay in Agreements. A document being sent is not the same as it being signed.</p>
-        </Card>
-      ) : (
-        <Card title="Workforce agreements">
-          <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
-            <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
-            Workforce documents are open to managers and the Owner.
-          </p>
-        </Card>
-      )}
-    </div>
-  );
-}
-
 function SkillsSection({ profile, onEdit }: { profile: Profile; onEdit: (what: Open) => void }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -664,6 +645,9 @@ export function ProfileModals({ profile, open, onClose }: { profile: Profile; op
       </Modal>
       <Modal open={open === "timeoff"} onClose={onClose} title="Add time away" description="They are offered nothing in this time.">
         <TimeOffForm cleanerId={profile.cleanerId} timezone={profile.timezone} onDone={onClose} />
+      </Modal>
+      <Modal open={open === "permission"} onClose={onClose} title="Permission for work texts" description="Texts to a cleaner go out only with their recorded permission. Record how they gave it.">
+        <TextPermissionForm cleanerId={profile.cleanerId} onDone={onClose} />
       </Modal>
       <Modal open={open === "pay"} onClose={onClose} title="Pay" description="The Owner's decision. Agents never change pay.">
         {pay !== undefined || !profile.viewer.seesPay ? <PayForm cleanerId={profile.cleanerId} engagement={profile.engagement} current={pay?.arrangement ?? null} onDone={onClose} /> : <Skeleton className="h-24" />}

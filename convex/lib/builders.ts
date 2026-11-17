@@ -16,6 +16,7 @@ import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkStat
 import { notAllowed, notFound, userError } from "./errors";
 import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
 import { invitationForToken } from "./invitations";
+import { portalLinkForToken, portalLinkState, sessionForToken, sessionState, type PortalLinkState } from "./workforce/portal";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -444,4 +445,92 @@ export function signedFileRoute(def: { verify: (request: Request, now: number) =
     if (!(await def.verify(request, now))) return new Response("Not found.", { status: 404 });
     return (await def.handler(ctx, request, now)) ?? new Response("Not found.", { status: 404 });
   });
+}
+
+// ── The cleaner portal: a link before the code, a session after it ─────────────────────────────────
+
+export type PortalLinkAccess = {
+  /** The link the token names, its company and cleaner, or null when the token names nothing. */
+  portal: { link: Doc<"portalLinks">; state: PortalLinkState; company: Doc<"companies">; cleaner: Doc<"cleaners"> } | null;
+};
+
+async function portalLinkAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PortalLinkAccess> {
+  const link = await portalLinkForToken(ctx, token);
+  const company = link ? await ctx.db.get(link.companyId) : null;
+  const cleaner = link ? await ctx.db.get(link.cleanerId) : null;
+  if (!link || !company || !cleaner || cleaner.companyId !== link.companyId) return { portal: null };
+  return { portal: { link, state: portalLinkState(link, Date.now()), company, cleaner } };
+}
+
+/**
+ * A read through a portal link, before the code. The token is the only authorization, and the handler
+ * must show nothing personal: the person holding the link has not yet shown they hold the cleaner's phone.
+ * It is a query, so opening the link (or a phone previewing it) changes nothing.
+ */
+export function portalLinkQuery<V extends AnyValidators, R>(def: { args: V; handler: (ctx: QueryCtx & PortalLinkAccess, args: ObjectType<V>) => R }): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await portalLinkAccess(ctx, token)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/** Asking for or confirming a code through a portal link. Refused unless the link is active right now. */
+export function portalLinkMutation<V extends AnyValidators, R>(def: { args: V; handler: (ctx: MutationCtx & { portal: NonNullable<PortalLinkAccess["portal"]> }, args: ObjectType<V>) => R }): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const { portal } = await portalLinkAccess(ctx, token);
+      if (!portal) notFound();
+      if (portal.state !== "active") throw userError(portal.state === "expired" ? "This link has expired. Ask the office for a new one." : "This link is no longer active. Ask the office for a new one.", "not_allowed");
+      if (portal.cleaner.status === "ended") throw userError("This link is no longer active.", "not_allowed");
+      return def.handler({ ...ctx, portal }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+export type PortalAccess = {
+  session: Doc<"portalSessions">;
+  cleaner: Doc<"cleaners">;
+  company: Doc<"companies">;
+  companyId: Id<"companies">;
+};
+
+const SIGNED_OUT = "Your portal session has ended. Open the link from your texts again to continue.";
+
+async function portalAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PortalAccess> {
+  const session = await sessionForToken(ctx, token);
+  if (!session || sessionState(session, Date.now()) !== "active") throw userError(SIGNED_OUT, "not_allowed");
+  const cleaner = await ctx.db.get(session.cleanerId);
+  const company = await ctx.db.get(session.companyId);
+  // Ending an engagement closes the portal, whatever the session says.
+  if (!cleaner || !company || cleaner.companyId !== session.companyId || cleaner.status === "ended" || company.suspendedAt !== undefined) throw userError(SIGNED_OUT, "not_allowed");
+  return { session, cleaner, company, companyId: company._id };
+}
+
+/**
+ * A read in a cleaner's portal session. The session is the only authorization; everything read must hang
+ * off `ctx.cleaner`, and no id in the arguments reaches another cleaner's record.
+ */
+export function portalQuery<V extends AnyValidators, R>(def: { args: V; handler: (ctx: QueryCtx & PortalAccess, args: ObjectType<V>) => R }): RegisteredQuery<"public", ObjectType<V> & { session: string }, R> {
+  return query({
+    args: { session: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { session: string }) => {
+      const { session, ...rest } = args;
+      return def.handler({ ...ctx, ...(await portalAccess(ctx, session)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+export function portalMutation<V extends AnyValidators, R>(def: { args: V; handler: (ctx: MutationCtx & PortalAccess, args: ObjectType<V>) => R }): RegisteredMutation<"public", ObjectType<V> & { session: string }, R> {
+  return mutation({
+    args: { session: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { session: string }) => {
+      const { session, ...rest } = args;
+      return def.handler({ ...ctx, ...(await portalAccess(ctx, session)) }, rest as ObjectType<V>);
+    },
+  } as any);
 }

@@ -8,6 +8,7 @@ import type { WeeklyWindow } from "../availability";
 import { notFound, userError } from "../errors";
 import { recordEvent, type Actor } from "../events";
 import type { CleanerStatus } from "../statuses";
+import { revokePortal } from "./portal";
 import { optionalEmail, optionalText, tags, text } from "../text";
 
 export type Engagement = Doc<"cleaners">["engagement"];
@@ -103,6 +104,8 @@ export async function changeStatus(ctx: MutationCtx, cleaner: Doc<"cleaners">, t
   if ((to === "paused" || to === "ended") && (!why || why.length < 3)) throw userError(to === "paused" ? "Say why they are being paused." : "Say why the engagement is ending.");
   if (to === "onboarding" && cleaner.status !== "onboarding") throw userError("A worker who has started cannot go back to onboarding. Pause them instead.");
   await ctx.db.patch(cleaner._id, { status: to, statusNote: why, statusChangedAt: Date.now(), statusChangedBy: member._id });
+  // Ending an engagement closes the cleaner's portal. Their history, documents and jobs are kept.
+  if (to === "ended") await revokePortal(ctx, cleaner, "Their engagement ended.", { kind: "member", memberId: member._id });
   await recordEvent(ctx, {
     companyId: cleaner.companyId,
     type: "cleaner.status_changed",

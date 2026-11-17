@@ -37,6 +37,8 @@ export type CleanerFacts = {
   /** Visits for this customer the cleaner accepted before. */
   priorVisitsForCustomer: number;
   pay: PayAnswer;
+  /** The company's onboarding requirements that block assignments and are not met (lib/workforce/requirements.ts). */
+  onboardingBlockers?: string[];
 };
 
 /** Which rules apply. Dispatch applies all of them. A person offering by hand may set some aside. */
@@ -70,6 +72,7 @@ const ENDED_WORDS: Record<Ended, string> = {
 /** The first rule this cleaner fails for this job, or null when they can be asked. */
 export function assess(cleaner: CleanerFacts, job: JobFacts, rules: Rules = DISPATCH_RULES): Exclusion | null {
   if (cleaner.status !== "ready") return { code: "not_ready", reason: "is not marked ready for work" };
+  if (cleaner.onboardingBlockers && cleaner.onboardingBlockers.length > 0) return { code: "not_ready", reason: `has onboarding requirements still open: ${cleaner.onboardingBlockers.join(", ")}` };
   if (rules.ended && cleaner.endedForJob) return { code: "already_asked", reason: ENDED_WORDS[cleaner.endedForJob], ended: cleaner.endedForJob };
   const missing = job.requiredSkills.filter((skill) => !cleaner.skills.includes(skill));
   if (missing.length > 0) return { code: "missing_skill", reason: `does not have a skill the job needs: ${missing.join(", ")}` };

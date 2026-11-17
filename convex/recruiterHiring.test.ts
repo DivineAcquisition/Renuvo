@@ -246,6 +246,24 @@ describe("Recruiter: screening, interviews, offers and the handoff to onboarding
     expect(await s.detail(applicationId)).toMatchObject({ stage: "offer_sent" });
   });
 
+  it("links a hire to the worker already on record by the same phone, instead of adding them twice", async () => {
+    const s = await setup();
+    // Maria worked here before, as a contractor, and her record is ended.
+    const earlier = await s.as.mutation(api.workforce.add, { companyId: s.companyId, addKey: "add-returning-maria", name: "Maria L.", engagement: "contractor", phone: "(512) 555-0142", serviceAreas: ["78701"] });
+    if (earlier.status !== "created") throw new Error("not created");
+    await s.as.mutation(api.workforce.setStatus, { companyId: s.companyId, cleanerId: earlier.cleanerId, status: "ended", reason: "Moved for a season" });
+    const { offerToken } = await offered(s);
+    await s.t.mutation(api.applicantPages.acceptOffer, { token: offerToken });
+    const [handoff] = await s.as.query(api.onboarding.queue, { companyId: s.companyId });
+    expect(handoff.cleanerId).toBe(earlier.cleanerId);
+    const workspace = await s.as.query(api.workforce.workspace, { companyId: s.companyId, asOf: Date.now(), includeEnded: true });
+    expect(workspace.rows).toHaveLength(1);
+    // Back to onboarding for this hire, with the hire linked; nothing makes them ready.
+    expect(workspace.rows[0]).toMatchObject({ cleanerId: earlier.cleanerId, status: "onboarding" });
+    const activity = await s.as.query(api.workforce.activity, { companyId: s.companyId, cleanerId: earlier.cleanerId, asOf: Date.now() });
+    expect(activity.map((row) => row.text)).toContain("linked a new hire to Maria L.'s existing record instead of adding them twice");
+  });
+
   it("opening an offer accepts nothing; accepting it hands off to onboarding and makes nobody dispatch-ready", async () => {
     const s = await setup();
     const { applicationId, offerToken } = await offered(s);

@@ -49,3 +49,45 @@ own sign-in (Clerk) was not exercised.
 - Hundreds of workers in one company: the directory reads up to 1,000 and filters in the browser. It was
   exercised with 13.
 - Concurrent imports with the same key rely on Convex's serializable mutations; not load-tested.
+
+## Phase 2: onboarding, documents, portal, reminders
+
+### Automated tests
+
+`convex/workforceOnboarding.test.ts` and a new case in `convex/recruiterHiring.test.ts`.
+
+| Requirement | Test |
+|---|---|
+| Only the Owner sets requirements; readiness and Dispatch block on the same requirement | "keeps the Owner's policy with the Owner…" |
+| An upload is not a verification; sending back needs words; acceptance sets validity | same test |
+| The same file sent twice is kept once | same test |
+| Only the cleaner agrees to a statement; Owner-only files and decisions stay with the Owner; office sees states only | "never lets a person agree for the cleaner…" |
+| Setting aside needs a reason and is never shown as accepted | same test |
+| Expiry is read from the clock and warned about before it | "reads expiry from the clock and warns before it" |
+| A real onboarding journey: invited, code, agree, upload, review, readiness updates; pay needs a fresh code; help reaches a person | "takes an invited cleaner through onboarding…" |
+| The code is never stored | same test (no message body holds it) |
+| Duplicate invitations close the earlier link; forged, used, expired and revoked links and codes do nothing; ending an engagement closes the portal | "closes old, expired and revoked links…" |
+| Failed delivery is shown as not sent with the reason; the office can hand over the link | "says plainly when the invitation cannot be texted…" |
+| Reminders: proposed first, sent once, limited, and silence decides nothing | "proposes first, sends once…" |
+| Reminders wait while the cleaner's question is open | "holds reminders while the cleaner's help request is open" |
+| A hire links to the existing worker by phone instead of adding them twice | "links a hire to the worker already on record…" |
+
+Full suite: 62 files, 660 tests passed, 19 skipped. `tsc --noEmit`, `eslint` and `next build` pass.
+
+### In a real browser
+
+Against the local backend with mock texting: the Owner's requirements were added, one cleaner was invited,
+the code was texted and confirmed, the policy agreed, an ID uploaded, hours set and a question sent, all
+through the real functions. Rendered at 1440 px (the Owner's requirements, the profile's onboarding
+review, an invitation that could not be texted, the cleaner's question) and on an iPhone 13 (the portal's
+confirm step, home, hours editor and a bad link). What the inspection changed:
+
+- The portal's "Before you can be offered work" now says where each item stands ("Photo ID: sent, the
+  office is reviewing it"), not just its name.
+- An invitation whose text was not sent is badged "Invitation not sent", not "Invited", with what to do next.
+
+### Not verified
+
+- Real texts through Telnyx: the mock provider was used. Quiet hours and carrier delivery reports follow
+  the existing messaging paths, which have their own tests.
+- Uploads from a real phone camera (HEIC); the server accepts the type, and a PNG was uploaded in the browser run.

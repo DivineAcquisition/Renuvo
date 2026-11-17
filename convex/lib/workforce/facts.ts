@@ -9,6 +9,7 @@ import { overlaps, withinWeeklyWindows, type Span, type WeeklyWindow } from "../
 import { CLEANER_STATUSES, type CleanerStatus } from "../statuses";
 import { addLocalDays, clock, dayName, startOfLocalDay, when } from "../time";
 import { readinessOf, type Readiness, type ProfileSection } from "./readiness";
+import { activeRequirements, expiringSoon, factFor, appliesTo, requirementCheck, signedAgreementsBy, stageOf, type OnboardingStage } from "./requirements";
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -51,7 +52,7 @@ export type UpcomingWork = {
 export type AttentionItem = {
   /** Stable for one issue, so the list does not jump and the same issue is never listed twice. */
   key: string;
-  kind: "conflict" | "blocked_active" | "onboarding_overdue" | "subcontractor_inactive" | "held_while_inactive";
+  kind: "conflict" | "blocked_active" | "onboarding_overdue" | "subcontractor_inactive" | "held_while_inactive" | "review_waiting" | "document_expiring" | "help_requested";
   cleanerId: Id<"cleaners">;
   cleanerName: string;
   title: string;
@@ -88,6 +89,10 @@ export type WorkforceRow = {
   workingToday: boolean;
   /** Where onboarding stands, when it comes from a hire. */
   handoff: { total: number; done: number; dueAt: number; overdue: boolean } | null;
+  /** Where the company's onboarding requirements stand for them. */
+  onboarding: { stage: OnboardingStage; met: number; total: number; awaitingReview: number };
+  /** Their portal: never invited, invited and not yet used, used (a code was confirmed), or the link ran out or was closed. */
+  portal: "none" | "invited" | "used" | "closed";
   source: Doc<"cleaners">["source"] | null;
   createdAt: number;
   attention: number;
@@ -346,6 +351,39 @@ export async function loadWorkforce(ctx: Ctx, company: Doc<"companies">, opts: {
     crewsBy.set(row.cleanerId, list);
   }
 
+  const requirements = await activeRequirements(ctx, companyId);
+  const requirementRows = new Map<string, Doc<"workerRequirements">[]>();
+  if (requirements.length > 0) {
+    const rows = await ctx.db
+      .query("workerRequirements")
+      .withIndex("by_company_cleaner", (q) => (only ? q.eq("companyId", companyId).eq("cleanerId", only._id) : q.eq("companyId", companyId)))
+      .take(8000);
+    for (const row of rows) {
+      const list = requirementRows.get(row.cleanerId) ?? [];
+      list.push(row);
+      requirementRows.set(row.cleanerId, list);
+    }
+  }
+  const signed = requirements.some((row) => row.kind === "agreement") ? await signedAgreementsBy(ctx, companyId, only?._id) : new Set<string>();
+
+  const portalBy = new Map<string, WorkforceRow["portal"]>();
+  const portalRows = only
+    ? await ctx.db.query("portalLinks").withIndex("by_company_cleaner", (q) => q.eq("companyId", companyId).eq("cleanerId", only._id)).order("desc").take(20)
+    : await ctx.db.query("portalLinks").withIndex("by_company_cleaner", (q) => q.eq("companyId", companyId)).order("desc").take(5000);
+  for (const link of portalRows) {
+    if (link.purpose !== "portal" || portalBy.has(link.cleanerId)) continue;
+    const open = link.revokedAt === undefined && link.expiresAt > now;
+    portalBy.set(link.cleanerId, link.verifiedAt !== undefined && open ? "used" : open ? "invited" : "closed");
+  }
+
+  const helpBy = new Map<string, Doc<"helpRequests">[]>();
+  for (const row of await ctx.db.query("helpRequests").withIndex("by_company_status", (q) => q.eq("companyId", companyId).eq("status", "open")).take(500)) {
+    if (only && row.cleanerId !== only._id) continue;
+    const list = helpBy.get(row.cleanerId) ?? [];
+    list.push(row);
+    helpBy.set(row.cleanerId, list);
+  }
+
   const handoffBy = new Map<string, Doc<"onboardingHandoffs">>();
   for (const row of await ctx.db.query("onboardingHandoffs").withIndex("by_company_status", (q) => q.eq("companyId", companyId).eq("status", "open")).take(500)) handoffBy.set(row.cleanerId, row);
 
@@ -358,6 +396,8 @@ export async function loadWorkforce(ctx: Ctx, company: Doc<"companies">, opts: {
     const sub = affiliationBy.get(worker._id) ?? null;
     const handoff = handoffBy.get(worker._id) ?? null;
     const outstanding = handoff ? handoff.requirements.filter((item) => item.status === "outstanding").map((item) => item.label) : [];
+    const own = requirementRows.get(worker._id) ?? [];
+    const reqFacts = requirements.filter((requirement) => appliesTo(requirement, worker)).map((requirement) => factFor(requirement, own.find((row) => row.requirementId === requirement._id) ?? null, now, signed.has(worker._id)));
     const readiness = readinessOf({
       status: worker.status,
       engagement: worker.engagement,
@@ -370,6 +410,7 @@ export async function loadWorkforce(ctx: Ctx, company: Doc<"companies">, opts: {
       workTexts: consentBy.get(worker._id) ?? "none",
       subcontractor: sub ? { name: sub.name, status: sub.status } : null,
       handoffOutstanding: outstanding,
+      requirementChecks: reqFacts.map((fact) => requirementCheck(fact, tz)),
     });
     const work = (byCleaner.get(worker._id) ?? []).filter((row) => row.endsAt > now);
     const next = work.find((row) => row.status === "accepted") ?? null;
@@ -394,6 +435,48 @@ export async function loadWorkforce(ctx: Ctx, company: Doc<"companies">, opts: {
         evidence: readiness.blockers.map((check) => ({ label: check.label, section: check.section })),
         action: { label: readiness.blockers[0].section === "pay" ? "Open pay" : "Fix availability", section: readiness.blockers[0].section },
         rank: 60,
+      });
+    }
+    const help = helpBy.get(worker._id) ?? [];
+    if (help.length > 0) {
+      items.push({
+        key: `help_requested:${worker._id}`,
+        kind: "help_requested",
+        cleanerId: worker._id,
+        cleanerName: worker.name,
+        title: `${worker.name} asked for help${help.length > 1 ? ` (${help.length} requests)` : ""}`,
+        detail: `"${help[0].text.slice(0, 220)}"${help.length > 1 ? " and more." : ""} Sent from their portal ${when(help[0].createdAt, now, tz)}.`,
+        evidence: [{ label: "Their requests", section: "overview" }],
+        action: { label: "Answer", section: "overview" },
+        rank: 85,
+      });
+    }
+    const waiting = worker.status === "ended" ? [] : reqFacts.filter((fact) => fact.state === "awaiting_review");
+    if (waiting.length > 0) {
+      items.push({
+        key: `review_waiting:${worker._id}`,
+        kind: "review_waiting",
+        cleanerId: worker._id,
+        cleanerName: worker.name,
+        title: `${worker.name} submitted ${waiting.length === 1 ? `${waiting[0].requirement.label}` : `${waiting.length} onboarding items`} for review`,
+        detail: `Waiting for a person: ${waiting.map((fact) => fact.requirement.label).join(", ")}. Submitted is not accepted until someone reviews it.`,
+        evidence: waiting.map((fact) => ({ label: fact.requirement.label, section: "onboarding" as const })),
+        action: { label: "Review", section: "onboarding" },
+        rank: 75,
+      });
+    }
+    const expiring = worker.status === "ended" ? [] : expiringSoon(reqFacts, now);
+    if (expiring.length > 0) {
+      items.push({
+        key: `document_expiring:${worker._id}`,
+        kind: "document_expiring",
+        cleanerId: worker._id,
+        cleanerName: worker.name,
+        title: `${expiring.length === 1 ? expiring[0].requirement.label : `${expiring.length} documents`} for ${worker.name} ${expiring.length === 1 ? "expires" : "expire"} soon`,
+        detail: expiring.map((fact) => `${fact.requirement.label}: valid until ${dayName(fact.row!.expiresAt!, tz)}${fact.requirement.blocks === "assignments" ? ", after which they cannot be offered work" : ""}.`).join(" "),
+        evidence: expiring.map((fact) => ({ label: fact.requirement.label, section: "onboarding" as const })),
+        action: { label: "Open onboarding", section: "onboarding" },
+        rank: 55,
       });
     }
     if (handoff && handoff.dueAt < now && outstanding.length > 0 && worker.status === "onboarding") {
@@ -446,6 +529,8 @@ export async function loadWorkforce(ctx: Ctx, company: Doc<"companies">, opts: {
       offersOut: work.filter((row) => row.status === "offered").length,
       workingToday,
       handoff: handoff ? { total: handoff.requirements.length, done: handoff.requirements.length - outstanding.length, dueAt: handoff.dueAt, overdue: handoff.dueAt < now && outstanding.length > 0 } : null,
+      onboarding: { stage: stageOf(reqFacts), met: reqFacts.filter((fact) => fact.met).length, total: reqFacts.length, awaitingReview: waiting.length },
+      portal: portalBy.get(worker._id) ?? "none",
       source: worker.source ?? null,
       createdAt: worker.createdAt,
       attention: items.length,

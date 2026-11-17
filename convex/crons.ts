@@ -28,6 +28,7 @@ crons.interval("recruiter reads the hiring inboxes", { minutes: 10 }, internal.r
 crons.interval("recruiter follows up on unfinished applications", { minutes: 30 }, internal.recruiter.followUps, {});
 crons.interval("recruiter sends interview reminders", { minutes: 15 }, internal.recruiter.interviewReminders, {});
 crons.interval("recruiter removes applicant details past retention", { hours: 24 }, internal.recruiter.retention, {});
+crons.interval("recruiter reminds new workers about onboarding", { minutes: 60 }, internal.workforce.reminders, {});
 
 // Company Chat: a response whose worker stopped reporting is closed honestly instead of spinning forever.
 crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.chatRuns.sweep, {});

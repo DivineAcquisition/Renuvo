@@ -15,6 +15,7 @@ import { openTask, setTaskState } from "../taskState";
 import { closeApplication, setStage } from "./applications";
 import type { Fact } from "./schema";
 import { DAY, recruiterSettings } from "./settings";
+import { findMatches } from "../workforce/duplicates";
 
 async function ownerOf(ctx: MutationCtx, companyId: Id<"companies">): Promise<Doc<"members"> | null> {
   const members = await ctx.db
@@ -44,22 +45,40 @@ export async function createHandoff(ctx: MutationCtx, application: Doc<"applicat
   const information: Fact[] = [...told("name", answers.fullName ?? applicant.name), ...told("email", answers.email), ...told("phone", answers.phone), ...told("experience_years", answers.experienceYears), ...told("hours_per_week", answers.hoursPerWeek)];
   if (Array.isArray(answers.availableDays)) information.push({ field: "available_days", value: answers.availableDays.join(", "), from: "form", where: "the application form, as the applicant wrote it" });
 
-  // The worker record exists so onboarding has something to work on. It is not ready, has no pay set, and is offered nothing.
-  const cleanerId = await ctx.db.insert("cleaners", {
-    companyId: company._id,
-    name: applicant.name ?? "New hire",
-    email: typeof answers.email === "string" ? answers.email : application.contact.address,
-    phone: applicant.phone ? `+${applicant.phone}` : undefined,
-    engagement: offer.terms.engagement,
-    status: "onboarding",
-    skills: [],
-    serviceAreas: Array.isArray(answers.serviceAreas) ? answers.serviceAreas : [],
-    // The hire this worker came from, so their profile keeps the hiring history and nobody is entered twice.
-    source: "hiring",
-    applicationId: application._id,
-    createdAt: Date.now(),
-  });
-  await recordEvent(ctx, { companyId: company._id, type: "cleaner.created", actor, subject: { table: "cleaners", id: cleanerId }, data: { from: "hiring", applicationId: application._id } });
+  // The worker record exists so onboarding has something to work on. If this person is already on record
+  // as a worker (the same phone or email), the hire is linked to that record instead of making a second one,
+  // so their history stays in one place. A name alone is never enough to link.
+  const hiredEmail = typeof answers.email === "string" ? answers.email : application.contact.address;
+  const hiredPhone = applicant.phone ? `+${applicant.phone}` : undefined;
+  const everyone: Doc<"cleaners">[] = [];
+  for (const status of ["onboarding", "ready", "paused", "ended"] as const) {
+    everyone.push(...(await ctx.db.query("cleaners").withIndex("by_company_status", (q) => q.eq("companyId", company._id).eq("status", status)).take(1000)));
+  }
+  const strong = everyone.filter((row) => findMatches({ name: applicant.name ?? "", email: hiredEmail, phone: hiredPhone }, [{ id: row._id, name: row.name, email: row.email, phone: row.phone }]).some((match) => match.reasons.some((reason) => reason !== "name")));
+  let cleanerId: Id<"cleaners">;
+  if (strong.length === 1) {
+    const existing = strong[0];
+    cleanerId = existing._id;
+    // A returning worker goes back to onboarding for this hire. Their pay, history and documents are kept.
+    await ctx.db.patch(existing._id, { applicationId: application._id, ...(existing.status === "ended" ? { status: "onboarding" as const, statusNote: undefined, statusChangedAt: Date.now() } : {}) });
+    await recordEvent(ctx, { companyId: company._id, type: "cleaner.linked_to_hire", actor, subject: { table: "cleaners", id: existing._id }, data: { applicationId: application._id, was: existing.status } });
+  } else {
+    cleanerId = await ctx.db.insert("cleaners", {
+      companyId: company._id,
+      name: applicant.name ?? "New hire",
+      email: hiredEmail,
+      phone: hiredPhone,
+      engagement: offer.terms.engagement,
+      status: "onboarding",
+      skills: [],
+      serviceAreas: Array.isArray(answers.serviceAreas) ? answers.serviceAreas : [],
+      // The hire this worker came from, so their profile keeps the hiring history and nobody is entered twice.
+      source: "hiring",
+      applicationId: application._id,
+      createdAt: Date.now(),
+    });
+    await recordEvent(ctx, { companyId: company._id, type: "cleaner.created", actor, subject: { table: "cleaners", id: cleanerId }, data: { from: "hiring", applicationId: application._id } });
+  }
 
   const dueAt = Date.now() + 3 * DAY;
   const requirements = recruiterSettings(company).onboardingRequirements.map((row) => ({ key: row.key, label: row.label, status: "outstanding" as const }));

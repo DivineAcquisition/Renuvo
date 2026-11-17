@@ -73,6 +73,7 @@ export const ACTIONS: readonly ActionDef[] = [
   action("recruiter.follow_up", "recruiter", "Remind an applicant about an unfinished application", "execute"),
   action("recruiter.send_offer", "recruiter", "Send a hiring offer on terms the Owner approved", "propose", { ceiling: "propose" }),
   action("recruiter.urgent_outreach", "recruiter", "Contact existing applicants about an urgent staffing need", "propose", { ceiling: "propose" }),
+  action("recruiter.onboarding_reminder", "recruiter", "Remind a new worker about onboarding items only they can do", "execute"),
 ];
 
 /** These need a person at any setting. They are not permissions, so nothing can switch them on. */

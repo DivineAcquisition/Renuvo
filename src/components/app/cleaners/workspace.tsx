@@ -11,13 +11,15 @@ import { WorkerDrawer } from "@/components/app/cleaners/drawer";
 import { ImportCleaners } from "@/components/app/cleaners/import";
 import { READINESS_WORDS, plural, TYPE_WORDS, useDirectoryState, type Row, type Workspace } from "@/components/app/cleaners/shared";
 import { SubcontractorsDialog } from "@/components/app/cleaners/subcontractors";
+import { InvitePortalDialog } from "@/components/app/cleaners/invite";
+import { RequirementsDialog } from "@/components/app/cleaners/onboarding";
 import { canManage, useCompany } from "@/components/app/company";
 import { PageHeader } from "@/components/app/shell";
 import { useNow } from "@/components/app/use-now";
-import { Building2, CalendarIcon, CheckCircle2, CircleDashed, FunnelIcon, LayoutGrid, Plus, Search, TableIcon, TeamIcon, TriangleAlert, Upload, Users, X } from "@/components/icons";
+import { Building2, CalendarIcon, CheckCircle2, CircleDashed, FunnelIcon, LayoutGrid, ListChecks, PaperPlaneIcon, Plus, Search, TableIcon, TeamIcon, TriangleAlert, Upload, Users, X } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { activeFilterCount, EMPTY_STATE, filterRows, LAST_LIST_KEY, type DirectoryState, type ReadinessFilter } from "@/lib/app/cleaners";
+import { activeFilterCount, EMPTY_STATE, filterRows, LAST_LIST_KEY, STAGE_WORDS, type DirectoryState, type ReadinessFilter } from "@/lib/app/cleaners";
 import { localDate, zonedInstant } from "@/lib/app/format";
 import { cn } from "@/lib/utils";
 
@@ -168,6 +170,13 @@ function FilterPanel({ data, state, set }: { data: Workspace; state: DirectorySt
           ))}
         </Group>
       ) : null}
+      <Group title="Onboarding stage">
+        {Object.entries(STAGE_WORDS).map(([value, label]) => (
+          <Toggle key={value} on={state.stage.includes(value)} onClick={() => set({ stage: toggleIn(state.stage, value) })}>
+            {label}
+          </Toggle>
+        ))}
+      </Group>
       {skills.length > 0 ? (
         <Group title="Skills (all of)">
           {skills.map((skill) => (
@@ -228,6 +237,7 @@ function ActiveFilters({ data, state, set }: { data: Workspace; state: Directory
   for (const id of state.subcontractor) chips.push({ key: `b${id}`, label: data.subcontractors.find((sub) => sub.id === id)?.name ?? "Subcontractor", clear: () => set({ subcontractor: state.subcontractor.filter((v) => v !== id) }) });
   for (const area of state.area) chips.push({ key: `a${area}`, label: `Area ${area}`, clear: () => set({ area: state.area.filter((v) => v !== area) }) });
   for (const skill of state.skill) chips.push({ key: `k${skill}`, label: skill, clear: () => set({ skill: state.skill.filter((v) => v !== skill) }) });
+  for (const stage of state.stage) chips.push({ key: `g${stage}`, label: `Onboarding: ${STAGE_WORDS[stage] ?? stage}`, clear: () => set({ stage: state.stage.filter((v) => v !== stage) }) });
   if (state.quick) chips.push({ key: "quick", label: state.quick === "attention" ? "Needs attention" : "Working today", clear: () => set({ quick: null }) });
   if (state.window) chips.push({ key: "window", label: "Free in the chosen window", clear: () => set({ window: null }) });
   if (chips.length === 0) return null;
@@ -296,7 +306,7 @@ class Boundary extends Component<{ children: React.ReactNode }, { failed: boolea
   }
 }
 
-type Dialog = "add" | "import" | "crew" | "crews" | "subcontractors" | null;
+type Dialog = "add" | "import" | "crew" | "crews" | "subcontractors" | "requirements" | "invite" | null;
 
 function Inner() {
   const company = useCompany();
@@ -324,7 +334,7 @@ function Inner() {
   const filterCount = activeFilterCount(state);
 
   const pick = (id: TileId) => {
-    const base = { ...state, type: [], status: [], readiness: [], crew: [], area: [], skill: [], subcontractor: [], quick: null } as DirectoryState;
+    const base = { ...state, type: [], status: [], readiness: [], crew: [], area: [], skill: [], subcontractor: [], stage: [], quick: null } as DirectoryState;
     if (id === "ready") set(state.readiness.length === 1 && state.readiness[0] === "ready" ? { readiness: [] } : { ...base, readiness: ["ready"] });
     if (id === "onboarding") set(state.status.length === 1 && state.status[0] === "onboarding" ? { status: [] } : { ...base, status: ["onboarding"] });
     if (id === "attention") set(state.quick === "attention" ? { quick: null } : { ...base, quick: "attention" });
@@ -334,6 +344,14 @@ function Inner() {
 
   const actions = manager ? (
     <>
+      <Button variant="outline" size="sm" onClick={() => setDialog("requirements")}>
+        <ListChecks aria-hidden />
+        Requirements
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => setDialog("invite")}>
+        <PaperPlaneIcon aria-hidden />
+        Invite to portal
+      </Button>
       <Button variant="outline" size="sm" onClick={() => setDialog("subcontractors")}>
         <Building2 aria-hidden />
         Subcontractors
@@ -351,7 +369,12 @@ function Inner() {
         Add cleaner
       </Button>
     </>
-  ) : null;
+  ) : (
+    <Button variant="outline" size="sm" onClick={() => setDialog("requirements")}>
+      <ListChecks aria-hidden />
+      Requirements
+    </Button>
+  );
 
   return (
     <>
@@ -442,6 +465,8 @@ function Inner() {
       <ImportCleaners open={dialog === "import"} onClose={() => setDialog(null)} />
       <NewCrewDialog open={dialog === "crew"} onClose={() => setDialog("crews")} rows={data?.rows ?? []} />
       <CrewsDialog open={dialog === "crews"} onClose={() => setDialog(null)} onNew={() => setDialog("crew")} onFilter={(crewId) => { setDialog(null); set({ crew: [crewId] }); }} />
+      <RequirementsDialog open={dialog === "requirements"} onClose={() => setDialog(null)} />
+      <InvitePortalDialog open={dialog === "invite"} onClose={() => setDialog(null)} rows={data?.rows ?? []} />
       <SubcontractorsDialog open={dialog === "subcontractors"} onClose={() => setDialog(null)} onFilter={(id) => { setDialog(null); set({ subcontractor: [id] }); }} />
     </>
   );

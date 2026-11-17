@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { Avatar, plural, type Attention } from "@/components/app/cleaners/shared";
 import { useDetail } from "@/components/app/detail-panel";
-import { ArrowRight, Building2, CalendarIcon, CheckCircle2, ChevronDown, CircleDashed, TriangleAlert, UserX } from "@/components/icons";
+import { ArrowRight, Building2, CalendarIcon, CheckCircle2, ChevronDown, CircleDashed, Clock, FileText, MessageCircleQuestion, TriangleAlert, UserX } from "@/components/icons";
 import { cleanerPath } from "@/lib/app/cleaners";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,9 @@ const KIND_LOOK: Record<Attention["kind"], { icon: typeof TriangleAlert; label: 
   onboarding_overdue: { icon: CircleDashed, label: "Onboarding overdue", tone: "bg-warning/10 text-warning-foreground" },
   blocked_active: { icon: TriangleAlert, label: "Active but cannot be offered work", tone: "bg-warning/10 text-warning-foreground" },
   subcontractor_inactive: { icon: Building2, label: "Supplying company not active", tone: "bg-warning/10 text-warning-foreground" },
+  review_waiting: { icon: FileText, label: "Waiting for your review", tone: "bg-warning/10 text-warning-foreground" },
+  document_expiring: { icon: Clock, label: "Document expiring", tone: "bg-warning/10 text-warning-foreground" },
+  help_requested: { icon: MessageCircleQuestion, label: "Asked for help", tone: "bg-brand-500/10 text-brand-700 dark:text-brand-300" },
 };
 
 /**

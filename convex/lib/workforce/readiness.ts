@@ -62,6 +62,8 @@ export type WorkerFacts = {
   subcontractor: { name: string; status: "active" | "paused" | "ended" } | null;
   /** Onboarding items from a hire that a person has not yet recorded as done. Told to us by Recruiter's handoff. */
   handoffOutstanding: string[];
+  /** The company's own onboarding requirements, each already worked out (lib/workforce/requirements.ts). */
+  requirementChecks?: ReadinessCheck[];
 };
 
 const listWords = (items: string[]) => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
@@ -154,6 +156,7 @@ export function readinessChecks(facts: WorkerFacts): ReadinessCheck[] {
       section: "onboarding",
     });
   }
+  checks.push(...(facts.requirementChecks ?? []));
   return checks;
 }
 
@@ -162,7 +165,7 @@ const BLOCKER_WORDS: Record<string, string> = { service_areas: "a service area",
 export function readinessOf(facts: WorkerFacts): Readiness {
   const checks = readinessChecks(facts);
   const blockers = checks.filter((check) => check.state === "unmet" && check.blocks === "assignments");
-  const missing = blockers.filter((check) => check.key !== "active").map((check) => BLOCKER_WORDS[check.key] ?? check.label.toLowerCase());
+  const missing = blockers.filter((check) => check.key !== "active").map((check) => BLOCKER_WORDS[check.key] ?? check.label);
   const needs = missing.length > 0 ? `Needs ${listWords(missing)}` : null;
   let state: ReadinessState;
   let headline: string;
@@ -187,8 +190,8 @@ export function readinessOf(facts: WorkerFacts): Readiness {
 
 /** Words for the overview's four counts. Shown beside the numbers, so nobody reads more into them. */
 export const COUNT_DEFINITIONS = {
-  ready: "Active, with service areas, weekly hours and pay set. Dispatch can offer them work that fits their skills, areas and hours. It does not mean they are free for any particular job.",
+  ready: "Active, with service areas, weekly hours, pay and every onboarding requirement that blocks work met. Dispatch can offer them work that fits their skills, areas and hours. It does not mean they are free for any particular job.",
   onboarding: "Not yet made active by a person. They are offered no work until they are.",
-  attention: "People with something a person should look at: a conflict with upcoming work, an overdue onboarding, or an active worker who cannot be offered work.",
+  attention: "People with something a person should look at: a conflict with upcoming work, an item waiting for review, a document about to expire, an overdue onboarding, or an active worker who cannot be offered work.",
   workingToday: "Has accepted at least one visit today. Someone not working today is not necessarily free.",
 } as const;

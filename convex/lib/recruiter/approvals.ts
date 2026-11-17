@@ -13,8 +13,9 @@ import { afterInvitationDecision, afterInvitationExpiry, sendFollowUp } from "./
 import { afterOfferDecision } from "./offers";
 import { sendInformationRequest } from "./screening";
 import { sendUrgentOutreach } from "./urgent";
+import { sendOnboardingReminder } from "../workforce/reminders";
 
-export const RECRUITER_PROPOSALS = ["send_invitation", "send_follow_up", "request_information", "invite_to_interview", "send_hiring_offer", "decline_application", "urgent_outreach"] as const;
+export const RECRUITER_PROPOSALS = ["send_invitation", "send_follow_up", "request_information", "invite_to_interview", "send_hiring_offer", "decline_application", "urgent_outreach", "send_onboarding_reminder"] as const;
 
 export function isRecruiterProposal(approval: Pick<Doc<"approvals">, "proposal">): boolean {
   return approval.proposal !== undefined && (RECRUITER_PROPOSALS as readonly string[]).includes(approval.proposal.kind);
@@ -44,6 +45,8 @@ export async function afterRecruiterDecision(ctx: MutationCtx, approval: Doc<"ap
       return record(ctx, approval, await afterDeclineDecision(ctx, approval, proposal.applicationId, proposal.criterion, decision, decidedBy));
     case "urgent_outreach":
       return record(ctx, approval, approved ? await sendUrgentOutreach(ctx, proposal.applicationId, proposal.taskId, decidedBy) : null);
+    case "send_onboarding_reminder":
+      return record(ctx, approval, approved ? await sendOnboardingReminder(ctx, proposal.cleanerId, proposal.attempt, decidedBy) : null);
     default:
       return null;
   }
