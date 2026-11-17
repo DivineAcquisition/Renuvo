@@ -168,3 +168,64 @@ recorded permission for each address, and a contact is not yet a person the comp
 permission for. The office makes the link and sends it; that is said on screen. A contact sees no pay (pay
 summaries are Phase 4). A subcontractor worker's pay goes through their company, which Dispatch cannot yet
 state on an offer, so such a worker is shown as not offerable for that reason.
+
+## Phase 4: performance, coaching, check-ins, Chat, pay
+
+**Works end to end (functions, tests and screens):**
+
+- **Measures from verified records only** (`convex/lib/cleaners/performance.ts`), each with its definition,
+  the period (90 days), the sample and the records themselves:
+  - *Accepted jobs kept*: jobs a person released, cancelled, moved or covered are left out; saying they could
+    not attend and a no-show declared by a person are counted apart.
+  - *On time when checked in*: by the end of the arrival window with five minutes' grace; a job with no
+    check-in recorded is never counted as late; late arrivals they told the office about are shown apart.
+  - *Offers answered*: declining is an answer; silence is shown apart; offers that never reached them or were
+    withdrawn are left out.
+  - *Completion reports on their own jobs*: shown, not scored; a crew job's report is not put on one member.
+- **The score** (`selestial.cleaners.score.v1`): reliability 50 points, punctuality 30, answering offers 20.
+  Deterministic; each part's points are shown; a part with fewer than five records is left out and its points
+  shared among the others, which the explanation says; with fewer than five accepted jobs there is no score
+  and the page says "Not enough history". It is not used to rank people or by Dispatch, and says so.
+- **Disputes**: a manager or the cleaner (from their portal, about the whole record) flags a record; it is
+  left out until someone other than whoever raised it (or the Owner) upholds or corrects it. The assignment
+  itself is never changed. Raising the same dispute twice finds the first.
+- **Suggestions that rest on records**: a no-show to talk about, arrivals without word, offers going
+  unanswered (checked as a contact problem first), recognition for a clean record, disputes to decide. Each
+  lists the records behind it.
+- **Coaching and feedback**: internal notes, shared feedback, training and coaching items with actions and a
+  follow-up date. Selestial's drafts are written from the records and stay drafts until a person publishes
+  them; only published shared feedback reaches the portal, where the cleaner replies; withdrawing removes it.
+  Drafts waiting, follow-ups due and disputes appear in Needs attention. Coaching is never a disciplinary
+  step (that remains a personnel request). Office sees none of it, including in the history.
+- **Idle-worker check-ins**: an active, ready cleaner with no accepted work, answered offer or portal activity
+  for the company's window gets a check-in from Dispatch under its permission (Propose by default). The
+  answer is kept: still available, fewer jobs, a break (recorded as time away, so no work is offered) or
+  wanting to stop (a person is told; the engagement is not ended). Unanswered check-ins go to a person after
+  the company's limit, and the attention list says "Not answering is not the same as leaving".
+- **Chat** (`convex/lib/chat/cleanerTools.ts`), through the same functions as the screens: who is free and
+  ready in a window; what stops people becoming ready; preparing onboarding reminders (the exact list is
+  approved in chat, then Recruiter's permission applies, and nobody gets a second); a crew suggestion for a
+  job; explaining a cleaner's score; drafting a coaching note. Office is not offered the last three.
+- **Pay**: the Owner's summary shows the arrangement, its history, and the pay each job's offer stated; the
+  cleaner sees their own behind a code. Finance is not built in Selestial, so approved earnings and payments
+  cannot be shown; both screens say so rather than showing a number that does not exist.
+
+**Tests:** `convex/lib/cleaners/performance.test.ts` (no score with little history, silence versus a no,
+missing check-ins, company-side cancellations, crew completion, disputes, deterministic scoring with parts
+left out, recommendations) and `convex/cleanersPerformance.test.ts` (the score from real records and its
+access; disputes decided by someone else, from the portal and not for anyone else's record; drafts,
+publishing, replies and withdrawal; check-ins asked for under Propose, a break, "stop", and silence handed to
+a person with nothing changed; the Chat questions, the reminder approval and no duplicates, and what Office
+is offered).
+
+**Visually inspected:** performance and coaching for a cleaner with a mixed record, a clean record (390 wide)
+and no history; the section as Office; a check-in answered from the portal at 390; the full Needs attention
+list with coaching drafts and a disputed record.
+
+**Found and fixed while inspecting:** disputing someone else's record from a portal answered "That record is
+not yours", which confirmed it existed; it now answers "Not found." The score's note repeated itself, and
+"Not enough history" was said twice.
+
+**Not done, and why:** Selestial has no Quality agent and no Finance workspace, so there is no quality
+measure (no inspections or customer ratings exist to measure) and no paid-earnings figure. Team Coordinator
+does not exist; Dispatch and Recruiter run the routine follow-ups that belong to their own work.

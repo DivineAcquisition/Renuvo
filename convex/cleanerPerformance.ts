@@ -41,7 +41,7 @@ export const forCleaner = managerQuery({
         weights: WEIGHTS,
         minimum: MINIMUM,
         graceMinutes: GRACE_MINUTES,
-        words: `Reliability ${WEIGHTS.reliability} points, punctuality ${WEIGHTS.punctuality}, answering offers ${WEIGHTS.responsiveness}. A part counts only with at least ${MINIMUM.punctuality} records; with fewer than ${MINIMUM.reliability} accepted jobs there is no score. Completion is shown, not scored. The score is never used to rank people or decide who is offered work.`,
+        words: `Not used to rank people or decide who is offered work. Reliability ${WEIGHTS.reliability} points, punctuality ${WEIGHTS.punctuality}, answering offers ${WEIGHTS.responsiveness}. A part counts only with at least ${MINIMUM.punctuality} records; with fewer than ${MINIMUM.reliability} accepted jobs there is no score. Completion is shown, not scored.`,
       },
       score: performance.score,
       measures: (["reliability", "punctuality", "responsiveness", "completion"] as const).map((key) => performance.measures[key]),

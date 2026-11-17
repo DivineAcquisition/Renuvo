@@ -28,6 +28,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Avatar, Chips, EFFECT_WORDS, ENGAGEMENT_WORDS, Progress, ReadinessLine, RequirementBadge, StatusBadge, type EngagementStatus } from "./bits";
 import { ConfirmHoursDialog, ExceptionDialog, RemoveButton, TimeAwayDialog, WeekDialog } from "./availability-edit";
+import { PerformanceSection } from "./performance";
 import { FollowUpsCard, PortalAccessCard, RequirementActions, SkillClaims } from "./onboarding-review";
 import { profilePath, SECTIONS, type SectionId } from "./state";
 
@@ -969,14 +970,6 @@ export function ActivitySection({ cleanerId }: { cleanerId: Id<"cleaners"> }) {
   );
 }
 
-export function PerformanceSection() {
-  return (
-    <div className="rounded-2xl border border-dashed border-border bg-card px-5 py-10 text-center sm:px-10">
-      <p className="font-semibold text-strong">Performance is not built yet</p>
-      <p className="mx-auto mt-1.5 max-w-xl text-sm leading-relaxed text-muted-foreground">Measures with their definitions and records, an explainable score once there is enough history, and coaching come in a later phase of this workspace. Nothing here is estimated in the meantime.</p>
-    </div>
-  );
-}
 
 export function SectionBody({ section, profile, onSection }: { section: SectionId; profile: Profile; onSection?: (section: SectionId) => void }) {
   // Sections lay out by the room they have, so the same section reads well in the drawer and on the page.
@@ -992,7 +985,7 @@ function sectionOf(section: SectionId, profile: Profile, onSection?: (section: S
     case "skills":
       return <SkillsSection profile={profile} />;
     case "performance":
-      return <PerformanceSection />;
+      return <PerformanceSection cleanerId={profile.cleanerId} name={profile.name} />;
     case "pay":
       return <PaySection profile={profile} />;
     case "activity":

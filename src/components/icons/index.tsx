@@ -160,6 +160,7 @@ import {
   PaperPlaneTilt as PhNPaperPlaneTilt,
   Crown as PhNCrown,
   Phone as PhNPhone,
+  Flag as PhNFlag,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon, IconProps } from "@phosphor-icons/react";
 
@@ -198,6 +199,8 @@ export const Building2 = wrap(PhBuildings, "Building2", true);
 /** A crew's lead. */
 export const Crown = wrap(PhNCrown, "Crown", true);
 export const Phone = wrap(PhNPhone, "Phone", true);
+/** A record someone says is wrong. */
+export const Flag = wrap(PhNFlag, "Flag", true);
 export const Cable = wrap(PhPlug, "Cable", true);
 export const Calculator = wrap(PhCalculator, "Calculator", true);
 export const CalculatorIcon = wrap(PhCalculator, "CalculatorIcon", true);

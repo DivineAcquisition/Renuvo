@@ -99,7 +99,7 @@ describe("Cleaners: performance, coaching and check-ins", () => {
       ["No check-in recorded (not counted)", 1],
     ]);
     expect(view.score.lines.map((line) => line.key)).toEqual(["reliability", "punctuality", "responsiveness"]);
-    expect(view.method.words).toContain("never used to rank people");
+    expect(view.method.words).toContain("Not used to rank people or decide who is offered work");
     expect(view.recommendations.map((row) => row.key)).toEqual(["no_show", "late"]);
 
     // Office never sees performance; another company finds nothing.

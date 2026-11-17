@@ -57,7 +57,7 @@ export function PortalPage({ token }: { token: string }) {
     <>
       <Page company={view.company} title={tab === "home" ? `Hi ${view.firstName}` : TABS.find((row) => row.id === tab)!.label}>
         {tab === "home" ? <Home view={view} token={token} onTab={setTab} /> : null}
-        {tab === "jobs" ? <Jobs view={view} /> : null}
+        {tab === "jobs" ? <Jobs view={view} token={token} /> : null}
         {tab === "hours" ? <Hours view={view} token={token} /> : null}
         {tab === "steps" ? <Steps view={view} token={token} onTab={setTab} /> : null}
         {tab === "pay" ? <Pay view={view} token={token} /> : null}
@@ -115,6 +115,7 @@ function Home({ view, token, onTab }: { view: View; token: string; onTab: (tab: 
   const next = view.jobs.find((job) => job.status === "accepted");
   return (
     <>
+      {view.purpose === "check_in" && view.allowed.includes("respond_check_in") ? <CheckInCard view={view} token={token} onTab={onTab} /> : null}
       {view.engagement === "onboarding" || steps.length > 0 ? (
         <Card title={steps.length > 0 ? "To finish your onboarding" : "Onboarding"}>
           <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={view.readiness.progress.total} aria-valuenow={view.readiness.progress.met} aria-label={`${view.readiness.progress.met} of ${view.readiness.progress.total} done`}>
@@ -201,7 +202,7 @@ function Home({ view, token, onTab }: { view: View; token: string; onTab: (tab: 
   );
 }
 
-function Jobs({ view }: { view: View }) {
+function Jobs({ view, token }: { view: View; token: string }) {
   return (
     <>
       <Card title="Coming up">
@@ -227,9 +228,7 @@ function Jobs({ view }: { view: View }) {
       <Card title="Recent">
         {view.past.length === 0 ? <p className="text-sm text-muted-foreground">No jobs in the last few weeks.</p> : null}
         {view.past.map((job) => (
-          <Row key={job.id} label={fmt(job.startsAt, view.timezone, { month: "short", day: "numeric" })}>
-            {job.service} · {job.status === "completed" ? "Done" : job.status === "cancelled" ? "Cancelled" : "In progress"}
-          </Row>
+          <PastJob key={job.id} job={job} view={view} token={token} />
         ))}
       </Card>
     </>
@@ -524,5 +523,116 @@ function Pay({ view, token }: { view: View; token: string }) {
         ))}
       </Card>
     </>
+  );
+}
+
+/** "Are you still available?" One tap; a break says until when, and wanting to stop goes to a person. */
+function CheckInCard({ view, token, onTab }: { view: View; token: string; onTab: (tab: Tab) => void }) {
+  const respond = useMutation(api.portal.respondCheckIn);
+  const [answer, setAnswer] = useState<"available" | "fewer" | "break" | "stop" | null>(null);
+  const [until, setUntil] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const options = [
+    { id: "available", label: "Yes, I'm available" },
+    { id: "fewer", label: "Yes, but fewer jobs" },
+    { id: "break", label: "I'm taking a break" },
+    { id: "stop", label: "I want to stop" },
+  ] as const;
+  if (done) {
+    return (
+      <Notice tone="good" title="Thanks for letting us know">
+        {done}
+        {answer === "fewer" ? (
+          <button type="button" onClick={() => onTab("hours")} className="mt-1 block text-left font-semibold text-brand-300">
+            Change your hours
+          </button>
+        ) : null}
+      </Notice>
+    );
+  }
+  return (
+    <Card title={`Are you still looking for work with ${view.company}?`}>
+      <p className="text-sm text-muted-foreground">We have not had work with you for a while. Nothing changes until you tell us, and there is no wrong answer.</p>
+      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Your answer">
+        {options.map((option) => (
+          <button key={option.id} type="button" role="radio" aria-checked={answer === option.id} onClick={() => setAnswer(option.id)} className={cn("min-h-12 rounded-xl border px-3 text-sm font-medium", answer === option.id ? "border-brand-500 bg-brand-500/10 text-brand-300" : "border-border bg-background")}>
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {answer === "break" ? (
+        <label className="grid gap-1 text-sm">
+          Back on
+          <input type="date" value={until} onChange={(event) => setUntil(event.target.value)} className="h-11 rounded-lg border border-border bg-background px-2 text-base" />
+        </label>
+      ) : null}
+      {answer ? <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Anything else? (optional)" className="h-11 rounded-lg border border-border bg-background px-3 text-base" /> : null}
+      <Problem message={problem} />
+      <Action
+        busy={busy}
+        disabled={!answer || (answer === "break" && !until)}
+        onPress={() => {
+          if (!answer) return;
+          const back = answer === "break" ? zoned(until, "00:00", view.timezone) : null;
+          setBusy(true);
+          setProblem(null);
+          respond({ token, answer, until: back ?? undefined, note: note || undefined })
+            .then((result) => setDone(result.words + (result.impact.length ? " The office will sort out the jobs your break touches." : "")))
+            .catch((error) => setProblem(problemWords(error)))
+            .finally(() => setBusy(false));
+        }}
+      >
+        Send
+      </Action>
+    </Card>
+  );
+}
+
+/** A past job, and a way to say its record is wrong. The office decides; it is left out of their measures meanwhile. */
+function PastJob({ job, view, token }: { job: View["past"][number]; view: View; token: string }) {
+  const dispute = useMutation(api.portal.disputeRecord);
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  return (
+    <div className="flex flex-col gap-1 border-b border-border pb-2 last:border-0 last:pb-0">
+      <Row label={fmt(job.startsAt, view.timezone, { month: "short", day: "numeric" })}>
+        {job.service} · {job.status === "completed" ? "Done" : job.status === "cancelled" ? "Cancelled" : "In progress"}
+      </Row>
+      {view.allowed.includes("dispute") ? (
+        sent ? (
+          <p className="text-xs text-muted-foreground">Sent. The office will look at it, and it does not count against you meanwhile.</p>
+        ) : open ? (
+          <>
+            <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} placeholder="What is wrong with this record?" className="w-full rounded-xl border border-border bg-background px-3 py-2 text-base" />
+            <Problem message={problem} />
+            <Action
+              kind="secondary"
+              busy={busy}
+              disabled={!reason.trim()}
+              onPress={() => {
+                setBusy(true);
+                setProblem(null);
+                dispute({ token, assignmentId: job.id as Id<"assignments">, reason })
+                  .then(() => setSent(true))
+                  .catch((error) => setProblem(problemWords(error)))
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Send to the office
+            </Action>
+          </>
+        ) : (
+          <button type="button" onClick={() => setOpen(true)} className="self-start text-xs font-medium text-muted-foreground underline underline-offset-4">
+            Something wrong with this record?
+          </button>
+        )
+      ) : null}
+    </div>
   );
 }
