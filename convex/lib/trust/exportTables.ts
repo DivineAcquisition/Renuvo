@@ -101,6 +101,16 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "googleAdsSnapshots", index: "by_company_account" },
   { table: "googleDriveTexts", index: "by_company_resource" },
   { table: "googleSettings", index: "by_company" },
+  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, costs, quotes, imports and research.
+  { table: "services", index: "by_company_status" },
+  { table: "serviceVersions", index: "by_company_service_version" },
+  { table: "serviceDrafts", index: "by_company_service" },
+  { table: "serviceChanges", index: "by_company_updated", omit: ["scheduledFunctionId"], why: "An internal reference to the scheduler." },
+  { table: "pricingProfiles", index: "by_company" },
+  { table: "serviceQuotes", index: "by_company_created" },
+  { table: "serviceImports", index: "by_company_created" },
+  { table: "researchBriefs", index: "by_company_created" },
+  { table: "researchSources", index: "by_company_brief" },
   // Cleaners (convex/lib/cleaners/schema.ts). The export is the Owner's, so pay and personnel records are included.
   { table: "subcontractors", index: "by_company_status" },
   { table: "workerAffiliations", index: "by_company_cleaner" },

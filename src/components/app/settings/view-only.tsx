@@ -5,7 +5,7 @@ import { Lock } from "@/components/icons";
 import { sectionById } from "@/lib/app/settings";
 
 /** Pages everyone may read but only the Owner may change say so once, at the top, to everyone else. */
-const OWNER_EDITS = new Set(["business", "services", "people", "agents", "dispatch", "recruiting", "integrations", "compliance", "agreements", "ai"]);
+const OWNER_EDITS = new Set(["business", "people", "agents", "dispatch", "recruiting", "integrations", "compliance", "agreements", "ai"]);
 
 export function ViewOnlyNote({ id }: { id: string }) {
   const { role } = useCompany();

@@ -57,7 +57,6 @@ const OWNER_CHANGES = "Only the Owner can change these settings. You can view th
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   section("business", "Business details", "company", "Your company name, time zone, the ZIP codes you serve and the hours customers can book.", OWNER_CHANGES, ["company", "name", "timezone", "time zone", "clock", "areas", "service area", "zip", "postal", "hours", "open", "opening", "schedule", "booking hours"]),
-  section("services", "Services & pricing", "company", "The cleaning services you offer, with a starting price and how long each one takes.", OWNER_CHANGES, ["catalog", "service", "services", "price", "pricing", "duration", "crew", "skills", "deep clean", "move out", "archive"]),
   section("people", "People & access", "company", "Who works in Selestial with you, what each person can do, and invitations.", "Only the Owner can invite people, change roles or remove access.", ["members", "team", "staff", "roles", "owner", "manager", "office", "invite", "invitation", "remove", "access"]),
   section("agents", "Agent controls", "agents", "What each agent may do on its own, what needs your approval, and pausing an agent.", OWNER_CHANGES, ["permissions", "approvals", "approve", "pause", "resume", "authority", "limits", "spending", "automatic", "ask me first"]),
   section("dispatch", "Dispatch rules", "agents", "How jobs are offered to cleaners, how replacements are found, and what a finished job needs.", OWNER_CHANGES, ["offers", "offering jobs", "replacement", "backup", "coverage", "buffer", "travel", "reminder", "arrival", "late", "no-show", "photos", "completion", "cleaner links"]),
@@ -116,6 +115,7 @@ export const LEGACY_HASHES: Readonly<Record<string, string>> = {
   people: `${SETTINGS_ROOT}/people`,
   company: `${SETTINGS_ROOT}/business`,
   compliance: `${SETTINGS_ROOT}/compliance`,
+  services: "/app/services",
 };
 
 export function legacyTarget(hash: string): string | null {

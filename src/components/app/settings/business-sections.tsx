@@ -5,17 +5,16 @@ import { useId, useMemo, useState } from "react";
 import { Unavailable } from "@/components/app/settings/guard";
 import { useBusinessDraft } from "@/components/app/settings/business-draft";
 import { SaveBar as SaveArea } from "@/components/app/settings/save-bar";
-import { Field, TextArea, TextInput } from "@/components/app/form";
+import { Field, TextInput } from "@/components/app/form";
 import { Plus, Search, Trash2, X } from "@/components/icons";
 import { Panel } from "@/components/app/shell";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { addPostalCodes, blankService, clockLabel, dollars, hoursSummary, minuteToTime, parseDollars, serviceErrors, type HoursWindow, timeToMinute, WEEKDAYS } from "@/lib/app/settings-draft";
+import { addPostalCodes, clockLabel, hoursSummary, minuteToTime, type HoursWindow, timeToMinute, WEEKDAYS } from "@/lib/app/settings-draft";
 import { filterTimeZones, timeZoneLabel, timeZoneOptions } from "@/lib/app/timezones";
 import { cn } from "@/lib/utils";
 
-/** Save and discard for the business draft. Shared by Business details and Services & pricing. */
+/** Save and discard for the business draft. */
 export function SaveBar() {
   const { canEdit, dirty, stale, problems, saving, error, notice, save, discard } = useBusinessDraft();
   return (
@@ -357,165 +356,6 @@ export function BusinessSection() {
 
       <ServiceArea />
       <BookingHours />
-      <SaveBar />
-    </div>
-  );
-}
-
-// ── Services ────────────────────────────────────────────────────────────────────────────────────────
-
-const minutesLabel = (value: string) => {
-  const minutes = Number(value);
-  if (!Number.isInteger(minutes) || minutes <= 0) return "—";
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h && m ? `${h} hr ${m} min` : h ? `${h} hr` : `${m} min`;
-};
-
-const priceLabel = (value: string) => {
-  if (!value.trim()) return "No starting price";
-  const cents = parseDollars(value);
-  return cents === null ? "—" : `From $${dollars(cents)}`;
-};
-
-/** The service catalog: a short list, with the full details opened one service at a time. */
-export function ServicesSection() {
-  const { draft, saved, canEdit, edit, unavailable } = useBusinessDraft();
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
-  if (unavailable) return <Unavailable what="Services & pricing" />;
-  if (!draft || !saved) return <Skeleton className="h-72 rounded-2xl" />;
-  type Service = (typeof draft.services)[number];
-  const set = (id: string, patch: Partial<Service>) => edit((current) => ({ ...current, services: current.services.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
-  const savedIds = new Set(saved.services.map((s) => s.id));
-  const active = draft.services.filter((s) => s.status === "active");
-  const archived = draft.services.filter((s) => s.status === "archived");
-  const visible = showArchived ? draft.services : active;
-
-  return (
-    <div className="grid gap-5">
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        Changes apply to new bookings. Bookings already made keep the details saved with the booking. A starting price fills in a new booking&apos;s price, and it can be changed on each booking.
-      </p>
-
-      {draft.services.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center">
-          <p className="text-base font-semibold text-strong">No services yet</p>
-          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Add the cleanings you offer, like a standard clean or a deep clean, so new bookings start with the right price and time.</p>
-        </div>
-      ) : (
-        <Panel flush>
-          <ul className="divide-y divide-border">
-            {visible.map((service) => {
-              const isOpen = openId === service.id;
-              const errors = canEdit ? serviceErrors(service) : {};
-              const hasErrors = Object.keys(errors).length > 0;
-              const isArchived = service.status === "archived";
-              return (
-                <li key={service.id}>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 sm:px-5">
-                    <div className="min-w-0 flex-1">
-                      <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-strong">
-                        {service.name.trim() || "New service"}
-                        {isArchived ? (
-                          <Badge variant="outline" size="sm">
-                            Archived
-                          </Badge>
-                        ) : (
-                          <Badge variant="success" size="sm">
-                            Active
-                          </Badge>
-                        )}
-                        {hasErrors && !isOpen ? (
-                          <Badge variant="error" size="sm">
-                            Needs details
-                          </Badge>
-                        ) : null}
-                      </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                        {priceLabel(service.price)} · {minutesLabel(service.duration)} · {Number(service.crew) === 1 ? "1 cleaner" : `${service.crew || "—"} cleaners`}
-                      </p>
-                    </div>
-                    <Button type="button" size="sm" variant={isOpen ? "secondary" : "outline"} aria-expanded={isOpen} aria-controls={`service-${service.id}`} onClick={() => setOpenId(isOpen ? null : service.id)}>
-                      {isOpen ? "Done" : canEdit ? "Edit" : "View"}
-                    </Button>
-                  </div>
-                  {isOpen ? (
-                    <div id={`service-${service.id}`} className="grid gap-4 border-t border-border bg-muted/30 px-4 py-4 sm:grid-cols-2 sm:px-5">
-                      <Field label="Service name" error={errors.name}>
-                        <TextInput value={service.name} disabled={!canEdit} placeholder="Standard clean" onChange={(event) => set(service.id, { name: event.target.value })} />
-                      </Field>
-                      <Field label="Starting price ($)" hint="Optional. Leave empty if you price each job yourself." error={errors.price}>
-                        <TextInput inputMode="decimal" value={service.price} disabled={!canEdit} placeholder="150.00" onChange={(event) => set(service.id, { price: event.target.value })} />
-                      </Field>
-                      <Field label="How long it takes (minutes)" hint={`About ${minutesLabel(service.duration)}.`} error={errors.duration}>
-                        <TextInput inputMode="numeric" value={service.duration} disabled={!canEdit} onChange={(event) => set(service.id, { duration: event.target.value })} />
-                      </Field>
-                      <Field label="Cleaners needed" error={errors.crew}>
-                        <TextInput inputMode="numeric" value={service.crew} disabled={!canEdit} onChange={(event) => set(service.id, { crew: event.target.value })} />
-                      </Field>
-                      <Field label="What the crew does" className="sm:col-span-2" hint="Cleaners see this when they accept the job." error={errors.scope}>
-                        <TextArea value={service.scope} disabled={!canEdit} placeholder="Kitchen, bathrooms, dusting, vacuum and mop all floors." onChange={(event) => set(service.id, { scope: event.target.value })} />
-                      </Field>
-                      <Field label="Skills a cleaner needs" className="sm:col-span-2" hint="Optional. Separate with commas. Only cleaners with every skill listed are offered the job.">
-                        <TextInput value={service.skills} disabled={!canEdit} placeholder="deep clean, pets" onChange={(event) => set(service.id, { skills: event.target.value })} />
-                      </Field>
-                      {canEdit ? (
-                        <div className="flex flex-wrap gap-2 sm:col-span-2">
-                          {savedIds.has(service.id) ? (
-                            <Button type="button" size="sm" variant="outline" onClick={() => set(service.id, { status: isArchived ? "active" : "archived" })}>
-                              {isArchived ? "Make active again" : "Archive this service"}
-                            </Button>
-                          ) : (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                edit((current) => ({ ...current, services: current.services.filter((s) => s.id !== service.id) }));
-                                setOpenId(null);
-                              }}
-                            >
-                              <Trash2 aria-hidden className="size-4" />
-                              Remove this new service
-                            </Button>
-                          )}
-                          {savedIds.has(service.id) ? <p className="self-center text-xs text-muted-foreground">{isArchived ? "Archived services can't be chosen for new bookings." : "Archiving hides it from new bookings. Past bookings keep it."}</p> : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-          {archived.length > 0 ? (
-            <div className="border-t border-border px-4 py-2.5 sm:px-5">
-              <button type="button" onClick={() => setShowArchived((value) => !value)} className="text-sm font-medium text-brand-600 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500" aria-expanded={showArchived}>
-                {showArchived ? "Hide archived services" : `Show ${archived.length} archived service${archived.length === 1 ? "" : "s"}`}
-              </button>
-            </div>
-          ) : null}
-        </Panel>
-      )}
-
-      {canEdit ? (
-        <div>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              const service = blankService();
-              edit((current) => ({ ...current, services: [...current.services, service] }));
-              setOpenId(service.id);
-            }}
-          >
-            <Plus aria-hidden className="size-4" />
-            Add a service
-          </Button>
-        </div>
-      ) : null}
       <SaveBar />
     </div>
   );

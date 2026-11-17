@@ -36,13 +36,16 @@ import { check, jsonSchema, stableHash, type Field } from "./fields";
 import { compareScenarios, PricingError, type PricingInput } from "./pricing";
 import { AGREEMENT_TOOLS } from "./agreementTools";
 import { CLEANER_TOOLS } from "./cleanerTools";
+import { SERVICE_TOOLS } from "./serviceTools";
 import { GOOGLE_TOOLS } from "./googleTools";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
 import { featureOn, ownedAsset, queueGeneration, settingFor, capabilityFor, checkedParams } from "../ai/media";
 import { resolve as resolveCapability } from "../ai/registry";
 import { allowanceRow, mediaAllowance, monthKey } from "../ai/usage";
-import { businessSettingsOf } from "../settings/business";
+import { priceSummary, scheduleFacts } from "../services/engine";
+import type { Schedule } from "../services/spec";
+import { publishedCatalog } from "../services/store";
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -186,7 +189,8 @@ const scenarioField: Field = {
     overheadPerVisitCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000_00 },
     targetMarginPercent: { type: "number", optional: true, min: 0, max: 99.9, description: "Profit as a percent of the price." },
     markupPercent: { type: "number", optional: true, min: 0, max: 1000, description: "Profit as a percent of the cost." },
-    visitsPerMonth: { type: "number", optional: true, min: 0, max: 100 },
+    schedule: { type: "string", optional: true, enum: ["every_7_days", "every_14_days", "twice_per_month", "once_per_month"], description: "For recurring service: the visit calendar. Monthly figures use its annual average (every 7 days is 4.35 visits a month, every 14 days 2.17), never 4 or 2." },
+    visitsPerMonth: { type: "number", optional: true, min: 0, max: 100, description: "Only for a fixed number of visits per calendar month. For an every-N-days schedule, give schedule instead." },
     roundToCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000, description: "Round prices up to a multiple of this many cents." },
   },
 };
@@ -230,7 +234,8 @@ const TOOLS: ChatTool[] = [
     input: { type: "object", properties: { scenarios: { type: "array", items: scenarioField, maxItems: 6, minItems: 1 } } },
     run: async (_ctx, args) => {
       try {
-        const out = compareScenarios(args.scenarios as PricingInput[]);
+        const scenarios = (args.scenarios as (PricingInput & { schedule?: Schedule })[]).map(({ schedule, ...rest }) => (schedule ? { ...rest, visitsPerMonth: Math.round(scheduleFacts(schedule).monthlyAverage * 100) / 100 } : rest));
+        const out = compareScenarios(scenarios);
         const first = out.scenarios[0];
         const summary = first ? `${out.scenarios.length} scenario${out.scenarios.length === 1 ? "" : "s"} priced${first.priceAtMarginCents !== null ? `; ${first.name} at margin: ${money(first.priceAtMarginCents)}` : first.priceAtMarkupCents !== null ? `; ${first.name} at markup: ${money(first.priceAtMarkupCents)}` : ""}` : "No scenario could be priced";
         if (!out.scenarios.length) return refused(out.errors.map((row) => `${row.name}: ${row.error}`).join(" "));
@@ -276,10 +281,8 @@ const TOOLS: ChatTool[] = [
           activeCustomers: customers.length,
           readyCleaners: cleaners.length,
           openHiringNeeds: needs.map((row) => ({ needId: row._id, title: row.title, openings: row.openings, payApproved: Boolean(row.compensation) })),
-          services: businessSettingsOf(ctx.company)
-            .services?.filter((service) => service.status === "active")
-            .map((service) => ({ name: service.name, scope: service.scope, durationMinutes: service.durationMinutes, defaultCrew: service.defaultCrew, startingPrice: service.startingPriceCents === undefined ? "not set" : money(service.startingPriceCents) })) ?? [],
-          priceNote: "Starting prices are the Owner's, set in Settings › Services & pricing. They are defaults for new visits, not quotes.",
+          services: (await publishedCatalog(ctx, ctx.company._id)).map(({ service, version }) => ({ id: service._id, name: service.name, price: priceSummary(version.spec), version: version.version, crew: version.spec.team.crewSize })),
+          priceNote: "Live services are in Services & Pricing. Use quote_service for a price and read_service for scope; only the Owner publishes a change.",
         },
       };
     },
@@ -884,7 +887,7 @@ const TOOLS: ChatTool[] = [
     minimumRole: "owner",
     specialist: "sales",
     input: { type: "object", properties: { service: { type: "string", optional: true, max: 200 }, priceCents: { type: "number", optional: true, integer: true, min: 0 } } },
-    run: async () => unavailable("Chat does not change prices: changing prices is always a person's decision. The Owner sets each service's starting price in Settings › Services & pricing. Save the pricing as a draft package to take there."),
+    run: async () => unavailable("Chat does not publish prices: changing a live price is always the Owner's decision, in Services & Pricing › Changes. Chat can draft the change (edit_service_draft) and submit it for review (submit_service_for_review)."),
   },
   {
     name: "launch_campaign",
@@ -997,7 +1000,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...GOOGLE_TOOLS, ...CLEANER_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...CLEANER_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

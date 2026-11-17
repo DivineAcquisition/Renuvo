@@ -10,9 +10,10 @@ import { SectionMark } from "@/components/app/settings/marks";
 import { legacyTarget, mayOpen, menuSections, sectionById, SETTINGS_GROUPS, sectionsFor, type SettingsRole, type SettingsSection } from "@/lib/app/settings";
 
 /** The jobs owners come to Settings for most, in their words, each pointing at the page that does it. */
-const COMMON_TASKS: readonly { section: string; task: string; detail: string; ownerOnly?: boolean; hash?: string }[] = [
+const COMMON_TASKS: readonly { section: string; task: string; detail: string; ownerOnly?: boolean; hash?: string; href?: string }[] = [
   { section: "business", task: "Change your booking hours", detail: "Set the days and times customers can book.", ownerOnly: true },
-  { section: "services", task: "Update services and prices", detail: "Add a service or change a starting price.", ownerOnly: true },
+  // Services moved out of Settings to Company → Services & Pricing; the task still starts here.
+  { section: "services", href: "/app/services", task: "Update services and prices", detail: "Under Company → Services & Pricing.", ownerOnly: true },
   { section: "people", task: "Invite a team member", detail: "Give someone in your office access.", ownerOnly: true },
   { section: "agents", task: "Decide what your agents may do", detail: "Choose what needs your approval first.", ownerOnly: true },
   { section: "integrations", task: "Connect Google or Gmail", detail: "Calendar, reviews, ads leads and your hiring inbox.", ownerOnly: true },
@@ -22,6 +23,7 @@ const COMMON_TASKS: readonly { section: string; task: string; detail: string; ow
 /** What a role sees first: the common tasks it can actually do. */
 export function commonTasksFor(role: SettingsRole) {
   return COMMON_TASKS.filter((row) => {
+    if (row.href) return !row.ownerOnly || role === "owner";
     const section = sectionById(row.section);
     if (!section || !mayOpen(section, role)) return false;
     return !row.ownerOnly || role === "owner";
@@ -93,14 +95,14 @@ export function SettingsOverview() {
           </h2>
           <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {tasks.map((row) => {
-              const section = sectionById(row.section)!;
+              const section = sectionById(row.section);
               return (
                 <li key={row.task}>
                   <Link
-                    href={section.path}
+                    href={row.href ?? section!.path}
                     className="group flex h-full items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 transition-colors hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-500"
                   >
-                    <SectionMark id={section.id} size="md" />
+                    <SectionMark id={section?.id ?? row.section} size="md" />
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-strong">{row.task}</span>
                       <span className="block text-xs text-muted-foreground">{row.detail}</span>

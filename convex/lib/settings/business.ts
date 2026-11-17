@@ -48,6 +48,12 @@ export const serviceSnapshotValidator = v.object({
   skills: v.array(v.string()),
   startingPriceCents: v.optional(v.number()),
   capturedAt: v.number(),
+  /** Services & Pricing: the published version the visit was made from, and the saved quote that priced it. */
+  versionId: v.optional(v.id("serviceVersions")),
+  version: v.optional(v.number()),
+  quoteId: v.optional(v.id("serviceQuotes")),
+  /** Where the visit's price came from: the engine's quote, a person's typed price, or nothing. */
+  priceSource: v.optional(v.union(v.literal("quote"), v.literal("manual"), v.literal("none"))),
 });
 
 export type Service = typeof serviceValidator.type;
