@@ -49,7 +49,6 @@ const section = (id: string, label: string, group: SettingsGroupId, purpose: str
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   section("business", "Business & hours", "business", "Company name and time zone, the postal codes you work in, and the hours appointments may be booked.", "Everyone reads. The Owner changes.", ["company", "name", "timezone", "time zone", "clock", "areas", "zip", "postal", "hours", "open", "schedule"]),
-  section("services", "Services & pricing", "business", "The services you offer: scope, duration, default crew, skills and a starting price for new visits.", "Everyone reads. The Owner changes.", ["catalog", "service", "price", "pricing", "duration", "crew", "skills", "templates", "archive"]),
   section("people", "People & access", "business", "Who is in the company, their roles, and invitations.", "Everyone reads. The Owner invites, changes roles and removes access.", ["members", "team", "roles", "owner", "manager", "office", "invite", "invitation", "remove"]),
   section("agents", "Agent permissions", "agents", "What each agent may do without asking, and a way to pause it.", "Everyone reads. The Owner changes.", ["permissions", "authority", "pause", "approve", "execute", "propose", "limits"]),
   section("dispatch", "Dispatch rules", "agents", "How long cleaners have to answer, buffers, coverage, the day of service and the evidence required.", "Everyone reads. The Owner changes.", ["offers", "buffer", "travel", "coverage", "no-show", "photos", "evidence", "reminder", "broadcast", "backup"]),
@@ -98,6 +97,7 @@ export const LEGACY_HASHES: Readonly<Record<string, string>> = {
   people: `${SETTINGS_ROOT}/people`,
   company: `${SETTINGS_ROOT}/business`,
   compliance: `${SETTINGS_ROOT}/compliance`,
+  services: "/app/services",
 };
 
 export function legacyTarget(hash: string): string | null {

@@ -113,6 +113,7 @@ import type * as lib_chat_googleTools from "../lib/chat/googleTools.js";
 import type * as lib_chat_model from "../lib/chat/model.js";
 import type * as lib_chat_pricing from "../lib/chat/pricing.js";
 import type * as lib_chat_prompt from "../lib/chat/prompt.js";
+import type * as lib_chat_serviceTools from "../lib/chat/serviceTools.js";
 import type * as lib_chat_state from "../lib/chat/state.js";
 import type * as lib_chat_steps from "../lib/chat/steps.js";
 import type * as lib_chat_titles from "../lib/chat/titles.js";
@@ -376,6 +377,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/model": typeof lib_chat_model;
   "lib/chat/pricing": typeof lib_chat_pricing;
   "lib/chat/prompt": typeof lib_chat_prompt;
+  "lib/chat/serviceTools": typeof lib_chat_serviceTools;
   "lib/chat/state": typeof lib_chat_state;
   "lib/chat/steps": typeof lib_chat_steps;
   "lib/chat/titles": typeof lib_chat_titles;

@@ -87,7 +87,7 @@ export const DEPARTMENTS: readonly Department[] = [
 
 // ── Company-wide items ──────────────────────────────────────────────────────────────────────────────
 
-export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "customers" | "cleaners" | "agreements" | "finance" | "reports" | "settings";
+export type NavItemId = "home" | "approvals" | "inbox" | "search" | "chat" | "services" | "customers" | "cleaners" | "agreements" | "finance" | "reports" | "settings";
 
 export type NavItem = Destination & {
   id: NavItemId;
@@ -139,6 +139,16 @@ export const SHARED_ITEMS: readonly NavItem[] = [
     minimumRole: "office",
     accessNote: "Each chat is private to the person who started it. What chat may change is checked in Convex against that person's role and each agent's authority.",
     alsoAt: [`${APP_ROOT}/chats`],
+  },
+  {
+    id: "services",
+    label: "Services & Pricing",
+    section: "shared",
+    purpose: "The services the company sells, how each is priced, what it earns, and every change to them, reviewed before it goes live.",
+    path: `${APP_ROOT}/services`,
+    availability: LIVE,
+    minimumRole: "office",
+    accessNote: "Everyone reads the catalog. Owners and Managers draft and submit changes. Only the Owner approves and publishes, and only the Owner sees costs and profitability. Not Selestial's own plans or credits, which are under Settings › Plan & Usage.",
   },
   {
     id: "customers",
@@ -220,6 +230,19 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
   { path: `${APP_ROOT}/agreements/archive`, label: "Archive", purpose: "Agreements set aside. They are kept, not deleted." },
   { path: `${APP_ROOT}/agreements/new`, label: "New agreement", purpose: "Build with Selestial, use a template, or upload an agreement." },
   { path: `${APP_ROOT}/agreements/[id]`, label: "Agreement", purpose: "One agreement: its document, parties, terms, versions, review and signatures, and activity." },
+];
+
+/** Pages inside Services & Pricing. The first four are its tabs; the rest are reached from them. They have no sidebar entry of their own. */
+export const SERVICES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/services/studio`, label: "Pricing Studio", purpose: "Test example jobs against live or draft services: price, time, crew, costs and what remains." },
+  { path: `${APP_ROOT}/services/research`, label: "Research & Insights", purpose: "Research briefs: what was found, what is comparable, what is uncertain, with every source." },
+  { path: `${APP_ROOT}/services/research/[id]`, label: "Research brief", purpose: "One brief, its findings labeled by kind, and its sources." },
+  { path: `${APP_ROOT}/services/changes`, label: "Changes", purpose: "Every change waiting for review, scheduled or published, and the history of each service." },
+  { path: `${APP_ROOT}/services/changes/[id]`, label: "Change", purpose: "One change: what it changes, prices before and after, evidence, specialists' checks, approval." },
+  { path: `${APP_ROOT}/services/new`, label: "New service", purpose: "Build with Selestial, use a template, import existing pricing, or add a service." },
+  { path: `${APP_ROOT}/services/setup`, label: "Pricing setup", purpose: "What the company told setup: areas, team, costs, margin and strategy." },
+  { path: `${APP_ROOT}/services/imports/[id]`, label: "Import review", purpose: "Rows read from a spreadsheet or pasted text, each reviewed before it becomes a draft." },
+  { path: `${APP_ROOT}/services/[id]`, label: "Service", purpose: "One service: the guided builder for its draft, its live version and its history." },
 ];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */
@@ -419,6 +442,7 @@ export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes
   { pattern: `${APP_ROOT}/records`, today: "Redirects to Customers & Properties.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/team`, today: "Redirects to Settings, where agent permissions and pause now live.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/schedule`, today: "Redirects to Dispatch › Schedule.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/settings/services`, today: "Redirects to Services & Pricing (moved out of Settings on November 16, 2026).", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/integrations`, today: "Redirects to Settings › Integrations (moved November 16, 2026).", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/settings/connections`, today: "Redirects to Settings › Integrations (Connections was folded in on November 16, 2026).", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/insights`, today: "The week's measures.", becomes: "Reports, at /app/reports, with a redirect from here." },

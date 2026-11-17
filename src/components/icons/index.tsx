@@ -158,6 +158,10 @@ import {
   Broom as PhNBroom,
   Buildings as PhNBuildings,
   PaperPlaneTilt as PhNPaperPlaneTilt,
+  Tag as PhNTag,
+  Flask as PhNFlask,
+  Stack as PhNStack,
+  ArrowUUpLeft as PhNArrowUUpLeft,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon, IconProps } from "@phosphor-icons/react";
 
@@ -361,3 +365,8 @@ export const SignOutIcon = wrap(PhNSignOut, "SignOutIcon", true);
 export const BroomIcon = wrap(PhNBroom, "BroomIcon", true);
 export const BuildingsIcon = wrap(PhNBuildings, "BuildingsIcon", true);
 export const PaperPlaneIcon = wrap(PhNPaperPlaneTilt, "PaperPlaneIcon", true);
+/** Services & Pricing. */
+export const PriceTagIcon = wrap(PhNTag, "PriceTagIcon", true);
+export const StudioIcon = wrap(PhNFlask, "StudioIcon", true);
+export const TemplateIcon = wrap(PhNStack, "TemplateIcon", true);
+export const RollbackIcon = wrap(PhNArrowUUpLeft, "RollbackIcon", false);

@@ -238,6 +238,27 @@ export const quote = companyQuery({
   },
 });
 
+/** Pricing Studio's material: each service's live version and, for Owners and Managers, its draft. Prices are then worked out in the browser by the same engine, free. */
+export const studio = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const out = [];
+    for (const status of ["active", "draft"] as const) {
+      const rows = await ctx.db
+        .query("services")
+        .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", status))
+        .take(200);
+      for (const row of rows) {
+        const live = await publishedSpec(ctx, row);
+        const draft = isManager(ctx.role) ? await draftOf(ctx, ctx.companyId, row._id) : null;
+        if (!live && !draft) continue;
+        out.push({ id: row._id, key: row.key, name: row.name, live: live ? { version: live.version, spec: live.spec } : null, draft: draft ? { revision: draft.revision, spec: draft.spec } : null });
+      }
+    }
+    return { services: out.sort((a, b) => a.name.localeCompare(b.name)), canSeeCosts: isOwner(ctx.role) };
+  },
+});
+
 /** The company's pricing setup. Costs are the Owner's alone, like pay. */
 export const profile = companyQuery({
   args: {},

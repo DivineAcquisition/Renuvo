@@ -1,14 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { ServicesSection } from "@/components/app/settings/business-sections";
-import { SectionPage } from "@/components/app/settings/section-page";
-
-export const metadata: Metadata = { title: "Services & pricing" };
-
+/** Services moved out of Settings into Company › Services & Pricing, the one catalog. Old links land there. */
 export default function Page() {
-  return (
-    <SectionPage id="services">
-      <ServicesSection />
-    </SectionPage>
-  );
+  redirect("/app/services");
 }

@@ -31,7 +31,7 @@ let search = "";
 vi.mock("next/navigation", () => ({ usePathname: () => "/app/settings/business", useRouter: () => ({ replace: () => undefined }), useSearchParams: () => new URLSearchParams(search) }));
 
 const { BusinessDraftProvider } = await import("@/components/app/settings/business-draft");
-const { BusinessSection, ServicesSection } = await import("@/components/app/settings/business-sections");
+const { BusinessSection } = await import("@/components/app/settings/business-sections");
 const { PlanBilling } = await import("@/components/app/settings/billing");
 const { OverviewGrid } = await import("@/components/app/settings/overview");
 const { SettingsNavList } = await import("@/components/app/settings/nav");
@@ -88,24 +88,6 @@ describe("business settings forms", () => {
     const html = page("owner", <BusinessSection />);
     expect(html).toContain("No hours set. Visits can be booked at any time.");
     expect(html).toContain("not closed");
-  });
-
-  it("explains an empty service catalog instead of showing a blank list", () => {
-    data["settings:business"] = business();
-    const html = page("owner", <ServicesSection />);
-    expect(html).toContain("No services yet");
-    expect(html).toContain("Add a service");
-    const readOnly = page("manager", <ServicesSection />);
-    expect(readOnly).toContain("No services yet");
-  });
-
-  it("lists saved services with their archived state", () => {
-    data["settings:business"] = business({ services: [{ id: "deep-clean", name: "Deep clean", scope: "Everything", durationMinutes: 240, defaultCrew: 2, skills: ["deep"], startingPriceCents: 28000, status: "archived" }] });
-    const html = page("owner", <ServicesSection />);
-    expect(html).toContain("Deep clean");
-    expect(html).toContain("Archived");
-    expect(html).toContain("280.00");
-    expect(html).toContain("Restore");
   });
 });
 
@@ -255,7 +237,7 @@ describe("the overview and navigation", () => {
 
   it("links every section the Owner may open, and each one is a real page", () => {
     const html = renderToStaticMarkup(<OverviewGrid sections={sectionsFor("owner")} />);
-    expect(SETTINGS_SECTIONS).toHaveLength(13);
+    expect(SETTINGS_SECTIONS).toHaveLength(12);
     for (const section of SETTINGS_SECTIONS) {
       expect(html, section.id).toContain(`href="${section.path}"`);
       expect(html, section.id).toContain(section.label.replace("&", "&amp;"));
@@ -273,8 +255,8 @@ describe("the overview and navigation", () => {
   });
 
   it("marks the current page and says when a search finds nothing", () => {
-    const html = renderToStaticMarkup(<SettingsNavList sections={SETTINGS_SECTIONS} activePath="/app/settings/services" />);
-    expect(html).toMatch(/href="\/app\/settings\/services"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/app\/settings\/services"/);
+    const html = renderToStaticMarkup(<SettingsNavList sections={SETTINGS_SECTIONS} activePath="/app/settings/dispatch" />);
+    expect(html).toMatch(/href="\/app\/settings\/dispatch"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/app\/settings\/dispatch"/);
     expect(renderToStaticMarkup(<SettingsNavList sections={[]} activePath="/" />)).toContain("Nothing in Settings matches");
   });
 });

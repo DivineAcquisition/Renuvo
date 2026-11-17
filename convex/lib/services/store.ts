@@ -278,6 +278,51 @@ export async function publishedByKey(ctx: QueryCtx, companyId: Id<"companies">, 
 
 const labels = (items: { label: string }[]) => new Set(items.map((i) => i.label));
 
+const PRICING_WORDS: Record<string, string> = {
+  amountCents: "Price per visit",
+  rateCents: "Hourly rate",
+  minimumHours: "Minimum hours",
+  incrementMinutes: "Billing increment (minutes)",
+  estimatedLaborMinutes: "Usual cleaner-minutes",
+  estimatedElapsedMinutes: "Usual minutes on site",
+  crewSize: "Crew the rate covers",
+  rateMillicents: "Rate per area",
+  laborMinutesPer1000: "Minutes per 1,000",
+  walkthroughAbove: "Walkthrough at or above",
+  baseCents: "Base price",
+  includedBedrooms: "Bedrooms in base",
+  includedBathrooms: "Bathrooms in base",
+  perBedroomCents: "Each extra bedroom",
+  perBathroomCents: "Each extra bathroom",
+  perHalfBathCents: "Each half bath",
+  baseLaborMinutes: "Base minutes",
+  perBedroomMinutes: "Minutes per extra bedroom",
+  perBathroomMinutes: "Minutes per extra bathroom",
+  perHalfBathMinutes: "Minutes per half bath",
+  unitCents: "Price per unit",
+  minimumUnits: "Fewest units charged",
+  laborMinutesPerUnit: "Minutes per unit",
+  monthlyCents: "Monthly price",
+  includedVisits: "Included visits",
+  extraVisitCents: "Extra visit",
+  laborMinutesPerVisit: "Minutes per visit",
+  fromCents: "Advertised starting price",
+};
+
+/** Each pricing amount that changed, old → new, for the same method. */
+function pricingDetail(before: Spec["pricing"], after: Spec["pricing"]): string[] {
+  const b = before as Record<string, unknown>;
+  const a = after as Record<string, unknown>;
+  const out: string[] = [];
+  const show = (key: string, value: unknown) => (value === null || value === undefined ? "none" : typeof value === "number" ? (key.endsWith("Cents") ? formatCents(value) : key === "rateMillicents" ? `$${(value / 100_000).toFixed(3).replace(/0$/, "")}` : String(value)) : String(value));
+  for (const key of Object.keys(a)) {
+    if (key === "method" || key === "bands") continue;
+    if (canonical(a[key]) !== canonical(b[key])) out.push(`${PRICING_WORDS[key] ?? key}: ${show(key, b[key])} → ${show(key, a[key])}.`);
+  }
+  if ("bands" in a && canonical(a.bands) !== canonical(b.bands)) out.push("Size bands changed (see the prices below).");
+  return out;
+}
+
 /** What differs between two versions, in sentences an owner can check. */
 export function describeChanges(before: Spec | null, after: Spec): string[] {
   if (!before) return [`New service: ${after.name || "unnamed"} (${CATEGORY_LABELS[after.category]}), ${priceSummary(after)}.`];
@@ -285,7 +330,9 @@ export function describeChanges(before: Spec | null, after: Spec): string[] {
   if (before.name !== after.name) out.push(`Renamed from "${before.name}" to "${after.name}".`);
   if (before.summary !== after.summary) out.push("The customer description changed.");
   if (before.pricing.method !== after.pricing.method) out.push(`Pricing method: ${METHOD_LABELS[before.pricing.method].label} → ${METHOD_LABELS[after.pricing.method].label}.`);
-  if (priceSummary(before) !== priceSummary(after)) out.push(`Price: ${priceSummary(before)} → ${priceSummary(after)}.`);
+  const detail = before.pricing.method === after.pricing.method ? pricingDetail(before.pricing, after.pricing) : [];
+  if (priceSummary(before) !== priceSummary(after) && (detail.length === 0 || before.pricing.method !== after.pricing.method)) out.push(`Price: ${priceSummary(before)} → ${priceSummary(after)}.`);
+  out.push(...detail);
   const [ib, ia] = [labels(before.included), labels(after.included)];
   const added = [...ia].filter((l) => !ib.has(l));
   const removed = [...ib].filter((l) => !ia.has(l));
@@ -320,10 +367,28 @@ export function describeChanges(before: Spec | null, after: Spec): string[] {
   return out;
 }
 
+/**
+ * Answers to a spec's required questions that never trigger a walkthrough, so a sample job is priced
+ * instead of reported as missing information. Used only for examples, never for a real visit.
+ */
+export function neutralAnswers(spec: Spec): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
+  for (const q of spec.questions) {
+    if (!q.required) continue;
+    const avoid = q.walkthroughIf?.equals?.toLowerCase();
+    if (q.kind === "number") out[q.id] = q.walkthroughIf?.atLeast !== undefined && q.walkthroughIf.atLeast <= 0 ? -1 : 0;
+    else if (q.kind === "yes_no") out[q.id] = avoid === "no" ? "yes" : "no";
+    else if (q.kind === "choice") out[q.id] = q.options.find((o) => o.toLowerCase() !== avoid) ?? q.options[0] ?? "";
+    else out[q.id] = "As usual";
+  }
+  return out;
+}
+
 /** A few typical jobs for a spec, so a change shows real before-and-after prices. */
 export function sampleInputs(spec: Spec): { label: string; input: QuoteInput }[] {
   const p = spec.pricing;
-  const beds = spec.str?.enabled ? { beds: 2 } : {};
+  const answers = neutralAnswers(spec);
+  const beds = { ...(spec.str?.enabled ? { beds: 2 } : {}), ...(Object.keys(answers).length ? { answers } : {}) };
   switch (p.method) {
     case "size_bands":
       return p.bands.slice(0, 3).map((band) => {
@@ -345,12 +410,18 @@ export function sampleInputs(spec: Spec): { label: string; input: QuoteInput }[]
   }
 }
 
-export function priceComparison(before: Spec | null, after: Spec): { label: string; before: number | null; after: number | null }[] {
-  return sampleInputs(after).map(({ label, input }) => ({
-    label,
-    before: before && before.pricing.method === after.pricing.method ? quote(before, input).totalCents : null,
-    after: quote(after, input).totalCents,
-  }));
+/** Before and after for each sample job. When there is no price, `note` says why: a walkthrough, or what is missing. */
+export function priceComparison(before: Spec | null, after: Spec): { label: string; before: number | null; after: number | null; note: string | null }[] {
+  return sampleInputs(after).map(({ label, input }) => {
+    const next = quote(after, input);
+    const firm = next.outcome === "firm" || next.outcome === "estimate";
+    return {
+      label,
+      before: before && before.pricing.method === after.pricing.method ? (quote(before, { ...input, answers: { ...neutralAnswers(before), ...(input.answers ?? {}) } }).totalCents ?? null) : null,
+      after: firm ? next.totalCents : null,
+      note: firm ? null : next.outcome === "walkthrough" ? "Walkthrough" : `Needs ${next.missing.join(", ")}`,
+    };
+  });
 }
 
 // ── Specialists' review notes ──────────────────────────────────────────────────────────────────────

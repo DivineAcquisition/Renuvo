@@ -139,7 +139,7 @@ export async function submitDraft(
   const evidence = [
     ...(draft.evidence ?? []),
     ...(args.evidence ?? []),
-    ...prices.map((row) => ({ kind: "scenario" as const, label: row.label, detail: `${row.before === null ? "—" : formatCents(row.before)} → ${row.after === null ? "walkthrough" : formatCents(row.after)}` })),
+    ...prices.map((row) => ({ kind: "scenario" as const, label: row.label, detail: `${row.before === null ? "—" : formatCents(row.before)} → ${row.after === null ? (row.note ?? "no price") : formatCents(row.after)}` })),
   ].slice(0, 30);
   const changeId = await ctx.db.insert("serviceChanges", {
     companyId: ctx.companyId,

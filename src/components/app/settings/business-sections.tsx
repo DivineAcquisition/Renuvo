@@ -7,7 +7,7 @@ import { Panel } from "@/components/app/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { blankService, hoursSummary, minuteToTime, type HoursWindow, timeToMinute, WEEKDAYS } from "@/lib/app/settings-draft";
+import { hoursSummary, minuteToTime, type HoursWindow, timeToMinute, WEEKDAYS } from "@/lib/app/settings-draft";
 
 /** Save, discard and the words that explain why saving is not possible. Shared by both business pages. */
 export function SaveBar() {
@@ -141,87 +141,6 @@ export function BusinessSection() {
         ) : null}
       </Panel>
 
-      <SaveBar />
-    </div>
-  );
-}
-
-/** The service catalog. Services are archived, never deleted, so earlier visits keep their record. */
-export function ServicesSection() {
-  const { draft, saved, canEdit, edit, unavailable } = useBusinessDraft();
-  if (unavailable) return <Unavailable error={unavailable} />;
-  if (!draft || !saved) return <Skeleton className="h-72 rounded-2xl" />;
-  const set = (id: string, patch: Partial<(typeof draft.services)[number]>) => edit((current) => ({ ...current, services: current.services.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
-  const savedIds = new Set(saved.services.map((s) => s.id));
-  return (
-    <div className="grid gap-5">
-      <p className="max-w-2xl text-sm text-muted-foreground">
-        Templates for visits an office member creates. A price here is an editable starting point, not a quote, discount, tax or refund. A visit keeps a copy of the service as it was when the visit was made, so editing or archiving a service never changes earlier visits.
-      </p>
-      {draft.services.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card px-5 py-8 text-center">
-          <p className="text-base font-semibold text-strong">No services yet</p>
-          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Visits can still be made by typing a service and scope. Add a service to start from a template instead.</p>
-        </div>
-      ) : null}
-      <ul className="grid gap-4">
-        {draft.services.map((service) => {
-          const archived = service.status === "archived";
-          return (
-            <li key={service.id} className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-strong">{service.name.trim() || "New service"}</h3>
-                  {archived ? (
-                    <Badge variant="outline" size="sm">
-                      Archived
-                    </Badge>
-                  ) : null}
-                </div>
-                {canEdit ? (
-                  <div className="flex gap-2">
-                    <Button type="button" size="sm" variant="secondary" onClick={() => set(service.id, { status: archived ? "active" : "archived" })}>
-                      {archived ? "Restore" : "Archive"}
-                    </Button>
-                    {!savedIds.has(service.id) ? (
-                      <Button type="button" size="sm" variant="ghost" onClick={() => edit((current) => ({ ...current, services: current.services.filter((s) => s.id !== service.id) }))}>
-                        Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Name">
-                  <TextInput value={service.name} disabled={!canEdit} onChange={(event) => set(service.id, { name: event.target.value })} />
-                </Field>
-                <Field label="Starting price (USD)" hint="Optional. Fills a new visit's price, which can be changed.">
-                  <TextInput inputMode="decimal" value={service.price} disabled={!canEdit} placeholder="150.00" onChange={(event) => set(service.id, { price: event.target.value })} />
-                </Field>
-                <Field label="Scope" className="sm:col-span-2" hint="What the crew does. Cleaners are shown this when they accept.">
-                  <TextArea value={service.scope} disabled={!canEdit} onChange={(event) => set(service.id, { scope: event.target.value })} />
-                </Field>
-                <Field label="Duration (minutes)">
-                  <TextInput inputMode="numeric" value={service.duration} disabled={!canEdit} onChange={(event) => set(service.id, { duration: event.target.value })} />
-                </Field>
-                <Field label="Default crew">
-                  <TextInput inputMode="numeric" value={service.crew} disabled={!canEdit} onChange={(event) => set(service.id, { crew: event.target.value })} />
-                </Field>
-                <Field label="Skills" className="sm:col-span-2" hint="Separate with commas. Only cleaners with every skill are offered the visit.">
-                  <TextInput value={service.skills} disabled={!canEdit} onChange={(event) => set(service.id, { skills: event.target.value })} />
-                </Field>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      {canEdit ? (
-        <div>
-          <Button type="button" variant="secondary" size="sm" onClick={() => edit((current) => ({ ...current, services: [...current.services, blankService()] }))}>
-            Add a service
-          </Button>
-        </div>
-      ) : null}
       <SaveBar />
     </div>
   );
