@@ -31,7 +31,7 @@ let search = "";
 vi.mock("next/navigation", () => ({ usePathname: () => "/app/settings/business", useRouter: () => ({ replace: () => undefined }), useSearchParams: () => new URLSearchParams(search) }));
 
 const { BusinessDraftProvider } = await import("@/components/app/settings/business-draft");
-const { BusinessSection, ServicesSection } = await import("@/components/app/settings/business-sections");
+const { BusinessSection } = await import("@/components/app/settings/business-sections");
 const { PlanBilling } = await import("@/components/app/settings/billing");
 const { OverviewGrid, commonTasksFor } = await import("@/components/app/settings/overview");
 const { SettingsNavList } = await import("@/components/app/settings/nav");
@@ -102,31 +102,6 @@ describe("business settings forms", () => {
     expect(html).toContain("Monday");
     expect(html).toContain("Closed for booking");
     expect(html).toContain('aria-label="Monday opens"');
-  });
-
-  it("explains an empty service catalog instead of showing a blank list", () => {
-    data["settings:business"] = business();
-    const html = page("owner", <ServicesSection />);
-    expect(html).toContain("No services yet");
-    expect(html).toContain("Add a service");
-    const readOnly = page("manager", <ServicesSection />);
-    expect(readOnly).toContain("No services yet");
-  });
-
-  it("lists services briefly, and keeps archived ones behind a toggle", () => {
-    data["settings:business"] = business({
-      services: [
-        { id: "deep-clean", name: "Deep clean", scope: "Everything", durationMinutes: 240, defaultCrew: 2, skills: ["deep"], startingPriceCents: 28000, status: "active" },
-        { id: "move-out", name: "Move-out clean", scope: "Everything", durationMinutes: 300, defaultCrew: 3, skills: [], status: "archived" },
-      ],
-    });
-    const html = page("owner", <ServicesSection />);
-    expect(html).toContain("Deep clean");
-    expect(html).toContain("From $280.00 · 4 hr · 2 cleaners");
-    expect(html).toContain("Edit");
-    expect(html).not.toContain("Move-out clean");
-    expect(html).toContain("Show 1 archived service");
-    expect(html).toContain("Changes apply to new bookings");
   });
 });
 
@@ -277,7 +252,7 @@ describe("the overview and navigation", () => {
 
   it("links every section the Owner may open, and each one is a real page", () => {
     const html = renderToStaticMarkup(<OverviewGrid sections={sectionsFor("owner")} />);
-    expect(SETTINGS_SECTIONS).toHaveLength(13);
+    expect(SETTINGS_SECTIONS).toHaveLength(12); // Services & pricing moved to Company → Services & Pricing.
     for (const section of SETTINGS_SECTIONS) {
       expect(html, section.id).toContain(`href="${section.path}"`);
       expect(html, section.id).toContain(section.label.replace("&", "&amp;"));
@@ -295,8 +270,8 @@ describe("the overview and navigation", () => {
   });
 
   it("marks the current page and says when a search finds nothing", () => {
-    const html = renderToStaticMarkup(<SettingsNavList sections={SETTINGS_SECTIONS} activeId="services" />);
-    expect(html).toMatch(/href="\/app\/settings\/services"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/app\/settings\/services"/);
+    const html = renderToStaticMarkup(<SettingsNavList sections={SETTINGS_SECTIONS} activeId="people" />);
+    expect(html).toMatch(/href="\/app\/settings\/people"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/app\/settings\/people"/);
     expect(renderToStaticMarkup(<SettingsNavList sections={[]} activeId={undefined} />)).toContain("No settings match that");
   });
 
@@ -311,6 +286,9 @@ describe("the overview and navigation", () => {
 
   it("offers owners the common tasks first, and only tasks a role can do", () => {
     expect(commonTasksFor("owner").map((row) => row.section)).toEqual(["business", "services", "people", "agents", "integrations", "billing"]);
+    // Services left Settings: its task opens Company → Services & Pricing, and it is not a Settings page.
+    expect(commonTasksFor("owner").find((row) => row.section === "services")?.href).toBe("/app/services");
+    expect(SETTINGS_SECTIONS.some((row) => row.id === "services")).toBe(false);
     expect(commonTasksFor("office")).toEqual([]);
   });
 });

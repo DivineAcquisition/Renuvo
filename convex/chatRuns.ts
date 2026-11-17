@@ -23,6 +23,7 @@ import { finishExecution } from "./lib/billing/executions";
 import { reserveExecution } from "./lib/billing/reserve";
 import { chatModel, ModelError, type ModelMessage, type ToolSpec } from "./lib/chat/model";
 import { systemPrompt, userTurn } from "./lib/chat/prompt";
+import { businessContext, conversationFocus, personContext } from "./lib/chat/business";
 import { runStatusValidator, type RunStatus } from "./lib/chat/schema";
 import { addPart, currentMember, monthOf, setState, stateAfter, usageRow } from "./lib/chat/state";
 import { finishDeferred, stepFromModel } from "./lib/chat/steps";
@@ -85,6 +86,7 @@ export const load = internalQuery({
     const company = await ctx.db.get(run.companyId);
     const now = await currentMember(ctx, run.initiatedBy, run.companyId);
     const userMessage = await ctx.db.get(run.userMessageId);
+    const conversation = await ctx.db.get(run.conversationId);
     if (!company || !now || !userMessage) return null;
     const knowledge = await ctx.db
       .query("companyKnowledge")
@@ -133,7 +135,16 @@ export const load = internalQuery({
     const option = chatModelOption(run.modelKey) ?? chatModelOption(DEFAULT_CHAT_MODEL)!;
     const staffOff = new Set((await ctx.db.query("chatModelSettings").take(100)).filter((row) => !row.enabled).map((row) => row.key));
     return {
-      system: systemPrompt({ company, member: now.member, role: now.role, knowledge: knowledge.map((row) => row.text), now: Date.now() }),
+      system: systemPrompt({
+        company,
+        member: now.member,
+        role: now.role,
+        knowledge: knowledge.map((row) => row.text),
+        now: Date.now(),
+        business: await businessContext(ctx, company, now.role),
+        person: personContext(now.member, now.role, company.timezone),
+        focus: conversation ? await conversationFocus(ctx, conversation) : null,
+      }),
       tools: toolSpecs(now.role, company),
       history,
       currentMessageId: userMessage._id,

@@ -99,7 +99,12 @@ the rate per unit, so completed work is never repriced.
 | `2026-11` | The production card, **approved November 16, 2026**: standard Chat answer 1, premium-model Chat answer 5, hiring email read by AI 1, generated image 20 (standard quality, 1024 × 1024), edited image 15 (1024 × 1024), generated video from 200 (exactly 200 for a 6-second clip at standard resolution and default audio; other lengths have no published price and cannot run). Shown to the Owner in Usage → "What costs credits?", not on the public site. |
 
 Tasks wired today: `chat_response_standard`, `chat_response_advanced` (models in the "Higher cost" class),
-`hiring_message_reading`, `image_generation`, `image_edit`, `video_generation`.
+`hiring_message_reading`, `image_generation`, `image_edit`, `video_generation`, and `research_brief` (one Services &
+Pricing research brief: up to 5 web searches and one written brief, under the work source `services`).
+
+Card `2026-11b` is the `2026-11` rates unchanged plus `research_brief` at 10 credits, approved by the owner on November
+16, 2026. Research briefs run only once `BILLING_RATE_CARD` is set to `2026-11b`; under `2026-11` they have no rate and are
+refused with that reason. `2026-11` lists `research_brief` as null because the task did not exist when it was approved.
 
 Defined but not wired, because the work is not built yet: `applicant_evaluation`, `follow_up_draft`,
 `dispatch_exception_analysis`, `retention_assessment`, `agreement_draft` (today, AI-guided drafting is a

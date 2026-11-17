@@ -14,6 +14,14 @@ crons.interval("dispatch looks for uncovered visits", { minutes: 15 }, internal.
 // The day of service: reminders that are due, arrivals that are overdue, visits running over.
 crons.interval("dispatch watches the day of service", { minutes: 5 }, internal.dispatchOps.monitor, {});
 
+// Finance: card payments and refunds still in flight are read back from Stripe when its notification is late,
+// and payments a customer started and abandoned are stopped. Nothing is ever charged or refunded again here.
+crons.interval("finance reconciles payments with Stripe", { minutes: 10 }, internal.financeStripe.reconcile, {});
+// Finance: Selestial prepares the payment reminders each open invoice is due for. It prepares only; a person approves every send.
+crons.interval("finance prepares payment reminders", { hours: 1 }, internal.financeMessages.sweep, {});
+// Finance: completed jobs get each cleaner's earnings worked out. Nothing is approved or paid here.
+crons.interval("finance works out team earnings", { minutes: 15 }, internal.teamPay.sweep, {});
+
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});
 
@@ -28,7 +36,6 @@ crons.interval("recruiter reads the hiring inboxes", { minutes: 10 }, internal.r
 crons.interval("recruiter follows up on unfinished applications", { minutes: 30 }, internal.recruiter.followUps, {});
 crons.interval("recruiter sends interview reminders", { minutes: 15 }, internal.recruiter.interviewReminders, {});
 crons.interval("recruiter removes applicant details past retention", { hours: 24 }, internal.recruiter.retention, {});
-crons.interval("recruiter reminds new workers about onboarding", { minutes: 60 }, internal.workforce.reminders, {});
 
 // Company Chat: a response whose worker stopped reporting is closed honestly instead of spinning forever.
 crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.chatRuns.sweep, {});
@@ -50,5 +57,9 @@ crons.interval("google local services leads", { minutes: 15 }, internal.googleAd
 crons.interval("google conversions for booked jobs", { minutes: 30 }, internal.googleAds.sweepConversions, {});
 crons.interval("google drive times for coming visits", { minutes: 30 }, internal.googleRoutes.sweep, {});
 crons.daily("renew gmail push watches", { hourUTC: 9, minuteUTC: 41 }, internal.recruiterGmailWatch.sweep, {});
+
+// Cleaners: routine follow-ups (each re-checked before it goes) and requirements that pass their validity.
+crons.interval("cleaners follow-ups", { minutes: 30 }, internal.cleanerFollowUps.sweep, {});
+crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.requirements.expireDue, {});
 
 export default crons;

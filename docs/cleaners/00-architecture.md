@@ -1,214 +1,126 @@
 # Cleaners: the workforce workspace
 
-**Status: Phases 1 and 2 of 4 built (November 17, 2026).** Phase 1 is the shared workforce record, the
-overview, the directory, profiles, role-aware access and adding or importing workers with a duplicate
-review. Phase 2 is onboarding requirements with review, documents, the cleaner portal with its sign-in,
-Recruiter's onboarding reminders and the hire-to-worker link. Crews in Dispatch, performance and coaching
-are Phases 3 and 4. What each phase verified is in [`01-verification.md`](01-verification.md).
+**Status: plan written November 17, 2026, on `claude/selestial-cleaners-workspace-qpz79j`.** Each phase
+below is marked as it is built and verified. This document is the source of truth for the workspace; where
+it differs from `docs/foundation`, the foundation documents win until changed on purpose.
 
-The workspace answers six questions: who is ready to work, who is available for a particular job, who
-needs attention, what is preventing someone from becoming ready, how each cleaner is performing, and what
-Selestial is doing and what needs the owner's approval. Phase 1 answers the first four from the record.
+## 1. What was there before this work
 
-## Boundaries
+Inspected on `main` at `7a375f6` (November 16).
 
-Cleaners owns the workforce directory and the ongoing relationship with each person. It reads the
-shared record; it does not keep a second copy of anything.
-
-| Workspace | Keeps | Cleaners shows |
+| Area | Implemented | Not implemented, or only described |
 |---|---|---|
-| Recruiter | Applicants, screening, interviews, hiring offers | A hired person's record links to their application (`cleaners.applicationId`, `source: "hiring"`) and the onboarding handoff from the hire |
-| Dispatch | Offers, assignments, coverage, the day of service | Upcoming and past work per person, and conflicts between accepted work and what the record now says |
-| Agreements | Drafting, signing, versions | Workforce agreements linked to the person, for managers and the Owner |
-| Finance | Earnings, payments (not built) | The pay arrangement and the pay each offer stated; never a payment record |
+| Cleaner record | `cleaners`: name, email, phone, `engagement` (contractor or employee), `status` (onboarding, ready, paused, ended), skills, postal-code service areas, owner-only `pay`. `convex/cleaners.ts`. | No subcontractors, no photo, no history of affiliation, no page per cleaner. The `/app/cleaners` page is one list with an add form. |
+| Readiness | Dispatch offers work only to `status === "ready"`, which only a person sets (`lib/dispatch/eligibility.ts`). | No requirements on the cleaner. "Ready" is one flag standing for onboarding, eligibility and payout readiness at once. |
+| Onboarding | Recruiter's `onboardingHandoffs`: a hire becomes a cleaner in `onboarding`, with a list of requirements a person ticks (`lib/recruiter/handoff.ts`). The list is the Recruiter Playbook's `onboardingRequirements` (keys and labels only). | No submissions, review states, expiry, effect on work or pay, or anything a cleaner does themselves. |
+| Availability | Weekly windows and time off (`availability.ts`), read by Dispatch on the company's clock. | No date exceptions, no confirmation date, no time-away request from the cleaner, no travel limit. |
+| Crews | Per-job roles (lead or support) on assignments, crew size on jobs, crew pay rules. | No permanent crews, no temporary team record. |
+| Links | Signed, scoped, expiring, revocable action links for one assignment (`lib/dispatch/links.ts`); applicant links for Recruiter. A read never acts. | No cleaner-wide portal, no onboarding or availability link. |
+| Messages | One outbox, one send policy (consent, opt-out, quiet hours, frequency) checked at planning and at sending (`lib/messaging`). Delivery states: queued, held, sending, sent, delivered, failed, unconfirmed, not sent. Telnyx texting is built; it needs each company's registration. | No message purpose for onboarding, availability or check-ins. No message index by cleaner. |
+| Agreements | Workforce agreements with an access class per document and links to cleaners (`agreementLinks`). Signing has no production provider: drafts, approval, export and externally signed uploads work. | Nothing reads an agreement's state as a requirement. |
+| Pay | `cleaners.pay` (Owner only) and the pay stated on each assignment when offered, which is the record for that job. | **Finance is not built.** There is no ledger of approved earnings, adjustments or payouts. |
+| Performance | The record holds offers and answers, check-ins with time, no-shows declared by a person, drops, completion reports and returns. | No measure, score or coaching. Customer feedback (Retention) and quality review (Quality) are not built. |
+| Agents | Dispatch and Recruiter workflows run; Sales and Retention are listed and not built. Team Coordinator and Quality exist only in the navigation plan. | |
+| Chat | A tool registry where each tool re-checks role and authority; consequential tools wait for approval in the chat. | No cleaner tools beyond reading one record. |
 
-## Six things kept apart
+A pay leak was found and is fixed in Phase 1: `onboarding.queue` returned the approved pay terms to every
+role.
 
-A single "Active" flag never implies that every requirement is met.
+### What Novara shows, and what is not taken from it
 
-| Concept | Where it lives | Who sets it |
+Novara is a reference for what a cleaning company tracks. Its interface, policies, thresholds, score weights,
+disciplinary ladder and pay tiers are not copied. Specifically avoided: its 70% supply threshold; its pulse
+check, which ends a cleaner who does not answer for three days; quality issues charged to a crew's lead; a
+portal that trusts a typed phone number; onboarding flags the cleaner writes directly; scores with no minimum
+history.
+
+## 2. Boundaries
+
+Cleaners owns the workforce directory and the ongoing relationship. It shows other workspaces' records and
+starts their workflows; it never keeps a second copy.
+
+| Concern | Owner | What Cleaners does |
 |---|---|---|
-| Relationship type | `cleaners.engagement`: employee, contractor, subcontracted | The Owner |
-| Engagement status | `cleaners.status`: onboarding, ready (shown as **Active**), paused, ended | A manager or the Owner, with a reason for paused and ended |
-| Onboarding progress | The company's requirements and each worker's review state (`onboardingRequirements`, `workerRequirements`) | The Owner sets requirements; managers review; the cleaner submits |
-| Job eligibility | Computed: active and no unmet check that blocks assignments | — |
-| Availability | `availabilityWindows`, `timeOff`, and work already held, asked for one stated window | The office, from what the cleaner said |
-| Payout readiness | Finance's record, not built: shown as not tracked, never as ready or not ready | — |
+| Applicants and hiring | Recruiter | A hire arrives as a linked cleaner (one record, history kept). The profile links back to the application. |
+| Offers, assignments, coverage | Dispatch | Reads assignments for jobs, history and conflicts. Crew assembly offers through Dispatch's own `offer` path. |
+| Earnings, payments | Finance (not built) | Shows the pay arrangement and the pay stated on each job. Says plainly that approved earnings and payments are not recorded yet. |
+| Documents to sign | Agreements | A requirement can point at a workforce agreement; it is accepted only when the agreement is signed. |
+| Services, durations, skills | Services & Pricing | Reads the skills a job requires from the job. Equipment needs can name a service. |
 
-## Readiness
+Team Coordinator and Quality are not built. Their work is either done by a launch agent that already owns the
+underlying workflow (section 6) or kept as a queue a person works. Nothing says either agent exists.
 
-`readinessOf(facts)` is a pure function. The directory, the profile, the attention list and the tests all
-run it. Every check says what it blocks:
+## 3. Records
 
-- **Blocks assignments**: marked active, a service area, weekly hours, a pay arrangement. Each of these is
-  something Dispatch's own eligibility rules already refuse without (`convex/lib/dispatch/eligibility.ts`),
-  so "ready" here and "can be offered" in Dispatch cannot disagree.
-- **Good to know**: a mobile number, permission for work texts, skills, the supplying company's status, and
-  items still outstanding from a hire's onboarding handoff. They change how work reaches a person, but stop
-  nothing, and the screen says so.
-- **The company's own requirements** (Phase 2) say for themselves whether they block assignments, block
-  payment or are good to know. One that blocks assignments is read by Dispatch too: before ranking
-  (`convex/lib/dispatch/facts.ts`) and again when an offer is accepted (`assignmentState.ts`).
+New tables live in `convex/lib/cleaners/schema.ts`. Every table carries `companyId` and is read through an
+index that starts with it.
 
-"Ready for assignments" never means "available for every job": each job is still checked for skills,
-area and time.
-
-## The four counts
-
-Each count is defined beside its number.
-
-| Count | Definition |
+| Table | What it is |
 |---|---|
-| Ready for assignments | Active, with service areas, weekly hours and pay set. Dispatch can offer them work that fits. Not a promise they are free for any one job. |
-| Onboarding in progress | Not yet made active by a person. Offered no work until then. |
-| Needs attention | People with at least one verified attention item. |
-| Working today | Accepted at least one visit today, on the company's clock. Not working today does not mean free. |
+| `cleaners` (extended) | One person. `engagement` gains `subcontractor`. `status` is the **engagement status** only (onboarding, active — stored as `ready` for compatibility — paused, suspended, ended). New: photo, `subcontractorId`, preferred areas, travel limit, `availabilityConfirmedAt`, `hiredFrom` (application). |
+| `subcontractors` | A company that supplies its own cleaners: name, status, the authorized contact, areas, owner-only pay arrangement. |
+| `workerAffiliations` | Which subcontractor a cleaner worked through, from when to when. A job's affiliation is read from the dates, so history survives a move. |
+| `requirementDefinitions` | The company's onboarding template: one row per requirement, with kind, effect (blocks assignments, blocks payment, or informational), the worker types it applies to, who reviews it, how long it stays valid, and for equipment who provides it and for which services. |
+| `workerRequirements` | One requirement for one cleaner: not started, submitted, awaiting review, accepted, needs changes, expired, or waived (with who and why). Evidence is a file, an agreement or a note. |
+| `availabilityExceptions` | A date the cleaner can or cannot work, outside their weekly pattern. |
+| `skillClaims` | A skill a cleaner says they have, waiting for a person to confirm. Dispatch reads only confirmed skills. |
+| `crews`, `crewMemberships` | Permanent crews with a lead, and temporary teams for one job. Membership has dates; a temporary team keeps its members whatever happens to the permanent crew. |
+| `portalLinks`, `portalCodes` | A cleaner's or subcontractor contact's portal access and focused task links. Same token scheme as action links. A one-time code unlocks pay, tax and personnel records. |
+| `followUps` | One routine follow-up: what it is about, the agent responsible, when it is due, its message, and why it stopped. One open follow-up per cleaner and topic, across every workspace. |
+| `coachingNotes` | Manager notes, coaching, training recommendations and shared feedback, with evidence, agreed actions, follow-up dates and the cleaner's response. Internal and shared are separate. |
+| `recordDisputes` | A cleaner or manager disputes a performance record. Open disputes are excluded from the score. |
+| `personnelRequests` | Pay changes, disciplinary actions, suspension, ending an engagement, rehire restrictions and destructive changes. Requested by a person, decided by an authorized person. No agent can create one. |
+| `payArrangements` | Each compensation arrangement with its effective date. The current one is copied to `cleaners.pay`, which Dispatch already reads. |
 
-## Attention items
+## 4. Readiness
 
-Built in code from the record (`convex/lib/workforce/facts.ts`). Each item explains the issue, names its
-evidence (each piece opens the visit or the profile section), and leads to where it is fixed. Nothing in
-the list was changed for the person.
+Six things are kept apart and each has its own words on screen:
 
-| Kind | When |
-|---|---|
-| Conflict with accepted work | Time off now overlaps an accepted visit; two accepted visits overlap; or weekly hours no longer cover an accepted visit |
-| Holds work while not active | A paused or ended person still holds accepted upcoming visits |
-| Active but cannot be offered work | Active, with an unmet check that blocks assignments |
-| Onboarding overdue | A hire's onboarding handoff is past its due date with items outstanding |
-| Supplying company not active | The person's subcontractor is paused or ended while they are active or onboarding |
+1. **Relationship type**: employee, independent contractor, subcontractor worker.
+2. **Engagement status**: onboarding, active, paused, suspended, ended. Set by a person.
+3. **Onboarding progress**: each requirement's state.
+4. **Job eligibility** ("Ready for assignments"): active, and every requirement that blocks assignments is
+   accepted and current. Equipment and skill requirements tied to a service only block that service.
+5. **Availability**: weekly pattern, exceptions, time away, existing commitments, for a given window.
+6. **Payout readiness**: every requirement that blocks payment is accepted.
 
-Phase 2 adds documents nearing expiry and availability needing confirmation. Phase 4 adds unanswered
-check-ins and coaching awaiting review.
+Readiness is one pure function (`lib/cleaners/readiness.ts`) used by the directory, the profile, Dispatch's
+eligibility rules, the portal, Chat and the follow-up engine. It returns the exact unmet requirements.
+An upload is "submitted", never "accepted". Viewing an agreement is not signing it. Starting payment setup
+is "submitted" until a person or provider confirms it.
 
-## Subcontractor companies
+## 5. Access
 
-The company (`subcontractors`), its authorized contact (fields on that row, not a worker), and the people
-it supplies (`cleaners` with `engagement: "subcontracted"`) are separate. A job is only ever assigned to a
-named person. `workerAffiliations` keeps which company supplied each person and over what period; moving
-a worker closes the open row and opens a new one, so history is never rewritten.
+| What | Office | Manager | Owner | Cleaner (portal) | Subcontractor contact (portal) |
+|---|---|---|---|---|---|
+| Directory, profile overview, availability, crews, onboarding states | read | read, change | read, change | own | their workers |
+| Document files, internal notes, coaching | — | read, write | read, write | shared feedback only | — |
+| Pay arrangement, job pay, pay requests | — | — | read, change | own, after a code | their company's, after a code |
+| Sensitive personnel requests | — | request | request, decide | — | — |
+| Templates, follow-up rules | read | read | change | — | — |
 
-## Crews
+The same checks run in Chat tools, search, exports and messages, not only on screens.
 
-`crews` and `crewMembers` hold permanent crews with one lead. Leaving a crew closes the membership row and
-keeps it. Being on a crew says nothing about being free: a crew is always read through its members' own
-readiness and availability. Temporary teams for one job, crew recommendations and Dispatch use of crews
-are Phase 3.
+## 6. Agents
 
-## Access
+Until Team Coordinator exists, routine follow-ups are run by the launch agent that already owns the
+underlying work, under new catalog actions that start on Propose like every action a cleaner sees:
 
-Checked in Convex on every read and write (`convex/lib/workforce/access.ts`), never only by hiding part
-of a screen.
+| Follow-up | Agent | Action |
+|---|---|---|
+| Onboarding reminders | Recruiter (brief, section 14: "chase what is stale") | `recruiter.onboarding_reminder` |
+| Availability confirmation, idle-worker check-ins | Dispatch (it reads availability) | `dispatch.availability_check_in` |
+| Coaching drafts, score explanations | No agent. Selestial prepares them in code for a person to review. | — |
 
-| Who | May |
-|---|---|
-| Everyone in the company | Read the directory, contact details, skills, areas, availability, crews, jobs and readiness; record time off and weekly hours |
-| Managers and the Owner | Add, import and edit workers; subcontractors; crews; engagement status and its reasons; personnel notes; hire onboarding items; workforce agreements |
-| The Owner only | Pay, the Pay section, and the relationship type (classification) |
+Before any send: the follow-up is checked again (still unresolved, cleaner still active, not already
+contacted about the same thing by any workspace in the company's window, message policy). Silence is never
+read as resignation or misconduct; an unanswered check-in becomes a task for a person.
 
-Readiness may say that pay is set; it never says what it is. The status reason is returned as `null` to
-office staff, with a note that one exists. Chat's `get_record` already returns pay to the Owner only.
+## 7. Phases
 
-## Adding and importing
-
-- **Add** (`workforce.add`) checks the person against everyone on record by normalized phone, email and
-  name. A possible match returns the matches instead of adding anyone; adding anyway needs each match
-  acknowledged. Nothing is merged. The browser's `addKey` makes a double submit one record.
-- **Import** (`workforce.previewImport`, `workforce.commitImport`) reads a CSV in the browser, maps
-  columns by their headers, and checks every row on the server: problems (no name, an unreadable worker
-  type, an unknown or inactive subcontractor), matches with people on record, and matches with earlier
-  rows in the same file. A blank worker type is filled only by the person's explicit choice. The commit
-  checks every row again, refuses rows with problems, and requires "a different person" for every
-  possible duplicate. The import's `key` makes the same import sent twice add nobody the second time.
-
-Everyone added starts in onboarding.
-
-## Navigation and deep links
-
-- `/app/cleaners`: the workspace. The search, every filter, the view (cards or table), the availability
-  window (`avail=date,from,to`) and the open quick-view panel (`cleaner=<id>`) live in the address, so
-  opening and closing a profile never loses the list and a link can be shared.
-- `/app/cleaners/[id]?section=<section>`: one person's page. Sections: overview, availability, onboarding,
-  skills, performance, pay, activity. "Cleaners" leads back to the list exactly as it was left.
-
-## Onboarding requirements (Phase 2)
-
-The Owner sets the company's requirements (`convex/requirements.ts`), each with: what kind it is (a document
-to upload, a statement to agree to, a signed agreement, payment setup, training, equipment, another step),
-which worker types it applies to, what it blocks, whether a person reviews submissions, who may review or
-set it aside (a manager, or the Owner only), how long an accepted document stays valid, and whether its
-files are the Owner's alone (tax and payout). Starting points are offered; nothing is added until the Owner
-chooses it.
-
-Each worker's state on a requirement is one of: not started, submitted (started, not complete), awaiting
-review, accepted, needs changes, expired. Expired is read from the clock. The rules:
-
-- An upload is never a verification: a file always waits for a person.
-- Viewing an agreement is never signing it: an agreement requirement is met only by a linked workforce
-  agreement whose signing is complete in Agreements.
-- Starting payment setup is never completing it: the cleaner can say they started; a person confirms it.
-- Only the cleaner can agree to a statement, to the exact words in force. Changing the words is a new
-  version, and an agreement to the old words no longer counts.
-- Setting a requirement aside for one worker needs a reason, and is shown as set aside, never as accepted.
-- Sending something back needs words the cleaner will see. Internal notes are never shown to them.
-
-Files are stored privately (`workerDocuments`); their size and type are read from storage, never from the
-caller. Managers and the Owner open them; an Owner-only file is the Owner's alone, and the others see only
-that one exists.
-
-## The cleaner portal (Phase 2)
-
-`/c/portal/<token>`, on the link host, on a phone. Sign-in is the link plus a code (the decision recorded
-on November 17: no accounts or passwords for cleaners, consistent with every other cleaner and applicant
-link in Selestial).
-
-- **The link** (`portalLinks`) is signed under its own words, so it never opens a job and a job link never
-  opens it. It works for 14 days. A new invitation closes the earlier link and its sessions. Opening it
-  changes nothing and shows only the company and a first name.
-- **The code** is texted to the phone on the cleaner's record through the one send gate. It is worked out
-  from the deployment's secret, the code row's id and a nonce, when it is sent and when it is checked: it is
-  never stored, not even in the message body. It works for 10 minutes and 5 tries; 5 codes an hour.
-- **The session** (`portalSessions`) is a random token kept on the phone; only its hash is stored. It lasts
-  30 days. Pay needs a code confirmed in the last 15 minutes.
-- **Access policy**: ending an engagement closes every link and session at once; a paused cleaner keeps
-  their portal. The office can end access at any time.
-- **What the cleaner can do**: work their onboarding (agree, upload a photo or file, say they started or
-  finished), set the hours they can work, add or remove time away, open their accepted jobs and offers
-  (through the existing job and offer links), see the pay each offer stated, and ask the office for help.
-  Changing hours or adding time away never changes an accepted visit: the affected ones are listed back to
-  the cleaner and appear under Needs attention for the office.
-- **Invitation states** are shown as they are: being prepared, held, sent, delivered, not sent (with the
-  send gate's reason), and acted on (a code was confirmed). Opening a link is never recorded.
-
-When a text cannot go (no permission for work texts, no number, texting not set up), the office records
-the permission the cleaner gave, or copies the link and gives it to them directly. The code still goes to
-the phone on record: without texting, nobody can sign in, and the page says so.
-
-## Onboarding reminders (Phase 2)
-
-Recruiter sends them (brief, section 14), under the permission `recruiter.onboarding_reminder`, which
-starts on Propose. A reminder is due after the company's days without progress (default 2 and 5; the
-list's length is the most sent), counted from the invitation, the worker's own last submission, or the
-last reminder. Before it is proposed, sent, or carried out after approval, everything is checked again:
-the worker is onboarding or active, has items only they can do, has a working portal link, has no open
-question for the office, and is under the company's limit; and it is inside Recruiter's sending hours.
-Each reminder is named `onboarding.reminder:<worker>:<attempt>`, so the sweep, an approval and a person's
-"Remind now" can never send it twice. When reminders run out, nothing happens to the person: silence is
-never read as a refusal.
-
-## A hire becomes one worker
-
-When an accepted hiring offer is handed to onboarding, a worker already on record with the same phone or
-email is linked to the hire instead of a second record being made (a name alone never links). A returning
-worker whose engagement had ended goes back to onboarding; their history, pay and documents stay.
-
-## Not built yet
-
-Each of these is labelled "not built yet" on screen.
-
-- Phase 3: date-specific availability exceptions, travel limits, confirmed qualifications, temporary
-  teams, crew recommendations, subcontractor lead access, upcoming-job impact previews for every change.
-- Phase 4: performance measures, the explainable score, coaching, idle-worker check-ins, agent action
-  cards and Chat actions for the workspace.
-- Finance: approved earnings, adjustments and payments.
-- Email as a second channel for portal invitations and codes.
+| Phase | Delivers | Gate |
+|---|---|---|
+| 1 | Records, directory (cards and table, search, filters, kept in the address), overview counts with definitions, attention list, profile page and drawer with sections, role-aware access, add and import with duplicate review. | An owner adds or imports a worker, finds them, opens a full profile and understands their status; restricted details are refused to other roles. |
+| 2 | Templates, requirement review, readiness, portal and focused links, documents and agreements, onboarding reminders, Recruiter handoff into the same requirements. | An invited cleaner completes a supported onboarding journey, the owner reviews it, readiness updates. |
+| 3 | Availability exceptions, time away with impact, skills confirmation, permanent and temporary crews, leads and subcontractor access, Dispatch eligibility on readiness. | The owner assembles an eligible crew for a job from real availability and requirements, with conflicts visible. |
+| 4 | Measures, versioned score, coaching, idle check-ins, recommendations, Chat tools, Pay. | An owner inspects a finding, sees its records, reviews a coaching draft and carries the authorized action through. |

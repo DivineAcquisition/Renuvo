@@ -5,13 +5,14 @@
 import { defineSchema, defineTable } from "convex/server";
 
 import { agreementTables } from "./lib/agreements/schema";
+import { cleanersSettingsValidator, cleanersTables, engagementValidator } from "./lib/cleaners/schema";
 import { googleTables } from "./lib/google/schema";
 import { aiTables } from "./lib/ai/schema";
 import { billingTables } from "./lib/billing/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
+import { financeTables } from "./lib/finance/schema";
 import { trustTables } from "./lib/trust/schema";
-import { workforceTables, workerSourceValidator } from "./lib/workforce/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
 
@@ -20,6 +21,7 @@ import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
+import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
   approvalStatusValidator,
@@ -54,14 +56,19 @@ export const addressValidator = v.object({
   lng: v.optional(v.number()),
 });
 
-/** How a cleaner is paid. Contractors get a share of the job (basis points); employees an hourly rate. */
-/** How a person works with the company. Contractors and employees directly; a subcontracted worker through their company. */
-export const engagementValidator = v.union(v.literal("contractor"), v.literal("employee"), v.literal("subcontracted"));
-
+/**
+ * How a cleaner is paid. Contractors: a share of the job (basis points), a named tier's share (the
+ * company's `payTiers`), or a fixed amount per job. Employees: an hourly rate.
+ */
 export const payValidator = v.union(
   v.object({ kind: v.literal("share"), shareBps: v.number() }),
   v.object({ kind: v.literal("hourly"), hourlyCents: v.number() }),
+  v.object({ kind: v.literal("tier"), tierId: v.string() }),
+  v.object({ kind: v.literal("fixed"), perJobCents: v.number() }),
 );
+
+/** A named share of the job the Owner defines, for example "Proven, 40%". Archived tiers keep past pay readable. */
+export const payTierValidator = v.object({ id: v.string(), name: v.string(), shareBps: v.number(), archived: v.optional(v.boolean()) });
 
 /** What a task or approval is about. */
 export const aboutValidator = v.union(
@@ -99,8 +106,9 @@ export const proposalValidator = v.union(
   v.object({ kind: v.literal("send_hiring_offer"), offerId: v.id("hiringOffers") }),
   v.object({ kind: v.literal("decline_application"), applicationId: v.id("applications"), criterion: v.string() }),
   v.object({ kind: v.literal("urgent_outreach"), applicationId: v.id("applications"), taskId: v.id("tasks") }),
-  /** Text a new worker a reminder about onboarding items only they can do (convex/lib/workforce/reminders.ts). */
-  v.object({ kind: v.literal("send_onboarding_reminder"), cleanerId: v.id("cleaners"), attempt: v.number() }),
+  // Cleaners workspace (convex/lib/cleaners/followUps.ts carries it out).
+  /** Send one routine follow-up to a cleaner. It is checked again, in full, when approved. */
+  v.object({ kind: v.literal("send_cleaner_follow_up"), followUpId: v.id("followUps") }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -207,10 +215,17 @@ export default defineSchema({
     dispatch: v.optional(dispatchSettingsValidator),
     dispatchPolicy: v.optional(dispatchPolicyValidator),
     recruiter: v.optional(recruiterSettingsValidator),
+    /** How the Cleaners workspace works for this company: follow-up rules and who decides personnel requests. */
+    cleaners: v.optional(cleanersSettingsValidator),
     /** Where the company works, when appointments may be, and its services (convex/lib/settings/business.ts). */
     businessSettings: v.optional(businessSettingsValidator),
     /** Counts saves of the business settings, so a stale browser tab cannot overwrite a newer save. Absent means zero. */
     settingsRevision: v.optional(v.number()),
+    /**
+     * When the services listed under businessSettings were copied into Services & Pricing (the one catalog
+     * since November 16, 2026). After it, businessSettings.services is a record of what was there, not read.
+     */
+    servicesMigratedAt: v.optional(v.number()),
     /** The sign-in subject of whoever created the company. */
     createdBy: v.optional(v.string()),
     /** Chosen by the creator's browser for one setup, so a create that is sent twice makes one company. */
@@ -223,6 +238,8 @@ export default defineSchema({
      * billing.clearLegacyPlans.
      */
     plan: v.optional(v.union(v.literal("operate"), v.literal("expand"), v.literal("growth"), v.literal("scale"))),
+    /** The Owner's named pay tiers (Finance › Team Pay). A job keeps the share that applied when it was worked. */
+    payTiers: v.optional(v.array(payTierValidator)),
     /** AI features the Owner switched off. Absent means on, within the plan's allowances. */
     aiFeatures: v.optional(v.object({ imageGeneration: v.optional(v.boolean()), videoGeneration: v.optional(v.boolean()), photoReview: v.optional(v.boolean()), documentSearch: v.optional(v.boolean()), otherChatModels: v.optional(v.boolean()) })),
     createdAt: v.number(),
@@ -302,35 +319,44 @@ export default defineSchema({
   cleaners: defineTable({
     companyId: v.id("companies"),
     name: v.string(),
-    /** What they like to be called, when it differs from their name. */
-    preferredName: v.optional(v.string()),
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
-    /**
-     * The relationship type: how this person works with the company. "subcontracted" is a person supplied
-     * by a subcontractor company (workerAffiliations says which). Selestial never decides it; a person records it.
-     */
+    /** Relationship type: employee, independent contractor, or a worker supplied by a subcontractor company. */
     engagement: engagementValidator,
-    /** The engagement status. "ready" is shown as Active: a person cleared them for work. It is not readiness. */
+    /**
+     * Engagement status, set by a person. The stored value "ready" means the engagement is active; it does
+     * not by itself make anyone eligible for a job (lib/cleaners/readiness.ts adds the requirements).
+     */
     status: cleanerStatusValidator,
-    /** Why the status was last changed, and by whom, when a person gave a reason. */
-    statusNote: v.optional(v.string()),
-    statusChangedAt: v.optional(v.number()),
-    statusChangedBy: v.optional(v.id("members")),
+    /** Skills a person confirmed. Dispatch matches a job's required skills against these. */
     skills: v.array(v.string()),
     /** Postal codes the cleaner works in. Empty means not set yet, which matches nothing. */
     serviceAreas: v.array(v.string()),
-    /** Set by the Owner only. No agent reads this to change it. */
+    /** Set by the Owner only. No agent reads this to change it. Its history is in payArrangements. */
     pay: v.optional(payValidator),
-    /** How the record came to exist, and the hire it came from. */
-    source: v.optional(workerSourceValidator),
-    applicationId: v.optional(v.id("applications")),
-    /** Chosen by the browser for one add, so the same add sent twice makes one record. */
-    addKey: v.optional(v.string()),
     createdAt: v.number(),
+    // The Cleaners workspace (convex/lib/cleaners/schema.ts). Every field is optional so older rows stay valid.
+    /** The subcontractor company this worker works through now. Past ones are in workerAffiliations. */
+    subcontractorId: v.optional(v.id("subcontractors")),
+    photoStorageId: v.optional(v.id("_storage")),
+    /** Areas the cleaner prefers, a subset of serviceAreas. */
+    preferredAreas: v.optional(v.array(v.string())),
+    /** The longest the cleaner said they will travel to a job. Dispatch has no drive times, so this is shown, not enforced. */
+    maxTravelMinutes: v.optional(v.number()),
+    /** When the cleaner (or a person for them) last confirmed the weekly availability is still right. */
+    availabilityConfirmedAt: v.optional(v.number()),
+    /** The application this worker was hired from, when Recruiter handed them over. */
+    hiredFrom: v.optional(v.id("applications")),
+    /** When the engagement status last changed. */
+    statusChangedAt: v.optional(v.number()),
+    /** Set by an approved rehire restriction. Shown to managers; never sent to the cleaner. */
+    rehireRestriction: v.optional(v.object({ until: v.optional(v.number()), requestId: v.id("personnelRequests") })),
+    /** Their last answer to a check-in: still available, fewer jobs, a break until a date, or wanting to stop. */
+    checkIn: v.optional(v.object({ answer: v.union(v.literal("available"), v.literal("fewer"), v.literal("break"), v.literal("stop")), at: v.number(), until: v.optional(v.number()), note: v.optional(v.string()) })),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_company_status", ["companyId", "status"])
-    .index("by_company_addKey", ["companyId", "addKey"]),
+    .index("by_company_subcontractor", ["companyId", "subcontractorId"]),
 
   /** A weekly window the cleaner said they can work, on the company's clock. Minutes from midnight. */
   availabilityWindows: defineTable({
@@ -347,6 +373,9 @@ export default defineSchema({
     startsAt: v.number(),
     endsAt: v.number(),
     note: v.optional(v.string()),
+    /** Who recorded it: a person, the cleaner from their portal, or their subcontractor company. Absent on older rows (a person). */
+    source: v.optional(v.union(v.literal("member"), v.literal("cleaner"), v.literal("subcontractor"))),
+    createdAt: v.optional(v.number()),
   }).index("by_company_cleaner_end", ["companyId", "cleanerId", "endsAt"]),
 
   // ── Jobs and assignments. Payments are not here and are never inferred from these. ─────────────
@@ -539,10 +568,17 @@ export default defineSchema({
       v.literal("hiring_offer"),
       v.literal("application_decline"),
       v.literal("urgent_outreach"),
-      // The Cleaners workspace, to workers.
-      v.literal("portal_invite"),
-      v.literal("portal_code"),
+      // Finance, to customers: an invoice's pay link, and a reminder about what is due (convex/lib/finance/outbox.ts).
+      v.literal("invoice_sent"),
+      v.literal("payment_reminder"),
+      // Finance, to a cleaner: the private link to their own earnings statement.
+      v.literal("earnings_statement"),
+      // Cleaners workspace, to cleaners and subcontractor contacts.
+      v.literal("portal_invitation"),
       v.literal("onboarding_reminder"),
+      v.literal("availability_check"),
+      v.literal("idle_check_in"),
+      v.literal("verification_code"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -554,13 +590,15 @@ export default defineSchema({
     /** The provider reported that the address rejected the message. */
     bouncedAt: v.optional(v.number()),
     cleanerId: v.optional(v.id("cleaners")),
+    /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
+    customerId: v.optional(v.id("customers")),
+    invoiceId: v.optional(v.id("invoices")),
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
     linkId: v.optional(v.id("actionLinks")),
-    /** A link into the cleaner's portal; filled in at sending time, never stored in the body. */
+    /** A Cleaners portal or task link the message carries. */
     portalLinkId: v.optional(v.id("portalLinks")),
-    /** A portal code; the code is worked out at sending time and never stored. */
-    portalCodeId: v.optional(v.id("portalCodes")),
+    followUpId: v.optional(v.id("followUps")),
     /** Where on the cleaner pages the link opens, for example "/delay". */
     linkPath: v.optional(v.string()),
     to: v.optional(v.string()),
@@ -586,6 +624,8 @@ export default defineSchema({
     .index("by_company_job", ["companyId", "jobId"])
     .index("by_company_queued", ["companyId", "queuedAt"])
     .index("by_company_application", ["companyId", "applicationId"])
+    .index("by_company_invoice", ["companyId", "invoiceId"])
+    .index("by_company_cleaner", ["companyId", "cleanerId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
 
@@ -755,13 +795,17 @@ export default defineSchema({
   ...chatTables,
   ...agreementTables,
   ...googleTables,
-
-  // ── The workforce beyond the cleaner row: subcontractors, affiliations, crews, imports ───────
-  ...workforceTables,
+  // ── Cleaners: subcontractors, requirements, crews, portal, follow-ups, coaching, personnel ──────
+  ...cleanersTables,
 
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,
   ...billingTables,
+  // Services & Pricing (convex/lib/services/schema.ts).
+  ...servicesTables,
+
+  // ── Finance: the cleaning company's own money, never Selestial's subscription (convex/lib/finance) ─
+  ...financeTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

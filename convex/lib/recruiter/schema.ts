@@ -188,8 +188,6 @@ export const recruiterSettingsValidator = v.object({
   decideWithinHours: v.optional(v.number()),
   /** What a new worker must have before a person may mark them ready. */
   onboardingRequirements: v.optional(v.array(v.object({ key: v.string(), label: v.string() }))),
-  /** Days without progress before each onboarding reminder, for example [2, 5]. The list's length is the most sent. */
-  onboardingReminderDays: v.optional(v.array(v.number())),
   /** The Owner's own words: rules, tone and when to escalate. Shown to people and given to the model as context, never as authority. */
   recruitingRules: v.optional(v.string()),
   communicationPolicy: v.optional(v.string()),

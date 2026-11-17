@@ -48,7 +48,7 @@ const shelfValidator = v.union(v.literal("active"), v.literal("archived"));
 
 // ── Context ──────────────────────────────────────────────────────────────────────────────────────
 
-const CONTEXT_TABLES: readonly ContextRef["table"][] = ["customers", "properties", "cleaners", "jobs", "tasks", "applications", "hiringNeeds", "chatArtifacts"];
+const CONTEXT_TABLES: readonly ContextRef["table"][] = ["customers", "properties", "cleaners", "jobs", "tasks", "applications", "hiringNeeds", "chatArtifacts", "invoices"];
 
 /** Records a person attached, checked against the company and their role. Labels come from the record, never the browser. */
 async function checkedContext(ctx: Ctx, refs: { table: string; id: string }[]): Promise<ContextRef[]> {
@@ -188,6 +188,8 @@ export const send = companyMutation({
     attachments: v.optional(v.array(v.object({ storageId: v.id("_storage"), name: v.string() }))),
     /** A key from lib/ai/chatModels.ts. Unset: keep this chat's model. */
     model: v.optional(v.string()),
+    /** Where a new conversation started (Research & Insights). Kept for every reply; ignored for an existing one. */
+    origin: v.optional(v.object({ kind: v.literal("research") })),
   },
   handler: async (ctx, args) => {
     const words = requiredText(args.text, "Your message", MESSAGE_MAX);
@@ -220,7 +222,8 @@ export const send = companyMutation({
     const now = Date.now();
     if (!conversation) {
       const title = titleFrom(words);
-      const id = await ctx.db.insert("conversations", { companyId: ctx.companyId, createdBy: ctx.member._id, title, titleSource: "generated", visibility: "private", state: "idle", searchText: searchTextFor(title, [words]), shelf: "active", messageCount: 0, modelKey, createdAt: now, updatedAt: now });
+      const origin = args.origin?.kind === "research" ? { kind: "research" as const, question: words.slice(0, 500) } : undefined;
+      const id = await ctx.db.insert("conversations", { companyId: ctx.companyId, createdBy: ctx.member._id, title, titleSource: "generated", visibility: "private", state: "idle", searchText: searchTextFor(title, [words]), shelf: "active", messageCount: 0, modelKey, ...(origin ? { origin } : {}), createdAt: now, updatedAt: now });
       conversation = (await ctx.db.get(id))!;
     } else {
       const asked = conversation.searchText.length < 3500 ? `${conversation.searchText} \n${words}`.slice(0, 4000) : conversation.searchText;
@@ -295,6 +298,22 @@ export const decideStep = companyMutation({
 function sessionRow(conversation: Doc<"conversations">) {
   return { conversationId: conversation._id, title: conversation.title, state: conversation.state, pinned: conversation.pinnedAt !== undefined, shelf: conversation.shelf, updatedAt: conversation.updatedAt, createdAt: conversation.createdAt };
 }
+
+/** The member's own conversations that started in Services & Pricing › Research & Insights, newest first. */
+export const researchChats = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("conversations")
+      .withIndex("by_company_creator_shelf_updated", (q) => q.eq("companyId", ctx.companyId).eq("createdBy", ctx.member._id).eq("shelf", "active"))
+      .order("desc")
+      .take(100);
+    return rows
+      .filter((row) => row.origin?.kind === "research")
+      .slice(0, 8)
+      .map((row) => ({ id: row._id, title: row.title, updatedAt: row.updatedAt, state: row.state }));
+  },
+});
 
 export const sessions = companyQuery({
   args: { shelf: shelfValidator, paginationOpts: paginationOptsValidator },

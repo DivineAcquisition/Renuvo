@@ -1,19 +1,24 @@
 /**
- * Subcontractor companies: organizations that supply their own cleaners. The company, the person
- * authorized to speak for it, and its individual workers are separate records. Work is only ever assigned
- * to a named worker; which company supplied them is kept as dated history (workerAffiliations).
+ * Subcontractor companies: businesses that supply their own cleaners. The company, its authorized contact
+ * and its individual workers are separate things. Jobs go to real people; a worker's past affiliation is
+ * kept with dates, so a move between subcontractors never rewrites where earlier jobs came from.
  */
 import { v } from "convex/values";
 
 import { owned } from "./lib/access";
-import { companyQuery, managerMutation } from "./lib/builders";
+import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
+import { STATUS_WORDS } from "./lib/cleaners/enroll";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
-import { maySeePersonnelNotes } from "./lib/workforce/access";
-import { nameKey } from "./lib/workforce/duplicates";
-import { phone, setAffiliation } from "./lib/workforce/records";
-import { subcontractorStatusValidator } from "./lib/workforce/schema";
-import { optionalEmail, optionalText, text } from "./lib/text";
+import { portalLinkState, revokePortalLink, subcontractorLinks } from "./lib/cleaners/portal";
+import { isManager, isOwner } from "./lib/roles";
+import { optionalEmail, optionalText, tags, text } from "./lib/text";
+
+const contactValidator = v.object({ name: v.string(), title: v.optional(v.string()), email: v.optional(v.string()), phone: v.optional(v.string()) });
+
+function cleanContact(contact: typeof contactValidator.type) {
+  return { name: text(contact.name, "The contact's name", 120), title: optionalText(contact.title, "Title", 80), email: optionalEmail(contact.email), phone: optionalText(contact.phone, "Phone", 40) };
+}
 
 export const list = companyQuery({
   args: {},
@@ -21,53 +26,76 @@ export const list = companyQuery({
     const rows = await ctx.db
       .query("subcontractors")
       .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId))
-      .take(500);
+      .take(200);
     const out = [];
     for (const row of rows) {
-      const affiliations = await ctx.db
-        .query("workerAffiliations")
+      const workers = await ctx.db
+        .query("cleaners")
         .withIndex("by_company_subcontractor", (q) => q.eq("companyId", ctx.companyId).eq("subcontractorId", row._id))
-        .take(1000);
+        .take(500);
       out.push({
-        id: row._id,
+        subcontractorId: row._id,
         name: row.name,
         status: row.status,
-        contactName: row.contactName ?? null,
-        contactEmail: row.contactEmail ?? null,
-        contactPhone: row.contactPhone ?? null,
-        statusNote: maySeePersonnelNotes(ctx.role) ? (row.statusNote ?? null) : null,
-        currentWorkers: affiliations.filter((item) => item.endedAt === undefined).length,
-        pastWorkers: new Set(affiliations.filter((item) => item.endedAt !== undefined).map((item) => item.cleanerId)).size,
+        contact: isManager(ctx.role) ? row.contact : { name: row.contact.name },
+        serviceAreas: row.serviceAreas,
+        workers: workers.filter((worker) => worker.status !== "ended").length,
+        activeWorkers: workers.filter((worker) => worker.status === "ready").length,
       });
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
-const contactArgs = {
-  contactName: v.optional(v.string()),
-  contactEmail: v.optional(v.string()),
-  contactPhone: v.optional(v.string()),
-};
+export const get = companyQuery({
+  args: { subcontractorId: v.id("subcontractors") },
+  handler: async (ctx, args) => {
+    const sub = await owned(ctx, args.subcontractorId);
+    const current = await ctx.db
+      .query("cleaners")
+      .withIndex("by_company_subcontractor", (q) => q.eq("companyId", ctx.companyId).eq("subcontractorId", sub._id))
+      .take(500);
+    const past = await ctx.db
+      .query("workerAffiliations")
+      .withIndex("by_company_subcontractor", (q) => q.eq("companyId", ctx.companyId).eq("subcontractorId", sub._id))
+      .take(1000);
+    const former = [];
+    for (const row of past) {
+      if (row.to === undefined) continue;
+      const cleaner = await ctx.db.get(row.cleanerId);
+      if (cleaner) former.push({ cleanerId: cleaner._id, name: cleaner.name, from: row.from, to: row.to });
+    }
+    return {
+      subcontractorId: sub._id,
+      name: sub.name,
+      status: sub.status,
+      contact: isManager(ctx.role) ? sub.contact : { name: sub.contact.name },
+      serviceAreas: sub.serviceAreas,
+      notes: isManager(ctx.role) ? (sub.notes ?? null) : null,
+      /** The Owner's arrangement with the subcontractor company. */
+      pay: isOwner(ctx.role) ? (sub.pay ?? null) : null,
+      workers: current.map((worker) => ({ cleanerId: worker._id, name: worker.name, status: worker.status, statusWords: STATUS_WORDS[worker.status] })).sort((a, b) => a.name.localeCompare(b.name)),
+      former,
+    };
+  },
+});
 
 export const create = managerMutation({
-  args: { name: v.string(), ...contactArgs },
+  args: { name: v.string(), contact: contactValidator, serviceAreas: v.optional(v.array(v.string())), notes: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const name = text(args.name, "Company name", 160);
+    const name = text(args.name, "The company name", 160);
     const existing = await ctx.db
       .query("subcontractors")
       .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId))
-      .take(500);
-    const same = existing.find((row) => nameKey(row.name) === nameKey(name));
-    if (same) throw userError(`${same.name} is already on record${same.status === "active" ? "" : ` (${same.status})`}.`);
+      .take(200);
+    if (existing.some((row) => row.name.trim().toLowerCase() === name.toLowerCase())) throw userError(`${name} is already a subcontractor company here.`);
     const id = await ctx.db.insert("subcontractors", {
       companyId: ctx.companyId,
       name,
-      contactName: optionalText(args.contactName, "Contact name", 160),
-      contactEmail: optionalEmail(args.contactEmail),
-      contactPhone: phone(args.contactPhone),
       status: "active",
-      createdBy: ctx.member._id,
+      contact: cleanContact(args.contact),
+      serviceAreas: tags(args.serviceAreas ?? [], "Service areas", 200).map((code) => code.toUpperCase()),
+      notes: optionalText(args.notes, "Notes", 2000),
       createdAt: Date.now(),
     });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.created", actor: byMember(ctx), subject: { table: "subcontractors", id } });
@@ -76,45 +104,35 @@ export const create = managerMutation({
 });
 
 export const update = managerMutation({
-  args: { subcontractorId: v.id("subcontractors"), name: v.optional(v.string()), ...contactArgs },
+  args: { subcontractorId: v.id("subcontractors"), name: v.optional(v.string()), contact: v.optional(contactValidator), serviceAreas: v.optional(v.array(v.string())), notes: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const row = await owned(ctx, args.subcontractorId);
-    await ctx.db.patch(row._id, {
-      ...(args.name !== undefined ? { name: text(args.name, "Company name", 160) } : {}),
-      ...(args.contactName !== undefined ? { contactName: optionalText(args.contactName, "Contact name", 160) } : {}),
-      ...(args.contactEmail !== undefined ? { contactEmail: optionalEmail(args.contactEmail) } : {}),
-      ...(args.contactPhone !== undefined ? { contactPhone: phone(args.contactPhone) } : {}),
+    const sub = await owned(ctx, args.subcontractorId);
+    await ctx.db.patch(sub._id, {
+      ...(args.name !== undefined ? { name: text(args.name, "The company name", 160) } : {}),
+      ...(args.contact !== undefined ? { contact: cleanContact(args.contact) } : {}),
+      ...(args.serviceAreas !== undefined ? { serviceAreas: tags(args.serviceAreas, "Service areas", 200).map((code) => code.toUpperCase()) } : {}),
+      ...(args.notes !== undefined ? { notes: optionalText(args.notes, "Notes", 2000) } : {}),
     });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.updated", actor: byMember(ctx), subject: { table: "subcontractors", id: row._id } });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.updated", actor: byMember(ctx), subject: { table: "subcontractors", id: sub._id } });
     return null;
   },
 });
 
 /**
- * Pausing or ending a subcontractor needs a reason. Its workers keep their own status: the workspace
- * lists each one still active, and a person decides.
+ * Pausing or ending a relationship with a subcontractor company is the Owner's, with a reason. Its workers
+ * keep their records and their history; ending it never removes anyone from a job they accepted.
  */
-export const setStatus = managerMutation({
-  args: { subcontractorId: v.id("subcontractors"), status: subcontractorStatusValidator, reason: v.optional(v.string()) },
+export const setStatus = ownerMutation({
+  args: { subcontractorId: v.id("subcontractors"), status: v.union(v.literal("active"), v.literal("paused"), v.literal("ended")), reason: v.string() },
   handler: async (ctx, args) => {
-    const row = await owned(ctx, args.subcontractorId);
-    if (row.status === args.status) return null;
-    const reason = optionalText(args.reason, "The reason", 500);
-    if (args.status !== "active" && (!reason || reason.length < 3)) throw userError("Say why.");
-    await ctx.db.patch(row._id, { status: args.status, statusNote: reason, endedAt: args.status === "ended" ? Date.now() : undefined });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.status_changed", actor: byMember(ctx), subject: { table: "subcontractors", id: row._id }, data: { from: row.status, to: args.status } });
-    return null;
-  },
-});
-
-/** Moves a subcontractor worker to another supplying company. The earlier affiliation is kept, closed. */
-export const moveWorker = managerMutation({
-  args: { cleanerId: v.id("cleaners"), subcontractorId: v.id("subcontractors") },
-  handler: async (ctx, args) => {
-    const worker = await owned(ctx, args.cleanerId);
-    await owned(ctx, args.subcontractorId);
-    if (worker.engagement !== "subcontracted") throw userError("Only a subcontractor worker is supplied by a subcontractor company. The Owner changes the worker type.");
-    await setAffiliation(ctx, worker, args.subcontractorId, ctx.member);
+    const sub = await owned(ctx, args.subcontractorId);
+    const reason = text(args.reason, "The reason", 500);
+    if (sub.status === args.status) return null;
+    if (sub.status === "ended") throw userError("This relationship has ended. Add the company again to work with it.");
+    await ctx.db.patch(sub._id, { status: args.status, ...(args.status === "ended" ? { endedAt: Date.now() } : {}) });
+    // Ending the relationship ends the contact's portal access. Their workers keep their own records and links.
+    if (args.status === "ended") for (const link of await subcontractorLinks(ctx, ctx.companyId, sub._id)) if (portalLinkState(link, Date.now()) === "active") await revokePortalLink(ctx, link, "The working relationship ended.", byMember(ctx));
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.status_changed", actor: byMember(ctx), subject: { table: "subcontractors", id: sub._id }, data: { from: sub.status, to: args.status, reason } });
     return null;
   },
 });

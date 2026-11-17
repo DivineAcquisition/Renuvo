@@ -13,9 +13,10 @@ import { userError } from "../errors";
 import { recordEvent, type Actor } from "../events";
 import { openTask, setTaskState } from "../taskState";
 import { closeApplication, setStage } from "./applications";
+import { createWorker } from "../cleaners/enroll";
+import { existingPerson, handoffChecklist, linkReturningWorker, recordFromHandoff } from "../cleaners/handoff";
 import type { Fact } from "./schema";
-import { DAY, recruiterSettings } from "./settings";
-import { findMatches } from "../workforce/duplicates";
+import { DAY } from "./settings";
 
 async function ownerOf(ctx: MutationCtx, companyId: Id<"companies">): Promise<Doc<"members"> | null> {
   const members = await ctx.db
@@ -45,44 +46,31 @@ export async function createHandoff(ctx: MutationCtx, application: Doc<"applicat
   const information: Fact[] = [...told("name", answers.fullName ?? applicant.name), ...told("email", answers.email), ...told("phone", answers.phone), ...told("experience_years", answers.experienceYears), ...told("hours_per_week", answers.hoursPerWeek)];
   if (Array.isArray(answers.availableDays)) information.push({ field: "available_days", value: answers.availableDays.join(", "), from: "form", where: "the application form, as the applicant wrote it" });
 
-  // The worker record exists so onboarding has something to work on. If this person is already on record
-  // as a worker (the same phone or email), the hire is linked to that record instead of making a second one,
-  // so their history stays in one place. A name alone is never enough to link.
-  const hiredEmail = typeof answers.email === "string" ? answers.email : application.contact.address;
-  const hiredPhone = applicant.phone ? `+${applicant.phone}` : undefined;
-  const everyone: Doc<"cleaners">[] = [];
-  for (const status of ["onboarding", "ready", "paused", "ended"] as const) {
-    everyone.push(...(await ctx.db.query("cleaners").withIndex("by_company_status", (q) => q.eq("companyId", company._id).eq("status", status)).take(1000)));
-  }
-  const strong = everyone.filter((row) => findMatches({ name: applicant.name ?? "", email: hiredEmail, phone: hiredPhone }, [{ id: row._id, name: row.name, email: row.email, phone: row.phone }]).some((match) => match.reasons.some((reason) => reason !== "name")));
+  // One person, one record: a returning worker keeps theirs; anyone else gets a new one with the company's
+  // onboarding template. Either way it is not active, has no pay set, and is offered nothing.
+  const email = typeof answers.email === "string" ? answers.email : application.contact.address;
+  const phone = applicant.phone ? `+${applicant.phone}` : undefined;
+  const returning = await existingPerson(ctx, company._id, email, phone);
   let cleanerId: Id<"cleaners">;
-  if (strong.length === 1) {
-    const existing = strong[0];
-    cleanerId = existing._id;
-    // A returning worker goes back to onboarding for this hire. Their pay, history and documents are kept.
-    await ctx.db.patch(existing._id, { applicationId: application._id, ...(existing.status === "ended" ? { status: "onboarding" as const, statusNote: undefined, statusChangedAt: Date.now() } : {}) });
-    await recordEvent(ctx, { companyId: company._id, type: "cleaner.linked_to_hire", actor, subject: { table: "cleaners", id: existing._id }, data: { applicationId: application._id, was: existing.status } });
+  let restricted = false;
+  if (returning) {
+    cleanerId = returning._id;
+    restricted = (await linkReturningWorker(ctx, company, returning, application._id, actor)).restricted;
   } else {
-    cleanerId = await ctx.db.insert("cleaners", {
-      companyId: company._id,
-      name: applicant.name ?? "New hire",
-      email: hiredEmail,
-      phone: hiredPhone,
-      engagement: offer.terms.engagement,
-      status: "onboarding",
-      skills: [],
-      serviceAreas: Array.isArray(answers.serviceAreas) ? answers.serviceAreas : [],
-      // The hire this worker came from, so their profile keeps the hiring history and nobody is entered twice.
-      source: "hiring",
-      applicationId: application._id,
-      createdAt: Date.now(),
-    });
-    await recordEvent(ctx, { companyId: company._id, type: "cleaner.created", actor, subject: { table: "cleaners", id: cleanerId }, data: { from: "hiring", applicationId: application._id } });
+    cleanerId = await createWorker(
+      ctx,
+      company,
+      { name: applicant.name ?? "New hire", engagement: offer.terms.engagement, email, phone, serviceAreas: Array.isArray(answers.serviceAreas) ? answers.serviceAreas.map(String) : [], hiredFrom: application._id },
+      actor,
+      { template: true, source: "hiring" },
+    );
   }
 
   const dueAt = Date.now() + 3 * DAY;
-  const requirements = recruiterSettings(company).onboardingRequirements.map((row) => ({ key: row.key, label: row.label, status: "outstanding" as const }));
-  const nextAction = `Start onboarding ${applicant.name ?? "the new hire"}: ${requirements.map((row) => row.label.toLowerCase()).join(", ")}.`;
+  // The checklist is the company's onboarding template, the same list the Cleaners profile shows.
+  const requirements = await handoffChecklist(ctx, company, offer.terms.engagement, cleanerId);
+  const outstanding = requirements.filter((row) => row.status === "outstanding");
+  const nextAction = `${restricted ? "This person has a rehire restriction on their record: decide before going on. " : ""}Start onboarding ${applicant.name ?? "the new hire"}: ${outstanding.map((row) => row.label.toLowerCase()).join(", ") || "every requirement is already met"}.`;
   const taskId = await openTask(ctx, {
     companyId: company._id,
     agent: "recruiter",
@@ -106,6 +94,8 @@ export async function createHandoff(ctx: MutationCtx, application: Doc<"applicat
 export async function recordRequirement(ctx: MutationCtx, handoff: Doc<"onboardingHandoffs">, key: string, done: boolean, member: Doc<"members">, note: string | undefined): Promise<void> {
   if (handoff.status !== "open") throw userError("This handoff is closed.");
   if (!handoff.requirements.some((row) => row.key === key)) throw userError("That is not one of this handoff's requirements.");
+  // Recorded on the cleaner too, under the template's reviewer rule, so there is one checklist.
+  await recordFromHandoff(ctx, handoff, key, done, member, note);
   const requirements = handoff.requirements.map((row) => (row.key === key ? { ...row, status: done ? ("done" as const) : ("outstanding" as const), note: note?.trim().slice(0, 500) || undefined, recordedBy: member._id, at: Date.now() } : row));
   const left = requirements.filter((row) => row.status === "outstanding");
   await ctx.db.patch(handoff._id, { requirements, nextAction: left.length > 0 ? `Still outstanding: ${left.map((row) => row.label.toLowerCase()).join(", ")}.` : "Every requirement is recorded. Complete the handoff, then mark the worker ready when you are satisfied." });

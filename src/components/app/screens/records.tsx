@@ -1,22 +1,21 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import Link from "next/link";
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { AgreementsForRecord } from "@/components/app/agreements/record";
-import { useCompany } from "@/components/app/company";
+import { canManage, useCompany } from "@/components/app/company";
+import { FormError, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
-import { NewCustomerForm } from "@/components/app/screens/forms";
+import { NewCleanerForm, NewCustomerForm } from "@/components/app/screens/forms";
 import { PageHeader, Panel } from "@/components/app/shell";
-import { useNow } from "@/components/app/use-now";
 import { Plus } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CLEANERS_ROOT } from "@/lib/app/cleaners";
 
 import { api } from "../../../../convex/_generated/api";
+import type { Doc } from "../../../../convex/_generated/dataModel";
 
 const KIND: Record<string, string> = { home: "Home", short_term_rental: "Short-term rental", property_manager: "Property manager", commercial: "Commercial" };
 
@@ -72,38 +71,88 @@ export function CustomersPanel() {
   );
 }
 
-/**
- * The Operations workspace's view of the cleaners: the same four counts as the Cleaners workspace, from
- * the same query, with a link there. Adding, editing and status changes live in the Cleaners workspace.
- */
-export function CleanersPanel() {
-  const { companyId } = useCompany();
-  const now = useNow();
-  const data = useQuery(api.workforce.workspace, now ? { companyId, asOf: now } : "skip");
+const CLEANER_STATUS: Record<Doc<"cleaners">["status"], { label: string; variant: "success" | "warning" | "outline" | "info" }> = {
+  ready: { label: "Ready for work", variant: "success" },
+  onboarding: { label: "Onboarding", variant: "info" },
+  paused: { label: "Paused", variant: "warning" },
+  suspended: { label: "Suspended", variant: "warning" },
+  ended: { label: "Ended", variant: "outline" },
+};
+
+function CleanerRow({ cleaner }: { cleaner: Doc<"cleaners"> }) {
+  const { companyId, role } = useCompany();
+  const setStatus = useMutation(api.cleaners.setStatus);
+  const { busy, error, run } = useRun();
+  const status = CLEANER_STATUS[cleaner.status];
   return (
-    <Panel title="Cleaners" action={<Link href={CLEANERS_ROOT} className="text-sm font-medium text-brand-700 hover:underline dark:text-brand-300">Open Cleaners</Link>}>
-      {data === undefined ? (
-        <Skeleton className="h-16" />
-      ) : data.counts.total === 0 ? (
-        <Empty>No cleaners yet. Add them in Cleaners.</Empty>
-      ) : (
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {(
-            [
-              ["Ready for assignments", data.counts.ready],
-              ["Onboarding", data.counts.onboarding],
-              ["Needs attention", data.counts.attention],
-              ["Working today", data.counts.workingToday],
-            ] as const
-          ).map(([label, value]) => (
-            <div key={label} className="rounded-xl border border-border px-3 py-2">
-              <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="font-heading text-xl text-strong tabular-nums">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-    </Panel>
+    <li className="px-4 py-3 text-sm sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span>
+          <span className="font-medium text-strong">{cleaner.name}</span>
+          <span className="block text-xs text-muted-foreground">
+            {cleaner.engagement === "contractor" ? "Contractor" : "Employee"}
+            {cleaner.skills.length > 0 ? ` · ${cleaner.skills.join(", ")}` : ""}
+            {cleaner.serviceAreas.length > 0 ? ` · works in ${cleaner.serviceAreas.join(", ")}` : " · no service areas set"}
+          </span>
+        </span>
+        <span className="flex items-center gap-2">
+          <Badge variant={status.variant} size="sm">
+            {status.label}
+          </Badge>
+          {/* A person decides a cleaner's standing. No agent can. */}
+          {canManage(role) && cleaner.status !== "ended" ? (
+            <Button variant="ghost" size="xs" loading={busy} onClick={() => void run(() => setStatus({ companyId, cleanerId: cleaner._id, status: cleaner.status === "ready" ? "paused" : "ready" }))}>
+              {cleaner.status === "ready" ? "Pause" : "Mark ready"}
+            </Button>
+          ) : null}
+        </span>
+      </div>
+      <FormError message={error} />
+      {canManage(role) ? <AgreementsForRecord table="cleaners" id={cleaner._id} title="Workforce documents you can see" /> : null}
+    </li>
+  );
+}
+
+export function CleanersPanel() {
+  const { companyId, role } = useCompany();
+  const ready = useQuery(api.cleaners.list, { companyId, status: "ready" });
+  const onboarding = useQuery(api.cleaners.list, { companyId, status: "onboarding" });
+  const paused = useQuery(api.cleaners.list, { companyId, status: "paused" });
+  const [adding, setAdding] = useState(false);
+  const loaded = ready && onboarding && paused;
+  const all = loaded ? [...ready, ...onboarding, ...paused] : [];
+  return (
+    <>
+      <Panel
+        title="Cleaners"
+        flush
+        action={
+          canManage(role) ? (
+            <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
+              <Plus aria-hidden />
+              Add a cleaner
+            </Button>
+          ) : undefined
+        }
+      >
+        {!loaded ? (
+          <div className="p-5">
+            <Skeleton className="h-10" />
+          </div>
+        ) : all.length === 0 ? (
+          <Empty>No cleaners yet. Add one with the hours they said they can work.</Empty>
+        ) : (
+          <ul className="divide-y divide-border">
+            {all.map((cleaner) => (
+              <CleanerRow key={cleaner._id} cleaner={cleaner} />
+            ))}
+          </ul>
+        )}
+      </Panel>
+      <Modal open={adding} onClose={() => setAdding(false)} title="Add a cleaner" description="Their hours are what they told you. Nobody is offered a time outside them.">
+        <NewCleanerForm onDone={() => setAdding(false)} />
+      </Modal>
+    </>
   );
 }
 

@@ -4,7 +4,6 @@
  * and the cleaner's own commitments again at that moment: two cleaners answering at once cannot both
  * take the last place, because the second one reads the first one's acceptance.
  */
-import { assignmentBlockers } from "../workforce/requirements";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { overlaps } from "../availability";
@@ -81,9 +80,6 @@ export async function answerOffer(ctx: MutationCtx, assignment: Doc<"assignments
     return { status: "refused", code: "filled", message: requiredCrew(job) === 1 ? "Another cleaner has already accepted this job." : "This job already has every cleaner it needs." };
   }
   if (cleaner.status !== "ready") return { status: "refused", code: "not_ready", message: "This cleaner is not marked ready for work, so the offer cannot be accepted." };
-  // An onboarding requirement that blocks assignments blocks accepting too, not only being offered.
-  const blockers = await assignmentBlockers(ctx, cleaner, Date.now());
-  if (blockers.length > 0) return { status: "refused", code: "not_ready", message: `An onboarding requirement is still open (${blockers.join(", ")}), so the offer cannot be accepted yet.` };
   const span = { startsAt: job.startsAt, endsAt: job.endsAt };
   const committed = await heldSpans(ctx, job.companyId, cleaner._id, job._id, ["accepted"]);
   if (committed.some((other) => overlaps(other, span))) {

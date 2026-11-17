@@ -54,9 +54,9 @@ export const POLICY_LIMITS: Record<Exclude<keyof DispatchPolicy, "broadcastEnabl
 };
 
 /** The crew pay rule in the shape the pay calculation takes. */
-export function crewPayOf(company: Pick<Doc<"companies">, "dispatchPolicy">): CrewPay {
+export function crewPayOf(company: Pick<Doc<"companies">, "dispatchPolicy"> & Partial<Pick<Doc<"companies">, "payTiers">>): CrewPay {
   const policy = dispatchPolicy(company);
-  return { mode: policy.crewPayMode, leadPremiumPercent: policy.leadPremiumPercent };
+  return { mode: policy.crewPayMode, leadPremiumPercent: policy.leadPremiumPercent, tiers: company.payTiers ?? [] };
 }
 
 export function dispatchPolicy(company: Pick<Doc<"companies">, "dispatchPolicy">): DispatchPolicy {

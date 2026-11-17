@@ -67,16 +67,6 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "interviews", index: "by_company_application" },
   { table: "hiringOffers", index: "by_company_application" },
   { table: "onboardingHandoffs", index: "by_company_status" },
-  // The workforce beyond the cleaner row (convex/lib/workforce/schema.ts).
-  { table: "subcontractors", index: "by_company_status" },
-  { table: "workerAffiliations", index: "by_company_cleaner" },
-  { table: "crews", index: "by_company_status" },
-  { table: "crewMembers", index: "by_company_crew" },
-  { table: "workerImports", index: "by_company_key", omit: ["key"], why: "A one-time key the browser chose so the same import is not added twice." },
-  { table: "onboardingRequirements", index: "by_company_status" },
-  { table: "workerRequirements", index: "by_company_cleaner" },
-  { table: "helpRequests", index: "by_company_status" },
-  { table: "workerDocuments", index: "by_company_cleaner", omit: ["storageId", "clientKey"], why: "Internal file references. The files themselves are not in the file." },
   { table: "integrationRequests", index: "by_company_integration" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
@@ -111,15 +101,53 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "googleAdsSnapshots", index: "by_company_account" },
   { table: "googleDriveTexts", index: "by_company_resource" },
   { table: "googleSettings", index: "by_company" },
+  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, costs, quotes, imports and research.
+  { table: "services", index: "by_company_status" },
+  { table: "serviceVersions", index: "by_company_service_version" },
+  { table: "serviceDrafts", index: "by_company_service" },
+  { table: "serviceChanges", index: "by_company_updated", omit: ["scheduledFunctionId"], why: "An internal reference to the scheduler." },
+  { table: "pricingProfiles", index: "by_company" },
+  { table: "serviceQuotes", index: "by_company_created" },
+  { table: "serviceImports", index: "by_company_created" },
+  { table: "researchBriefs", index: "by_company_created" },
+  { table: "researchSources", index: "by_company_brief" },
+  // Finance: the company's own money (convex/lib/finance/schema.ts).
+  { table: "financeSettings", index: "by_company" },
+  { table: "stripeAccounts", index: "by_company", omit: ["onboarding"], why: "A single-use Stripe onboarding link." },
+  { table: "invoices", index: "by_company_created", omit: ["publicId"], why: "Half of a pay link." },
+  { table: "payments", index: "by_company_invoice", omit: ["stripe.clientSecret"], why: "Lets a browser finish an unfinished card payment." },
+  { table: "refunds", index: "by_company_invoice" },
+  { table: "invoiceCredits", index: "by_company_invoice" },
+  { table: "financeMessages", index: "by_company_invoice" },
+  { table: "earnings", index: "by_company_job" },
+  { table: "teamPayments", index: "by_company_cleaner" },
+  { table: "tips", index: "by_company_job" },
+  { table: "statementLinks", index: "by_company_cleaner", omit: ["publicId"], why: "Half of a cleaner's statement link." },
+  { table: "expenses", index: "by_company_spent" },
+  { table: "expenseReceipts", index: "by_company_sha", omit: ["storageId"], why: "An internal file reference; the receipt files themselves are not in the export. What was read from each is." },
+  { table: "expenseRules", index: "by_company" },
+  { table: "expenseImports", index: "by_company_created" },
+  // Cleaners (convex/lib/cleaners/schema.ts). The export is the Owner's, so pay and personnel records are included.
+  { table: "subcontractors", index: "by_company_status" },
+  { table: "workerAffiliations", index: "by_company_cleaner" },
+  { table: "requirementDefinitions", index: "by_company_key" },
+  { table: "workerRequirements", index: "by_company_cleaner", omit: ["evidence"], why: "Internal file references for uploaded documents; the files themselves are not in the file. Each requirement's state, review and dates are." },
+  { table: "availabilityExceptions", index: "by_company_cleaner_date" },
+  { table: "skillClaims", index: "by_company_cleaner" },
+  { table: "crews", index: "by_company_status" },
+  { table: "crewMemberships", index: "by_company_crew" },
+  { table: "portalLinks", index: "by_company_issued", omit: ["publicId"], why: "Half of a portal link." },
+  { table: "followUps", index: "by_company_cleaner" },
+  { table: "coachingNotes", index: "by_company_cleaner" },
+  { table: "recordDisputes", index: "by_company_cleaner" },
+  { table: "personnelRequests", index: "by_company_status" },
+  { table: "payArrangements", index: "by_company_cleaner" },
 ];
 
 /** Company tables kept out of the export, and why. */
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   numberSearches: "Lists of numbers that were for sale at the moment of a search; the number the company asked for is in its texting request.",
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
-  portalLinks: "Each row is half of a cleaner's portal link; a copy of it must never leave the record.",
-  portalCodes: "Ten-minute, single-use code records for portal sign-in; nothing in them is about the business.",
-  portalSessions: "Device sessions for the cleaner portal; a copy must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
   billingWebhooks: "Delivery references for Autumn's notices to Selestial; the plan and balances they point to are exported as billingAccounts.",
   mailboxCredentials: "A sealed authorization to read and send from the company's mailbox; it opens the mailbox, so a copy must never leave. The connection itself is exported.",
@@ -136,6 +164,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   googleChoices: "A short-lived copy of what Google listed for the Owner to choose from.",
   googleBusy: "A short-lived copy of busy times read from Google Calendar; the calendar itself is the record.",
   googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
+  portalCodes: "Hashes of one-time codes that unlock a portal for ten minutes; nothing in them is about the business.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 
@@ -145,6 +174,11 @@ export const COMPANY_OMIT = ["setupKey"] as const;
 /** Removes the named fields from a row. */
 export function without(row: Record<string, unknown>, omit: readonly string[] = []): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(row)) if (!omit.includes(name)) out[name] = value;
+  for (const [name, value] of Object.entries(row)) {
+    if (omit.includes(name)) continue;
+    // "stripe.clientSecret" leaves out one field inside an object and keeps the rest of it.
+    const inner = omit.filter((path) => path.startsWith(`${name}.`)).map((path) => path.slice(name.length + 1));
+    out[name] = inner.length && value && typeof value === "object" && !Array.isArray(value) ? without(value as Record<string, unknown>, inner) : value;
+  }
   return out;
 }

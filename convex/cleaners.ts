@@ -10,7 +10,6 @@ import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { cleanerStatusValidator } from "./lib/statuses";
-import { changeStatus } from "./lib/workforce/records";
 import { optionalEmail, optionalText, tags, text } from "./lib/text";
 import { payValidator } from "./schema";
 
@@ -90,15 +89,24 @@ export const update = managerMutation({
   },
 });
 
-/**
- * A person decides a cleaner's standing: active (stored as "ready"), paused, or ended. Pausing or ending
- * needs a reason. Visits they accepted are not touched (lib/workforce/records.ts).
- */
+/** A person decides routine changes to a cleaner's engagement: active ("ready") or paused. */
 export const setStatus = managerMutation({
-  args: { cleanerId: v.id("cleaners"), status: cleanerStatusValidator, reason: v.optional(v.string()) },
+  args: { cleanerId: v.id("cleaners"), status: cleanerStatusValidator },
   handler: async (ctx, args) => {
     const cleaner = await owned(ctx, args.cleanerId);
-    await changeStatus(ctx, cleaner, args.status, args.reason, ctx.member);
+    if (cleaner.status === args.status) return null;
+    // Suspending, ending, and leaving a suspension or an ending are personnel decisions (convex/personnel.ts).
+    if (args.status === "suspended" || args.status === "ended" || cleaner.status === "suspended" || cleaner.status === "ended") {
+      throw userError("Suspending or ending an engagement, and undoing either, is a personnel request an authorized person decides.");
+    }
+    await ctx.db.patch(cleaner._id, { status: args.status, statusChangedAt: Date.now() });
+    await recordEvent(ctx, {
+      companyId: ctx.companyId,
+      type: "cleaner.status_changed",
+      actor: byMember(ctx),
+      subject: { table: "cleaners", id: cleaner._id },
+      data: { from: cleaner.status, to: args.status },
+    });
     return null;
   },
 });
@@ -109,10 +117,17 @@ export const setPay = ownerMutation({
     const cleaner = await owned(ctx, args.cleanerId);
     const pay = args.pay;
     if (pay.kind === "share") {
-      if (cleaner.engagement === "employee") throw userError("A share of the job is for contractors. Employees are paid hourly.");
+      if (cleaner.engagement !== "contractor") throw userError("A share of the job is for contractors. Employees are paid hourly.");
       if (!Number.isInteger(pay.shareBps) || pay.shareBps < 0 || pay.shareBps > 10000) throw userError("The share must be between 0% and 100%.");
+    } else if (pay.kind === "tier") {
+      if (cleaner.engagement !== "contractor") throw userError("Pay tiers are for contractors. Employees are paid hourly.");
+      const tier = (ctx.company.payTiers ?? []).find((row) => row.id === pay.tierId && !row.archived);
+      if (!tier) throw userError("Choose one of your current pay tiers.");
+    } else if (pay.kind === "fixed") {
+      if (cleaner.engagement !== "contractor") throw userError("A fixed amount per job is for contractors. Employees are paid hourly.");
+      if (!Number.isSafeInteger(pay.perJobCents) || pay.perJobCents < 0 || pay.perJobCents > 1_000_000) throw userError("Enter the amount per job, up to $10,000.");
     } else {
-      if (cleaner.engagement === "contractor") throw userError("An hourly rate is for employees. Contractors are paid a share of the job.");
+      if (cleaner.engagement !== "employee") throw userError("An hourly rate is for employees. Contractors are paid a share of the job, a tier, or a fixed amount.");
       if (!Number.isSafeInteger(pay.hourlyCents) || pay.hourlyCents < 0) throw userError("The hourly rate must be a whole number of cents, zero or more.");
     }
     await ctx.db.patch(cleaner._id, { pay });

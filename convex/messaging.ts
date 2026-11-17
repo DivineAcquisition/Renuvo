@@ -12,8 +12,9 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from "./_generated/server";
 import { readProfile } from "./lib/compliance/profile";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
+import { customerClaim } from "./lib/finance/outbox";
+import { statementClaim } from "./lib/finance/cleanerOutbox";
 import { linkPath, linkState, siteOrigin, tokenFor } from "./lib/dispatch/links";
-import { codeFor, portalLinkState, portalPath, portalToken } from "./lib/workforce/portal";
 import { recordEvent } from "./lib/events";
 import type { SendIntent } from "./lib/messaging/outbox";
 import { checkSend } from "./lib/messaging/policy";
@@ -24,10 +25,13 @@ import { unseal } from "./lib/recruiter/secrets";
 import { messagingProvider } from "./lib/messaging/provider";
 import { afterApplicantMessage } from "./lib/recruiter/delivery";
 import { applicantLinkPath, applicantLinkState } from "./lib/recruiter/links";
+import { cleanerMessageAtSend } from "./lib/cleaners/outbox";
+import { portalUrl } from "./lib/cleaners/portal";
 import { sendProblem, type ApplicantPurpose } from "./lib/recruiter/outbox";
 import { recruiterSettings } from "./lib/recruiter/settings";
 
 const MAX_ATTEMPTS = 3;
+const ROUTINE_CLEANER: readonly Doc<"messages">["purpose"][] = ["portal_invitation", "onboarding_reminder", "availability_check", "idle_check_in", "verification_code"];
 const STUCK_AFTER = 5 * 60 * 1000;
 
 /**
@@ -48,7 +52,7 @@ async function intentOf(ctx: MutationCtx, message: Doc<"messages">): Promise<Sen
  * it was withdrawn, or the sending policy refused it or held it again.
  */
 export const claim = internalMutation({
-  args: { messageId: v.id("messages") },
+  args: { messageId: v.id("messages"), code: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const message = await ctx.db.get(args.messageId);
     if (!message || (message.status !== "queued" && message.status !== "held") || !message.to) return null;
@@ -84,29 +88,24 @@ export const claim = internalMutation({
       }
       body = body.replace("{link}", `${siteOrigin()}${linkPath(link.purpose, token, message.linkPath ?? "")}`);
     }
-    if (message.portalLinkId) {
-      const link = await ctx.db.get(message.portalLinkId);
-      const token = link ? await portalToken(link) : null;
-      if (!link || !token || portalLinkState(link, Date.now()) !== "active") {
-        await ctx.db.patch(message._id, { status: "not_sent", problem: "The link was closed before the text went out." });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
-        return null;
-      }
-      body = body.replace("{link}", `${siteOrigin()}${portalPath(token)}`);
-    }
-    if (message.portalCodeId) {
-      // The code is worked out now and never stored. A code that expired or was replaced is not sent.
-      const code = await ctx.db.get(message.portalCodeId);
-      const digits = code && code.usedAt === undefined && code.expiresAt > Date.now() ? await codeFor(code) : null;
-      if (!digits) {
-        await ctx.db.patch(message._id, { status: "not_sent", problem: "The code expired or was replaced before the text went out." });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
-        return null;
-      }
-      body = body.replace("{code}", digits);
-    }
     let fromName = "";
     let via: { connectionId: Id<"mailboxConnections">; address: string } | null = null;
+    if (message.portalLinkId || message.followUpId || ROUTINE_CLEANER.includes(message.purpose)) {
+      // A Cleaners message is checked once more as it goes: the link still open, the follow-up still needed.
+      const checked = await cleanerMessageAtSend(ctx, message, (token) => portalUrl(token));
+      if (!checked.ok) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: checked.problem });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        return null;
+      }
+      body = checked.body;
+    }
+    // A sign-in code travels only in the scheduled call, never in the stored message.
+    if (args.code && message.purpose === "verification_code") body = body.replace("{code}", args.code);
+    if (!message.applicationId && (message.channel ?? "sms") === "email") {
+      const company = await ctx.db.get(message.companyId);
+      fromName = (await readProfile(ctx, message.companyId)).messaging.senderName ?? company?.name ?? "";
+    }
     if (message.applicationId) {
       // A message to an applicant passes the send gate again at the moment it goes: they may have submitted, withdrawn or asked a question since it was planned.
       const application = await ctx.db.get(message.applicationId);
@@ -138,6 +137,28 @@ export const claim = internalMutation({
           await ctx.db.patch(message._id, { provider: "gmail" });
         }
       }
+    }
+    if (message.purpose === "earnings_statement") {
+      const statement = await statementClaim(ctx, message);
+      if ("problem" in statement) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: statement.problem });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        return null;
+      }
+      body = statement.body;
+      fromName = statement.fromName;
+    }
+    if (message.invoiceId) {
+      // A message to a customer about an invoice: still true now, and its pay link made only now.
+      const customer = await customerClaim(ctx, message);
+      if ("problem" in customer) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: customer.problem });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        return null;
+      }
+      body = customer.body;
+      fromName = customer.fromName;
+      via = customer.via;
     }
     const attempt = message.attempts + 1;
     await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now() });
@@ -176,7 +197,7 @@ export const settle = internalMutation({
     await ctx.db.patch(message._id, { status: "failed", failedAt: now, problem: result.problem, ...(result.bounced ? { bouncedAt: now } : {}) });
     await recordEvent(ctx, { companyId: message.companyId, type: result.bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
-    else await afterMessageFailed(ctx, { ...message, status: "failed", problem: result.problem });
+    else if (!message.invoiceId && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem: result.problem });
     return null;
   },
 });
@@ -213,9 +234,9 @@ async function sendThroughMailbox(
 }
 
 export const deliver = internalAction({
-  args: { messageId: v.id("messages") },
+  args: { messageId: v.id("messages"), code: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const claimed = await ctx.runMutation(internal.messaging.claim, { messageId: args.messageId });
+    const claimed = await ctx.runMutation(internal.messaging.claim, { messageId: args.messageId, code: args.code });
     if (!claimed) return null;
     if (claimed.channel === "email" && claimed.via) {
       const result = await sendThroughMailbox(ctx, args.messageId, claimed.via, claimed);
@@ -275,7 +296,7 @@ export const receipt = internalMutation({
     await ctx.db.patch(message._id, { status: "failed", failedAt: now, problem, ...(bounced ? { bouncedAt: now } : {}) });
     await recordEvent(ctx, { companyId: message.companyId, type: bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
-    else await afterMessageFailed(ctx, { ...message, status: "failed", problem });
+    else if (!message.invoiceId && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem });
     return "failed" as const;
   },
 });
@@ -293,7 +314,7 @@ export const sweepStuck = internalMutation({
       await ctx.db.patch(message._id, { status: "unconfirmed", problem });
       await recordEvent(ctx, { companyId: message.companyId, type: "message.unconfirmed", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
-      else await afterMessageFailed(ctx, { ...message, status: "unconfirmed", problem });
+      else if (!message.invoiceId && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "unconfirmed", problem });
     }
     return stuck.length;
   },

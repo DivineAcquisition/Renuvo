@@ -15,10 +15,12 @@ export const actorValidator = v.union(
   v.object({ kind: v.literal("system") }),
   /** A cleaner acting through an action link. The link is the authorization; the cleaner id says who it was issued to. */
   v.object({ kind: v.literal("cleaner"), cleanerId: v.id("cleaners"), linkId: v.id("actionLinks") }),
-  /** A cleaner acting in their own portal, after confirming a code sent to them (convex/portal.ts). */
-  v.object({ kind: v.literal("cleaner_portal"), cleanerId: v.id("cleaners") }),
   /** An applicant acting through an applicant link. */
   v.object({ kind: v.literal("applicant"), applicantId: v.id("applicants"), linkId: v.id("applicantLinks") }),
+  /** A cleaner acting through their Cleaners portal or a task link. */
+  v.object({ kind: v.literal("cleaner_portal"), cleanerId: v.id("cleaners"), linkId: v.id("portalLinks") }),
+  /** A subcontractor company's authorized contact acting through their portal link. */
+  v.object({ kind: v.literal("subcontractor_contact"), subcontractorId: v.id("subcontractors"), linkId: v.id("portalLinks") }),
 );
 export type Actor = typeof actorValidator.type;
 
@@ -55,18 +57,22 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("interviews"), id: v.id("interviews") }),
   v.object({ table: v.literal("hiringOffers"), id: v.id("hiringOffers") }),
   v.object({ table: v.literal("onboardingHandoffs"), id: v.id("onboardingHandoffs") }),
-  // The workforce (convex/lib/workforce/schema.ts).
-  v.object({ table: v.literal("subcontractors"), id: v.id("subcontractors") }),
-  v.object({ table: v.literal("crews"), id: v.id("crews") }),
-  v.object({ table: v.literal("workerImports"), id: v.id("workerImports") }),
-  v.object({ table: v.literal("onboardingRequirements"), id: v.id("onboardingRequirements") }),
-  v.object({ table: v.literal("portalLinks"), id: v.id("portalLinks") }),
-  v.object({ table: v.literal("helpRequests"), id: v.id("helpRequests") }),
   // Company agreements (convex/lib/agreements/schema.ts).
   v.object({ table: v.literal("agreements"), id: v.id("agreements") }),
   v.object({ table: v.literal("agreementTemplates"), id: v.id("agreementTemplates") }),
   v.object({ table: v.literal("agreementSignatureRequests"), id: v.id("agreementSignatureRequests") }),
   v.object({ table: v.literal("agreementFiles"), id: v.id("agreementFiles") }),
+  // Cleaners (convex/lib/cleaners/schema.ts).
+  v.object({ table: v.literal("subcontractors"), id: v.id("subcontractors") }),
+  v.object({ table: v.literal("requirementDefinitions"), id: v.id("requirementDefinitions") }),
+  v.object({ table: v.literal("workerRequirements"), id: v.id("workerRequirements") }),
+  v.object({ table: v.literal("crews"), id: v.id("crews") }),
+  v.object({ table: v.literal("portalLinks"), id: v.id("portalLinks") }),
+  v.object({ table: v.literal("followUps"), id: v.id("followUps") }),
+  v.object({ table: v.literal("coachingNotes"), id: v.id("coachingNotes") }),
+  v.object({ table: v.literal("recordDisputes"), id: v.id("recordDisputes") }),
+  v.object({ table: v.literal("personnelRequests"), id: v.id("personnelRequests") }),
+  v.object({ table: v.literal("skillClaims"), id: v.id("skillClaims") }),
   // Company Chat (convex/lib/chat/schema.ts).
   v.object({ table: v.literal("chatArtifacts"), id: v.id("chatArtifacts") }),
   v.object({ table: v.literal("companyKnowledge"), id: v.id("companyKnowledge") }),
@@ -77,6 +83,26 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("billingAccounts"), id: v.id("billingAccounts") }),
   v.object({ table: v.literal("aiExecutions"), id: v.id("aiExecutions") }),
   v.object({ table: v.literal("billingIntents"), id: v.id("billingIntents") }),
+  // Services & Pricing (convex/lib/services/schema.ts).
+  v.object({ table: v.literal("services"), id: v.id("services") }),
+  v.object({ table: v.literal("serviceChanges"), id: v.id("serviceChanges") }),
+  v.object({ table: v.literal("serviceImports"), id: v.id("serviceImports") }),
+  v.object({ table: v.literal("researchBriefs"), id: v.id("researchBriefs") }),
+  // Finance: the company's own money (convex/lib/finance/schema.ts).
+  v.object({ table: v.literal("invoices"), id: v.id("invoices") }),
+  v.object({ table: v.literal("payments"), id: v.id("payments") }),
+  v.object({ table: v.literal("refunds"), id: v.id("refunds") }),
+  v.object({ table: v.literal("invoiceCredits"), id: v.id("invoiceCredits") }),
+  v.object({ table: v.literal("stripeAccounts"), id: v.id("stripeAccounts") }),
+  v.object({ table: v.literal("financeSettings"), id: v.id("financeSettings") }),
+  v.object({ table: v.literal("financeMessages"), id: v.id("financeMessages") }),
+  v.object({ table: v.literal("earnings"), id: v.id("earnings") }),
+  v.object({ table: v.literal("teamPayments"), id: v.id("teamPayments") }),
+  v.object({ table: v.literal("tips"), id: v.id("tips") }),
+  v.object({ table: v.literal("statementLinks"), id: v.id("statementLinks") }),
+  v.object({ table: v.literal("expenses"), id: v.id("expenses") }),
+  v.object({ table: v.literal("expenseRules"), id: v.id("expenseRules") }),
+  v.object({ table: v.literal("expenseImports"), id: v.id("expenseImports") }),
 );
 export type Subject = typeof subjectValidator.type;
 

@@ -7,7 +7,7 @@ responsive secondary navigation. Old `#security` and `#agents` links redirect to
 | Section | Source of truth |
 | --- | --- |
 | Business & hours | `companies.name`, `timezone`, optional `businessSettings` (areas, hours) |
-| Services & pricing | `businessSettings.services`; a job keeps `serviceSnapshot` |
+| (moved) Services & pricing | Company › Services & Pricing since November 16, 2026 (`docs/services/00-architecture.md`). `/app/settings/services` redirects there. `businessSettings.services` is copied once into the new catalog and then kept only as a record |
 | People & access | `members`, `invitations` (Owner changes roles and removes access) |
 | Agent permissions | `permissions`, `companies.pausedAgents`; four later agents shown as unavailable |
 | Dispatch rules | `companies.dispatch`, `companies.dispatchPolicy` |
@@ -29,7 +29,7 @@ nothing. A saved service can be archived, never removed. Deploy the Convex funct
 - Hours are appointment windows, not cleaner availability or quiet hours. Empty hours or areas mean no
   company-wide restriction. A visit must fit one window; overnight is not supported.
 - Areas and hours are enforced when a visit is created or rescheduled. Existing visits are never moved.
-- Prices are editable defaults, not a quote engine. Archived services are refused for new visits.
+- Services and prices live in Services & Pricing, with one pricing engine and a reviewed change workflow. Archived services are refused for new visits.
 - The unsaved draft survives moving between Settings pages and warns on leaving Settings or unloading.
   Browser history navigation is not blocked. Other settings keep their existing, unversioned APIs.
 - `convex/_generated/api.d.ts` was extended by hand (codegen needs a deployment). Regenerate it against

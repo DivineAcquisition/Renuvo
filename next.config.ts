@@ -24,6 +24,12 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "no-store" },
         ],
       },
+      // The pay page runs Stripe's payment form, which may offer Apple Pay or Google Pay from Stripe's frame.
+      // Listed after the rule above so its Permissions-Policy is the one that applies there.
+      {
+        source: "/c/pay/:path*",
+        headers: [{ key: "Permissions-Policy", value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://js.stripe.com")' }],
+      },
     ];
   },
 };

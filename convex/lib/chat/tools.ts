@@ -29,19 +29,26 @@ import { runTool as recruiterTool, type ToolInput as RecruiterInput, type ToolNa
 import { isManager, isOwner, type Role } from "../roles";
 import { AGENTS, type Agent } from "../statuses";
 import { liveTaskByKey, openTask } from "../taskState";
-import { addLocalDays, clock, dayName, startOfLocalDay } from "../time";
+import { addLocalDays, clock, dayName } from "../time";
 import { createArtifact, readableArtifact, reviseArtifact, setArtifactState, STATE_WORDS, unresolvedFields, versionOf } from "./artifacts";
 import { CalcError, evaluate } from "./calc";
 import { check, jsonSchema, stableHash, type Field } from "./fields";
 import { compareScenarios, PricingError, type PricingInput } from "./pricing";
 import { AGREEMENT_TOOLS } from "./agreementTools";
+import { CLEANER_TOOLS } from "./cleanerTools";
+import { SERVICE_TOOLS } from "./serviceTools";
 import { GOOGLE_TOOLS } from "./googleTools";
+import { FINANCE_TOOLS } from "./financeTools";
+import { localDay } from "./localDay";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
 import { featureOn, ownedAsset, queueGeneration, settingFor, capabilityFor, checkedParams } from "../ai/media";
 import { resolve as resolveCapability } from "../ai/registry";
 import { allowanceRow, mediaAllowance, monthKey } from "../ai/usage";
-import { businessSettingsOf } from "../settings/business";
+import { priceSummary, scheduleFacts } from "../services/engine";
+import type { Schedule } from "../services/spec";
+import { publishedCatalog } from "../services/store";
+import { amountRequested, invoiceState, STATE_WORDS as FINANCE_STATE_WORDS } from "../finance/invoiceState";
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -94,14 +101,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 // ── Small helpers ────────────────────────────────────────────────────────────────────────────────
 
-/** "2027-03-02" on the company's clock, as the instant that day begins. */
-export function localDay(date: string, timezone: string): number {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) throw userError(`"${date}" is not a date written as YYYY-MM-DD.`);
-  const noon = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
-  if (Number.isNaN(noon)) throw userError(`"${date}" is not a date.`);
-  return startOfLocalDay(noon, timezone);
-}
+export { localDay };
 
 /** "2027-03-02" or "2027-03-02T15:30" on the company's clock. */
 function localInstant(value: string, timezone: string): number {
@@ -185,7 +185,8 @@ const scenarioField: Field = {
     overheadPerVisitCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000_00 },
     targetMarginPercent: { type: "number", optional: true, min: 0, max: 99.9, description: "Profit as a percent of the price." },
     markupPercent: { type: "number", optional: true, min: 0, max: 1000, description: "Profit as a percent of the cost." },
-    visitsPerMonth: { type: "number", optional: true, min: 0, max: 100 },
+    schedule: { type: "string", optional: true, enum: ["every_7_days", "every_14_days", "twice_per_month", "once_per_month"], description: "For recurring service: the visit calendar. Monthly figures use its annual average (every 7 days is 4.35 visits a month, every 14 days 2.17), never 4 or 2." },
+    visitsPerMonth: { type: "number", optional: true, min: 0, max: 100, description: "Only for a fixed number of visits per calendar month. For an every-N-days schedule, give schedule instead." },
     roundToCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000, description: "Round prices up to a multiple of this many cents." },
   },
 };
@@ -229,7 +230,8 @@ const TOOLS: ChatTool[] = [
     input: { type: "object", properties: { scenarios: { type: "array", items: scenarioField, maxItems: 6, minItems: 1 } } },
     run: async (_ctx, args) => {
       try {
-        const out = compareScenarios(args.scenarios as PricingInput[]);
+        const scenarios = (args.scenarios as (PricingInput & { schedule?: Schedule })[]).map(({ schedule, ...rest }) => (schedule ? { ...rest, visitsPerMonth: Math.round(scheduleFacts(schedule).monthlyAverage * 100) / 100 } : rest));
+        const out = compareScenarios(scenarios);
         const first = out.scenarios[0];
         const summary = first ? `${out.scenarios.length} scenario${out.scenarios.length === 1 ? "" : "s"} priced${first.priceAtMarginCents !== null ? `; ${first.name} at margin: ${money(first.priceAtMarginCents)}` : first.priceAtMarkupCents !== null ? `; ${first.name} at markup: ${money(first.priceAtMarkupCents)}` : ""}` : "No scenario could be priced";
         if (!out.scenarios.length) return refused(out.errors.map((row) => `${row.name}: ${row.error}`).join(" "));
@@ -275,10 +277,8 @@ const TOOLS: ChatTool[] = [
           activeCustomers: customers.length,
           readyCleaners: cleaners.length,
           openHiringNeeds: needs.map((row) => ({ needId: row._id, title: row.title, openings: row.openings, payApproved: Boolean(row.compensation) })),
-          services: businessSettingsOf(ctx.company)
-            .services?.filter((service) => service.status === "active")
-            .map((service) => ({ name: service.name, scope: service.scope, durationMinutes: service.durationMinutes, defaultCrew: service.defaultCrew, startingPrice: service.startingPriceCents === undefined ? "not set" : money(service.startingPriceCents) })) ?? [],
-          priceNote: "Starting prices are the Owner's, set in Settings › Services & pricing. They are defaults for new visits, not quotes.",
+          services: (await publishedCatalog(ctx, ctx.company._id)).map(({ service, version }) => ({ id: service._id, name: service.name, price: priceSummary(version.spec), version: version.version, crew: version.spec.team.crewSize })),
+          priceNote: "Live services are in Services & Pricing. Use quote_service for a price and read_service for scope; only the Owner publishes a change.",
         },
       };
     },
@@ -883,7 +883,7 @@ const TOOLS: ChatTool[] = [
     minimumRole: "owner",
     specialist: "sales",
     input: { type: "object", properties: { service: { type: "string", optional: true, max: 200 }, priceCents: { type: "number", optional: true, integer: true, min: 0 } } },
-    run: async () => unavailable("Chat does not change prices: changing prices is always a person's decision. The Owner sets each service's starting price in Settings › Services & pricing. Save the pricing as a draft package to take there."),
+    run: async () => unavailable("Chat does not publish prices: changing a live price is always the Owner's decision, in Services & Pricing › Changes. Chat can draft the change (edit_service_draft) and submit it for review (submit_service_for_review)."),
   },
   {
     name: "launch_campaign",
@@ -910,20 +910,21 @@ const TOOLS: ChatTool[] = [
   {
     name: "issue_refund_or_credit",
     label: "Issuing a refund or credit",
-    description: "Refund or credit a customer. NOT AVAILABLE: call it only to learn the blocker.",
+    description: "Refund or credit a customer. NOT AVAILABLE in chat: call it only to learn where to do it.",
     kind: "unavailable",
     minimumRole: "owner",
-    specialist: "retention",
     input: { type: "object", properties: { customerId: { ...ID("The customer's id."), optional: true } } },
-    run: async () => unavailable("Selestial does not hold payments, and refunds or compensation are a person's decision. Record what you decide as a task if you want it tracked."),
+    run: async () => unavailable("Refunds and credits are the Owner's decision and are made in Finance, where the exact amount, customer and effect are shown before anything happens: open the invoice and choose Refund on a payment, or Add credit."),
   },
 ];
 
-export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds";
+export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "invoices";
 
 /** A short, role-appropriate description of one record. Null when it is not this company's. Used for tools and attached context. */
 export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: Doc<"companies">; role: Role }, table: RecordTable, id: string): Promise<{ label: string; data: Record<string, unknown>; record?: RecordRef; link?: Link } | null> {
   const tz = ctx.company.timezone;
+  // Finance is the Owner's: anyone else gets nothing about an invoice, as if it were not there.
+  if (table === "invoices" && !isOwner(ctx.role)) return null;
   const normalized = ctx.db.normalizeId(table, id);
   const row = normalized ? ((await ctx.db.get(normalized)) as (Doc<RecordTable> & { companyId: Id<"companies"> }) | null) : null;
   if (!row || row.companyId !== ctx.company._id) return null;
@@ -982,6 +983,15 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
       const need = application.needId ? await ctx.db.get(application.needId) : null;
       return { label: `the application from ${applicant?.name ?? "an applicant"}`, data: { applicationId: application._id, applicant: applicant?.name ?? null, role: need?.title ?? application.roleSeen ?? null, stage: application.stage, nextAction: application.nextAction ?? null }, link: { href: "/app/agents/recruiter/applicants", label: "Applicants" } };
     }
+    case "invoices": {
+      const invoice = row as Doc<"invoices">;
+      const now = Date.now();
+      return {
+        label: `invoice ${invoice.number ?? "(draft)"}`,
+        data: { invoiceId: invoice._id, number: invoice.number ?? null, customer: await nameOf(ctx, invoice.customerId), state: FINANCE_STATE_WORDS[invoiceState(invoice, now)], total: money(invoice.totals.totalCents), balance: money(invoice.totals.balanceCents), askingFor: money(amountRequested(invoice)), processing: money(invoice.totals.processingCents), due: invoice.dueAt ? when(invoice.dueAt, tz) : null, note: "Use explain_invoice for payments, credits and messages." },
+        link: { href: `/app/finance?tab=invoices&invoice=${invoice._id}`, label: `Open ${invoice.number ?? "the invoice"}` },
+      };
+    }
     case "hiringNeeds": {
       const need = row as Doc<"hiringNeeds">;
       return { label: `the role "${need.title}"`, data: { needId: need._id, title: need.title, status: need.status, openings: need.openings, engagement: need.engagement, location: need.location, payApproved: Boolean(need.compensation), pay: isOwner(ctx.role) ? (need.compensation?.pay ?? null) : need.compensation ? "Approved; shown to the Owner." : null }, link: { href: "/app/agents/recruiter/hiring-needs", label: "Hiring Needs" } };
@@ -996,7 +1006,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...GOOGLE_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

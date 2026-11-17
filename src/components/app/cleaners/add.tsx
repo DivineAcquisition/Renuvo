@@ -1,187 +1,212 @@
 "use client";
 
-import { useMutation } from "convex/react";
-import { useState } from "react";
+/**
+ * Adding one person. As the name, phone and email are typed, people already in the record who may be the
+ * same person are shown, with a way to open them instead. Adding a second record anyway needs a reason.
+ */
+import { useMutation, useQuery } from "convex/react";
+import { useDeferredValue, useState } from "react";
 
-import { list, Submit } from "@/components/app/cleaners/forms";
-import { Avatar } from "@/components/app/cleaners/shared";
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
+import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
 import { TriangleAlert } from "@/components/icons";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import type { Engagement } from "./bits";
+import { profilePath } from "./state";
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const minutesOf = (time: string) => {
-  const match = /^(\d{2}):(\d{2})$/.exec(time);
-  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+const TYPES: { value: Engagement; label: string; help: string }[] = [
+  { value: "employee", label: "Employee", help: "On your payroll." },
+  { value: "contractor", label: "Independent contractor", help: "Works for themselves." },
+  { value: "subcontractor", label: "Subcontractor worker", help: "Supplied by another company." },
+];
+const DAYS = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+];
+const list = (value: string) => value.split(/[,;\n]/).map((part) => part.trim()).filter(Boolean);
+const minutes = (time: string) => {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
 };
-const newKey = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
-type Match = { cleanerId: Id<"cleaners">; name: string; initials: string; status: string; engagement: string; reasons: string[] };
-
-function Form({ subcontractors, onDone, onAdded }: { subcontractors: { id: Id<"subcontractors">; name: string; status: string }[]; onDone: () => void; onAdded: (cleanerId: Id<"cleaners">) => void }) {
-  const { companyId, timezone } = useCompany();
+export function AddCleanerDialog({ onClose, onAdded }: { onClose: () => void; onAdded: (cleanerId: Id<"cleaners">) => void }) {
+  const { companyId } = useCompany();
   const add = useMutation(api.workforce.add);
-  const { busy, error, run, setError } = useRun();
-  // One key for this add, so a double click or a retry makes one record.
-  const [addKey] = useState(newKey);
-  const [form, setForm] = useState({ name: "", preferredName: "", engagement: "contractor" as "contractor" | "employee" | "subcontracted", subcontractorId: "", phone: "", email: "", skills: "", areas: "", from: "", to: "" });
+  const subs = useQuery(api.subcontractors.list, { companyId });
+  const createSub = useMutation(api.subcontractors.create);
+  const { busy, error, run } = useRun();
+  const [form, setForm] = useState({ name: "", engagement: "contractor" as Engagement, phone: "", email: "", areas: "", skills: "", subcontractorId: "", newSub: "", newSubContact: "" });
   const [days, setDays] = useState<number[]>([]);
-  const [matches, setMatches] = useState<Match[] | null>(null);
-  const [different, setDifferent] = useState(false);
-  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm((current) => ({ ...current, [key]: event.target.value }));
-    // Changing who this is means the duplicate check has to run again.
-    if (["name", "phone", "email"].includes(key)) {
-      setMatches(null);
-      setDifferent(false);
-    }
-  };
-  const active = subcontractors.filter((row) => row.status === "active");
+  const [hours, setHours] = useState({ from: "08:00", to: "17:00" });
+  const [different, setDifferent] = useState("");
+  const deferred = useDeferredValue({ name: form.name, phone: form.phone, email: form.email });
+  const matches = useQuery(api.workforce.possibleDuplicates, deferred.name.trim().length >= 2 || deferred.phone.trim().length >= 7 || deferred.email.includes("@") ? { companyId, name: deferred.name, phone: deferred.phone || undefined, email: deferred.email || undefined } : "skip");
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [key]: event.target.value });
+  const strong = matches?.some((match) => match.strong) ?? false;
+  const needsReason = (matches?.length ?? 0) > 0;
+  const hoursValid = days.length === 0 || minutes(hours.from) < minutes(hours.to);
 
   return (
-    <form
-      className="grid gap-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const [startMinute, endMinute] = [minutesOf(form.from), minutesOf(form.to)];
-        if (days.length > 0 && (startMinute === null || endMinute === null || startMinute >= endMinute)) return setError("Give the hours for the chosen days, with the start before the end.");
-        void run(async () => {
-          const result = await add({
-            companyId,
-            addKey,
-            name: form.name,
-            preferredName: form.preferredName || undefined,
-            engagement: form.engagement,
-            subcontractorId: form.engagement === "subcontracted" && form.subcontractorId ? (form.subcontractorId as Id<"subcontractors">) : undefined,
-            phone: form.phone || undefined,
-            email: form.email || undefined,
-            skills: list(form.skills),
-            serviceAreas: list(form.areas),
-            windows: days.length > 0 && startMinute !== null && endMinute !== null ? days.map((weekday) => ({ weekday, startMinute, endMinute })) : undefined,
-            acknowledged: different && matches ? matches.map((match) => match.cleanerId) : undefined,
+    <Modal open onClose={onClose} title="Add cleaner" description="They start in onboarding with your checklist. Nobody is offered work until a person makes them active and every requirement for work is met.">
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void run(async () => {
+            let subcontractorId = form.subcontractorId as Id<"subcontractors"> | "";
+            if (form.engagement === "subcontractor" && form.subcontractorId === "new") {
+              subcontractorId = await createSub({ companyId, name: form.newSub, contact: { name: form.newSubContact || form.newSub } });
+            }
+            const { cleanerId } = await add({
+              companyId,
+              person: {
+                name: form.name,
+                engagement: form.engagement,
+                phone: form.phone || undefined,
+                email: form.email || undefined,
+                serviceAreas: list(form.areas),
+                skills: list(form.skills),
+                subcontractorId: form.engagement === "subcontractor" && subcontractorId ? subcontractorId : undefined,
+              },
+              windows: days.map((weekday) => ({ weekday, startMinute: minutes(hours.from), endMinute: minutes(hours.to) })),
+              notDuplicateBecause: needsReason ? different || undefined : undefined,
+            });
+            onAdded(cleanerId);
           });
-          if (result.status === "possible_duplicates") {
-            setMatches(result.matches);
-            return;
-          }
-          onAdded(result.cleanerId);
-          onDone();
-        });
-      }}
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Name">
-          <TextInput value={form.name} onChange={set("name")} required maxLength={160} autoComplete="off" />
+        }}
+      >
+        <Field label="Full name">
+          <TextInput value={form.name} onChange={set("name")} required autoComplete="off" autoFocus />
         </Field>
-        <Field label="Preferred name (optional)">
-          <TextInput value={form.preferredName} onChange={set("preferredName")} maxLength={80} autoComplete="off" />
-        </Field>
-        <Field label="Worker type" hint="What you agreed with them. Selestial records it and never decides it.">
-          <SelectInput value={form.engagement} onChange={set("engagement")}>
-            <option value="contractor">Independent contractor</option>
-            <option value="employee">Employee</option>
-            <option value="subcontracted">Supplied by a subcontractor company</option>
-          </SelectInput>
-        </Field>
-        {form.engagement === "subcontracted" ? (
-          <Field label="Subcontractor company" hint={active.length === 0 ? "Add the company first, under Subcontractors." : undefined}>
-            <SelectInput value={form.subcontractorId} onChange={set("subcontractorId")} required>
-              <option value="">Choose a company</option>
-              {active.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-        ) : (
-          <span className="hidden sm:block" />
-        )}
-        <Field label="Mobile number (optional)" hint="Offers and reminders are texted here.">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} autoComplete="off" />
-        </Field>
-        <Field label="Email (optional)">
-          <TextInput type="email" value={form.email} onChange={set("email")} autoComplete="off" />
-        </Field>
-      </div>
-      <Field label="Postal codes they work in (optional)" hint="Separate with commas. Visits elsewhere are not offered to them.">
-        <TextInput value={form.areas} onChange={set("areas")} />
-      </Field>
-      <Field label="Skills (optional)" hint="Separate with commas.">
-        <TextInput value={form.skills} onChange={set("skills")} />
-      </Field>
-      <fieldset>
-        <legend className="text-sm font-medium text-strong">Days they said they can work (optional)</legend>
-        <p className="text-xs text-muted-foreground">Only what they told you, on your company&apos;s clock ({timezone}). More detail can be added on their profile.</p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {DAYS.map((day, index) => {
-            const on = days.includes(index);
-            return (
-              <button key={day} type="button" aria-pressed={on} onClick={() => setDays((current) => (on ? current.filter((value) => value !== index) : [...current, index].sort()))} className={cn("min-h-9 rounded-lg border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500", on ? "border-brand-500/60 bg-brand-500/10 text-strong" : "border-border bg-background text-muted-foreground")}>
-                {day}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
-      {days.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="From">
-            <TextInput type="time" value={form.from} onChange={set("from")} required />
-          </Field>
-          <Field label="Until">
-            <TextInput type="time" value={form.to} onChange={set("to")} required />
-          </Field>
-        </div>
-      ) : null}
 
-      {matches && matches.length > 0 ? (
-        <div role="alert" className="grid gap-2 rounded-xl border border-warning/50 bg-warning/5 p-3">
-          <p className="flex items-center gap-2 text-sm font-medium text-strong">
-            <TriangleAlert className="size-4 text-warning-foreground" aria-hidden />
-            {matches.length === 1 ? "This may be someone already on record" : `This may be one of ${matches.length} people already on record`}
-          </p>
-          <ul className="grid gap-1.5">
-            {matches.map((match) => (
-              <li key={match.cleanerId} className="flex items-center gap-2.5 rounded-lg bg-card px-2.5 py-2">
-                <Avatar initials={match.initials} seed={match.cleanerId} size="sm" />
-                <span className="min-w-0 flex-1 text-sm">
-                  <span className="block font-medium text-strong">{match.name}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {match.engagement} · {match.status} · {match.reasons.join(", ")}
-                  </span>
-                </span>
-                <a href={`/app/cleaners/${match.cleanerId}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">
-                  Open
-                </a>
-              </li>
+        <fieldset className="grid gap-2">
+          <legend className="mb-1.5 text-sm font-medium text-strong">How they work with you</legend>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {TYPES.map((type) => (
+              <label key={type.value} className={cn("flex cursor-pointer flex-col rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500", form.engagement === type.value ? "border-brand-500 bg-brand-500/8" : "border-border hover:border-brand-500/40")}>
+                <input type="radio" name="engagement" value={type.value} checked={form.engagement === type.value} onChange={() => setForm({ ...form, engagement: type.value })} className="sr-only" />
+                <span className="text-sm font-medium text-strong">{type.label}</span>
+                <span className="text-xs text-muted-foreground">{type.help}</span>
+              </label>
             ))}
-          </ul>
-          <label className="flex items-start gap-2 text-sm text-strong">
-            <input type="checkbox" checked={different} onChange={(event) => setDifferent(event.target.checked)} className="mt-1 size-4 accent-[var(--color-brand-500)]" />
-            <span>
-              This is a different person
-              <span className="block text-xs text-muted-foreground">Nothing is merged. Both records are kept separately.</span>
-            </span>
-          </label>
-        </div>
-      ) : null}
-      <p className="text-xs text-muted-foreground">They start in onboarding. Nobody is offered work until a person makes them active and their hours, areas and pay are set.</p>
-      <FormError message={error} />
-      <Submit busy={busy} label={matches && matches.length > 0 ? "Add as a new person" : "Add cleaner"} onCancel={onDone} disabled={Boolean(matches && matches.length > 0 && !different)} />
-    </form>
-  );
-}
+          </div>
+        </fieldset>
 
-export function AddCleaner({ open, onClose, subcontractors, onAdded }: { open: boolean; onClose: () => void; subcontractors: { id: Id<"subcontractors">; name: string; status: string }[]; onAdded: (cleanerId: Id<"cleaners">) => void }) {
-  return (
-    <Modal open={open} onClose={onClose} title="Add a cleaner" description="Checked against everyone on record before anything is added.">
-      <Form subcontractors={subcontractors} onDone={onClose} onAdded={onAdded} />
+        {form.engagement === "subcontractor" ? (
+          <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-3">
+            <Field label="Subcontractor company" hint="Jobs still go to this person by name; the company is who they work through.">
+              <SelectInput value={form.subcontractorId} onChange={set("subcontractorId")} required>
+                <option value="">Choose…</option>
+                {subs
+                  ?.filter((sub) => sub.status !== "ended")
+                  .map((sub) => (
+                    <option key={sub.subcontractorId} value={sub.subcontractorId}>
+                      {sub.name}
+                    </option>
+                  ))}
+                <option value="new">Add a new subcontractor company…</option>
+              </SelectInput>
+            </Field>
+            {form.subcontractorId === "new" ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Company name">
+                  <TextInput value={form.newSub} onChange={set("newSub")} required />
+                </Field>
+                <Field label="Authorized contact">
+                  <TextInput value={form.newSubContact} onChange={set("newSubContact")} placeholder="Who speaks for the company" />
+                </Field>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Mobile phone" hint="Used for offers and reminders once they agree to texts.">
+            <TextInput value={form.phone} onChange={set("phone")} inputMode="tel" autoComplete="off" />
+          </Field>
+          <Field label="Email">
+            <TextInput type="email" value={form.email} onChange={set("email")} autoComplete="off" />
+          </Field>
+        </div>
+
+        {matches && matches.length > 0 ? (
+          <div className={cn("grid gap-2 rounded-xl border px-3 py-2.5", strong ? "border-warning/60 bg-warning/8" : "border-border bg-muted/40")} role="status">
+            <p className="flex items-center gap-2 text-sm font-medium text-strong">
+              <TriangleAlert className="size-4 text-warning-foreground" aria-hidden />
+              {strong ? "This may be someone already in the record" : "Someone with a similar name is already here"}
+            </p>
+            <ul className="grid gap-1 text-sm">
+              {matches.map((match) => (
+                <li key={match.cleanerId} className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <span className="font-medium text-strong">{match.name}</span> <span className="text-xs text-muted-foreground">({match.why})</span>
+                  </span>
+                  <a href={profilePath(match.cleanerId)} className="text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
+                    Open them instead
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <Field label="If this is a different person, say how you know">
+              <TextArea value={different} onChange={(event) => setDifferent(event.target.value)} rows={2} placeholder="For example: her daughter, who shares the family phone." />
+            </Field>
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Service areas" hint="Postal codes, separated by commas.">
+            <TextInput value={form.areas} onChange={set("areas")} placeholder="78701, 78702" />
+          </Field>
+          <Field label="Confirmed skills" hint="Optional. Only what you have confirmed.">
+            <TextInput value={form.skills} onChange={set("skills")} placeholder="deep clean, windows" />
+          </Field>
+        </div>
+
+        <fieldset className="grid gap-2">
+          <legend className="mb-1 text-sm font-medium text-strong">Weekly hours they said they can work</legend>
+          <p className="-mt-1 text-xs text-muted-foreground">Optional now. They can give or confirm these from their portal later.</p>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days">
+            {DAYS.map((day) => {
+              const on = days.includes(day.value);
+              return (
+                <button key={day.value} type="button" aria-pressed={on} onClick={() => setDays(on ? days.filter((value) => value !== day.value) : [...days, day.value])} className={cn("h-9 min-w-12 rounded-lg border px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500", on ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-card text-strong hover:border-brand-500/40")}>
+                  {day.label}
+                </button>
+              );
+            })}
+          </div>
+          {days.length > 0 ? (
+            <div className="grid max-w-xs grid-cols-2 gap-2">
+              <Field label="From">
+                <TextInput type="time" value={hours.from} onChange={(event) => setHours({ ...hours, from: event.target.value })} />
+              </Field>
+              <Field label="To" error={hoursValid ? null : "Ends before it starts"}>
+                <TextInput type="time" value={hours.to} onChange={(event) => setHours({ ...hours, to: event.target.value })} />
+              </Field>
+            </div>
+          ) : null}
+        </fieldset>
+
+        <FormError message={error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" loading={busy} disabled={!hoursValid || (needsReason && strong && !different.trim())}>
+            Add cleaner
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }

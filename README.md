@@ -136,6 +136,7 @@ Convex · Clerk · Vercel.
 | `src/components/icons` | Phosphor icons, with the picks the Novara app uses |
 | `convex/schema.ts` | The shared record |
 | `convex/dispatch.ts`, `convex/lib/dispatch` | Dispatch: eligibility, ranking, pay, the cover workflow |
+| `convex/services.ts`, `convex/lib/services` | Services & Pricing: the one catalog, the pricing engine, versions and review (`docs/services/00-architecture.md`) |
 | `convex/overview.ts`, `convex/details.ts` | What the Overview and the detail panel read |
 | `convex/lib/departments.ts` | Which agent sits in which department |
 | `convex/lib` | Access builders, roles, statuses, permissions, events |

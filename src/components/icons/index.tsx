@@ -131,6 +131,8 @@ import {
   X as PhX,
   XCircle as PhXCircle,
   CalendarCheck as PhNCalendarCheck,
+  Camera as PhNCamera,
+  Receipt as PhNReceipt,
   CalendarDots as PhNCalendarDots,
   ChartLine as PhNChartLine,
   ChatCircleText as PhNChatCircleText,
@@ -158,6 +160,13 @@ import {
   Broom as PhNBroom,
   Buildings as PhNBuildings,
   PaperPlaneTilt as PhNPaperPlaneTilt,
+  Tag as PhNTag,
+  Flask as PhNFlask,
+  Stack as PhNStack,
+  ArrowUUpLeft as PhNArrowUUpLeft,
+  Crown as PhNCrown,
+  Phone as PhNPhone,
+  Flag as PhNFlag,
 } from "@phosphor-icons/react/dist/ssr";
 import type { Icon, IconProps } from "@phosphor-icons/react";
 
@@ -193,6 +202,11 @@ export const Palette = wrap(PhPalette, "Palette", true);
 export const Quote = wrap(PhQuotes, "Quote", false);
 export const BriefcaseBusiness = wrap(PhBriefcase, "BriefcaseBusiness", true);
 export const Building2 = wrap(PhBuildings, "Building2", true);
+/** A crew's lead. */
+export const Crown = wrap(PhNCrown, "Crown", true);
+export const Phone = wrap(PhNPhone, "Phone", true);
+/** A record someone says is wrong. */
+export const Flag = wrap(PhNFlag, "Flag", true);
 export const Cable = wrap(PhPlug, "Cable", true);
 export const Calculator = wrap(PhCalculator, "Calculator", true);
 export const CalculatorIcon = wrap(PhCalculator, "CalculatorIcon", true);
@@ -336,6 +350,8 @@ export const Zap = wrap(PhLightning, "Zap", true);
 export const HouseIcon = wrap(PhNHouse, "HouseIcon", true);
 export const DashboardIcon = wrap(PhNSquaresFour, "DashboardIcon", true);
 export const ScheduleIcon = wrap(PhNCalendarDots, "ScheduleIcon", true);
+export const CameraIcon = wrap(PhNCamera, "CameraIcon", true);
+export const ReceiptIcon = wrap(PhNReceipt, "ReceiptIcon", true);
 export const CalendarCheckIcon = wrap(PhNCalendarCheck, "CalendarCheckIcon", true);
 export const TeamIcon = wrap(PhNUsersThree, "TeamIcon", true);
 export const HandshakeIcon = wrap(PhNHandshake, "HandshakeIcon", true);
@@ -361,3 +377,8 @@ export const SignOutIcon = wrap(PhNSignOut, "SignOutIcon", true);
 export const BroomIcon = wrap(PhNBroom, "BroomIcon", true);
 export const BuildingsIcon = wrap(PhNBuildings, "BuildingsIcon", true);
 export const PaperPlaneIcon = wrap(PhNPaperPlaneTilt, "PaperPlaneIcon", true);
+/** Services & Pricing. */
+export const PriceTagIcon = wrap(PhNTag, "PriceTagIcon", true);
+export const StudioIcon = wrap(PhNFlask, "StudioIcon", true);
+export const TemplateIcon = wrap(PhNStack, "TemplateIcon", true);
+export const RollbackIcon = wrap(PhNArrowUUpLeft, "RollbackIcon", false);

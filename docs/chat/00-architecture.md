@@ -37,6 +37,27 @@ has no tool, chat says what blocks it and does not pretend.
 There is no cross-chat memory. The model sees the current conversation only, and the system prompt says
 so.
 
+### Context that is never lost
+
+Only the last 40 messages of a conversation reach the model (`HISTORY_MESSAGES`, `chatRuns.ts`). The system
+prompt is rebuilt from live records for every reply (`convex/lib/chat/business.ts`), so three blocks hold
+however long a conversation runs:
+
+- **`<business>`**:
+  - areas served, from pricing setup and booking postal codes;
+  - customers;
+  - every live service with its price summary, crew and usual labor, plus drafts not yet live;
+  - the team: crews, cleaners on record and the pay model;
+  - typical work, notes and "I'm not sure" answers from setup;
+  - the pricing approach;
+  - which costs are entered, never their amounts. The Owner's own margin targets go to the Owner only.
+- **`<person>`**: who is asking, their role, and what that role can and cannot do.
+- **`<conversation>`**: where the conversation started (a conversation opened from Research & Insights
+  keeps its first question) and every research brief it started, with its state now.
+
+All three are company data, marked as data by the Safety rules. Tests check that the first question is
+still in the prompt after 44 more messages have pushed it out of the history.
+
 ## A run, start to finish
 
 1. `chat.send` checks membership, the attached records and files, the monthly allowance and a per-person
@@ -73,7 +94,8 @@ person's approval in chat.
 | Draft | `save_draft`, `revise_draft`, `propose_company_knowledge` | Run directly. A revision names its base version. |
 | Routine write | `create_task`, `prepare_hiring_offer` (Recruiter; a draft for the Approvals queue) | Run directly, once, under an idempotency key. |
 | Consequential write | `request_dispatch_offer` (Dispatch), `request_application_invitation` (Recruiter), `create_hiring_need` (Owner), `record_draft_status` | Shown as a preview; nothing happens until the person approves **in chat**. |
-| Not available | `send_customer_message`, `update_price_book`, `launch_campaign`, `send_for_signature`, `issue_refund_or_credit` | Always answer with the blocker. |
+| Services & Pricing | `list_services`, `read_service`, `quote_service`, `run_pricing_scenarios` (read); `start_service_draft`, `edit_service_draft`, `attach_research` (draft, Managers and the Owner); `submit_service_for_review` (approved in chat first) | Same functions as the workspace (`lib/services/workflow.ts`). Chat edits the one draft the workspace shows and never publishes. See `docs/services/00-architecture.md`. |
+| Not available | `send_customer_message`, `update_price_book`, `launch_campaign`, `send_for_signature`, `issue_refund_or_credit` | Always answer with the blocker. `update_price_book` says publishing is the Owner's, in Services & Pricing › Changes. |
 
 A specialist tool runs through the agent's own tool function (`lib/dispatch/tools.ts`,
 `lib/recruiter/tools.ts`), so the agent's authority level, pause state and hard rules apply exactly as

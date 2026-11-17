@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
-import { CleanersWorkspace } from "@/components/app/cleaners/workspace";
+import { CleanersScreen } from "@/components/app/cleaners/directory";
 
 export const metadata: Metadata = { title: "Cleaners" };
 
 export default function Page() {
-  return <CleanersWorkspace />;
+  return <CleanersScreen />;
 }

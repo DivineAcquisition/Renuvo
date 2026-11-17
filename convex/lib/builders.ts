@@ -16,7 +16,9 @@ import { linkForToken, linkState, noteLinkAction, type LinkAction, type LinkStat
 import { notAllowed, notFound, userError } from "./errors";
 import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
 import { invitationForToken } from "./invitations";
-import { portalLinkForToken, portalLinkState, sessionForToken, sessionState, type PortalLinkState } from "./workforce/portal";
+import { invoiceForToken } from "./finance/payLinks";
+import { linkForStatementToken } from "./finance/statementLinks";
+import { notePortalAction, portalLinkForToken, portalLinkState, type PortalAction, type PortalLinkState } from "./cleaners/portal";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
@@ -339,6 +341,82 @@ export function linkMutation<V extends AnyValidators, R>(def: {
   } as any);
 }
 
+// ── Pay links: a customer viewing and paying one invoice without signing in ─────────────────────
+
+export type PayAccess = {
+  /** The invoice the token names and its company, or null when the token names nothing. */
+  pay: { invoice: Doc<"invoices">; company: Doc<"companies"> } | null;
+};
+
+async function payAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PayAccess> {
+  const invoice = await invoiceForToken(ctx, token);
+  const company = invoice ? await ctx.db.get(invoice.companyId) : null;
+  return { pay: invoice && company ? { invoice, company } : null };
+}
+
+/**
+ * A read through a pay link. The token is the only authorization and everything shown must hang off
+ * `ctx.pay`. A wrong signature, an unknown id, a draft and a deployment with no secret all arrive as
+ * null, so the page cannot tell them apart. Opening the link changes nothing.
+ */
+export function payQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & PayAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      return def.handler({ ...ctx, ...(await payAccess(ctx, token)) }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/** One action through a pay link. Refused unless the token names an invoice that is still open. */
+export function payMutation<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: MutationCtx & { invoice: Doc<"invoices">; company: Doc<"companies">; companyId: Id<"companies"> }, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const { pay } = await payAccess(ctx, token);
+      if (!pay) notFound();
+      return def.handler({ ...ctx, invoice: pay.invoice, company: pay.company, companyId: pay.company._id }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+// ── Statement links: a cleaner reading their own earnings without signing in ────────────────────
+
+export type StatementAccess = {
+  /** The cleaner the link was issued to and their company, or null when the token names nothing open. */
+  statement: { link: Doc<"statementLinks">; cleaner: Doc<"cleaners">; company: Doc<"companies"> } | null;
+};
+
+/**
+ * A read through a cleaner's statement link. The token is the only authorization; the handler is given
+ * that one cleaner and must show nothing about anyone else. A wrong, expired or revoked link arrives as
+ * null. Opening it changes nothing.
+ */
+export function statementQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & StatementAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const link = await linkForStatementToken(ctx, token);
+      const cleaner = link ? await ctx.db.get(link.cleanerId) : null;
+      const company = link ? await ctx.db.get(link.companyId) : null;
+      const statement = link && cleaner && company && cleaner.companyId === company._id ? { link, cleaner, company } : null;
+      return def.handler({ ...ctx, statement }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
 // ── Applicant links: an applicant acting on one application without signing in ───────────────────
 
 export type ApplicantAccess = {
@@ -447,90 +525,74 @@ export function signedFileRoute(def: { verify: (request: Request, now: number) =
   });
 }
 
-// ── The cleaner portal: a link before the code, a session after it ─────────────────────────────────
+// ── Portal links: a cleaner, or a subcontractor company's contact, acting on their own records ────
 
-export type PortalLinkAccess = {
-  /** The link the token names, its company and cleaner, or null when the token names nothing. */
-  portal: { link: Doc<"portalLinks">; state: PortalLinkState; company: Doc<"companies">; cleaner: Doc<"cleaners"> } | null;
+export type PortalAccess = {
+  link: Doc<"portalLinks">;
+  linkState: PortalLinkState;
+  company: Doc<"companies">;
+  companyId: Id<"companies">;
+  /** Set for a cleaner's link. */
+  cleaner: Doc<"cleaners"> | null;
+  /** Set for a subcontractor contact's link. */
+  subcontractor: Doc<"subcontractors"> | null;
 };
 
-async function portalLinkAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PortalLinkAccess> {
+async function portalAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PortalAccess> {
   const link = await portalLinkForToken(ctx, token);
   const company = link ? await ctx.db.get(link.companyId) : null;
-  const cleaner = link ? await ctx.db.get(link.cleanerId) : null;
-  if (!link || !company || !cleaner || cleaner.companyId !== link.companyId) return { portal: null };
-  return { portal: { link, state: portalLinkState(link, Date.now()), company, cleaner } };
+  const cleaner = link?.cleanerId ? await ctx.db.get(link.cleanerId) : null;
+  const subcontractor = link?.subcontractorId ? await ctx.db.get(link.subcontractorId) : null;
+  // A token that names nothing, or whose person left its company, gets the same "Not found." whatever was wrong.
+  if (!link || !company) notFound();
+  if (link.holder === "cleaner" && (!cleaner || cleaner.companyId !== link.companyId)) notFound();
+  if (link.holder === "subcontractor" && (!subcontractor || subcontractor.companyId !== link.companyId)) notFound();
+  return { link, linkState: portalLinkState(link, Date.now()), company, companyId: link.companyId, cleaner, subcontractor };
 }
 
 /**
- * A read through a portal link, before the code. The token is the only authorization, and the handler
- * must show nothing personal: the person holding the link has not yet shown they hold the cleaner's phone.
- * It is a query, so opening the link (or a phone previewing it) changes nothing.
+ * A read through a portal link. The token is the only authorization: no id in the arguments is trusted, and
+ * everything the handler reads must hang off `ctx.link` and its person. Reading changes nothing, so opening
+ * a link (or a phone or mail scanner previewing it) does nothing. An expired or revoked link still reaches
+ * the handler so the page can say so; the handler decides what such a link may still see (nothing private).
  */
-export function portalLinkQuery<V extends AnyValidators, R>(def: { args: V; handler: (ctx: QueryCtx & PortalLinkAccess, args: ObjectType<V>) => R }): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+export function portalQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & PortalAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
   return query({
     args: { token: v.string(), ...def.args },
     handler: async (ctx: QueryCtx, args: { token: string }) => {
       const { token, ...rest } = args;
-      return def.handler({ ...ctx, ...(await portalLinkAccess(ctx, token)) }, rest as ObjectType<V>);
+      return def.handler({ ...ctx, ...(await portalAccess(ctx, token)) }, rest as ObjectType<V>);
     },
   } as any);
 }
 
-/** Asking for or confirming a code through a portal link. Refused unless the link is active right now. */
-export function portalLinkMutation<V extends AnyValidators, R>(def: { args: V; handler: (ctx: MutationCtx & { portal: NonNullable<PortalLinkAccess["portal"]> }, args: ObjectType<V>) => R }): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+const PORTAL_CLOSED: Record<Exclude<PortalLinkState, "active">, string> = {
+  expired: "This link has expired. Ask the office for a new one.",
+  revoked: "This link is no longer active.",
+};
+
+/** One named action through a portal link. Refused unless the link is active right now and lists the action. */
+export function portalMutation<V extends AnyValidators, R>(def: {
+  action: PortalAction;
+  args: V;
+  handler: (ctx: MutationCtx & PortalAccess, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
   return mutation({
     args: { token: v.string(), ...def.args },
     handler: async (ctx: MutationCtx, args: { token: string }) => {
       const { token, ...rest } = args;
-      const { portal } = await portalLinkAccess(ctx, token);
-      if (!portal) notFound();
-      if (portal.state !== "active") throw userError(portal.state === "expired" ? "This link has expired. Ask the office for a new one." : "This link is no longer active. Ask the office for a new one.", "not_allowed");
-      if (portal.cleaner.status === "ended") throw userError("This link is no longer active.", "not_allowed");
-      return def.handler({ ...ctx, portal }, rest as ObjectType<V>);
-    },
-  } as any);
-}
-
-export type PortalAccess = {
-  session: Doc<"portalSessions">;
-  cleaner: Doc<"cleaners">;
-  company: Doc<"companies">;
-  companyId: Id<"companies">;
-};
-
-const SIGNED_OUT = "Your portal session has ended. Open the link from your texts again to continue.";
-
-async function portalAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<PortalAccess> {
-  const session = await sessionForToken(ctx, token);
-  if (!session || sessionState(session, Date.now()) !== "active") throw userError(SIGNED_OUT, "not_allowed");
-  const cleaner = await ctx.db.get(session.cleanerId);
-  const company = await ctx.db.get(session.companyId);
-  // Ending an engagement closes the portal, whatever the session says.
-  if (!cleaner || !company || cleaner.companyId !== session.companyId || cleaner.status === "ended" || company.suspendedAt !== undefined) throw userError(SIGNED_OUT, "not_allowed");
-  return { session, cleaner, company, companyId: company._id };
-}
-
-/**
- * A read in a cleaner's portal session. The session is the only authorization; everything read must hang
- * off `ctx.cleaner`, and no id in the arguments reaches another cleaner's record.
- */
-export function portalQuery<V extends AnyValidators, R>(def: { args: V; handler: (ctx: QueryCtx & PortalAccess, args: ObjectType<V>) => R }): RegisteredQuery<"public", ObjectType<V> & { session: string }, R> {
-  return query({
-    args: { session: v.string(), ...def.args },
-    handler: async (ctx: QueryCtx, args: { session: string }) => {
-      const { session, ...rest } = args;
-      return def.handler({ ...ctx, ...(await portalAccess(ctx, session)) }, rest as ObjectType<V>);
-    },
-  } as any);
-}
-
-export function portalMutation<V extends AnyValidators, R>(def: { args: V; handler: (ctx: MutationCtx & PortalAccess, args: ObjectType<V>) => R }): RegisteredMutation<"public", ObjectType<V> & { session: string }, R> {
-  return mutation({
-    args: { session: v.string(), ...def.args },
-    handler: async (ctx: MutationCtx, args: { session: string }) => {
-      const { session, ...rest } = args;
-      return def.handler({ ...ctx, ...(await portalAccess(ctx, session)) }, rest as ObjectType<V>);
+      const access = await portalAccess(ctx, token);
+      if (access.linkState !== "active") throw userError(PORTAL_CLOSED[access.linkState], "not_allowed");
+      if (!access.link.allowed.includes(def.action)) notAllowed();
+      // An ended engagement keeps its history, and its links do nothing more.
+      if (access.cleaner?.status === "ended") throw userError("This engagement has ended, so this link no longer changes anything.", "not_allowed");
+      if (access.subcontractor?.status === "ended") throw userError("This working relationship has ended, so this link no longer changes anything.", "not_allowed");
+      const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
+      await notePortalAction(ctx, access.link, def.action);
+      return result;
     },
   } as any);
 }

@@ -200,15 +200,8 @@ export async function eraseCleanerRecords(ctx: Ctx, cleaner: Doc<"cleaners">, ac
   const steps: EraseStep[] = [];
   const name = cleaner.name;
 
-  await ctx.db.patch(cleaner._id, { name: ERASED_CLEANER, preferredName: undefined, email: undefined, phone: undefined, skills: [], serviceAreas: [], pay: undefined, status: "ended", statusNote: undefined });
-  steps.push({ step: "Cleaner details", state: "done", detail: "Name replaced with \"Erased cleaner\"; preferred name, email, phone, skills, service areas, pay rate and the status reason removed; the cleaner is ended." });
-
-  // Crew membership ends; the rows stay so a crew's past work still adds up, naming only "Erased cleaner".
-  const memberships = await ctx.db
-    .query("crewMembers")
-    .withIndex("by_company_cleaner", (q) => q.eq("companyId", ctx.companyId).eq("cleanerId", cleaner._id))
-    .take(MAX_ROWS);
-  for (const row of memberships) if (row.leftAt === undefined) await ctx.db.patch(row._id, { leftAt: Date.now() });
+  await ctx.db.patch(cleaner._id, { name: ERASED_CLEANER, email: undefined, phone: undefined, skills: [], serviceAreas: [], pay: undefined, status: "ended" });
+  steps.push({ step: "Cleaner details", state: "done", detail: "Name replaced with \"Erased cleaner\"; email, phone, skills, service areas and pay rate removed; the cleaner is ended." });
 
   const windows = await ctx.db
     .query("availabilityWindows")

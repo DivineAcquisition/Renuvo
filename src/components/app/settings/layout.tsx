@@ -5,7 +5,7 @@ import { SettingsNav } from "@/components/app/settings/nav";
 
 /**
  * Every Settings page sits inside this: a secondary navigation beside the page. The business draft is
- * held here, above the pages, so edits survive moving between Business & hours and Services & pricing.
+ * held here, above the pages, so edits survive moving between Settings pages.
  */
 export function SettingsLayout({ children }: { children: React.ReactNode }) {
   return (

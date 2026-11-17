@@ -1,121 +1,63 @@
 "use client";
 
-import { useQuery } from "convex/react";
+/**
+ * A focused look at one person from the directory, without leaving it. The search, filters and view stay
+ * as they were underneath; closing returns to them. "Open full profile" goes to the person's own page.
+ */
 import Link from "next/link";
-import { Component, useState } from "react";
 
-import { ProfileHeader, ProfileModals, ReadinessChecklist } from "@/components/app/cleaners/profile";
-import { Chips, NextLine } from "@/components/app/cleaners/shared";
-import { useCompany } from "@/components/app/company";
-import { useNow } from "@/components/app/use-now";
-import { ArrowRight, MapPin, TriangleAlert } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetPopup, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cleanerPath, PROFILE_SECTIONS } from "@/lib/app/cleaners";
+import { ArrowUpRight } from "@/components/icons";
 
-import { api } from "../../../../convex/_generated/api";
-import type { Id } from "../../../../convex/_generated/dataModel";
+import { PendingRequests, ProfileActions, ProfileHeader, SectionBody, SectionTabs, useProfile } from "./profile";
+import { isSection, profilePath, type SectionId } from "./state";
 
-class Guard extends Component<{ children: React.ReactNode; onClose: () => void }, { failed: boolean }> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  render() {
-    if (!this.state.failed) return this.props.children;
-    return (
-      <div className="grid gap-3 p-6">
-        <p className="text-base font-semibold text-strong">This person cannot be opened</p>
-        <p className="text-sm leading-relaxed text-muted-foreground">They may have been removed, the link may be incomplete, or they may belong to a company you are not signed in to.</p>
-        <div>
-          <Button variant="outline" size="sm" onClick={this.props.onClose}>
-            Close
-          </Button>
-        </div>
-      </div>
-    );
-  }
-}
-
-type Open = Parameters<typeof ProfileModals>[0]["open"];
-
-function Body({ cleanerId }: { cleanerId: Id<"cleaners"> }) {
-  const company = useCompany();
-  const now = useNow();
-  const profile = useQuery(api.workforce.profile, now ? { companyId: company.companyId, cleanerId, asOf: now } : "skip");
-  const [open, setOpen] = useState<Open>(null);
+function Body({ cleanerId, section, onSection }: { cleanerId: string; section: SectionId; onSection: (section: string | undefined) => void }) {
+  const profile = useProfile(cleanerId);
   if (profile === undefined) {
     return (
-      <div className="grid gap-3 p-6">
-        <Skeleton className="size-12 rounded-full" />
-        <Skeleton className="h-7 w-2/3" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-24 w-full" />
+      <div className="grid gap-4 p-5 sm:p-6" aria-busy="true">
+        <div className="flex items-center gap-4">
+          <Skeleton className="size-14 rounded-full" />
+          <div className="grid flex-1 gap-2">
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-4 w-1/3" />
+          </div>
+        </div>
+        <Skeleton className="h-28 rounded-2xl" />
+        <Skeleton className="h-48 rounded-2xl" />
       </div>
     );
   }
-  const unmet = profile.readiness.checks.filter((check) => check.state === "unmet");
   return (
-    <div className="grid gap-5 p-5 sm:p-6">
-      <ProfileHeader profile={profile} onEdit={setOpen} compact />
-      {profile.attentionItems.length > 0 ? (
-        <section className="grid gap-2">
-          <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Needs attention</h3>
-          {profile.attentionItems.map((item) => (
-            <div key={item.key} className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/5 p-3">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
-              <span>
-                <span className="block text-sm font-medium text-strong">{item.title}</span>
-                <span className="block text-xs leading-relaxed text-muted-foreground">{item.detail}</span>
-              </span>
-            </div>
-          ))}
-        </section>
-      ) : null}
-      <section className="grid gap-2">
-        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Readiness{unmet.length === 0 ? " · every check met" : ""}</h3>
-        <ReadinessChecklist checks={profile.readiness.checks} />
-      </section>
-      <section className="grid gap-3 rounded-2xl border border-border p-4">
-        <NextLine row={profile} />
-        <span className="flex items-start gap-1.5">
-          <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <Chips values={profile.serviceAreas} max={6} empty="No service area set" mono />
-        </span>
-        {profile.skills.length > 0 ? <Chips values={profile.skills} max={6} /> : null}
-      </section>
-      <section className="grid gap-2">
-        <Button variant="primary" render={<Link href={cleanerPath(profile.cleanerId)} />}>
-          Open full profile <ArrowRight aria-hidden />
+    <div className="grid gap-4 p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
+        <ProfileHeader profile={profile} compact />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" render={<Link href={profilePath(cleanerId, section)} />}>
+          Open full profile
+          <ArrowUpRight aria-hidden />
         </Button>
-        <div className="flex flex-wrap gap-1.5">
-          {PROFILE_SECTIONS.filter((section) => section.id !== "overview").map((section) => (
-            <Link key={section.id} href={cleanerPath(profile.cleanerId, section.id)} className="inline-flex min-h-8 items-center rounded-lg border border-border px-2.5 text-xs font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
-              {section.label}
-            </Link>
-          ))}
-        </div>
-      </section>
-      <ProfileModals profile={profile} open={open} onClose={() => setOpen(null)} />
+      </div>
+      <ProfileActions profile={profile} />
+      <PendingRequests cleanerId={profile.cleanerId} />
+      <SectionTabs cleanerId={cleanerId} active={section} onSection={(next) => onSection(next === "overview" ? undefined : next)} />
+      <SectionBody section={section} profile={profile} onSection={(next) => onSection(next === "overview" ? undefined : next)} />
     </div>
   );
 }
 
-/** A focused view of one person over the list. The list, its search and its filters stay as they were. */
-export function WorkerDrawer({ cleanerId, onClose }: { cleanerId: string | null; onClose: () => void }) {
+export function CleanerDrawer({ cleanerId, section, onClose, onSection }: { cleanerId: string | null; section?: string; onClose: () => void; onSection: (section: string | undefined) => void }) {
+  const current: SectionId = isSection(section) ? section : "overview";
   return (
     <Sheet open={cleanerId !== null} onOpenChange={(next) => (next ? undefined : onClose())}>
-      <SheetPopup side="right" className="max-w-lg bg-card">
-        <SheetTitle className="sr-only">Cleaner</SheetTitle>
-        <ScrollArea className="min-h-0 flex-1">
-          {cleanerId ? (
-            <Guard key={cleanerId} onClose={onClose}>
-              <Body cleanerId={cleanerId as Id<"cleaners">} />
-            </Guard>
-          ) : null}
-        </ScrollArea>
+      <SheetPopup side="right" className="w-full max-w-2xl bg-background">
+        <SheetTitle className="sr-only">Cleaner profile</SheetTitle>
+        <ScrollArea className="min-h-0 flex-1">{cleanerId ? <Body key={cleanerId} cleanerId={cleanerId} section={current} onSection={onSection} /> : null}</ScrollArea>
       </SheetPopup>
     </Sheet>
   );

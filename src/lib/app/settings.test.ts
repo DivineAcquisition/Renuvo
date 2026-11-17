@@ -40,7 +40,10 @@ describe("the settings catalog", () => {
   });
 
   it("maps a path, and an old hash link, to the page that holds it now", () => {
-    expect(sectionForPath("/app/settings/services?x=1")?.id).toBe("services");
+    expect(sectionForPath("/app/settings/dispatch?x=1")?.id).toBe("dispatch");
+    // Services moved to Company › Services & Pricing; old links land there.
+    expect(sectionForPath("/app/settings/services")).toBeUndefined();
+    expect(legacyTarget("#services")).toBe("/app/services");
     expect(sectionForPath("/app/settings")).toBeUndefined();
     expect(legacyTarget("#security")).toBe("/app/settings/security");
     expect(legacyTarget("#agents")).toBe("/app/settings/agents");
