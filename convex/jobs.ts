@@ -21,7 +21,7 @@ import { byMember, recordEvent } from "./lib/events";
 import { businessSettingsOf, checkArea, checkHours, findService } from "./lib/settings/business";
 import type { Quote, QuoteInput } from "./lib/services/engine";
 import { quote as runQuote, saveQuote, visitInput, visitScope } from "./lib/services/operations";
-import { dayOf, engineInput, priceInForce } from "./lib/services/propertyPrices";
+import { addPropertyTasks, dayOf, engineInput, priceInForce, withPropertyTasks } from "./lib/services/propertyPrices";
 import { quoteInputValidator } from "./lib/services/schema";
 import { publishedByKey } from "./lib/services/store";
 import { formatCents } from "./lib/services/words";
@@ -137,14 +137,14 @@ export const create = companyMutation({
     const property = await owned(ctx, args.propertyId);
     if (property.customerId !== customer._id) throw userError("That property belongs to a different customer.");
     const times = span(args.startsAt, args.endsAt);
+    // The property's own price for this service, when the Owner approved one and it is in force on the visit's day.
+    const own = catalog ? await priceInForce(ctx, ctx.companyId, property._id, catalog.service._id, dayOf(times.startsAt, ctx.company.timezone)) : null;
     // The company's own rules for where and when it works. Empty rules restrict nothing.
     checkArea(settings, property.address.postalCode);
     checkHours(settings, times, ctx.company.timezone);
     // The price: a person's typed price wins and is recorded as theirs; otherwise the engine prices the published version.
     let priced: { input: QuoteInput; result: Quote } | null = null;
     if (spec && args.priceCents === undefined) {
-      // The property's own price, when the Owner approved one and it is in force on the visit's day.
-      const own = catalog ? await priceInForce(ctx, ctx.companyId, property._id, catalog.service._id, dayOf(times.startsAt, ctx.company.timezone)) : null;
       const input = await visitInput(ctx, ctx.company, spec, (args.quoteInput ?? {}) as QuoteInput, times.startsAt, own ? engineInput(own) : null);
       const result = runQuote(spec, input);
       if (args.quoteInput || result.outcome === "firm" || result.outcome === "estimate") {
@@ -161,7 +161,7 @@ export const create = companyMutation({
       customerId: customer._id,
       propertyId: property._id,
       serviceType: text(serviceType, "Service type", 80),
-      scope: text(scope, "Scope", 2000),
+      scope: text(withPropertyTasks(scope, own?.addedTasks ?? []), "Scope", 2000),
       requiredSkills: tags(args.requiredSkills ?? service?.skills ?? [], "Required skills"),
       // What the template said when this visit was made. Editing or archiving it later leaves this alone.
       ...(legacy
@@ -197,6 +197,7 @@ export const create = companyMutation({
       await ctx.db.patch(jobId, { serviceSnapshot: { ...job.serviceSnapshot!, quoteId } });
     }
     const template = await applyTemplate(ctx, (await ctx.db.get(jobId))!);
+    if (own?.addedTasks?.length) await addPropertyTasks(ctx, ctx.companyId, jobId, own.addedTasks);
     await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: byMember(ctx), subject: { table: "jobs", id: jobId }, data: template ? { checklistVersion: template.version } : undefined });
     await coverJob(ctx, jobId);
     return jobId;

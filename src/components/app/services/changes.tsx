@@ -438,9 +438,9 @@ function ProposedPrice({ price }: { price: OwnPrice }) {
     if (!spec) return null;
     const sample = defaultInput(spec);
     const usual = runQuote(spec, sample);
-    const here = runQuote(spec, { ...sample, propertyPrice: { baseCents: price.baseCents, laborMinutes: price.laborMinutes } });
+    const here = runQuote(spec, { ...sample, propertyPrice: { baseCents: price.baseCents, laborMinutes: price.laborMinutes, extras: price.extras.map((e) => ({ id: e.id, included: e.included, priceCents: e.priceCents })) } });
     return { usual: usual.outcome === "firm" || usual.outcome === "estimate" ? usual.totalCents : null, here: here.totalCents };
-  }, [spec, price.baseCents, price.laborMinutes]);
+  }, [spec, price.baseCents, price.laborMinutes, price.extras]);
   return (
     <Panel title="The price">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -484,6 +484,41 @@ function ProposedPrice({ price }: { price: OwnPrice }) {
           <dd className="text-strong">{price.laborMinutes ? minutesWords(price.laborMinutes) : "The service's"}</dd>
         </div>
       </dl>
+      {price.extras.length || price.addedTasks.length ? (
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+          {price.extras.length ? (
+            <div>
+              <p className="text-xs text-muted-foreground">Extras here</p>
+              <ul className="mt-1 grid gap-1">
+                {price.extras.map((extra) => (
+                  <li key={extra.id} className="flex flex-wrap justify-between gap-x-2 text-strong">
+                    <span>{extra.label}</span>
+                    <span className="tabular-nums">
+                      {extra.serviceCents !== null ? (
+                        <span className="mr-1.5 text-muted-foreground line-through decoration-muted-foreground/60">
+                          <span className="sr-only">service price </span>
+                          {formatCents(extra.serviceCents)}
+                        </span>
+                      ) : null}
+                      {extra.included ? "Included" : `${formatCents(extra.priceCents ?? 0)} ${extra.unit}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {price.addedTasks.length ? (
+            <div>
+              <p className="text-xs text-muted-foreground">Also done here, on every visit</p>
+              <ul className="mt-1 grid gap-1 text-strong">
+                {price.addedTasks.map((task) => (
+                  <li key={task}>• {task}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {example && example.here !== null ? (
         <p className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
           The service&apos;s example job: <span className="font-medium tabular-nums text-strong">{formatCents(example.here)}</span> here

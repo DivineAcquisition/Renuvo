@@ -20,10 +20,11 @@ import { localParts } from "../availability";
 import type { MemberAccess } from "../builders";
 import { userError } from "../errors";
 import { recordEvent, type Actor } from "../events";
-import { priceSummary, type PropertyPrice } from "./engine";
+import { priceSummary, type PropertyExtra, type PropertyPrice } from "./engine";
+import type { Spec } from "./spec";
 import { canonical, openChanges, ownedService, publishedSpec } from "./store";
 import { closeChange } from "./workflow";
-import { formatCents, minutesWords } from "./words";
+import { addOnWord, formatCents, minutesWords } from "./words";
 
 /** How long before a review or end date the Owner is reminded. */
 export const REMIND_DAYS = 14;
@@ -72,7 +73,7 @@ export async function priceInForce(ctx: QueryCtx, companyId: Id<"companies">, pr
 
 /** What the pricing engine is given for it. */
 export function engineInput(row: Doc<"propertyPrices">): PropertyPrice {
-  return { id: row._id, baseCents: row.baseCents, ...(row.laborMinutes !== null ? { laborMinutes: row.laborMinutes } : {}) };
+  return { id: row._id, baseCents: row.baseCents, ...(row.laborMinutes !== null ? { laborMinutes: row.laborMinutes } : {}), ...(row.extras?.length ? { extras: row.extras } : {}) };
 }
 
 function checkUntil(until: Until, today: string): Until {
@@ -90,7 +91,58 @@ export type Proposal = {
   laborMinutes: number | null;
   until: Until;
   reason: string;
+  /** Tasks the crew also does at this property. */
+  addedTasks?: string[];
+  /** Extras included, or priced their own way, at this property. */
+  extras?: PropertyExtra[];
 };
+
+/** Added tasks, trimmed, without blanks or repeats, at most 20 of 120 characters. */
+function checkTasks(tasks: string[] | undefined): string[] {
+  const out: string[] = [];
+  for (const raw of tasks ?? []) {
+    const task = raw.replace(/\s+/g, " ").trim();
+    if (!task) continue;
+    if (task.length > 120) throw userError("Each task here is at most 120 characters.");
+    if (!out.some((t) => t.toLowerCase() === task.toLowerCase())) out.push(task);
+  }
+  if (out.length > 20) throw userError("Add at most 20 tasks for one property.");
+  if (out.join("").length > 800) throw userError("The tasks here are at most 800 characters together. The crew reads them on every visit.");
+  return out;
+}
+
+/** Extras that differ here must be the service's own, sold separately (not already in its scope), each once. */
+function checkExtras(extras: PropertyExtra[] | undefined, spec: Spec): PropertyExtra[] {
+  const out: PropertyExtra[] = [];
+  for (const extra of extras ?? []) {
+    const addOn = spec.addOns.find((a) => a.id === extra.id);
+    if (!addOn) throw userError("That extra is not one this service sells.");
+    if (addOn.coversItemId && spec.included.some((item) => item.id === addOn.coversItemId)) throw userError(`"${addOn.label}" is already included in the service.`);
+    if (out.some((e) => e.id === extra.id)) throw userError(`"${addOn.label}" is listed twice.`);
+    if (extra.included) {
+      out.push({ id: extra.id, included: true, priceCents: null });
+      continue;
+    }
+    if (extra.priceCents === null || !Number.isSafeInteger(extra.priceCents) || extra.priceCents < 0 || extra.priceCents > 100_000_00) throw userError(`Give "${addOn.label}" a price here in whole cents, or include it.`);
+    if (extra.priceCents === addOn.priceCents) continue;
+    out.push({ id: extra.id, included: false, priceCents: extra.priceCents });
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Extras that differ at a property, for screens: the extra's name, how it is sold and both prices. */
+export function extrasView(extras: PropertyExtra[], spec: Spec) {
+  return extras.map((extra) => {
+    const addOn = spec.addOns.find((a) => a.id === extra.id);
+    return { id: extra.id, label: addOn?.label ?? "An extra the service no longer sells", included: extra.included, priceCents: extra.priceCents, serviceCents: addOn?.priceCents ?? null, unit: addOn ? addOnWord(addOn) : "" };
+  });
+}
+
+/** How an extra works at the property, in words, against the service's price. */
+function extraWords(extra: PropertyExtra, spec: Spec): string {
+  const addOn = spec.addOns.find((a) => a.id === extra.id)!;
+  return extra.included ? `"${addOn.label}" is included at no charge.` : `"${addOn.label}" is ${formatCents(extra.priceCents!)} ${addOnWord(addOn)} here (the service charges ${formatCents(addOn.priceCents)}).`;
+}
 
 /** Checks a proposal and says what approving it would do, in words, without writing anything. */
 export async function reviewProposal(ctx: QueryCtx & MemberAccess, input: Proposal) {
@@ -107,13 +159,17 @@ export async function reviewProposal(ctx: QueryCtx & MemberAccess, input: Propos
   if (!reason) throw userError("Say why this property has its own price, for example after a walkthrough. The Owner reads it first.");
   const today = dayOf(Date.now(), ctx.company.timezone);
   const until = checkUntil(input.until, today);
+  const addedTasks = checkTasks(input.addedTasks);
+  const extras = checkExtras(input.extras, live.spec);
   const current = await activePrice(ctx, ctx.companyId, property._id, service._id);
-  if (current && current.baseCents === input.baseCents && current.laborMinutes === input.laborMinutes && canonical(current.until) === canonical(until)) throw userError("This property already has this price.");
+  if (current && current.baseCents === input.baseCents && current.laborMinutes === input.laborMinutes && canonical(current.until) === canonical(until) && canonical(current.addedTasks ?? []) === canonical(addedTasks) && canonical(current.extras ?? []) === canonical(extras)) throw userError("This property already has this price.");
   const name = propertyName(property);
   const per = live.spec.pricing.method === "recurring_package" ? "month" : live.spec.visitWord;
   const impact = [
     `Visits at ${name} for "${service.name}" start from a base price of ${formatCents(input.baseCents)} per ${per}, instead of the service's (${priceSummary(live.spec)}).`,
-    "Extras, rush, discounts, the minimum charge and rounding still come from the service.",
+    extras.length ? "Rush, discounts, the minimum charge and rounding still come from the service, and so do the other extras." : "Extras, rush, discounts, the minimum charge and rounding still come from the service.",
+    ...extras.map((extra) => extraWords(extra, live.spec)),
+    ...(addedTasks.length ? [`At this property the crew also does: ${addedTasks.join("; ")}. These are added to each visit's scope and checklist.`] : []),
     ...(current ? [`It replaces this property's current price of ${formatCents(current.baseCents)}.`] : []),
     ...(input.laborMinutes !== null ? [`Visits here are planned at ${minutesWords(input.laborMinutes)} of cleaner time.`] : []),
     until
@@ -124,7 +180,7 @@ export async function reviewProposal(ctx: QueryCtx & MemberAccess, input: Propos
     "Visits already booked keep the price they were booked with.",
     "A later change to the service's price does not change this property's price.",
   ];
-  return { service, live, property, customer, current, until, reason, name, impact };
+  return { service, live, property, customer, current, until, reason, name, impact, addedTasks, extras };
 }
 
 /**
@@ -133,11 +189,11 @@ export async function reviewProposal(ctx: QueryCtx & MemberAccess, input: Propos
  */
 export async function proposePropertyPrice(ctx: MutationCtx & MemberAccess, input: Proposal & { actor: Actor; via: "workspace" | "chat" }): Promise<{ changeId: Id<"serviceChanges">; title: string }> {
   const checked = await reviewProposal(ctx, input);
-  const { service, property, current, until, reason, name, impact } = checked;
+  const { service, property, current, until, reason, name, impact, addedTasks, extras } = checked;
   for (const change of await openChanges(ctx, ctx.companyId, service._id)) {
     if (change.kind === "property_price" && change.propertyPrice?.propertyId === property._id) await closeChange(ctx, change, "superseded", "A newer price for this property was proposed.");
   }
-  const proposed = { propertyId: property._id, baseCents: input.baseCents, laborMinutes: input.laborMinutes, until, replaces: current?._id ?? null };
+  const proposed = { propertyId: property._id, baseCents: input.baseCents, laborMinutes: input.laborMinutes, until, ...(addedTasks.length ? { addedTasks } : {}), ...(extras.length ? { extras } : {}), replaces: current?._id ?? null };
   const now = Date.now();
   const title = `Own price for ${name}`.slice(0, 200);
   const changeId = await ctx.db.insert("serviceChanges", {
@@ -189,6 +245,8 @@ export async function applyPropertyPrice(ctx: MutationCtx, change: Doc<"serviceC
     baseCents: proposed.baseCents,
     laborMinutes: proposed.laborMinutes,
     until: proposed.until,
+    ...(proposed.addedTasks?.length ? { addedTasks: proposed.addedTasks } : {}),
+    ...(proposed.extras?.length ? { extras: proposed.extras } : {}),
     reason: change.reason,
     state: "active",
     changeId: change._id,
@@ -197,6 +255,29 @@ export async function applyPropertyPrice(ctx: MutationCtx, change: Doc<"serviceC
     approvedAt: change.approval?.at ?? now,
     updatedAt: now,
   });
+}
+
+export const PROPERTY_TASKS_HEADING = "At this property:";
+
+/** A visit's scope with the property's own tasks after it, once, whether the scope was filled in or typed. */
+export function withPropertyTasks(scope: string, tasks: string[]): string {
+  if (!tasks.length || scope.includes(PROPERTY_TASKS_HEADING)) return scope;
+  const block = `${PROPERTY_TASKS_HEADING}\n${tasks.map((task) => `- ${task}`).join("\n")}`;
+  // A visit's scope holds 2,000 characters: the property's tasks always fit, so the service's part gives way.
+  const room = 2000 - block.length - 1;
+  const head = scope.trim();
+  return `${head.length > room ? `${head.slice(0, room - 1)}…` : head}\n${block}`;
+}
+
+/** The property's own tasks, after the service's checklist on a new visit. */
+export async function addPropertyTasks(ctx: MutationCtx, companyId: Id<"companies">, jobId: Id<"jobs">, tasks: string[]) {
+  const last = await ctx.db
+    .query("checklistItems")
+    .withIndex("by_company_job", (q) => q.eq("companyId", companyId).eq("jobId", jobId))
+    .order("desc")
+    .first();
+  let order = (last?.order ?? -1) + 1;
+  for (const label of tasks) await ctx.db.insert("checklistItems", { companyId, jobId, order: order++, section: "At this property", label, requiresPhoto: false, state: "pending" });
 }
 
 /** Ends a property's own price now. From its next visit, the property pays the service's price. */

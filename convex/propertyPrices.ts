@@ -9,19 +9,20 @@
  */
 import { v } from "convex/values";
 
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx } from "./_generated/server";
 import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { isManager, isOwner } from "./lib/roles";
-import { activePrice, dayOf, dayWords, endPropertyPrice, engineInput, priceInForce, propertyName, proposePropertyPrice, reminderDue, untilWords } from "./lib/services/propertyPrices";
-import { untilValidator } from "./lib/services/schema";
-import { ownedService, publishedByKey } from "./lib/services/store";
+import { activePrice, dayOf, dayWords, endPropertyPrice, engineInput, extrasView, priceInForce, propertyName, proposePropertyPrice, reminderDue, untilWords } from "./lib/services/propertyPrices";
+import { propertyExtraValidator, untilValidator } from "./lib/services/schema";
+import type { Spec } from "./lib/services/spec";
+import { ownedService, publishedByKey, publishedSpec } from "./lib/services/store";
 import { formatCents } from "./lib/services/words";
 import { openTask } from "./lib/taskState";
 
-async function describe(ctx: QueryCtx, row: Doc<"propertyPrices">, service: Doc<"services">, today: string) {
+async function describe(ctx: QueryCtx, row: Doc<"propertyPrices">, service: Doc<"services">, today: string, spec: Spec | null) {
   const property = await ctx.db.get(row.propertyId);
   const customer = await ctx.db.get(row.customerId);
   const approver = await ctx.db.get(row.approvedBy);
@@ -34,6 +35,8 @@ async function describe(ctx: QueryCtx, row: Doc<"propertyPrices">, service: Doc<
     customer: customer?.name ?? "A customer",
     baseCents: row.baseCents,
     laborMinutes: row.laborMinutes,
+    addedTasks: row.addedTasks ?? [],
+    extras: spec ? extrasView(row.extras ?? [], spec) : [],
     until: row.until,
     untilWords: untilWords(row.until),
     /** The review or end date is within two weeks, or already passed. */
@@ -64,6 +67,7 @@ export const forService = companyQuery({
   handler: async (ctx, args) => {
     const service = await ownedService(ctx, ctx.companyId, args.serviceId);
     const today = dayOf(Date.now(), ctx.company.timezone);
+    const spec = (await publishedSpec(ctx, service))?.spec ?? null;
     const active = await ctx.db
       .query("propertyPrices")
       .withIndex("by_company_service_state", (q) => q.eq("companyId", ctx.companyId).eq("serviceId", service._id).eq("state", "active"))
@@ -94,12 +98,12 @@ export const forService = companyQuery({
       const customer = property ? await ctx.db.get(property.customerId) : null;
       waiting.push({ changeId: change._id, state: change.state, property: property ? propertyName(property) : "A property", customer: customer?.name ?? "A customer", baseCents: change.propertyPrice.baseCents, untilWords: untilWords(change.propertyPrice.until), submittedAt: change.submittedAt, replacesOwnPrice: change.propertyPrice.replaces !== null });
     }
-    const rows = await Promise.all(active.map((row) => describe(ctx, row, service, today)));
+    const rows = await Promise.all(active.map((row) => describe(ctx, row, service, today, spec)));
     return {
       live: service.status === "active" && service.publishedVersion !== undefined,
       active: rows.sort((a, b) => Number(b.dueSoon) - Number(a.dueSoon) || a.property.localeCompare(b.property)),
       waiting,
-      past: await Promise.all(past.map((row) => describe(ctx, row, service, today))),
+      past: await Promise.all(past.map((row) => describe(ctx, row, service, today, spec))),
       today,
       canPropose: isManager(ctx.role),
       canEnd: isOwner(ctx.role),
@@ -122,7 +126,7 @@ export const forVisit = companyQuery({
     const row = await priceInForce(ctx, ctx.companyId, property._id, catalog.service._id, day);
     const lapsed = row ? null : await activePrice(ctx, ctx.companyId, property._id, catalog.service._id);
     return {
-      price: row ? { ...engineInput(row), untilWords: untilWords(row.until), approvedAt: row.approvedAt } : null,
+      price: row ? { ...engineInput(row), addedTasks: row.addedTasks ?? [], untilWords: untilWords(row.until), approvedAt: row.approvedAt } : null,
       /** The property has its own price, but it ends before this visit's day. */
       endsBefore: lapsed?.until?.kind === "end" ? dayWords(lapsed.until.date) : null,
     };
@@ -148,9 +152,38 @@ export const forProperty = companyQuery({
   },
 });
 
+/** Every property price in force, by customer, for Customers & Properties. Everyone reads them: they price visits the office books. */
+export const forCompany = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const today = dayOf(Date.now(), ctx.company.timezone);
+    const rows = await ctx.db
+      .query("propertyPrices")
+      .withIndex("by_company_state", (q) => q.eq("companyId", ctx.companyId).eq("state", "active"))
+      .take(500);
+    const byCustomer: Record<string, { id: Id<"propertyPrices">; serviceId: Id<"services">; service: string; property: string; baseCents: number; untilWords: string | null; dueSoon: boolean; tasks: number; extras: number }[]> = {};
+    for (const row of rows) {
+      const [service, property] = [await ctx.db.get(row.serviceId), await ctx.db.get(row.propertyId)];
+      (byCustomer[row.customerId] ??= []).push({
+        id: row._id,
+        serviceId: row.serviceId,
+        service: service?.name ?? "A service",
+        property: property ? propertyName(property) : "A property",
+        baseCents: row.baseCents,
+        untilWords: untilWords(row.until),
+        dueSoon: row.until !== null && row.until.date <= addDaysIso(today, 14),
+        tasks: row.addedTasks?.length ?? 0,
+        extras: row.extras?.length ?? 0,
+      });
+    }
+    for (const list of Object.values(byCustomer)) list.sort((a, b) => a.property.localeCompare(b.property) || a.service.localeCompare(b.service));
+    return byCustomer;
+  },
+});
+
 /** Proposes a property's own base price for a service. It waits for the Owner in Changes; nothing prices a visit until it is approved. */
 export const propose = managerMutation({
-  args: { serviceId: v.id("services"), propertyId: v.id("properties"), baseCents: v.number(), laborMinutes: v.union(v.number(), v.null()), until: untilValidator, reason: v.string() },
+  args: { serviceId: v.id("services"), propertyId: v.id("properties"), baseCents: v.number(), laborMinutes: v.union(v.number(), v.null()), until: untilValidator, reason: v.string(), addedTasks: v.optional(v.array(v.string())), extras: v.optional(v.array(propertyExtraValidator)) },
   handler: async (ctx, args) => proposePropertyPrice(ctx, { ...args, actor: byMember(ctx), via: "workspace" }),
 });
 

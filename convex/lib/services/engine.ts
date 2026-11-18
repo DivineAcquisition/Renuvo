@@ -76,7 +76,11 @@ export type PropertyPrice = {
   baseCents: number;
   /** Labor-minutes at this property, when they differ from the service's. Null or absent: the service's. */
   laborMinutes?: number | null;
+  /** Extras that work differently at this property: included at no charge, or at the property's own price. */
+  extras?: PropertyExtra[];
 };
+
+export type PropertyExtra = { id: string; included: boolean; priceCents: number | null };
 
 export type LineKind = "base" | "adjustment" | "add_on" | "fee" | "discount" | "minimum" | "rounding" | "info" | "billed_later";
 
@@ -128,7 +132,7 @@ export type Quote = {
   /** The cleaning amount discounts apply to. */
   cleaningCents: number;
   includedScope: string[];
-  extras: { id: string; label: string; quantity: number; amountCents: number; included: boolean }[];
+  extras: { id: string; label: string; quantity: number; amountCents: number; included: boolean; atProperty?: boolean }[];
   time: { laborMinutes: number; crewSize: number; elapsedMinutes: number };
   schedule: ScheduleFacts | null;
   /** Short-term rentals: the laundry and restocking this turnover needs. */
@@ -499,10 +503,14 @@ export function quote(spec: Spec, input: QuoteInput): Quote {
     }
     const quantity = Math.min(Math.max(0, Math.round(chosen.quantity)), addOn.maxQuantity);
     if (quantity === 0) continue;
-    const included = !chargeable(spec, addOn);
-    const amountCents = included ? 0 : quantity * addOn.priceCents;
-    extras.push({ id: addOn.id, label: addOn.label, quantity, amountCents, included });
-    if (!included) extrasLabor += quantity * addOn.laborMinutes;
+    // The service's own scope already covers it (and its time); a property can include it or price it its own way.
+    const inScope = !chargeable(spec, addOn);
+    const here = inScope ? undefined : input.propertyPrice?.extras?.find((e) => e.id === addOn.id);
+    const included = inScope || here?.included === true;
+    const unit = here && !here.included && here.priceCents !== null ? here.priceCents : addOn.priceCents;
+    const amountCents = included ? 0 : quantity * unit;
+    extras.push({ id: addOn.id, label: addOn.label, quantity, amountCents, included, ...(here ? { atProperty: true } : {}) });
+    if (!inScope) extrasLabor += quantity * addOn.laborMinutes;
   }
   laborMinutes += (extrasLabor * timePercent) / 100;
 
@@ -620,7 +628,7 @@ export function quote(spec: Spec, input: QuoteInput): Quote {
       key: `addon:${extra.id}`,
       kind: extra.included ? "info" : "add_on",
       label: extra.label,
-      detail: extra.included ? "Already included in this service, so not charged" : `${extra.quantity} × ${formatCents(addOn.priceCents)} ${addOnWord(addOn)}`,
+      detail: extra.atProperty && extra.included ? "Included at this property" : extra.included ? "Already included in this service, so not charged" : `${extra.quantity} × ${formatCents(extra.amountCents / extra.quantity)} ${addOnWord(addOn)}${extra.atProperty ? ", this property's price" : ""}`,
       amountCents: extra.amountCents,
     });
     serviceCents += extra.amountCents;

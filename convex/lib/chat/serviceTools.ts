@@ -44,7 +44,9 @@ async function proposalOf(ctx: ToolCtx, args: Record<string, unknown>): Promise<
   if (!propertyId) return { why: "No property with that id. read_record on the customer lists their properties." };
   if (args.reviewOn && args.endsAfter) return { why: "Give a review date or an end date, not both." };
   const until = args.endsAfter ? { kind: "end" as const, date: String(args.endsAfter) } : args.reviewOn ? { kind: "review" as const, date: String(args.reviewOn) } : null;
-  return { serviceId: service._id, propertyId, baseCents: Number(args.baseCents), laborMinutes: args.laborMinutes === undefined || args.laborMinutes === null ? null : Number(args.laborMinutes), until, reason: String(args.reason ?? "") };
+  const extras = ((args.extras as { id: string; included: boolean; priceCents?: number }[] | undefined) ?? []).map((e) => ({ id: String(e.id), included: e.included === true, priceCents: e.included === true || e.priceCents === undefined ? null : Number(e.priceCents) }));
+  const addedTasks = ((args.addedTasks as string[] | undefined) ?? []).map(String);
+  return { serviceId: service._id, propertyId, baseCents: Number(args.baseCents), laborMinutes: args.laborMinutes === undefined || args.laborMinutes === null ? null : Number(args.laborMinutes), until, reason: String(args.reason ?? ""), addedTasks, extras };
 }
 
 async function findService(ctx: ToolCtx, ref: unknown): Promise<Doc<"services"> | null> {
@@ -374,7 +376,7 @@ export const SERVICE_TOOLS: ChatTool[] = [
         const own = fromDraft ? null : await priceInForce(ctx, ctx.company._id, property._id, service._id, input.date ?? dayOf(Date.now(), ctx.company.timezone));
         if (own) {
           input.propertyPrice = engineInput(own);
-          propertyPrice = `${propertyName(property)} has its own base price of ${formatCents(own.baseCents)}, approved by the Owner${own.until ? ` (${lowerFirst(untilWords(own.until)!)})` : ""}.`;
+          propertyPrice = `${propertyName(property)} has its own base price of ${formatCents(own.baseCents)}, approved by the Owner${own.until ? ` (${lowerFirst(untilWords(own.until)!)})` : ""}.${own.addedTasks?.length ? ` The crew also does there: ${own.addedTasks.join("; ")}.` : ""}`;
         }
       }
       const result = quote(spec, input);
@@ -557,7 +559,7 @@ export const SERVICE_TOOLS: ChatTool[] = [
     name: "propose_property_price",
     label: "Proposing a property's own price",
     description:
-      "Propose one property's own base price for a live service, for example after a walkthrough or for a rental listing. Owners and Managers, after the person approves in chat. It waits for the Owner in Services & Pricing › Changes, and visits use it only once the Owner approves it. It replaces only the base: extras, rush, discounts, the minimum and rounding still come from the service, and it keeps its price when the service's price changes. The amount must be one the person gave. read_record on the customer lists their property ids.",
+      "Propose one property's own base price for a live service, for example after a walkthrough or for a rental listing, optionally with tasks the crew also does there and extras included or priced differently there. Owners and Managers, after the person approves in chat. It waits for the Owner in Services & Pricing › Changes, and visits use it only once the Owner approves it. Rush, discounts, the minimum and rounding still come from the service, and it keeps its price when the service's price changes. Amounts and tasks must be ones the person gave. read_record on the customer lists their property ids.",
     kind: "write",
     minimumRole: "manager",
     confirm: true,
@@ -571,6 +573,14 @@ export const SERVICE_TOOLS: ChatTool[] = [
         reviewOn: { type: "string", optional: true, max: 10, description: "YYYY-MM-DD. The Owner is reminded two weeks before to review it; it does not end. Not with endsAfter." },
         endsAfter: { type: "string", optional: true, max: 10, description: "YYYY-MM-DD, the last day it applies. After it the property pays the service's price again." },
         reason: { type: "string", max: 1000, description: "Why the property has its own price, in the person's words." },
+        addedTasks: { type: "array", optional: true, maxItems: 20, items: { type: "string", max: 120 }, description: "Tasks the crew also does at this property, only as the person gave them. They are added to each visit's scope and checklist." },
+        extras: {
+          type: "array",
+          optional: true,
+          maxItems: 30,
+          description: "Extras that work differently at this property, only as the person gave them: included at no charge, or at the property's own price. Ids from read_service.",
+          items: { type: "object", properties: { id: { type: "string", max: 40 }, included: { type: "boolean" }, priceCents: { type: "number", integer: true, min: 0, max: 100_000_00, optional: true, description: "The price here in whole cents, when not included." } } },
+        },
       },
     },
     preview: async (ctx, args) => {
@@ -583,7 +593,7 @@ export const SERVICE_TOOLS: ChatTool[] = [
           preview: {
             summary: `Propose ${formatCents(proposal.baseCents)} as ${checked.name}'s own base price for ${checked.service.name}`,
             lines: [...checked.impact, `Reason: ${checked.reason}`, "It waits for the Owner's approval in Services & Pricing › Changes."],
-            bindsTo: stableHash({ service: checked.service._id, propertyId: proposal.propertyId, baseCents: proposal.baseCents, laborMinutes: proposal.laborMinutes, until: proposal.until, reason: proposal.reason, replaces: checked.current?._id ?? null }),
+            bindsTo: stableHash({ service: checked.service._id, propertyId: proposal.propertyId, baseCents: proposal.baseCents, laborMinutes: proposal.laborMinutes, until: proposal.until, reason: proposal.reason, addedTasks: checked.addedTasks, extras: checked.extras, replaces: checked.current?._id ?? null }),
           },
         };
       } catch (error) {

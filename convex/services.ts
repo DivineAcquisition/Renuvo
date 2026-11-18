@@ -41,7 +41,7 @@ import { costsValidator } from "./lib/services/profit";
 import { businessSettingsOf } from "./lib/settings/business";
 import { actorLabel, changeHash, closeChange, createDraft, STALE_DRAFT, submitDraft, writeDraft } from "./lib/services/workflow";
 import { assumptionsFor, emptyContext } from "./lib/services/setup";
-import { applyPropertyPrice, dayWords, ownPricesFor, propertyName, propertyPriceProblem, untilWords } from "./lib/services/propertyPrices";
+import { applyPropertyPrice, dayWords, extrasView, ownPricesFor, propertyName, propertyPriceProblem, untilWords } from "./lib/services/propertyPrices";
 import { startSetupResearch } from "./lib/services/researchStart";
 
 type Ctx = QueryCtx & MemberAccess;
@@ -616,7 +616,9 @@ async function proposedPriceView(ctx: Ctx, row: Doc<"serviceChanges">, service: 
     until: proposed.until,
     untilWords: untilWords(proposed.until),
     untilDay: proposed.until ? dayWords(proposed.until.date) : null,
-    current: replaces ? { baseCents: replaces.baseCents, approvedAt: replaces.approvedAt, untilWords: untilWords(replaces.until) } : null,
+    addedTasks: proposed.addedTasks ?? [],
+    extras: live ? extrasView(proposed.extras ?? [], live.spec) : [],
+    current: replaces ? { baseCents: replaces.baseCents, approvedAt: replaces.approvedAt, untilWords: untilWords(replaces.until), addedTasks: replaces.addedTasks ?? [], extras: live ? extrasView(replaces.extras ?? [], live.spec) : [] } : null,
     catalog: live ? { version: live.version, summary: priceSummary(live.spec), spec: live.spec } : null,
     /** The property's price changed since this was proposed, so approving it would overwrite that. */
     moved: open ? (await propertyPriceProblem(ctx, row)) : null,

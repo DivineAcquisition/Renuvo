@@ -112,6 +112,8 @@ describe("A property's own price", () => {
     await approve(as, companyId, changeId);
     const [row] = (await office.query(api.propertyPrices.forService, { companyId, serviceId })).active;
     expect(row).toMatchObject({ property: "12 Elm St, Austin", baseCents: 18500, approvedBy: "owner-a" });
+    // Customers & Properties lists it under its customer, for every role.
+    expect((await office.query(api.propertyPrices.forCompany, { companyId }))[home.customerId]).toEqual([expect.objectContaining({ property: "12 Elm St, Austin", service: "Standard clean", baseCents: 18500, serviceId })]);
     expect(await refusal(manager.mutation(api.propertyPrices.end, { companyId, priceId: row.id, reason: "No longer agreed." }))).toBe("Not allowed.");
     await as.mutation(api.propertyPrices.end, { companyId, priceId: row.id, reason: "No longer agreed." });
     const after = await as.query(api.propertyPrices.forService, { companyId, serviceId });
@@ -234,5 +236,62 @@ describe("A property's own price", () => {
     const rival = await company(t, "owner-b", "Beta Cleaning");
     const theirs = await place(rival.as, rival.companyId);
     expect(await refusal(as.mutation(api.propertyPrices.propose, { companyId, serviceId, propertyId: theirs.propertyId, baseCents: 18500, laborMinutes: null, until: null, reason: "Walkthrough." }))).toBe("Not found.");
+  });
+
+  it("adds the property's own tasks to each visit's scope and checklist, and prices its extras its own way", async () => {
+    const { t, as, companyId } = await setup();
+    const { serviceId, key } = await publishNew(as, companyId, readySpec());
+    const home = await place(as, companyId);
+    expect(await refusal(as.mutation(api.propertyPrices.propose, { companyId, serviceId, propertyId: home.propertyId, baseCents: 18500, laborMinutes: null, until: null, reason: "Walkthrough.", extras: [{ id: "nope", included: true, priceCents: null }] }))).toBe("That extra is not one this service sells.");
+    expect(await refusal(as.mutation(api.propertyPrices.propose, { companyId, serviceId, propertyId: home.propertyId, baseCents: 18500, laborMinutes: null, until: null, reason: "Walkthrough.", extras: [{ id: "oven", included: false, priceCents: null }] }))).toContain("Give \"Inside the oven\" a price here");
+    const { changeId } = await as.mutation(api.propertyPrices.propose, {
+      companyId,
+      serviceId,
+      propertyId: home.propertyId,
+      baseCents: 18500,
+      laborMinutes: null,
+      until: null,
+      reason: "Walkthrough: the owner wants the plants watered and the oven done every time.",
+      addedTasks: ["Water the plants", " water the plants ", "Feed the cat"],
+      extras: [{ id: "oven", included: true, priceCents: null }],
+    });
+    const review = await as.query(api.services.change, { companyId, changeId });
+    expect(review.impact).toEqual(expect.arrayContaining(['"Inside the oven" is included at no charge.', "At this property the crew also does: Water the plants; Feed the cat. These are added to each visit's scope and checklist."]));
+    expect(review.propertyPrice).toMatchObject({ addedTasks: ["Water the plants", "Feed the cat"], extras: [{ id: "oven", label: "Inside the oven", included: true, serviceCents: 3500 }] });
+    await approve(as, companyId, changeId);
+
+    const jobId = await as.mutation(api.jobs.create, { companyId, ...home, serviceId: key, quoteInput: { bedrooms: 2, bathrooms: 1, addOns: [{ id: "oven", quantity: 1 }] }, expectedTotalCents: 18500, startsAt: JOB_START, endsAt: JOB_END });
+    const job = (await as.query(api.jobs.get, { companyId, jobId })).job;
+    expect(job.priceCents).toBe(18500);
+    expect(job.scope).toContain("Wipe kitchen counters");
+    expect(job.scope).toMatch(/At this property:\n- Water the plants\n- Feed the cat$/);
+    const items = await t.run(async (ctx) => ctx.db.query("checklistItems").withIndex("by_company_job", (q) => q.eq("companyId", companyId).eq("jobId", jobId)).collect());
+    expect(items.map((i) => [i.section, i.label])).toEqual([
+      ["Kitchen", "Wipe kitchen counters"],
+      ["At this property", "Water the plants"],
+      ["At this property", "Feed the cat"],
+    ]);
+    // A typed price still takes the property's tasks: they are scope, not price.
+    const typed = await as.mutation(api.jobs.create, { companyId, ...home, serviceId: key, priceCents: 30000, startsAt: JOB_START + DAY, endsAt: JOB_END + DAY });
+    expect((await as.query(api.jobs.get, { companyId, jobId: typed })).job.scope).toContain("At this property:");
+
+    // A new price for the property can drop the tasks; one with the same terms is refused.
+    expect(await refusal(as.mutation(api.propertyPrices.propose, { companyId, serviceId, propertyId: home.propertyId, baseCents: 18500, laborMinutes: null, until: null, reason: "Same.", addedTasks: ["Water the plants", "Feed the cat"], extras: [{ id: "oven", included: true, priceCents: null }] }))).toBe("This property already has this price.");
+    const [row] = (await as.query(api.propertyPrices.forService, { companyId, serviceId })).active;
+    expect(row).toMatchObject({ addedTasks: ["Water the plants", "Feed the cat"], extras: [{ label: "Inside the oven", included: true }] });
+  });
+
+  it("keeps a long scope within the visit's limit, with the property's tasks whole", async () => {
+    const { as, companyId } = await setup();
+    const many = Array.from({ length: 40 }, (_, i) => ({ id: `t${i}`, label: `A long included task number ${i} that the crew must do carefully in every room`, section: "Whole home", requiresPhoto: false }));
+    const { serviceId, key } = await publishNew(as, companyId, readySpec({ included: many }));
+    const home = await place(as, companyId);
+    expect(await refusal(as.mutation(api.propertyPrices.propose, { companyId, serviceId, propertyId: home.propertyId, baseCents: 18500, laborMinutes: null, until: null, reason: "Walkthrough.", addedTasks: Array.from({ length: 10 }, (_, i) => `${"x".repeat(100)}${i}`) }))).toContain("800 characters");
+    const { changeId } = await as.mutation(api.propertyPrices.propose, { companyId, serviceId, propertyId: home.propertyId, baseCents: 18500, laborMinutes: null, until: null, reason: "Walkthrough.", addedTasks: ["Water the plants"] });
+    await approve(as, companyId, changeId);
+    const jobId = await as.mutation(api.jobs.create, { companyId, ...home, serviceId: key, quoteInput: { bedrooms: 2, bathrooms: 1 }, startsAt: JOB_START, endsAt: JOB_END });
+    const scope = (await as.query(api.jobs.get, { companyId, jobId })).job.scope;
+    expect(scope.length).toBeLessThanOrEqual(2000);
+    expect(scope.endsWith("At this property:\n- Water the plants")).toBe(true);
   });
 });

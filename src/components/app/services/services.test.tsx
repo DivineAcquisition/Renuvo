@@ -454,7 +454,9 @@ describe("the builder and review", () => {
         until: { kind: "end", date: "2027-06-30" },
         untilWords: "Ends after June 30, 2027",
         untilDay: "June 30, 2027",
-        current: { baseCents: 17000, approvedAt: 1, untilWords: null },
+        addedTasks: ["Water the plants"],
+        extras: [{ id: "oven-extra", label: "Oven interior", included: true, priceCents: null, serviceCents: 3500, unit: "per visit" }],
+        current: { baseCents: 17000, approvedAt: 1, untilWords: null, addedTasks: [], extras: [] },
         catalog: { version: 3, summary: "$150.00 per visit", spec: spec() },
         moved: null,
       },
@@ -470,6 +472,9 @@ describe("the builder and review", () => {
     expect(html).toContain("3 h 20 min");
     // The example job at the service's own fixed price, priced both ways.
     expect(html).toMatch(/\$185\.00<\/span> here[\s\S]*\$150\.00<\/span> elsewhere/);
+    expect(html).toContain("Also done here, on every visit");
+    expect(html).toContain("• Water the plants");
+    expect(html).toMatch(/Oven interior[\s\S]*line-through[^>]*><span class="sr-only">service price <\/span>\$35\.00<\/span>Included/);
     expect(html).toContain("Approve this price");
     expect(html).not.toContain("Approve only");
     expect(html).toContain("The service&#x27;s price and other properties stay as they are");
@@ -505,6 +510,8 @@ describe("property prices on a service", () => {
     customer: "Dana Whitfield",
     baseCents: 18500,
     laborMinutes: null,
+    addedTasks: ["Water the plants", "Feed the cat"],
+    extras: [{ id: "oven-extra", label: "Oven interior", included: false, priceCents: 3000, serviceCents: 3500, unit: "per visit" }],
     until: { kind: "review", date: "2027-03-10" },
     untilWords: "Review by March 10, 2027",
     dueSoon: true,
@@ -529,6 +536,8 @@ describe("property prices on a service", () => {
     expect(html).toContain("base per visit");
     expect(html).toContain("Review by March 10, 2027");
     expect(html).toContain("Kept its price through a service change");
+    expect(html).toContain("+2 tasks here");
+    expect(html).toContain("Oven interior: $30.00 per visit");
     expect(html).toContain("Waiting for the Owner");
     expect(html).toContain("40 Oak Ave, Austin");
     expect(html).toContain("Add a property price");

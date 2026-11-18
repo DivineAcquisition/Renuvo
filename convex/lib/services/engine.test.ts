@@ -485,3 +485,39 @@ describe("a property's own base price", () => {
     expect(result.totalCents).toBe(36000);
   });
 });
+
+describe("a property's own extras", () => {
+  const spec = service({
+    pricing: { method: "fixed", amountCents: 15000, laborMinutes: 120 },
+    included: [{ id: "counters", label: "Counters", section: "Kitchen", requiresPhoto: false }],
+    addOns: [
+      { id: "oven", label: "Inside the oven", priceCents: 3500, per: "item", itemWord: "oven", laborMinutes: 30, maxQuantity: 1 },
+      { id: "windows", label: "Interior windows", priceCents: 500, per: "item", itemWord: "window", laborMinutes: 5, maxQuantity: 30 },
+      { id: "counters-x", label: "Counters again", priceCents: 900, per: "visit", laborMinutes: 10, maxQuantity: 1, coversItemId: "counters" },
+    ],
+  });
+  const chosen: QuoteInput["addOns"] = [
+    { id: "oven", quantity: 1 },
+    { id: "windows", quantity: 10 },
+  ];
+
+  it("includes an extra at no charge, but still plans its time", () => {
+    const usual = quote(spec, { addOns: chosen });
+    const here = quote(spec, { addOns: chosen, propertyPrice: { baseCents: 15000, extras: [{ id: "oven", included: true, priceCents: null }] } });
+    expect(usual.totalCents).toBe(15000 + 3500 + 5000);
+    expect(here.totalCents).toBe(15000 + 5000);
+    expect(here.lines.find((l) => l.key === "addon:oven")).toMatchObject({ kind: "info", detail: "Included at this property", amountCents: 0 });
+    expect(here.time.laborMinutes).toBe(usual.time.laborMinutes);
+  });
+
+  it("charges an extra at the property's own price, per unit", () => {
+    const here = quote(spec, { addOns: chosen, propertyPrice: { baseCents: 15000, extras: [{ id: "windows", included: false, priceCents: 400 }] } });
+    expect(here.lines.find((l) => l.key === "addon:windows")).toMatchObject({ amountCents: 4000, detail: "10 × $4.00 per window, this property's price" });
+    expect(here.totalCents).toBe(sumOfLines(here.lines));
+  });
+
+  it("never charges an extra the service already includes, whatever the property says", () => {
+    const here = quote(spec, { addOns: [{ id: "counters-x", quantity: 1 }], propertyPrice: { baseCents: 15000, extras: [{ id: "counters-x", included: false, priceCents: 900 }] } });
+    expect(here.lines.find((l) => l.key === "addon:counters-x")).toMatchObject({ amountCents: 0, detail: "Already included in this service, so not charged" });
+  });
+});

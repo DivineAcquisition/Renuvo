@@ -306,7 +306,33 @@ such field, and the server removes one if it appears.
 
 It never proposes, approves or extends anything.
 
+**What's different here** (optional, added November 18, 2026). A property price can also carry the
+property's own scope and extras, reviewed and approved with it:
+
+![What's different here](../screenshots/services/18-property-different-here-1440.png)
+
+- **Tasks also done here**, one per line: at most 20, 800 characters together. They are added after the
+  service's scope on each new visit there, under "At this property:". They are also added to the visit's
+  checklist, in an "At this property" section. This happens whether the price came from the engine or was
+  typed, because they are scope, not price. When a long service scope would push the visit's scope over
+  its 2,000 characters, the service's part is shortened and the property's tasks stay whole.
+- **Extras here**: an extra the service sells can be included at no charge at this property, or sold at
+  the property's own price.
+  - An extra the service already includes stays free whatever the property says.
+  - An included extra's time is still planned.
+  - The line reads "Included at this property" or "…, this property's price".
+  - A price equal to the service's is dropped, and an unknown extra is refused.
+- The review lists both, the extras against the service's price, and the impact says them in words.
+  Proposing the same terms again is refused. Chat's `propose_property_price` takes `addedTasks` and
+  `extras`.
+
 **Ending early.** The Owner can end a price with a reason. Booked visits keep their price.
+
+**On Customers & Properties.** Each customer's row lists the property prices in force for their
+properties. Each entry shows the service, the base, its tasks and extras, and its date, and links to the
+service where it is changed (`propertyPrices.forCompany`). A full page per customer is still not built.
+
+![Customers & Properties with property prices](../screenshots/services/19-customers-property-prices-1440.png)
 
 **A change to the service.** Its impact says how many properties keep their own price, and its review lists
 them under "Properties that keep their own price". An archive request leaves property price proposals alone.
