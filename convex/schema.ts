@@ -272,6 +272,12 @@ export default defineSchema({
     companyId: v.id("companies"),
     /** The sign-in subject. Empty until an invited person signs in and joins. */
     userId: v.optional(v.string()),
+    /**
+     * The sign-in service (token issuer) `userId` came from. Absent on rows bound before it was recorded.
+     * A person is only ever re-pointed to a new sign-in by verified email when the service changed
+     * (see convex/lib/reconnect.ts); within one service, email never moves a membership.
+     */
+    userIssuer: v.optional(v.string()),
     email: v.string(),
     name: v.string(),
     role: roleValidator,

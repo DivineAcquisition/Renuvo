@@ -161,7 +161,7 @@ export type Joined = { status: "joined" | "already_member"; memberId: Id<"member
  * membership they have: the invitation is closed as accepted and its invited row is removed, so the
  * company never has two rows for one person. Null means the invited row is gone, so there is nothing to join.
  */
-export async function joinByInvitation(ctx: MutationCtx, invitation: Doc<"invitations">, userId: string): Promise<Joined | null> {
+export async function joinByInvitation(ctx: MutationCtx, invitation: Doc<"invitations">, userId: string, userIssuer: string): Promise<Joined | null> {
   const now = Date.now();
   const seat = await ctx.db.get(invitation.memberId);
   const rows = await ctx.db
@@ -188,7 +188,7 @@ export async function joinByInvitation(ctx: MutationCtx, invitation: Doc<"invita
   // Someone removed earlier and invited again joins on the new row. The old row stops pointing at their
   // sign-in, so the company still has one row for one signed-in person.
   for (const row of rows) if (row._id !== seat._id) await ctx.db.patch(row._id, { userId: undefined });
-  await ctx.db.patch(seat._id, { userId, status: "active", role: invitation.role });
+  await ctx.db.patch(seat._id, { userId, userIssuer, status: "active", role: invitation.role });
   await ctx.db.patch(invitation._id, accepted);
   await recordEvent(ctx, { companyId: invitation.companyId, type: "member.joined", actor: { kind: "member", memberId: seat._id }, subject: { table: "members", id: seat._id } });
   return { status: "joined", memberId: seat._id };
