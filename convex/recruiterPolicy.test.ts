@@ -21,7 +21,7 @@ async function permissions(s: Setup, applicantId: string) {
 }
 
 async function messages(s: Setup) {
-  return s.t.run(async (ctx) => ctx.db.query("messages").collect());
+  return s.t.run(async (ctx) => ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")));
 }
 
 async function setMessaging(s: Setup, change: Record<string, unknown>) {

@@ -29,7 +29,9 @@ export const overview = companyQuery({
       .withIndex("by_company", (q) => q.eq("companyId", ctx.companyId))
       .take(20);
     const gmail = mailboxes.find((row) => row.provider === "gmail" && row.status === "connected");
-    const gmailState: LiveState = gmail ? "connected" : googleApp() !== null && (await secretsConfigured()) ? "ready" : "not_set_up";
+    // An inbox whose access ended is not "ready to connect": it needs reconnecting, and says so.
+    const brokenGmail = mailboxes.find((row) => row.provider === "gmail" && (row.status === "expired" || row.status === "error"));
+    const gmailState: LiveState = brokenGmail ? "in_progress" : gmail ? "connected" : googleApp() !== null && (await secretsConfigured()) ? "ready" : "not_set_up";
 
     const texting = (
       await ctx.db
@@ -68,7 +70,7 @@ export const overview = companyQuery({
     return {
       live: {
         stripe: stripeCard,
-        gmail: { state: gmailState, detail: gmail ? gmail.address : null },
+        gmail: { state: gmailState, detail: brokenGmail ? "Reconnect needed" : gmail ? gmail.address : null },
         "google-drive": googleCard("drive", ["drive_source", "drive_output"]),
         "google-calendar": googleCard("calendar", ["calendar_sync", "calendar_busy"]),
         "google-business-profile": googleCard("business_profile", ["business_location"]),

@@ -15,7 +15,7 @@ const fromB64url = (data: string) => {
 };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-export type FakeMessage = MessageBody & { labels?: string[]; historyId?: number; pdf?: boolean };
+export type FakeMessage = MessageBody & { labels?: string[]; historyId?: number; pdf?: boolean; messageIdHeader?: string; references?: string };
 
 export function fakeGoogle(options: { email?: string; scope?: string } = {}) {
   const state = {
@@ -27,7 +27,10 @@ export function fakeGoogle(options: { email?: string; scope?: string } = {}) {
     oldestHistory: 0,
     labels: [{ id: "Label_7", name: "Hiring" }],
     refreshRevoked: false,
-    sent: [] as { raw: string; decoded: string }[],
+    sent: [] as { raw: string; decoded: string; threadId?: string }[],
+    /** What the send endpoint answers with, when a test needs Gmail to fail. */
+    sendStatus: 200,
+    revoked: [] as string[],
     calls: [] as string[],
     codes: new Set<string>(["good-code"]),
   };
@@ -40,6 +43,10 @@ export function fakeGoogle(options: { email?: string; scope?: string } = {}) {
   const fetch = (async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = new URL(String(input instanceof Request ? input.url : input));
     state.calls.push(`${init.method ?? "GET"} ${url.pathname}`);
+    if (url.hostname === "oauth2.googleapis.com" && url.pathname === "/revoke") {
+      state.revoked.push(new URLSearchParams(String(init.body)).get("token") ?? "");
+      return json(200, {});
+    }
     if (url.hostname === "oauth2.googleapis.com") {
       const body = new URLSearchParams(String(init.body));
       if (body.get("grant_type") === "authorization_code") {
@@ -58,9 +65,19 @@ export function fakeGoogle(options: { email?: string; scope?: string } = {}) {
     if (path === "/profile") return json(200, { emailAddress: state.email, historyId: String(state.historyId) });
     if (path === "/labels") return json(200, { labels: state.labels });
     if (path === "/messages/send" && init.method === "POST") {
-      const raw = (JSON.parse(String(init.body)) as { raw: string }).raw;
-      state.sent.push({ raw, decoded: fromB64url(raw) });
-      return json(200, { id: `sent-${state.sent.length}`, threadId: "t" });
+      if (state.sendStatus !== 200) return json(state.sendStatus, { error: { errors: [{ reason: state.sendStatus === 403 ? "userRateLimitExceeded" : "backendError" }] } });
+      const { raw, threadId } = JSON.parse(String(init.body)) as { raw: string; threadId?: string };
+      state.sent.push({ raw, decoded: fromB64url(raw), ...(threadId ? { threadId } : {}) });
+      return json(200, { id: `sent-${state.sent.length}`, threadId: threadId ?? "t" });
+    }
+    const thread = path.match(/^\/threads\/([^/]+)$/);
+    if (thread) {
+      const inThread = state.messages.filter((m) => m.threadId === decodeURIComponent(thread[1]));
+      if (!inThread.length) return json(404, {});
+      return json(200, {
+        id: thread[1],
+        messages: inThread.map((m) => ({ id: m.id, threadId: m.threadId, payload: { headers: [{ name: "Subject", value: m.subject }, ...(m.messageIdHeader ? [{ name: "Message-ID", value: m.messageIdHeader }] : []), ...(m.references ? [{ name: "References", value: m.references }] : [])] } })),
+      });
     }
     if (path === "/messages") {
       const after = Number(params.get("q")?.match(/after:(\d+)/)?.[1] ?? 0) * 1000;

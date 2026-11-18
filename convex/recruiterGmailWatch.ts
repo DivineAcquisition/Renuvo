@@ -53,10 +53,14 @@ export const notified = internalMutation({
   args: { emailAddress: v.string() },
   handler: async (ctx, args) => {
     const address = args.emailAddress.trim().toLowerCase();
-    const rows = await ctx.db.query("mailboxConnections").take(5000);
+    // Found by its address, so a notification reads only the inboxes it names.
+    const rows = await ctx.db
+      .query("mailboxConnections")
+      .withIndex("by_address", (q) => q.eq("address", address))
+      .take(50);
     let started = 0;
     for (const row of rows) {
-      if (row.provider !== "gmail" || row.status !== "connected" || row.address.toLowerCase() !== address) continue;
+      if (row.provider !== "gmail" || row.status !== "connected") continue;
       await ctx.scheduler.runAfter(0, internal.recruiterInbox.sync, { connectionId: row._id });
       started += 1;
     }

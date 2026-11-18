@@ -183,6 +183,8 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "bookingImages", index: "by_company" },
   { table: "bookingAcceptances", index: "by_company_session", omit: ["ipHash"], why: "A one-way hash kept only as signing evidence." },
   { table: "bookingEvents", index: "by_company_experience_at" },
+  // Notifications to members (convex/lib/notify/schema.ts): each person's choices. The notices themselves are messages.
+  { table: "notificationPreferences", index: "by_company_member" },
 ];
 
 /** Company tables kept out of the export, and why. */
