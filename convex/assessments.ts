@@ -204,33 +204,39 @@ export const applyToSite = companyMutation({
   args: { assessmentId: v.id("assessments"), revision: v.number() },
   handler: async (ctx, args) => {
     const row = await owned(ctx, args.assessmentId);
-    if (row.status !== "completed") throw userError("Complete the walkthrough first.");
-    if (!row.draftId || !row.siteKey) throw userError("This walkthrough isn't linked to a proposal site.");
-    const draft = await owned(ctx, row.draftId);
-    if (draft.revision !== args.revision) throw userError("The draft changed. Reload, then apply the findings.");
-    const findings = (row.findings ?? {}) as Record<string, string | number | boolean>;
-    const body = draft.body as DraftBody;
-    const site = body.proposal?.sites.find((s) => s.key === row.siteKey);
-    if (!site) throw userError("The site is no longer on the proposal.");
-    const input = { ...(site.input ?? {}) } as Record<string, unknown>;
-    const answers = { ...((input.answers as Record<string, string | number | boolean> | undefined) ?? {}) };
-    if (typeof findings.area === "number") input.area = findings.area;
-    if (typeof findings.bedrooms === "number") input.bedrooms = findings.bedrooms;
-    if (typeof findings.bathrooms === "number") input.bathrooms = findings.bathrooms;
-    if (typeof findings.condition === "string" && row.serviceKey) {
-      const found = await publishedByKey(ctx, ctx.companyId, row.serviceKey);
-      const level = found?.version.spec.modifiers.condition.levels.find((l) => l.label === findings.condition);
-      if (level) input.condition = level.id;
-    }
-    for (const [key, value] of Object.entries(findings)) if (key.startsWith("q:")) answers[key.slice(2)] = value;
-    input.answers = answers;
-    const notes = typeof findings.notes === "string" ? findings.notes : undefined;
-    const sites = body.proposal!.sites.map((s) => (s.key === site.key ? { ...s, input: input as never, ...(notes && !s.accessNotes ? { accessNotes: notes.slice(0, 1000) } : {}) } : s));
-    await ctx.db.patch(draft._id, { body: { ...body, proposal: { ...body.proposal!, sites } }, revision: draft.revision + 1, updatedAt: Date.now(), updatedBy: ctx.member._id });
-    await ctx.db.patch(row._id, { pricingReviewedAt: Date.now() });
-    return { revision: draft.revision + 1 };
+    return applyFindings(ctx, row, args.revision, ctx.member._id);
   },
 });
+
+/** Shared by the workspace and Chat: findings that map to the service's own inputs go onto the site's answers. */
+export async function applyFindings(ctx: MutationCtx, row: Doc<"assessments">, revision: number, memberId: Id<"members">) {
+  if (row.status !== "completed") throw userError("Complete the walkthrough first.");
+  if (!row.draftId || !row.siteKey) throw userError("This walkthrough isn't linked to a proposal site.");
+  const draft = await ctx.db.get(row.draftId);
+  if (!draft || draft.companyId !== row.companyId) throw userError("The proposal draft no longer exists.");
+  if (draft.revision !== revision) throw userError("The draft changed. Reload, then apply the findings.");
+  const findings = (row.findings ?? {}) as Record<string, string | number | boolean>;
+  const body = draft.body as DraftBody;
+  const site = body.proposal?.sites.find((s) => s.key === row.siteKey);
+  if (!site) throw userError("The site is no longer on the proposal.");
+  const input = { ...(site.input ?? {}) } as Record<string, unknown>;
+  const answers = { ...((input.answers as Record<string, string | number | boolean> | undefined) ?? {}) };
+  if (typeof findings.area === "number") input.area = findings.area;
+  if (typeof findings.bedrooms === "number") input.bedrooms = findings.bedrooms;
+  if (typeof findings.bathrooms === "number") input.bathrooms = findings.bathrooms;
+  if (typeof findings.condition === "string" && row.serviceKey) {
+    const found = await publishedByKey(ctx, row.companyId, row.serviceKey);
+    const level = found?.version.spec.modifiers.condition.levels.find((l) => l.label === findings.condition);
+    if (level) input.condition = level.id;
+  }
+  for (const [key, value] of Object.entries(findings)) if (key.startsWith("q:")) answers[key.slice(2)] = value;
+  input.answers = answers;
+  const notes = typeof findings.notes === "string" ? findings.notes : undefined;
+  const sites = body.proposal!.sites.map((s) => (s.key === site.key ? { ...s, input: input as never, ...(notes && !s.accessNotes ? { accessNotes: notes.slice(0, 1000) } : {}) } : s));
+  await ctx.db.patch(draft._id, { body: { ...body, proposal: { ...body.proposal!, sites } }, revision: draft.revision + 1, updatedAt: Date.now(), updatedBy: memberId });
+  await ctx.db.patch(row._id, { pricingReviewedAt: Date.now() });
+  return { revision: draft.revision + 1, applied: Object.keys(findings).filter((k) => k === "area" || k === "bedrooms" || k === "bathrooms" || k === "condition" || k.startsWith("q:")) };
+}
 
 // ── The assessor's link ─────────────────────────────────────────────────────────────────────────
 

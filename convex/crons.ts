@@ -66,5 +66,6 @@ crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.re
 crons.interval("sales bookings sweep", { minutes: 10 }, internal.bookings.sweep, {});
 crons.interval("recurring plans make their visits", { hours: 6 }, internal.plans.sweep, {});
 crons.interval("proposals past their expiry", { hours: 1 }, internal.proposals.sweep, {});
+crons.interval("sales follow-up reminders", { minutes: 30 }, internal.pipeline.sweep, {});
 
 export default crons;

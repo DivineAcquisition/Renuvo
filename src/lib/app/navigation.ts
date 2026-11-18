@@ -346,7 +346,7 @@ export const AGENTS: readonly AgentNav[] = [
     responsibility: "Turns inquiries into confirmed bookings.",
     backendAgent: "sales",
     tabs: [
-      ["pipeline", "Pipeline"],
+      ["pipeline", "Pipeline", LIVE],
       ["quotes-proposals", "Quotes & Proposals", LIVE],
       ["follow-ups", "Follow-ups"],
       ["calls-messages", "Calls & Messages"],
