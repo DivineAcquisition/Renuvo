@@ -370,6 +370,7 @@ import type * as media from "../media.js";
 import type * as members from "../members.js";
 import type * as messaging from "../messaging.js";
 import type * as messagingBilling from "../messagingBilling.js";
+import type * as messagingFunds from "../messagingFunds.js";
 import type * as onboarding from "../onboarding.js";
 import type * as overview from "../overview.js";
 import type * as pay from "../pay.js";
@@ -783,6 +784,7 @@ declare const fullApi: ApiFromModules<{
   members: typeof members;
   messaging: typeof messaging;
   messagingBilling: typeof messagingBilling;
+  messagingFunds: typeof messagingFunds;
   onboarding: typeof onboarding;
   overview: typeof overview;
   pay: typeof pay;

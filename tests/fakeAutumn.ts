@@ -43,6 +43,8 @@ export function fakeAutumn() {
     /** Balance history entries; null answers 404, as for a customer without history yet. */
     ledger: null as unknown[] | null,
     topUpPrice: 0.01,
+    /** Billing controls set per customer (automatic top-ups). */
+    billingControls: new Map<string, unknown>(),
   };
   const grantOf = (customer: Customer) => (customer.plan ? customer.grant : 0);
   const held = (customerId: string, feature = "selestial_credits") => [...state.locks.values()].filter((lock) => lock.customerId === customerId && (lock.feature ?? "selestial_credits") === feature && lock.finalized === null && lock.expiresAt > Date.now()).reduce((sum, lock) => sum + lock.credits, 0);
@@ -168,6 +170,12 @@ export function fakeAutumn() {
       case "/v1/billing.preview_attach": {
         const customer = customerFor(customerId);
         const plan = body.plan_id as string;
+        if (plan === "messaging_top_up") {
+          // $1 per 10,000 units, exactly.
+          const quantity = Number((body.feature_quantities as { quantity: number }[])[0].quantity);
+          const total = quantity / 10_000;
+          return json(200, { currency: "usd", total, subtotal: total, line_items: [{ display_name: "Messaging funds", total }], plan_activates: "on_payment", incoming: [{ plan_id: plan, effective_at: null }] });
+        }
         if (plan === "credit_top_up") {
           const quantity = Number((body.feature_quantities as { quantity: number }[])[0].quantity);
           return json(200, { currency: "usd", total: quantity * state.topUpPrice, subtotal: quantity * state.topUpPrice, line_items: [{ display_name: "Credit top-up", total: quantity * state.topUpPrice }], plan_activates: "on_payment", incoming: [{ plan_id: plan, effective_at: null }] });
@@ -184,6 +192,12 @@ export function fakeAutumn() {
         if (plan === "credit_top_up") {
           customer.purchased += Number((body.feature_quantities as { quantity: number }[])[0].quantity);
           return json(200, { customer_id: customerId, payment_url: null });
+        }
+        if (plan === "messaging_top_up") {
+          const quantity = Number((body.feature_quantities as { quantity: number }[])[0].quantity);
+          customer.messaging.purchased += quantity;
+          customer.invoices.push({ id: `in_msg_${customer.invoices.length + 1}`, plan_ids: [plan], status: "paid", total: quantity / 10_000, currency: "usd", created_at: Date.now(), hosted_invoice_url: "https://invoice.stripe.test/msg" });
+          return json(200, { customer_id: customerId, payment_url: null, invoice: { status: "paid", total: quantity / 10_000, currency: "usd", hosted_invoice_url: "https://invoice.stripe.test/msg" } });
         }
         const target = plan as PlanId;
         if (body.plan_schedule === "end_of_cycle") customer.scheduled = target;
@@ -206,6 +220,9 @@ export function fakeAutumn() {
         }
         return json(200, { customer_id: customerId, payment_url: null });
       }
+      case "/v1/customers.update":
+        state.billingControls.set(customerId, body.billing_controls);
+        return json(200, { id: customerId });
       case "/v1/billing.open_customer_portal":
         return json(200, { customer_id: customerId, url: "https://billing.stripe.test/portal" });
       case "/v1/balances.list_ledger":

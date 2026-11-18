@@ -173,6 +173,33 @@ export function trackMessaging(input: { customerId: string; amount: number; key:
   );
 }
 
+/**
+ * Sets (or turns off) the automatic top-up of the messaging balance on Autumn's customer: when the balance
+ * falls below `threshold` units, Autumn buys `quantity` units at the messaging top-up price and charges the
+ * saved payment method, at most `perMonth` times a calendar month. Only called after the Owner authorized
+ * exactly these amounts.
+ */
+export function setMessagingAutoTopUp(input: { customerId: string; enabled: boolean; threshold: number; quantity: number; perMonth: number }, idempotencyKey: string) {
+  return call<{ id: string }>(
+    "/v1/customers.update",
+    {
+      customer_id: input.customerId,
+      billing_controls: {
+        auto_topups: [
+          {
+            feature_id: AUTUMN.messaging,
+            enabled: input.enabled,
+            threshold: input.threshold,
+            quantity: input.quantity,
+            purchase_limit: { interval: "month", interval_count: 1, limit: Math.max(1, input.perMonth) },
+          },
+        ],
+      },
+    },
+    { idempotencyKey },
+  );
+}
+
 // ── Plans, top-ups and the billing portal ────────────────────────────────────────────────────────
 
 export type AttachData = { customer_id: string; payment_url: string | null; required_action?: { code: string; reason?: string }; invoice?: { status: string; total: number; currency: string; hosted_invoice_url: string | null } };
@@ -194,13 +221,13 @@ export type PreviewData = {
  * The body for a plan change or a top-up. On every plan change, usage so far this cycle carries over to
  * the new plan's allowance, so switching plans can never hand out a fresh allowance.
  */
-export function attachBody(input: { customerId: string; planId: string; successUrl: string; quantity?: number; schedule?: "immediate" | "end_of_cycle" }) {
+export function attachBody(input: { customerId: string; planId: string; successUrl: string; quantity?: number; featureId?: string; schedule?: "immediate" | "end_of_cycle" }) {
   return {
     customer_id: input.customerId,
     plan_id: input.planId,
     success_url: input.successUrl,
     redirect_mode: "if_required",
-    ...(input.quantity !== undefined ? { feature_quantities: [{ feature_id: AUTUMN.credits, quantity: input.quantity }] } : { carry_over_usages: { enabled: true, feature_ids: [AUTUMN.credits] } }),
+    ...(input.quantity !== undefined ? { feature_quantities: [{ feature_id: input.featureId ?? AUTUMN.credits, quantity: input.quantity }] } : { carry_over_usages: { enabled: true, feature_ids: [AUTUMN.credits] } }),
     ...(input.schedule ? { plan_schedule: input.schedule } : {}),
   };
 }

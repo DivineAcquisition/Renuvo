@@ -31,7 +31,7 @@ import { cleanerMessageAtSend } from "./lib/cleaners/outbox";
 import { portalUrl } from "./lib/cleaners/portal";
 import { sendProblem, type ApplicantPurpose } from "./lib/recruiter/outbox";
 import { recruiterSettings } from "./lib/recruiter/settings";
-import { captureCharge, markPending, planOutbound, releaseCharge } from "./lib/messagingBilling/ledger";
+import { captureCharge, markPending, planOutbound, refundCharge, releaseCharge } from "./lib/messagingBilling/ledger";
 import { reserveCharge } from "./messagingBilling";
 
 const MAX_ATTEMPTS = 3;
@@ -342,7 +342,7 @@ export const deliver = internalAction({
  * This is what a webhook will call once a provider is connected.
  */
 export const receipt = internalMutation({
-  args: { provider: v.string(), eventId: v.string(), providerMessageId: v.string(), outcome: v.union(v.literal("delivered"), v.literal("failed"), v.literal("bounced")), problem: v.optional(v.string()) },
+  args: { provider: v.string(), eventId: v.string(), providerMessageId: v.string(), outcome: v.union(v.literal("delivered"), v.literal("failed"), v.literal("bounced")), problem: v.optional(v.string()), providerCost: v.optional(v.number()), errorCode: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const seen = await ctx.db
       .query("providerReceipts")
@@ -354,6 +354,8 @@ export const receipt = internalMutation({
       .query("messages")
       .withIndex("by_provider_message", (q) => q.eq("provider", args.provider).eq("providerMessageId", args.providerMessageId))
       .first();
+    // Reconciliation: what the provider charged Selestial, and no charge to the company for a text the provider did not charge for.
+    if (message) await reconcileCharge(ctx, message._id, { providerCost: args.providerCost, errorCode: args.errorCode });
     if (message?.status === "sending") {
       // The report beat the send's own answer. Kept, and applied when the send settles.
       await ctx.db.patch(message._id, { earlyReceipt: { outcome: args.outcome, problem: args.problem, at: Date.now() } });
@@ -363,6 +365,22 @@ export const receipt = internalMutation({
     return applyOutcome(ctx, message, args.outcome, args.problem);
   },
 });
+
+/** Telnyx does not charge for a text that expired in its own queue before it was sent (40014). */
+const PROVIDER_NOT_CHARGED = new Set(["40014"]);
+
+async function reconcileCharge(ctx: MutationCtx, messageId: Id<"messages">, input: { providerCost?: number; errorCode?: string }) {
+  const charge = await ctx.db
+    .query("messagingCharges")
+    .withIndex("by_message", (q) => q.eq("messageId", messageId))
+    .first();
+  if (!charge) return;
+  if (input.providerCost !== undefined) await ctx.db.patch(charge._id, { providerCost: input.providerCost, updatedAt: Date.now() });
+  if (input.errorCode && PROVIDER_NOT_CHARGED.has(input.errorCode)) {
+    if (charge.state === "captured") await refundCharge(ctx, charge._id, { reason: "The provider expired this text before sending it, so it was not charged." });
+    else await releaseCharge(ctx, charge._id, "The provider expired this text before sending it.");
+  }
+}
 
 async function applyOutcome(ctx: MutationCtx, message: Doc<"messages">, outcome: "delivered" | "failed" | "bounced", reported?: string) {
     const args = { outcome, problem: reported };

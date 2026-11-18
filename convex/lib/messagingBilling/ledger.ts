@@ -24,7 +24,6 @@ import { countSegments, plainPunctuation } from "./segments";
 
 type Ctx = MutationCtx;
 type Message = Doc<"messages">;
-type Charge = Doc<"messagingCharges">;
 type Account = Doc<"billingAccounts">;
 
 const MINUTE = 60_000;

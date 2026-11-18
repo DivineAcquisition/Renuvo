@@ -30,7 +30,40 @@ export type ChargeState = (typeof CHARGE_STATES)[number];
 export const CHARGE_SETTLEMENTS = ["none", "pending_confirm", "pending_release", "pending_track", "confirmed", "released", "tracked", "unverified", "unbilled"] as const;
 export type ChargeSettlement = (typeof CHARGE_SETTLEMENTS)[number];
 
+export const TOP_UP_STATES = ["payment_needed", "paid", "failed", "refunded", "partly_refunded", "disputed", "dispute_won"] as const;
+
 export const messagingTables = {
+  /**
+   * Money put into the messaging balance: a purchase the Owner confirmed, or an automatic top-up Autumn
+   * charged under the Owner's authorization. Autumn and Stripe hold the payment; this is the history the
+   * Owner sees and what refunds and disputes are matched against (by invoice), each applied once.
+   */
+  messagingTopUps: defineTable({
+    companyId: v.id("companies"),
+    env: envValidator,
+    source: v.union(v.literal("manual"), v.literal("automatic")),
+    /** Units of $0.0001 added to the balance. */
+    amount: v.number(),
+    /** What the card was charged, in cents, before tax; tax is its own line on the invoice. */
+    cents: v.number(),
+    status: literals(TOP_UP_STATES),
+    intentId: v.optional(v.id("billingIntents")),
+    /** Autumn's or Stripe's invoice for it, when known: the key refunds and disputes are matched on. */
+    invoiceId: v.optional(v.string()),
+    invoiceUrl: v.optional(v.string()),
+    memberId: v.optional(v.id("members")),
+    problem: v.optional(v.string()),
+    /** Payment events already applied, by their provider event id, so a retried webhook changes nothing. */
+    applied: v.array(v.string()),
+    /** Units taken back because the payment was refunded or disputed (and given back if a dispute is won). */
+    clawedBack: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company_created", ["companyId", "createdAt"])
+    .index("by_invoice", ["invoiceId"])
+    .index("by_intent", ["intentId"]),
+
   messagingCharges: defineTable({
     companyId: v.id("companies"),
     env: envValidator,

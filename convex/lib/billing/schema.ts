@@ -185,7 +185,7 @@ export const billingTables = {
   billingIntents: defineTable({
     companyId: v.id("companies"),
     env: envValidator,
-    kind: v.union(v.literal("plan_change"), v.literal("top_up"), v.literal("cancel"), v.literal("uncancel"), v.literal("portal"), v.literal("payment_method")),
+    kind: v.union(v.literal("plan_change"), v.literal("top_up"), v.literal("messaging_top_up"), v.literal("cancel"), v.literal("uncancel"), v.literal("portal"), v.literal("payment_method")),
     planId: v.optional(v.string()),
     quantity: v.optional(v.number()),
     memberId: v.id("members"),

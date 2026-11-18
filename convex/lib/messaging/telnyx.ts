@@ -106,7 +106,7 @@ export async function verifyTelnyx(input: { publicKey: string; signature: string
 }
 
 export type TelnyxEvent =
-  | { kind: "receipt"; eventId: string; providerMessageId: string; outcome: "delivered" | "failed"; problem: string | null }
+  | { kind: "receipt"; eventId: string; providerMessageId: string; outcome: "delivered" | "failed"; problem: string | null; costUnits: number | null; errorCode: string | null }
   | { kind: "inbound"; eventId: string; from: string; to: string; text: string; receivedAt: number; providerMessageId: string | null; parts: number | null; media: number }
   | { kind: "ignored" };
 
@@ -120,14 +120,19 @@ export function telnyxEvent(body: string): TelnyxEvent {
   }
   const data = (parsed as { data?: { id?: unknown; event_type?: unknown; occurred_at?: unknown; payload?: Record<string, unknown> } }).data;
   if (!data || typeof data.id !== "string" || !data.payload) return { kind: "ignored" };
-  const payload = data.payload as { id?: unknown; text?: unknown; parts?: unknown; media?: unknown[]; from?: { phone_number?: unknown }; to?: { phone_number?: unknown; status?: unknown }[]; errors?: { code?: unknown; title?: unknown }[] };
+  const payload = data.payload as { id?: unknown; text?: unknown; parts?: unknown; media?: unknown[]; cost?: { amount?: unknown; currency?: unknown } | null; from?: { phone_number?: unknown }; to?: { phone_number?: unknown; status?: unknown }[]; errors?: { code?: unknown; title?: unknown }[] };
+  // What Telnyx charged Selestial (USD, as a decimal string), kept in units of $0.0001 for internal margin tracking.
+  const costAmount = payload.cost && payload.cost.currency === "USD" ? Number(payload.cost.amount) : NaN;
+  const costUnits = Number.isFinite(costAmount) ? Math.round(costAmount * 10_000) : null;
+  const firstCode = payload.errors?.[0]?.code;
+  const errorCode = typeof firstCode === "string" ? firstCode.slice(0, 20) : null;
   if (data.event_type === "message.finalized") {
     const status = payload.to?.[0]?.status;
     if (typeof payload.id !== "string") return { kind: "ignored" };
-    if (status === "delivered") return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "delivered", problem: null };
+    if (status === "delivered") return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "delivered", problem: null, costUnits, errorCode };
     if (status === "delivery_failed" || status === "sending_failed") {
       const code = payload.errors?.[0]?.code;
-      return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "failed", problem: typeof code === "string" ? (ERRORS[code]?.problem ?? null) : null };
+      return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "failed", problem: typeof code === "string" ? (ERRORS[code]?.problem ?? null) : null, costUnits, errorCode };
     }
     // delivery_unconfirmed: the carrier never said. The message stays "sent", which already says that.
     return { kind: "ignored" };
