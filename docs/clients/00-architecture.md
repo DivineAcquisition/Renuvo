@@ -12,7 +12,8 @@ agreement or money database: every number and state on it comes from the record 
 | Question | Decision |
 |---|---|
 | Plans | A running recurring plan books its visits 28 days ahead, through the same visit creation as a manual booking, at the plan's agreed price. A standing arrangement (short-term rentals) holds terms only; turnovers are booked one by one. |
-| Prospects | A prospect is a relationship status on the same client record, not a separate list. Booking a visit makes them a client; history stays. No Sales pipeline exists in this repository (Sales is not built), so nothing links to one. |
+| Prospects | A prospect is a relationship status on the same client record, not a separate list. A customer added in Sales starts as a prospect; booking a visit (by a person, a plan, Sales or the online booking page) makes them a client; history stays. The deal itself lives in the Sales pipeline. |
+| Sales and Clients plans (decided November 18, 2026) | Both stay: Sales recurring plans (made by Sales bookings and proposals) and Clients service plans. The client's profile shows both, each changed where it lives; setting up a Clients plan at a property with a running Sales plan warns that it books visits on top. |
 | Messages | Threads plus sending: texts and emails both ways, notes, scheduled follow-ups, take over and hand back. |
 | Access | Office adds and edits clients and properties. Access instructions and office notes are for Owners and Managers only, and never appear in search, previews, Chat or agent summaries. Archiving and merging need an Owner or Manager. |
 | Billing | The Owner's, as Finance is (decision of November 15, 2026). Enforced by the server, not by hiding the tab. |
@@ -34,6 +35,7 @@ agreement or money database: every number and state on it comes from the record 
 | Internal notes | `clientNotes` | `clientConversations.addNote` |
 | Money | Finance (`invoices`, `payments`, `refunds`, `invoiceCredits`) | `convex/clientBilling.ts` (Owner only) |
 | Open work, "Selestial is handling" | `tasks`, `approvals` | `lib/clients/signals.ts` |
+| Deals, quotes, proposals, bookings, Sales plans | Sales (`salesOpportunities`, `salesQuotes`, `proposals`, `bookings`, `recurringPlans`) | `convex/clientSales.ts` reads them for the profile; changed in Sales (`/app/agents/sales`) |
 
 ## Statuses kept apart
 
@@ -95,3 +97,21 @@ list, bulk actions with an exact preview), `quick-view.tsx`, `profile.tsx` (head
 phones), `overview.tsx`, `properties.tsx`, `services.tsx`, `conversations.tsx`, `documents.tsx`,
 `billing.tsx`, shared pieces in `bits.tsx`, `parts.tsx`, `menu.tsx`, `edit.tsx`. URL state (view, filters,
 sort, tab, property, services view, open visit) lives in the address, and scroll is restored on return.
+
+## Sales
+
+The Sales workspace (`/app/agents/sales`) and Clients & Properties share the customer, property and visit
+records:
+
+- A customer or property added in Sales is filed into the directory at once (`refreshClient`), as a
+  prospect until a visit is booked. Visits Sales makes (one-time bookings, plan visits, proposal turnovers)
+  go through `visitBooked`, like `jobs.create` and online booking.
+- The Recurring view counts a running Sales plan on a home; a visit a Sales plan made (`planVisits`) does
+  not count as one-time work.
+- "Needs follow-up" includes a deal whose next action is overdue.
+- The profile shows deals (stage, milestone, owner, next action), proposals (version, sent, opened,
+  expiry), bookings (booking, payment, agreement and time each in their own words), quotes, and Sales plans,
+  each linking to its Sales page. An accepted proposal says plainly that it books nothing by itself.
+- "Create booking or proposal" offers a quick visit, a Sales booking, a Sales proposal, or an agreement only.
+  A prospect's main action is "Quote or book in Sales".
+- Chat's client record lists open deals and Sales plans.

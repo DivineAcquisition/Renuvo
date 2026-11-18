@@ -40,6 +40,7 @@ import type * as clientBilling from "../clientBilling.js";
 import type * as clientConversations from "../clientConversations.js";
 import type * as clientDocuments from "../clientDocuments.js";
 import type * as clientProperties from "../clientProperties.js";
+import type * as clientSales from "../clientSales.js";
 import type * as clients from "../clients.js";
 import type * as coaching from "../coaching.js";
 import type * as companies from "../companies.js";
@@ -417,6 +418,7 @@ declare const fullApi: ApiFromModules<{
   clientConversations: typeof clientConversations;
   clientDocuments: typeof clientDocuments;
   clientProperties: typeof clientProperties;
+  clientSales: typeof clientSales;
   clients: typeof clients;
   coaching: typeof coaching;
   companies: typeof companies;

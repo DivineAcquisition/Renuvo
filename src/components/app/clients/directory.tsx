@@ -79,8 +79,10 @@ export function ClientsScreen() {
             className="h-9 rounded-lg border border-border bg-card px-3 text-sm font-medium text-strong hover:bg-muted"
             trigger={<span className="flex items-center gap-1.5">Create booking or proposal</span>}
             actions={[
-              { label: "Book a visit", onSelect: () => setBooking({}) },
-              { label: "Draft a proposal or agreement", href: "/app/agreements/new?mode=selestial" },
+              { label: "Book a visit now", onSelect: () => setBooking({}) },
+              { label: "Booking in Sales (quote, payment, agreement)", href: "/app/agents/sales/new?mode=booking" },
+              { label: "Proposal in Sales", href: "/app/agents/sales/new?mode=proposal" },
+              { label: "Agreement only", href: "/app/agreements/new?mode=selestial" },
             ]}
           />
           <Button variant="primary" onClick={() => setAdding(true)}>

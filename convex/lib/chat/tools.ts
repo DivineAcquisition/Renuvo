@@ -941,6 +941,8 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
       const plans = await ctx.db.query("servicePlans").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20);
       const planRows = [];
       for (const plan of plans.filter((p) => p.state !== "ended")) planRows.push({ service: (await ctx.db.get(plan.serviceId))?.name ?? "A service", kind: plan.kind, state: plan.state, cadence: plan.cadence, price: plan.priceCents === null ? "set per visit" : money(plan.priceCents), bookedThrough: plan.bookedThrough ?? null });
+      const deals = (await ctx.db.query("salesOpportunities").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20)).filter((d) => d.stage !== "won" && d.stage !== "lost");
+      const salesPlans = (await ctx.db.query("recurringPlans").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20)).filter((p) => p.status !== "ended");
       const openTasks = (await ctx.db.query("tasks").withIndex("by_company_about", (q) => q.eq("companyId", ctx.company._id).eq("about.id", customer._id)).take(30)).filter((t) => t.status !== "done" && t.status !== "cancelled");
       const invoices = isOwner(ctx.role) ? (await ctx.db.query("invoices").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(200)).filter((i) => i.status === "open") : [];
       return {
@@ -959,6 +961,8 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
           contacts: contacts.filter((c) => c.status === "active").map((c) => ({ name: c.name, title: c.title ?? null, roles: c.roles, email: c.email ?? null, phone: c.phone ?? null })),
           properties: properties.map((p) => ({ propertyId: p._id, label: p.label ?? null, kind: p.kind, city: p.address.city, postalCode: p.address.postalCode, status: p.status })),
           plans: planRows,
+          salesPlans: salesPlans.map((p) => ({ planId: p._id, status: p.status, startDate: p.startDate, endDate: p.endDate ?? null, billing: p.billing, managedIn: "Sales" })),
+          openDeals: deals.map((d) => ({ title: d.title, stage: d.stage, milestone: d.milestone ?? null, nextAction: d.nextAction ?? null, nextActionAt: d.nextActionAt ? when(d.nextActionAt, tz) : null })),
           openTasks: openTasks.map((t) => ({ taskId: t._id, title: t.title, status: t.status, nextAction: t.nextAction ?? null })),
           recentVisits: jobs.map((job) => ({ jobId: job._id, when: when(job.startsAt, tz), service: job.serviceType, status: job.status, price: job.priceCents === undefined ? "not set" : money(job.priceCents) })),
           conversation: customer.conversationHeld ? "A person has taken over this client's conversation: do not draft agent follow-ups." : null,

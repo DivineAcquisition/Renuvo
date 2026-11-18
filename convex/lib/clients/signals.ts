@@ -145,7 +145,7 @@ export async function pendingApprovalFor(ctx: QueryCtx, companyId: Id<"companies
 
 export type AttentionKind = "followup" | "setup" | "schedule" | "issues";
 export const ATTENTION_WORDS: Record<AttentionKind, { label: string; detail: string }> = {
-  followup: { label: "Needs follow-up", detail: "An open Sales or Retention task about the client or one of its properties." },
+  followup: { label: "Needs follow-up", detail: "An open Sales or Retention task about the client or one of its properties, or a deal in the Sales pipeline whose next action is overdue." },
   setup: { label: "Awaiting service setup", detail: "An active client with no property, a plan still being set up, or no plan and no visit yet." },
   schedule: { label: "Schedule exceptions", detail: "A visit in the next 14 days that does not have its full crew." },
   issues: { label: "Open service issues", detail: "An open quality review or customer-care task about a visit or the client." },
@@ -183,6 +183,14 @@ export async function companyAttention(ctx: QueryCtx, companyId: Id<"companies">
         if (id) out.followup.add(id);
       }
     }
+  }
+  // A deal in the Sales pipeline whose next action is past due.
+  for (const stage of ["new", "qualifying", "quoting"] as const) {
+    const deals = await ctx.db
+      .query("salesOpportunities")
+      .withIndex("by_company_stage", (q) => q.eq("companyId", companyId).eq("stage", stage))
+      .take(500);
+    for (const deal of deals) if (deal.customerId && deal.nextActionAt !== undefined && deal.nextActionAt < Date.now()) out.followup.add(deal.customerId);
   }
   const setup = await ctx.db
     .query("clientViews")

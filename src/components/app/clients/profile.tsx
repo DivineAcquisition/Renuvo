@@ -138,7 +138,8 @@ export function ProfileHeader({ profile, onDialog, compact }: { profile: Profile
       ? { label: "Restore client", run: () => void run(() => restore({ companyId, customerId: profile.id })) }
       : null
     : profile.relationship === "prospect"
-      ? { label: "Mark as client", run: () => onDialog("relationship") }
+      ? // A prospect is quoted and booked in Sales; booking there makes them a client on this same record.
+        { label: "Quote or book in Sales", run: () => router.push(`/app/agents/sales/new?mode=booking&customer=${profile.id}`) }
       : activeProperties.length === 0
         ? { label: "Add a property", run: () => router.push(`${clientPath(profile.id, "properties")}?add=1`) }
         : { label: "Book a visit", run: () => onDialog("book") };
@@ -190,7 +191,9 @@ export function ProfileHeader({ profile, onDialog, compact }: { profile: Profile
             { label: "Edit details", onSelect: () => onDialog("edit") },
             { label: "Change relationship", onSelect: () => onDialog("relationship"), disabled: archived },
             ...(action?.label !== "Book a visit" && activeProperties.length ? [{ label: "Book a visit", onSelect: () => onDialog("book") }] : []),
-            { label: "Draft a proposal or agreement", href: `/app/agreements/new?mode=selestial&customer=${profile.id}` },
+            { label: "Booking in Sales", href: `/app/agents/sales/new?mode=booking&customer=${profile.id}` },
+            { label: "Proposal in Sales", href: `/app/agents/sales/new?mode=proposal&customer=${profile.id}` },
+            { label: "Agreement only", href: `/app/agreements/new?mode=selestial&customer=${profile.id}` },
             ...(profile.canManage && !archived ? [{ label: "Archive client", onSelect: () => onDialog("archive"), danger: true }] : []),
           ]}
         />

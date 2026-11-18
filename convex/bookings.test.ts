@@ -191,6 +191,22 @@ describe("recurring plans", () => {
     return { t, ...owner, planId: booking.planId!, bookingId };
   }
 
+  it("shows a Sales plan on the client's profile and files the client under recurring, not one-time", async () => {
+    const { as, companyId, planId, bookingId } = await confirmedPlan();
+    const booking = (await as.query(api.bookings.get, { companyId, bookingId })).booking;
+    const customerId = booking.customerId;
+    const inView = async (view: "residential_recurring" | "residential_one_time") => (await as.query(api.clients.directory, { companyId, view, paginationOpts: { numItems: 10, cursor: null } })).page.map((row) => row.customerId);
+    expect(await inView("residential_recurring")).toEqual([customerId]);
+    // Every visit so far was made by the plan, so none of them makes this a one-time client.
+    expect(await inView("residential_one_time")).toEqual([]);
+    const sales = await as.query(api.clientSales.forClient, { companyId, customerId });
+    expect(sales.plans).toEqual([expect.objectContaining({ id: planId, status: "active", statusWords: "Running", href: `/app/agents/sales/plans/${planId}` })]);
+    expect(sales.plans[0]!.cadence).toMatch(/Every 2 weeks/);
+    expect(sales.bookings[0]).toMatchObject({ id: bookingId, status: "confirmed", statusWords: "Confirmed", kind: "recurring" });
+    // Confirmed is about the booking; staffing stays Dispatch's and is not claimed here.
+    expect(JSON.stringify(sales.bookings[0])).not.toMatch(/staffed|covered/);
+  });
+
   it("makes the deep first visit, then the ongoing visits at the recurring price, each date once", async () => {
     const { t, as, companyId, planId } = await confirmedPlan();
     let plan = await as.query(api.plans.get, { companyId, planId });

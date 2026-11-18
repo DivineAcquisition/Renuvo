@@ -119,6 +119,18 @@ describe("sales workspace drafts and quotes", () => {
     expect(found).toHaveLength(2);
   });
 
+  it("adds a new customer from Sales as a prospect in Clients & Properties, on one record", async () => {
+    const { as, companyId } = await setup();
+    const draftId = await as.mutation(api.sales.startDraft, { companyId, mode: "booking" });
+    const created = await as.mutation(api.sales.quickCreate, { companyId, draftId, customer: { name: "Riya Shah", phone: "512-555-0100" }, property: { address: { line1: "4 Oak Ave", city: "Austin", region: "TX", postalCode: "78702" } }, confirmedNew: false });
+    if (!created.created) throw new Error();
+    const page = { numItems: 10, cursor: null };
+    expect((await as.query(api.clients.directory, { companyId, view: "prospects", paginationOpts: page })).page.map((r) => r.customerId)).toEqual([created.customerId]);
+    const profile = await as.query(api.clients.profile, { companyId, customerId: created.customerId });
+    expect(profile).toMatchObject({ relationship: "prospect" });
+    expect(profile.properties).toHaveLength(1);
+  });
+
   it("prices recurring service with a different first visit and saves a quote with both", async () => {
     const { as, companyId, key } = await setup();
     const deepKey = await publish(as, companyId, homeSpec({ name: "Deep clean", pricing: { method: "bed_bath", baseCents: 20000, includedBedrooms: 1, includedBathrooms: 1, perBedroomCents: 3000, perBathroomCents: 3000, perHalfBathCents: 1000, baseLaborMinutes: 200, perBedroomMinutes: 40, perBathroomMinutes: 40, perHalfBathMinutes: 20 } }));
