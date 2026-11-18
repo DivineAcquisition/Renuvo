@@ -410,6 +410,8 @@ export async function writeDraft(ctx: MutationCtx & MemberAccess, experience: Do
   }
   const draft = normalizeDefinition(definition);
   if (canonical(draft) === canonical(experience.draft)) return { ok: true as const, revision: experience.draftRevision, unchanged: true };
+  // A new hero image must be one this company uploaded.
+  if (draft.theme.heroImage && draft.theme.heroImage !== experience.draft.theme.heroImage) await claimImage(ctx, draft.theme.heroImage);
   const published = experience.publishedVersion !== undefined ? await versionRow(ctx, experience, experience.publishedVersion) : null;
   const now = Date.now();
   await ctx.db.patch(experience._id, { draft, draftRevision: experience.draftRevision + 1, draftSavedAt: now, draftSavedBy: actorName(ctx, options.via), draftDiffers: !published || canonical(published.definition) !== canonical(draft), updatedAt: now });
@@ -578,7 +580,7 @@ export const saveRules = ownerMutation({
       const template = await ctx.db.get(rule.templateId);
       if (!template || template.companyId !== ctx.companyId) throw userError("An agreement template wasn't found.");
     }
-    if (next.profile.logo) await checkImage(ctx, next.profile.logo);
+    if (next.profile.logo && next.profile.logo !== row?.profile.logo) await claimImage(ctx, next.profile.logo);
     const now = Date.now();
     const fields = { ...next, handle: next.handle, revision: current + 1, updatedBy: ctx.member._id, updatedAt: now };
     const id = row ? (await ctx.db.replace(row._id, { companyId: ctx.companyId, ...fields }), row._id) : await ctx.db.insert("bookingSettings", { companyId: ctx.companyId, ...fields });
@@ -587,11 +589,38 @@ export const saveRules = ownerMutation({
   },
 });
 
-async function checkImage(ctx: MutationCtx, storageId: Id<"_storage">) {
+const IMAGE_TYPES = /^image\/(png|jpe?g|webp)$/;
+const FRESH_UPLOAD = 60 * 60_000;
+
+/**
+ * Registers an uploaded image to this company, or confirms it is already this company's. A stored file
+ * has no owner of its own, so an id is only accepted when it was uploaded within the hour and nothing
+ * (another company's booking page, Creative Studio, Agreements, receipts, Chat) has claimed it. SVG is
+ * refused: it can carry script, and these images are shown to the public.
+ */
+async function claimImage(ctx: MutationCtx & MemberAccess, storageId: Id<"_storage">) {
+  const gone = () => userError("The image wasn't found. Upload it again.");
+  const mine = await ctx.db
+    .query("bookingImages")
+    .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+    .first();
+  if (mine) {
+    if (mine.companyId !== ctx.companyId) throw gone();
+    return;
+  }
   const meta = await ctx.db.system.get(storageId);
-  if (!meta) throw userError("The image wasn't found. Upload it again.");
-  if (!/^image\/(png|jpe?g|webp|svg\+xml)$/.test(meta.contentType ?? "")) throw userError("Use a PNG, JPEG, WebP or SVG image.");
+  if (!meta) throw gone();
+  if (!IMAGE_TYPES.test(meta.contentType ?? "")) throw userError("Use a PNG, JPEG or WebP image.");
   if (meta.size > 2 * 1024 * 1024) throw userError("Use an image under 2 MB.");
+  if (meta._creationTime < Date.now() - FRESH_UPLOAD) throw gone();
+  for (const table of ["mediaAssets", "agreementFiles", "expenseReceipts", "chatUploads"] as const) {
+    const claimed = await ctx.db
+      .query(table)
+      .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+      .first();
+    if (claimed) throw gone();
+  }
+  await ctx.db.insert("bookingImages", { companyId: ctx.companyId, storageId, uploadedBy: ctx.member._id, createdAt: Date.now() });
 }
 
 export const uploadUrl = managerMutation({
@@ -603,7 +632,7 @@ export const uploadUrl = managerMutation({
 export const checkUpload = managerMutation({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
-    await checkImage(ctx, args.storageId);
+    await claimImage(ctx, args.storageId);
     return { url: await ctx.storage.getUrl(args.storageId) };
   },
 });

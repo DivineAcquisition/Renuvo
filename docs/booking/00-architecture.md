@@ -115,6 +115,9 @@ Publish, rollback, unpublish, archive and booking rules are the Owner's; drafts 
     (`/b/resume#bk_…`), so it never reaches a server log or a referrer. The link lasts 30 days past
     the visit and can be rotated or revoked by the customer or by the company. Changes are requests.
 
+Logos and hero images are registered to the uploading company in `bookingImages` the first time they are
+used; a page shows only its own company's images, and never SVG.
+
 `/b` responses send `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex`, `Cache-Control: no-store`
 and a `Permissions-Policy` that allows payment; only `/embed` may be framed.
 
@@ -168,8 +171,8 @@ Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET
 
 ### Implemented and verified
 
-Verified by `convex/booking.test.ts` (26 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
-(894 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
+Verified by `convex/booking.test.ts` (27 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
+(895 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
 Chromium at desktop and phone widths against the real Convex functions (screenshots in
 `docs/screenshots/booking/`).
 
@@ -177,6 +180,8 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
   unpublish, archive, duplicate; readiness blockers with links to the setting to fix.
 - Company isolation; Office cannot edit; Owner-only publishing and rules.
 - A booking matched to an existing customer by email leaves that customer's record as it was.
+- Logos and hero images: PNG, JPEG or WebP only (no SVG), registered to the company that uploaded them
+  (`bookingImages`); another company's file, or an old unregistered one, is refused.
 - Residential instant booking without payment, with a deposit through the fake Stripe including
   duplicate webhooks, and a redirect without a webhook not counting as paid.
 - Simultaneous visitors at one time; confirmed visits and holds both counted (an overbooking bug found

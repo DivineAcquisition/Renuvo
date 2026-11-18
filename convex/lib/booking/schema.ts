@@ -300,6 +300,19 @@ export const bookingTables = {
     .index("by_company_session", ["companyId", "sessionId"])
     .index("by_status_expires", ["status", "expiresAt"]),
 
+  /**
+   * Images a company uploaded for its booking pages (logo, hero). A stored file has no owner of its own,
+   * so a page may only show an image registered here to the same company.
+   */
+  bookingImages: defineTable({
+    companyId: v.id("companies"),
+    storageId: v.id("_storage"),
+    uploadedBy: v.id("members"),
+    createdAt: v.number(),
+  })
+    .index("by_storage", ["storageId"])
+    .index("by_company", ["companyId", "createdAt"]),
+
   /** What a customer accepted, exactly as they saw it, with the evidence. Never edited. */
   bookingAcceptances: defineTable({
     companyId: v.id("companies"),

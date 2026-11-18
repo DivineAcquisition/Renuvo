@@ -148,6 +148,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "bookingExperienceVersions", index: "by_company_experience_version" },
   { table: "bookingSessions", index: "by_company_created", omit: ["tokenHash"], why: "A hash of a customer's private booking link." },
   { table: "bookingHolds", index: "by_company_start" },
+  { table: "bookingImages", index: "by_company" },
   { table: "bookingAcceptances", index: "by_company_session", omit: ["ipHash"], why: "A one-way hash kept only as signing evidence." },
   { table: "bookingEvents", index: "by_company_experience_at" },
 ];

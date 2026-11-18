@@ -105,7 +105,7 @@ function RulesForm({ rules, onClose }: { rules: RulesData; onClose: () => void }
               <UploadSimple aria-hidden /> Upload logo
               <input
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                accept="image/png,image/jpeg,image/webp"
                 className="sr-only"
                 onChange={(e) => {
                   const file = e.target.files?.[0];

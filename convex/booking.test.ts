@@ -387,6 +387,31 @@ describe("a residential booking with no payment", () => {
     expect(records.jobs[0].instructions).toMatch(/Booked as Dana Whitfield, \+15125550199 \(differs from the customer record/);
   });
 
+  it("shows only images the company itself uploaded, and never SVG", async () => {
+    const s = await setup();
+    const store = (type: string) => s.t.run(async (ctx) => ctx.storage.store(new Blob([new Uint8Array([137, 80, 78, 71, 1, 2, 3])], { type })));
+    const png = await store("image/png");
+    expect(await s.as.mutation(api.bookingExperiences.checkUpload, { companyId: s.companyId, storageId: png })).toMatchObject({ url: expect.any(String) });
+    await edit(s.as, s.companyId, s.experienceId, (def) => {
+      def.theme.heroImage = png;
+    });
+    expect(await refusal(s.as.mutation(api.bookingExperiences.checkUpload, { companyId: s.companyId, storageId: await store("image/svg+xml") }))).toContain("PNG, JPEG or WebP");
+
+    // Another company can't put the first company's image (or any file it learned the id of) on its page.
+    const other = await company(s.t, "owner-b", "Beta Cleaning");
+    const otherExperience = await other.as.mutation(api.bookingExperiences.create, { companyId: other.companyId, kind: "residential", name: "Homes" });
+    expect(await refusal(edit(other.as, other.companyId, otherExperience, (def) => {
+      def.theme.heroImage = png;
+    }))).toContain("wasn't found");
+    const rules = await other.as.query(api.bookingExperiences.rules, { companyId: other.companyId });
+    expect(await refusal(other.as.mutation(api.bookingExperiences.saveRules, { companyId: other.companyId, expectedRevision: rules.revision, ...RULES({ handle: "beta-clean" }), profile: { ...RULES().profile, logo: png } } as never))).toContain("wasn't found");
+
+    // An old file nobody registered is not accepted either.
+    const stale = await store("image/png");
+    vi.setSystemTime(NOW + 2 * HOUR);
+    expect(await refusal(s.as.mutation(api.bookingExperiences.checkUpload, { companyId: s.companyId, storageId: stale }))).toContain("wasn't found");
+  });
+
   it("asks again when a price-affecting answer changes after the price was accepted", async () => {
     const s = await setup();
     await publish(s.as, s.companyId, s.experienceId);
