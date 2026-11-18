@@ -23,7 +23,7 @@ import { Sidebar, SidebarStateProvider, type BusinessOption } from "@/components
 import { useNow } from "@/components/app/use-now";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LANDING_PATH } from "@/lib/app/navigation";
+import { LANDING_PATH, SETUP_PAGES } from "@/lib/app/navigation";
 import { AUTH, withNext } from "@/lib/auth/routes";
 
 import { api } from "../../../convex/_generated/api";
@@ -31,6 +31,7 @@ import { currentVersion } from "../../../convex/lib/trust/documents";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const STORED = "selestial.company";
+const SETUP_PATH = SETUP_PAGES[0].path;
 
 function Loading() {
   return (
@@ -183,7 +184,18 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, children }: 
   const company = useQuery(api.companies.get, { companyId });
   const count = useQuery(api.overview.decisionCount, { companyId });
   const team = useQuery(api.overview.team, { companyId });
-  if (company === undefined) return <Loading />;
+  const setup = useQuery(api.setup.state, { companyId });
+  const router = useRouter();
+  const pathname = usePathname();
+  const inSetup = pathname === SETUP_PATH || pathname.startsWith(`${SETUP_PATH}/`);
+  // Only an Owner who has not yet opened the workspace is taken to setup. Staff and older companies never are.
+  const sendToSetup = setup?.required === true && !inSetup;
+  useEffect(() => {
+    if (sendToSetup) router.replace(SETUP_PATH);
+  }, [sendToSetup, router]);
+  if (company === undefined || setup === undefined || sendToSetup) return <Loading />;
+  // Setup is its own full screen: no sidebar, dock or chat until the owner opens the workspace.
+  if (inSetup) return <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>{children}</CompanyProvider>;
   return (
     <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
       <ChatProvider userId={userId} companyId={companyId}>

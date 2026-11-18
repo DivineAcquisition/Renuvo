@@ -234,6 +234,11 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 ];
 
 /** Pages inside Services & Pricing. The first four are its tabs; the rest are reached from them. They have no sidebar entry of their own. */
+/** Company setup: a full-screen guided start for the Owner, outside the sidebar. Reached at company creation and from Home. */
+export const SETUP_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/setup`, label: "Set up your company", purpose: "The Owner confirms the company's details, chooses what Selestial helps with first, and opens the workspace." },
+];
+
 /** Pages inside Sales that are not tabs: the booking and proposal workspace and its entry point. */
 export const SALES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/agents/sales/new`, label: "New booking or proposal", purpose: "Starts a workspace draft from Sales, a customer or Dispatch, with what they know filled in." },

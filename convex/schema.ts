@@ -25,6 +25,7 @@ import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
 import { salesSettingsValidator } from "./lib/sales/agentSchema";
 import { salesTables } from "./lib/sales/schema";
+import { setupTables } from "./lib/setup/schema";
 import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
@@ -918,6 +919,7 @@ export default defineSchema({
 
   // ── Sales: the booking and proposal workspace and what it commits the company to (convex/lib/sales) ─
   ...salesTables,
+  ...setupTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

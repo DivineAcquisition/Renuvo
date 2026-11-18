@@ -5,6 +5,7 @@
  * this is rebuilt each time. Amounts the Owner keeps private (pay, costs, margin targets for anyone but
  * the Owner) are never in it; tools give them to the Owner.
  */
+import { factLines, factsOf } from "../setup/facts";
 import type { Doc } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
 import type { Role } from "../roles";
@@ -76,6 +77,9 @@ export async function businessContext(ctx: QueryCtx, company: Doc<"companies">, 
   }
   const team = [c?.teamStructure ? TEAM[c.teamStructure] : null, working ? `${working} cleaner${working === 1 ? "" : "s"} on record` : c?.cleaners ? `about ${c.cleaners} cleaners (setup)` : null, c?.compensation ? `paid ${PAY[c.compensation]}` : null].filter(Boolean);
   if (team.length) lines.push(`- Team: ${team.join("; ")}.`);
+  // What the Owner confirmed about the company in setup. Things only found on a page or in a file are left out.
+  const facts = factLines(await factsOf(ctx, company._id));
+  if (facts.length) lines.push("- Confirmed by the Owner in setup:", ...facts.map((line) => `  ${line}`));
 
   if (c) {
     const job = [c.typicalSizes ? `typical homes ${clip(c.typicalSizes, 120)}` : null, c.typicalVisitMinutes ? `about ${minutesWords(c.typicalVisitMinutes)} on site` : null, c.bookingsPerWeek ? `${c.bookingsPerWeek} bookings a week` : null, c.capacityPerWeek ? `room for ${c.capacityPerWeek} a week` : null].filter(Boolean);
