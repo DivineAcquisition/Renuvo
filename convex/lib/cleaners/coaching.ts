@@ -58,7 +58,7 @@ function draftText(key: DraftKey, cleaner: Doc<"cleaners">, jobs: string[], acce
         kind: "coaching" as const,
         visibility: "shared" as const,
         title: "Arriving on time",
-        body: `Hi ${name}, we wanted to check in about arrival times. On these jobs the check-in was after the arrival window, without a message beforehand:\n${list}\n\nIf something makes it hard to arrive on time (travel, the schedule, the job before), tell us and we will look at it together. If you are running late, a quick message from the job link helps the customer and us.`,
+        body: `Hi ${name}, we wanted to check in about arrival times. On these jobs the check-in was after the arrival window, without a message beforehand:\n${list}\n\nIf something makes it hard to arrive on time (travel, the schedule, the job before), tell us and we will look at it together. If you are running late, a quick message from the job link helps the customer and us. If you arrived on time and only checked in late, tell us and we will correct the record.`,
         actions: ["Send a message from the job link when running late", "Tell the office if a schedule makes arriving on time hard"],
         followUpDays: 30,
       };

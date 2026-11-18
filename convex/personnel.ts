@@ -11,10 +11,12 @@ import { internalMutation } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, managerMutation, managerQuery } from "./lib/builders";
 import { STATUS_WORDS } from "./lib/cleaners/enroll";
-import { applyPay, carryOut, KIND_WORDS, upcomingWork } from "./lib/cleaners/personnel";
+import type { Id } from "./_generated/dataModel";
+import { applyPay, carryOut, EVIDENCED_KINDS, evidenceProblem, evidenceStates, KIND_WORDS, upcomingWork } from "./lib/cleaners/personnel";
+import { jobLabel } from "./lib/cleaners/schedule";
 import { payArrangementValidator, personnelKindValidator } from "./lib/cleaners/schema";
 import { cleanersSettings } from "./lib/cleaners/settings";
-import { notAllowed, userError } from "./lib/errors";
+import { notAllowed, notFound, userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { payWords } from "./lib/recruiter/offers";
 import { isManager, isOwner } from "./lib/roles";
@@ -66,6 +68,7 @@ export const list = managerQuery({
         decidedAt: row.decidedAt ?? null,
         decisionNote: row.decisionNote ?? null,
         carriedOut: row.carriedOut ?? null,
+        evidence: await evidenceStates(ctx, row),
         youMayDecide: row.status === "pending" && mayDecide(ctx.role, settings.personnelDecider) && (row.requestedBy !== ctx.member._id || isOwner(ctx.role)),
       });
     }
@@ -89,6 +92,8 @@ export const request = managerMutation({
     pay: v.optional(payArrangementValidator),
     effectiveAt: v.optional(v.number()),
     until: v.optional(v.number()),
+    /** The job records it rests on: their own assignments, for what happened (not for pay). */
+    evidence: v.optional(v.array(v.id("assignments"))),
   },
   handler: async (ctx, args) => {
     const reason = text(args.reason, "The reason", 2000);
@@ -118,12 +123,26 @@ export const request = managerMutation({
         .take(100);
       if (open.some((row) => row.status === "pending" && row.kind === args.kind)) throw userError("A request like this is already waiting for a decision.");
     }
+    const evidence: { assignmentId: Id<"assignments">; label: string }[] = [];
+    if (args.evidence?.length) {
+      if (!cleaner || !EVIDENCED_KINDS.includes(args.kind)) throw userError("Only a disciplinary record, a suspension, an ending or a rehire restriction rests on job records.");
+      if (args.evidence.length > 20) throw userError("Attach up to 20 records.");
+      for (const id of [...new Set(args.evidence)]) {
+        const assignment = await owned(ctx, id);
+        // Another person's record is answered exactly like a missing one.
+        if (assignment.cleanerId !== cleaner._id) notFound();
+        const job = await ctx.db.get(assignment.jobId);
+        evidence.push({ assignmentId: assignment._id, label: job ? jobLabel(job, (await ctx.db.get(job.customerId))?.name ?? null, ctx.company.timezone) : "A job" });
+      }
+      const corrected = (await evidenceStates(ctx, { companyId: ctx.companyId, cleanerId: cleaner._id, details: { evidence } })).filter((row) => row.dispute === "corrected");
+      if (corrected.length) throw userError(`A record you chose was corrected after a dispute: ${corrected.map((row) => row.label).join("; ")}. Leave it out.`);
+    }
     const requestId = await ctx.db.insert("personnelRequests", {
       companyId: ctx.companyId,
       cleanerId: args.cleanerId,
       subcontractorId: args.subcontractorId,
       kind: args.kind,
-      details: { pay: args.pay, effectiveAt: args.effectiveAt, summary: optionalText(args.summary, "The summary", 4000), until: args.until },
+      details: { pay: args.pay, effectiveAt: args.effectiveAt, summary: optionalText(args.summary, "The summary", 4000), until: args.until, ...(evidence.length ? { evidence } : {}) },
       reason,
       status: "pending",
       requestedBy: ctx.member._id,
@@ -159,6 +178,11 @@ export const decide = companyMutation({
     if (row.status !== "pending") throw userError(`This request was already ${row.status}.`);
     const note = optionalText(args.note, "The note", 2000);
     if (args.decision === "declined" && !note) throw userError("Say why it is declined.");
+    // The records it rests on are read again now: a disputed or corrected one stops an approval, never a decline.
+    if (args.decision === "approved") {
+      const problem = evidenceProblem(await evidenceStates(ctx, row));
+      if (problem) throw userError(problem);
+    }
     const decided = { status: args.decision, decidedBy: ctx.member._id, decidedAt: Date.now(), decisionNote: note };
     await ctx.db.patch(row._id, decided);
     let result: { ok: boolean; detail: string } | null = null;

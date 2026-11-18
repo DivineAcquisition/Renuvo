@@ -74,8 +74,8 @@ describe("performance from verified records", () => {
     expect([punctuality.numerator, punctuality.denominator]).toEqual([5, 7]);
     expect(punctuality.breakdown.map((row) => [row.label, row.count])).toEqual([
       ["On time", 5],
-      ["Late, told the office beforehand", 1],
-      ["Late without word", 1],
+      ["Checked in late, told the office beforehand", 1],
+      ["Checked in late, without word", 1],
       ["No check-in recorded (not counted)", 1],
     ]);
     expect(punctuality.records.find((row) => row.outcome.startsWith("No check-in"))).toMatchObject({ counts: false, tone: "neutral" });

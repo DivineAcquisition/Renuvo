@@ -22,6 +22,15 @@ under Settings › Plan & Usage.
 | Plans | Everything on both plans. Research uses credits on either. |
 | Outside systems | No sync in this release: Selestial connects to no outside pricing system yet. Nothing claims a price changed elsewhere. |
 
+### Property prices (decided November 17, 2026)
+
+| Question | Decision |
+|---|---|
+| What a property's own price changes | Its base price for one service. Extras, rush, discounts, the minimum and rounding still come from the service. |
+| Who approves it | The Owner approves each one in Changes. Managers, and Chat on a person's request, propose it. Visits use it only once it is approved. |
+| When the service's price changes | The property keeps its price until a person changes it or its end date passes. The review of a catalog change lists the properties that have their own price. |
+| Review or end date | Optional. The Owner gets a reminder two weeks before either one. After an end date, the property pays the service's price again. |
+
 ## Where things are
 
 | Piece | File |
@@ -33,6 +42,7 @@ under Settings › Plan & Usage.
 | Checks, hashes, change descriptions, specialists' notes | `convex/lib/services/store.ts` |
 | Drafting and review steps (shared by the workspace and Chat) | `convex/lib/services/workflow.ts` |
 | Visit pricing and the day's fullness | `convex/lib/services/operations.ts` |
+| Property prices: proposing, approving, the price in force on a day, reminders | `convex/lib/services/propertyPrices.ts`; public functions in `convex/propertyPrices.ts` |
 | Templates | `convex/lib/services/templates.ts` |
 | Import parsing | `convex/lib/services/imports.ts` |
 | Research rules, screening, company records | `convex/lib/services/research.ts`, `researchStart.ts`, `webResearch.ts` |
@@ -42,6 +52,7 @@ under Settings › Plan & Usage.
 | Routes and tabs | `src/lib/app/services.ts`; navigation entry in `src/lib/app/navigation.ts` |
 | Tips, switches, labeled fields | `src/components/app/services/shared.tsx` |
 | Animated price, price-split bar, margin meter | `src/components/app/services/visuals.tsx` |
+| The Property prices panel on a service | `src/components/app/services/property-prices.tsx` |
 
 ## Showing, not explaining
 
@@ -235,6 +246,97 @@ like pay: Managers and Office never receive them.
 
 Every step writes an event (`service.*`) to the append-only log.
 
+## Property prices
+
+![The Property prices panel on a service](../screenshots/services/14-property-prices-1440.png)
+
+A property can have its own base price for one service, for example after a walkthrough, or for a rental
+listing priced differently from the bands.
+
+**Where it shows.** The **Property prices** panel sits under the service, whether or not a draft is open. It
+shows three groups:
+
+- the prices in force, each with its date (a due date stands out) and its own cleaner time, marked when it
+  kept its price through a change to the service;
+- the proposals waiting for the Owner, each linked to its review;
+- the ones that ended or were replaced, folded away.
+
+**Proposing.** Owners and Managers choose the customer and property, the base price, optionally the cleaner
+time there, a review or end date, and why. The form prices the service's example job at the property and
+elsewhere, with the same engine visits use. Sending it opens a change of kind `property_price` in
+**Changes**. A newer proposal for the same property and service replaces an older open one.
+
+**Reviewing and approving.** Only the Owner approves, one button, for that exact proposal (its hash).
+
+- The review shows the property and customer.
+- It shows the proposed price beside the property's current one (struck through) and the service's price.
+- It prices the example job both ways.
+- The catalog version is not checked: a property price keeps its price when the catalog moves (the
+  decision above).
+- What is checked is the property's own price. If another price for the property was approved or ended
+  after this was proposed, the review says so and approval is refused.
+- Approving writes a `propertyPrices` row (`active`). The one it replaces is kept, marked `replaced`.
+- Approving one property's price never touches another property's proposal.
+
+**Pricing.** The engine takes `propertyPrice` (`QuoteInput`), which replaces only the base line ("Base price
+for this property").
+
+- The size, rooms or walkthrough the method would need are not asked again.
+- Condition, first clean, extras, area, rush, demand, discounts, the minimum and rounding still apply, in
+  the usual order.
+- The time is the property's own cleaner time when given, else the method's, else the service's usual.
+- An hourly service becomes the property's flat price. A monthly package's per-visit average follows the
+  property's monthly price.
+
+**Visits.** `jobs.create` looks up the price in force at the property, for the service, on the visit's own
+day (`priceInForce`). It never takes one from what a screen or a model sent: `quoteInputValidator` has no
+such field, and the server removes one if it appears.
+
+- The visit form reads the same price (`propertyPrices.forVisit`) to show it. "Base price for this property"
+  appears in the breakdown, and the price the person saw is checked as usual.
+- The saved quote keeps the property price's id in its inputs.
+- A visit on the last day of an end date gets the property's price. A visit the day after pays the
+  service's price, whether or not the daily sweep has run.
+
+**Dates and reminders.** A daily cron (`propertyPrices.sweep`, 12:23 UTC) does two things:
+
+- Two weeks before a review or end date, it opens one task for a person, about the property. It says
+  Selestial will not change or extend the price.
+- After an end date, it marks the price ended.
+
+It never proposes, approves or extends anything.
+
+**What's different here** (optional, added November 18, 2026). A property price can also carry the
+property's own scope and extras, reviewed and approved with it:
+
+![What's different here](../screenshots/services/18-property-different-here-1440.png)
+
+- **Tasks also done here**, one per line: at most 20, 800 characters together. They are added after the
+  service's scope on each new visit there, under "At this property:". They are also added to the visit's
+  checklist, in an "At this property" section. This happens whether the price came from the engine or was
+  typed, because they are scope, not price. When a long service scope would push the visit's scope over
+  its 2,000 characters, the service's part is shortened and the property's tasks stay whole.
+- **Extras here**: an extra the service sells can be included at no charge at this property, or sold at
+  the property's own price.
+  - An extra the service already includes stays free whatever the property says.
+  - An included extra's time is still planned.
+  - The line reads "Included at this property" or "…, this property's price".
+  - A price equal to the service's is dropped, and an unknown extra is refused.
+- The review lists both, the extras against the service's price, and the impact says them in words.
+  Proposing the same terms again is refused. Chat's `propose_property_price` takes `addedTasks` and
+  `extras`.
+
+**Ending early.** The Owner can end a price with a reason. Booked visits keep their price.
+
+**On Customers & Properties.** Each customer's row lists the property prices in force for their
+properties. Each entry shows the service, the base, its tasks and extras, and its date, and links to the
+service where it is changed (`propertyPrices.forCompany`). A full page per customer is still not built.
+
+![Customers & Properties with property prices](../screenshots/services/19-customers-property-prices-1440.png)
+
+**A change to the service.** Its impact says how many properties keep their own price, and its review lists
+them under "Properties that keep their own price". An archive request leaves property price proposals alone.
+
 ## Operations
 
 - **Visits.** `jobs.create` takes a service key and `quoteInput`.
@@ -247,6 +349,8 @@ Every step writes an event (`service.*`) to the append-only log.
     repriced.
   - The visit's `serviceSnapshot` stores the version, the quote id and where the price came from.
     `serviceQuotes` stores the inputs, their hash, the lines and the engine version.
+  - A property's own approved price, in force on the visit's day, replaces the base (see Property
+    prices).
 - **Dispatch.** The visit takes the service's crew, skills, arrival window, and the engine's minutes on
   site.
 - **Checklists.** Publishing writes the included tasks, by room, with photo requirements, as the service's
@@ -265,9 +369,10 @@ member chatting, with their role as it is now:
 
 | Tool | Kind | Who |
 |---|---|---|
-| `list_services`, `read_service`, `quote_service`, `run_pricing_scenarios` | read | everyone; draft prices and costs only for Managers and the Owner, costs only for the Owner |
+| `list_services`, `read_service`, `quote_service`, `run_pricing_scenarios` | read | everyone; draft prices and costs only for Managers and the Owner, costs only for the Owner. `quote_service` takes an optional `propertyId` and uses that property's approved price |
 | `start_service_draft`, `edit_service_draft`, `attach_research` | draft | Owner, Manager |
 | `submit_service_for_review` | write, approved in chat first | Owner, Manager |
+| `propose_property_price` | write, approved in chat first; then waits for the Owner in Changes | Owner, Manager |
 | `start_research` | write, approved in chat first (shows the 10-credit cost for web research) | Owner, Manager |
 | `read_research_brief` | read | everyone |
 | `update_price_book` | unavailable | says publishing is the Owner's, in Changes |
@@ -365,5 +470,8 @@ never changes a price.
 | Draft, import, research, submit, withdraw own, start rollback | | ✓ | ✓ |
 | Costs, profitability, pricing setup | | | ✓ |
 | Approve, publish, schedule, return, archive or restore | | | ✓ |
+| Read property prices; visits use them | ✓ | ✓ | ✓ |
+| Propose a property price | | ✓ | ✓ |
+| Approve or end a property price | | | ✓ |
 
 A record of another company is "Not found." (tested).

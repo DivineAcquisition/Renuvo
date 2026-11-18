@@ -94,8 +94,8 @@ describe("Cleaners: performance, coaching and check-ins", () => {
     expect([punctuality.numerator, punctuality.denominator]).toEqual([6, 9]);
     expect(punctuality.breakdown.map((row) => [row.label, row.count])).toEqual([
       ["On time", 6],
-      ["Late, told the office beforehand", 1],
-      ["Late without word", 2],
+      ["Checked in late, told the office beforehand", 1],
+      ["Checked in late, without word", 2],
       ["No check-in recorded (not counted)", 1],
     ]);
     expect(view.score.lines.map((line) => line.key)).toEqual(["reliability", "punctuality", "responsiveness"]);
@@ -177,6 +177,91 @@ describe("Cleaners: performance, coaching and check-ins", () => {
     // Office never sees coaching in the history either.
     const seen = await office.query(api.cleanerProfile.activity, { companyId: s.companyId, cleanerId: s.cleaners.Lena });
     expect(seen.some((row) => /coaching|feedback|disputed/.test(row.text))).toBe(false);
+  });
+
+  it("takes a finding through to an outcome: a request names its records, and a disputed or corrected record stops approval", async () => {
+    const s = await setup(["Lena", "Rosa"]);
+    await template(s);
+    for (const day of [3, 5, 7, 9, 11]) await pastJob(s, s.cleaners.Lena, day);
+    const noShow = await pastJob(s, s.cleaners.Lena, 13, { status: "cancelled", endCause: "no_show", checkIn: undefined, completion: undefined });
+    const manager = await addMember(s.t, s.as, s.companyId, "manager-a", "manager");
+
+    // The finding and its source record; the score says how fresh it is.
+    const view = await perf(s, s.cleaners.Lena);
+    expect(view.recommendations.find((row) => row.key === "no_show")!.evidence.map((row) => row.assignmentId)).toEqual([noShow.assignmentId]);
+    expect(view.score).toMatchObject({ state: "scored", newestRecordAt: NOW - 3 * DAY });
+    expect(view.computedAt).toBe(NOW);
+
+    // A disciplinary record that rests on it. Another person's record, or records on a pay change, are refused.
+    const rosas = await pastJob(s, s.cleaners.Rosa, 3);
+    const ask = (evidence: Id<"assignments">[]) => manager.mutation(api.personnel.request, { companyId: s.companyId, cleanerId: s.cleaners.Lena, kind: "disciplinary", reason: "Second no-show this quarter.", summary: "Did not arrive for the visit on the date shown; no message.", evidence });
+    expect(await refusal(ask([rosas.assignmentId]))).toBe(NOT_FOUND);
+    expect(await refusal(s.as.mutation(api.personnel.request, { companyId: s.companyId, cleanerId: s.cleaners.Lena, kind: "pay_change", reason: "x", pay: { kind: "share", shareBps: 4000 }, evidence: [noShow.assignmentId] }))).toContain("rests on job records");
+    const requestId = await ask([noShow.assignmentId]);
+    const pending = async () => (await s.as.query(api.personnel.list, { companyId: s.companyId, cleanerId: s.cleaners.Lena })).find((row) => row.requestId === requestId)!;
+    expect((await pending()).evidence).toMatchObject([{ assignmentId: noShow.assignmentId, dispute: null }]);
+    expect((await pending()).evidence[0].label).toMatch(/standard/i);
+
+    // Lena disputes the record from her portal: nobody can approve until the dispute is decided.
+    await s.t.mutation(api.portal.disputeRecord, { token: await portalToken(s, s.cleaners.Lena), assignmentId: noShow.assignmentId, reason: "I was there; the customer did not answer the door." });
+    expect((await pending()).evidence[0].dispute).toBe("open");
+    expect(await refusal(s.as.mutation(api.personnel.decide, { companyId: s.companyId, requestId, decision: "approved" }))).toContain("disputed and not decided yet");
+    // The Owner finds she was right: the record is corrected, so the request cannot be approved on it.
+    const disputeId = (await perf(s, s.cleaners.Lena)).disputes[0].disputeId;
+    await s.as.mutation(api.cleanerPerformance.decideDispute, { companyId: s.companyId, disputeId, decision: "corrected", resolution: "The doorbell camera shows her at the door at 9:58." });
+    expect(await refusal(s.as.mutation(api.personnel.decide, { companyId: s.companyId, requestId, decision: "approved" }))).toContain("was corrected after a dispute");
+    await s.as.mutation(api.personnel.decide, { companyId: s.companyId, requestId, decision: "declined", note: "The record was corrected." });
+    // Nor can a new request rest on the corrected record. Nothing about her changed.
+    expect(await refusal(ask([noShow.assignmentId]))).toContain("Leave it out");
+    expect((await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleaners.Lena, asOf: NOW })).status).toBe("ready");
+
+    // A record that stands carries the request through to its outcome.
+    const second = await pastJob(s, s.cleaners.Lena, 20, { status: "cancelled", endCause: "no_show", checkIn: undefined, completion: undefined });
+    const next = await ask([second.assignmentId]);
+    const decided = await s.as.mutation(api.personnel.decide, { companyId: s.companyId, requestId: next, decision: "approved" });
+    expect(decided.carriedOut).toMatchObject({ ok: true });
+    expect((await s.as.query(api.personnel.list, { companyId: s.companyId, cleanerId: s.cleaners.Lena })).find((row) => row.requestId === next)).toMatchObject({ status: "approved", evidence: [{ assignmentId: second.assignmentId, dispute: null }] });
+  });
+
+  it("shows the Owner pay read from Team Pay: approved earnings, adjustments waiting, and payments with references masked", async () => {
+    const s = await setup(["Lena"]);
+    await template(s);
+    const done = await pastJob(s, s.cleaners.Lena, 10);
+    const waiting = await pastJob(s, s.cleaners.Lena, 4);
+    await s.t.run(async (ctx) => {
+      const owner = (await ctx.db.query("members").withIndex("by_company", (q) => q.eq("companyId", s.companyId)).first())!;
+      const base = (assignmentId: Id<"assignments">, jobId: Id<"jobs">, startsAt: number) => ({
+        companyId: s.companyId,
+        cleanerId: s.cleaners.Lena,
+        jobId,
+        assignmentId,
+        method: "share" as const,
+        basis: "50% of the job price",
+        facts: { priceCents: 16000, crewSize: 1, lead: true, scheduledMinutes: 120, workedMinutes: 120, paidMinutes: 120, minutesSource: "worked" as const, offeredCents: 8000, checkInAt: null, completedAt: null },
+        baseCents: 8000,
+        tipCents: 0,
+        flags: [],
+        jobStartsAt: startsAt,
+        createdAt: NOW,
+        updatedAt: NOW,
+      });
+      const earningId = await ctx.db.insert("earnings", { ...base(done.assignmentId, done.jobId, NOW - 10 * DAY), status: "paid", adjustments: [], totalCents: 8000, approved: { by: owner._id, at: NOW - 8 * DAY, totalCents: 8000 } });
+      await ctx.db.insert("earnings", { ...base(waiting.assignmentId, waiting.jobId, NOW - 4 * DAY), status: "needs_review", adjustments: [{ id: "a1", cents: 1500, reason: "Parking at the building", by: owner._id, at: NOW - 3 * DAY }], totalCents: 9500 });
+      await ctx.db.insert("teamPayments", { companyId: s.companyId, cleanerId: s.cleaners.Lena, parts: [{ earningId, jobCents: 8000, tipCents: 0 }], amountCents: 8000, method: "bank_transfer", status: "paid", reference: "021000021 4400123456789", startedAt: NOW - 7 * DAY, paidOn: "2027-02-22", paidAt: NOW - 7 * DAY, recordedBy: owner._id, clientKey: "pay-1", createdAt: NOW - 7 * DAY, updatedAt: NOW - 7 * DAY });
+    });
+    const pay = await s.as.query(api.cleanerPay.summary, { companyId: s.companyId, cleanerId: s.cleaners.Lena, asOf: NOW });
+    expect(pay.finance).toMatchObject({ approvedCents: 8000, paidCents: 8000, paidCount: 1, reviewCents: 9500 });
+    expect(pay.adjustmentsPending).toMatchObject([{ cents: 1500, reasons: ["Parking at the building"] }]);
+    expect(pay.payments).toMatchObject([{ amountCents: 8000, method: "Bank transfer", status: "Paid", jobs: 1, reference: "ending 6789" }]);
+    // The account and routing numbers typed into the reference never reach the screen.
+    expect(JSON.stringify(pay)).not.toContain("4400123456789");
+    expect(JSON.stringify(pay)).not.toContain("021000021");
+    // Each job keeps the pay its offer stated, beside where Team Pay has it.
+    expect(pay.jobs.find((row) => row.jobId === done.jobId)).toMatchObject({ payCents: 8000, teamPay: { state: "Paid", totalCents: 8000 } });
+    expect(pay.jobs.find((row) => row.jobId === waiting.jobId)).toMatchObject({ payCents: 8000, teamPay: { state: "Being reviewed", totalCents: 9500 } });
+    // The Owner's alone.
+    const manager = await addMember(s.t, s.as, s.companyId, "manager-a", "manager");
+    expect(await refusal(manager.query(api.cleanerPay.summary, { companyId: s.companyId, cleanerId: s.cleaners.Lena, asOf: NOW }))).toBe(NOT_ALLOWED);
   });
 
   it("checks in with an idle cleaner on Dispatch's permission, records the answer, and never treats silence or 'stop' as ending anything", async () => {

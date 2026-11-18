@@ -31,6 +31,7 @@ const { PricingStep, ExtrasStep } = await import("./steps");
 const { marginStanding, PriceStrip } = await import("./visuals");
 const { setupSteps } = await import("./home");
 const { ResearchHome } = await import("./research");
+const { PropertyPrices } = await import("./property-prices");
 const { ChatProvider } = await import("@/components/app/chat/chat-context");
 
 const companyId = "company1" as Id<"companies">;
@@ -411,6 +412,8 @@ describe("the builder and review", () => {
       prices: [{ label: "A usual visit", before: null, after: 15000 }],
       liveMoved: false,
       draftMoved: false,
+      propertyPrice: null,
+      ownPrices: [],
       canPublish: false,
       canWithdraw: true,
   });
@@ -434,8 +437,127 @@ describe("the builder and review", () => {
     expect(html).toContain("Booked visits and signed agreements keep their price");
   });
 
+  it("reviews a property's own price: the property, the price now and proposed, and one approve button", () => {
+    data["services:change"] = {
+      ...changeFixture(),
+      kind: "property_price",
+      title: "Own price for 12 Elm St, Austin",
+      changesInWords: [],
+      prices: [],
+      agentNotes: [],
+      impact: ["Extras, rush, discounts, the minimum charge and rounding still come from the service."],
+      propertyPrice: {
+        property: { id: "p1", name: "12 Elm St, Austin", address: "12 Elm St, Austin 78701" },
+        customer: { id: "c1", name: "Dana Whitfield" },
+        baseCents: 18500,
+        laborMinutes: 200,
+        until: { kind: "end", date: "2027-06-30" },
+        untilWords: "Ends after June 30, 2027",
+        untilDay: "June 30, 2027",
+        addedTasks: ["Water the plants"],
+        extras: [{ id: "oven-extra", label: "Oven interior", included: true, priceCents: null, serviceCents: 3500, unit: "per visit" }],
+        current: { baseCents: 17000, approvedAt: 1, untilWords: null, addedTasks: [], extras: [] },
+        catalog: { version: 3, summary: "$150.00 per visit", spec: spec() },
+        moved: null,
+      },
+      canPublish: true,
+    };
+    const html = render("owner", <ChangeReview changeId="c1" />);
+    expect(html).toContain("12 Elm St, Austin");
+    expect(html).toContain("Dana Whitfield");
+    expect(html).toMatch(/line-through[^>]*><span class="sr-only">now <\/span>\$170\.00/);
+    expect(html).toContain("$185.00");
+    expect(html).toContain("$150.00 per visit (version 3)");
+    expect(html).toContain("Ends after June 30, 2027");
+    expect(html).toContain("3 h 20 min");
+    // The example job at the service's own fixed price, priced both ways.
+    expect(html).toMatch(/\$185\.00<\/span> here[\s\S]*\$150\.00<\/span> elsewhere/);
+    expect(html).toContain("Also done here, on every visit");
+    expect(html).toContain("• Water the plants");
+    expect(html).toMatch(/Oven interior[\s\S]*line-through[^>]*><span class="sr-only">service price <\/span>\$35\.00<\/span>Included/);
+    expect(html).toContain("Approve this price");
+    expect(html).not.toContain("Approve only");
+    expect(html).toContain("The service&#x27;s price and other properties stay as they are");
+    expect(html).not.toContain("Customers to be told");
+
+    data["services:change"] = { ...(data["services:change"] as object), propertyPrice: { ...(data["services:change"] as { propertyPrice: object }).propertyPrice, moved: "This property's price changed after this was proposed." } };
+    const moved = render("owner", <ChangeReview changeId="c1" />);
+    expect(moved).toContain("This property&#x27;s price changed");
+    expect(moved).toMatch(/<button[^>]*disabled=""[^>]*>Approve this price/);
+  });
+
+  it("lists the properties that keep their own price in a catalog change's review", () => {
+    data["services:change"] = { ...changeFixture(), ownPrices: [{ id: "pp1", property: "12 Elm St, Austin", customer: "Dana Whitfield", baseCents: 18500, until: null, untilWords: "Review by May 1, 2027" }] };
+    const html = render("owner", <ChangeReview changeId="c1" />);
+    expect(html).toContain("Properties that keep their own price");
+    expect(html).toContain("Dana Whitfield · review by May 1, 2027");
+    expect(html).toContain("$185.00 base");
+  });
+
   it("reads a change line as its label, old value and new value", () => {
     expect(beforeAfter("Default crew: 1 → 2.")).toEqual({ label: "Default crew", before: "1", after: "2" });
     expect(beforeAfter("Rush switched on.")).toBeNull();
+  });
+});
+
+describe("property prices on a service", () => {
+  const row = {
+    id: "pp1",
+    propertyId: "p1",
+    property: "12 Elm St, Austin",
+    address: "12 Elm St, Austin",
+    customerId: "c1",
+    customer: "Dana Whitfield",
+    baseCents: 18500,
+    laborMinutes: null,
+    addedTasks: ["Water the plants", "Feed the cat"],
+    extras: [{ id: "oven-extra", label: "Oven interior", included: false, priceCents: 3000, serviceCents: 3500, unit: "per visit" }],
+    until: { kind: "review", date: "2027-03-10" },
+    untilWords: "Review by March 10, 2027",
+    dueSoon: true,
+    lapsed: false,
+    reason: "Walkthrough.",
+    state: "active",
+    approvedAt: Date.UTC(2027, 1, 20),
+    approvedBy: "Dana",
+    catalogVersion: 1,
+    catalogMoved: true,
+    endedAt: null,
+    endedReason: null,
+    changeId: "ch1",
+  };
+  const prices = (over: Record<string, unknown> = {}) => ({ live: true, active: [row], waiting: [{ changeId: "ch2", state: "in_review", property: "40 Oak Ave, Austin", customer: "Sam Lee", baseCents: 15000, untilWords: null, submittedAt: 1, replacesOwnPrice: false }], past: [], today: "2027-03-01", canPropose: true, canEnd: true, ...over });
+
+  it("shows each property's own price, its date, and that it kept its price through a service change", () => {
+    data["propertyPrices:forService"] = prices();
+    const html = render("owner", <PropertyPrices serviceId={"s1" as Id<"services">} spec={spec()} />);
+    expect(html).toContain("12 Elm St, Austin");
+    expect(html).toContain("$185.00");
+    expect(html).toContain("base per visit");
+    expect(html).toContain("Review by March 10, 2027");
+    expect(html).toContain("Kept its price through a service change");
+    expect(html).toContain("+2 tasks here");
+    expect(html).toContain("Oven interior: $30.00 per visit");
+    expect(html).toContain("Waiting for the Owner");
+    expect(html).toContain("40 Oak Ave, Austin");
+    expect(html).toContain("Add a property price");
+    expect(html).toContain('aria-label="End the price for 12 Elm St, Austin"');
+  });
+
+  it("lets a Manager propose and change but not end, and an Office member only read", () => {
+    data["propertyPrices:forService"] = prices({ canEnd: false });
+    const manager = render("manager", <PropertyPrices serviceId={"s1" as Id<"services">} spec={spec()} />);
+    expect(manager).toContain("Add a property price");
+    expect(manager).not.toContain("End the price");
+    data["propertyPrices:forService"] = prices({ canEnd: false, canPropose: false });
+    const office = render("office", <PropertyPrices serviceId={"s1" as Id<"services">} spec={spec()} />);
+    expect(office).not.toContain("Add a property price");
+    expect(office).not.toContain("Change the price");
+    expect(office).toContain("$185.00");
+  });
+
+  it("says plainly when no property has its own price", () => {
+    data["propertyPrices:forService"] = prices({ active: [], waiting: [] });
+    expect(render("owner", <PropertyPrices serviceId={"s1" as Id<"services">} spec={spec()} />)).toContain("No property has its own price. Every visit uses the service&#x27;s price.");
   });
 });

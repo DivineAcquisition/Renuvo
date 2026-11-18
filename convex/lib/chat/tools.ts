@@ -41,6 +41,7 @@ import { SERVICE_TOOLS } from "./serviceTools";
 import { GOOGLE_TOOLS } from "./googleTools";
 import { SALES_TOOLS } from "./salesTools";
 import { FINANCE_TOOLS } from "./financeTools";
+import { CLIENT_TOOLS } from "./clientTools";
 import { localDay } from "./localDay";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
@@ -875,7 +876,7 @@ const TOOLS: ChatTool[] = [
     minimumRole: "office",
     specialist: "customer-care",
     input: { type: "object", properties: { customerId: { ...ID("The customer's id."), optional: true }, body: { type: "string", optional: true, max: 4000 } } },
-    run: async () => unavailable("Customer Care is not built, and the shared messaging policy has no customer-message purpose yet, so Selestial cannot send to customers. Save the reply as a draft and send it from your own email or phone."),
+    run: async () => unavailable("Chat never sends to clients. Use draft_client_message to prepare it; a person reads it, sees who it goes to and what the sending policy says, and sends it from the client's Conversations."),
   },
   {
     name: "update_price_book",
@@ -935,15 +936,46 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
       const customer = row as Doc<"customers">;
       const properties = await ctx.db.query("properties").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20);
       const jobs = await ctx.db.query("jobs").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).order("desc").take(10);
+      // What the profile shows this person, and no more: never access details, private notes or office notes; billing only for the Owner.
+      const contacts = await ctx.db.query("clientContacts").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20);
+      const plans = await ctx.db.query("servicePlans").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20);
+      const planRows = [];
+      for (const plan of plans.filter((p) => p.state !== "ended")) planRows.push({ service: (await ctx.db.get(plan.serviceId))?.name ?? "A service", kind: plan.kind, state: plan.state, cadence: plan.cadence, price: plan.priceCents === null ? "set per visit" : money(plan.priceCents), bookedThrough: plan.bookedThrough ?? null });
+      const openTasks = (await ctx.db.query("tasks").withIndex("by_company_about", (q) => q.eq("companyId", ctx.company._id).eq("about.id", customer._id)).take(30)).filter((t) => t.status !== "done" && t.status !== "cancelled");
+      const invoices = isOwner(ctx.role) ? (await ctx.db.query("invoices").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(200)).filter((i) => i.status === "open") : [];
       return {
-        label: `customer ${customer.name}`,
-        data: { customerId: customer._id, name: customer.name, kind: customer.kind, email: customer.email ?? null, phone: customer.phone ?? null, preferences: customer.preferences ?? null, status: customer.status, properties: properties.map((p) => ({ propertyId: p._id, label: p.label ?? null, city: p.address.city, postalCode: p.address.postalCode })), recentVisits: jobs.map((job) => ({ jobId: job._id, when: when(job.startsAt, tz), service: job.serviceType, status: job.status, price: job.priceCents === undefined ? "not set" : money(job.priceCents) })) },
-        link: { href: "/app/customers", label: "Customers & Properties" },
+        label: `client ${customer.name}`,
+        data: {
+          customerId: customer._id,
+          name: customer.name,
+          type: customer.type ?? null,
+          kind: customer.kind,
+          status: customer.status,
+          relationship: customer.relationship ?? (customer.status === "archived" ? "former" : "active"),
+          email: customer.email ?? null,
+          phone: customer.phone ?? null,
+          communication: customer.communication ?? null,
+          preferences: customer.preferences ?? null,
+          contacts: contacts.filter((c) => c.status === "active").map((c) => ({ name: c.name, title: c.title ?? null, roles: c.roles, email: c.email ?? null, phone: c.phone ?? null })),
+          properties: properties.map((p) => ({ propertyId: p._id, label: p.label ?? null, kind: p.kind, city: p.address.city, postalCode: p.address.postalCode, status: p.status })),
+          plans: planRows,
+          openTasks: openTasks.map((t) => ({ taskId: t._id, title: t.title, status: t.status, nextAction: t.nextAction ?? null })),
+          recentVisits: jobs.map((job) => ({ jobId: job._id, when: when(job.startsAt, tz), service: job.serviceType, status: job.status, price: job.priceCents === undefined ? "not set" : money(job.priceCents) })),
+          conversation: customer.conversationHeld ? "A person has taken over this client's conversation: do not draft agent follow-ups." : null,
+          billing: isOwner(ctx.role) ? { openInvoices: invoices.length, owedCents: invoices.reduce((sum, i) => sum + Math.max(0, i.totals.balanceCents), 0) } : "Shown to the Owner only.",
+          accessDetails: "Kept on the property page for Owners and Managers. Never shared in Chat.",
+        },
+        link: { href: `/app/clients/${customer._id}`, label: `Open ${customer.name}` },
       };
     }
     case "properties": {
       const property = row as Doc<"properties">;
-      return { label: `property ${property.label ?? property.address.line1}`, data: { propertyId: property._id, customer: await nameOf(ctx, property.customerId), address: property.address, kind: property.kind, accessInstructions: property.accessInstructions ?? null } };
+      // Access instructions (codes, keys, alarms) and office notes never go into Chat, for any role.
+      return {
+        label: `property ${property.label ?? property.address.line1}`,
+        data: { propertyId: property._id, customer: await nameOf(ctx, property.customerId), address: property.address, kind: property.kind, details: property.details ?? null, parking: property.parking ?? null, crewNotes: property.crewNotes ?? null, clientNotes: property.clientNotes ?? null, accessDetails: property.accessInstructions ? "On file. Kept on the property page for Owners and Managers; never shared in Chat." : "None on file." },
+        link: { href: `/app/clients/${property.customerId}/properties/${property._id}`, label: "Open the property" },
+      };
     }
     case "cleaners": {
       const cleaner = row as Doc<"cleaners">;
@@ -1008,7 +1040,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...BOOKING_TOOLS, ...SALES_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...BOOKING_TOOLS, ...CLIENT_TOOLS, ...SALES_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

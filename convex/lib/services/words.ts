@@ -41,3 +41,6 @@ export function minutesWords(minutes: number): string {
   const m = rounded - h * 60;
   return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
+
+/** A phrase such as "Ends after June 30, 2027" inside a sentence: only the first letter changes. */
+export const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);

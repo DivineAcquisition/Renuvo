@@ -43,7 +43,7 @@ starts their workflows; it never keeps a second copy.
 |---|---|---|
 | Applicants and hiring | Recruiter | A hire arrives as a linked cleaner (one record, history kept). The profile links back to the application. |
 | Offers, assignments, coverage | Dispatch | Reads assignments for jobs, history and conflicts. Crew assembly offers through Dispatch's own `offer` path. |
-| Earnings, payments | Finance (not built) | Shows the pay arrangement and the pay stated on each job. Says plainly that approved earnings and payments are not recorded yet. |
+| Earnings, payments | Finance › Team Pay | Shows the pay arrangement and its history, the pay stated on each job, and reads Team Pay for each job's state, adjustments waiting for approval, approved earnings and payments. Keeps no ledger of its own. |
 | Documents to sign | Agreements | A requirement can point at a workforce agreement; it is accepted only when the agreement is signed. |
 | Services, durations, skills | Services & Pricing | Reads the skills a job requires from the job. Equipment needs can name a service. |
 

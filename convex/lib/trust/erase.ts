@@ -136,15 +136,32 @@ export async function eraseCustomerRecords(ctx: Ctx, customer: Doc<"customers">)
   const steps: EraseStep[] = [];
   const name = customer.name;
 
-  await ctx.db.patch(customer._id, { name: ERASED_CUSTOMER, email: undefined, phone: undefined, preferences: undefined, status: "archived" });
-  steps.push({ step: "Customer details", state: "done", detail: "Name replaced with \"Erased customer\"; email, phone and preferences removed; the customer is archived." });
+  await ctx.db.patch(customer._id, { name: ERASED_CUSTOMER, email: undefined, phone: undefined, preferences: undefined, privateNotes: undefined, communication: undefined, relationshipNote: undefined, archivedReason: undefined, status: "archived" });
+  steps.push({ step: "Customer details", state: "done", detail: "Name replaced with \"Erased customer\"; email, phone, preferences and notes removed; the customer is archived." });
+
+  const contacts = await ctx.db
+    .query("clientContacts")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const contact of contacts) await ctx.db.patch(contact._id, { name: ERASED_CUSTOMER, title: undefined, email: undefined, phone: undefined, status: "archived" });
+  const notes = await ctx.db
+    .query("clientNotes")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const note of notes) await ctx.db.delete(note._id);
+  const inbound = await ctx.db
+    .query("inboundMessages")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const message of inbound) await ctx.db.patch(message._id, { from: "erased", body: "(erased)" });
+  steps.push({ step: "Contacts, notes and texts", state: "done", detail: `${contacts.length} contact${contacts.length === 1 ? "" : "s"} scrubbed, ${notes.length} internal note${notes.length === 1 ? "" : "s"} deleted, ${inbound.length} received text${inbound.length === 1 ? "" : "s"} blanked.` });
 
   const properties = await ctx.db
     .query("properties")
     .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
     .take(MAX_ROWS);
   for (const property of properties) {
-    await ctx.db.patch(property._id, { label: undefined, address: { line1: "Erased address", city: "", region: "", postalCode: "" }, accessInstructions: undefined, status: "archived" });
+    await ctx.db.patch(property._id, { label: undefined, address: { line1: "Erased address", city: "", region: "", postalCode: "" }, accessInstructions: undefined, parking: undefined, crewNotes: undefined, clientNotes: undefined, officeNotes: undefined, details: undefined, status: "archived" });
   }
   steps.push({ step: "Properties", state: "done", detail: `${properties.length} address${properties.length === 1 ? "" : "es"} and access instructions removed.` });
 

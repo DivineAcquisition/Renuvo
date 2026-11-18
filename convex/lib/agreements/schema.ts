@@ -242,6 +242,7 @@ export const agreementTables = {
   })
     .index("by_company_created", ["companyId", "createdAt"])
     .index("by_company_agreement", ["companyId", "agreementId"])
+    .index("by_company_linked", ["companyId", "linked.id"])
     .index("by_storage", ["storageId"]),
 
   agreementSignatureRequests: defineTable({

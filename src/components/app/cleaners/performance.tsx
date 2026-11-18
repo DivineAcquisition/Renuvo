@@ -83,6 +83,7 @@ function Panel({ title, action, children, className }: { title: string; action?:
 // ── The score ───────────────────────────────────────────────────────────────────────────────────────
 
 function ScoreCard({ data }: { data: View }) {
+  const { timezone } = useCompany();
   const score = data.score;
   return (
     <Panel title="Score" action={<span className="text-xs text-muted-foreground">Last {data.periodDays} days</span>}>
@@ -116,7 +117,11 @@ function ScoreCard({ data }: { data: View }) {
           </ul>
         </div>
       )}
-      <p className="mt-4 flex gap-1.5 rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      <p className="mt-3 text-xs text-muted-foreground">
+        {score.newestRecordAt ? `Newest record counted: ${longDay(score.newestRecordAt, timezone)}. ` : "No record counted yet. "}
+        Worked out live from the records as they are now; nothing about it is stored.
+      </p>
+      <p className="mt-3 flex gap-1.5 rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
           {data.method.words} <span className="whitespace-nowrap">Version {data.version}.</span>

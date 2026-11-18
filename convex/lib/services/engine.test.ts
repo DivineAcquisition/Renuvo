@@ -412,3 +412,112 @@ describe("a starting price only where one exists", () => {
     expect(startingCents(service({ pricing: { method: "hourly_per_cleaner", rateCents: 4500, minimumHours: 2, incrementMinutes: 30, estimatedLaborMinutes: 240 } }))).toBeNull();
   });
 });
+
+describe("a property's own base price", () => {
+  const own = { id: "pp1", baseCents: 18500 };
+
+  it("replaces only the base line; extras, rush, discounts, the minimum and rounding still apply", () => {
+    const spec = service({
+      pricing: bands,
+      addOns: [{ id: "oven", label: "Inside the oven", priceCents: 3500, per: "item", itemWord: "oven", laborMinutes: 30, maxQuantity: 2 }],
+      modifiers: {
+        ...defaultModifiers(),
+        recurring: { enabled: true, options: [{ schedule: "every_14_days", discount: { kind: "percent", value: 10 } }] },
+        rush: { enabled: true, adjustment: { kind: "fixed", value: 2500 } },
+        minimumCents: 25000,
+        rounding: { stepCents: 100, mode: "nearest" },
+      },
+    });
+    const input: QuoteInput = { area: 1500, addOns: [{ id: "oven", quantity: 1 }], rush: true, schedule: "every_14_days" };
+    const catalog = quote(spec, input);
+    const property = quote(spec, { ...input, propertyPrice: own });
+    expect(catalog.lines.find((l) => l.key === "base")!.amountCents).toBe(16000);
+    const base = property.lines.find((l) => l.key === "base")!;
+    expect(base.amountCents).toBe(18500);
+    expect(base.label).toBe("Base price for this property");
+    // Everything after the base is the service's own: the same lines, by key, as the catalog quote.
+    const after = (q: typeof catalog) => q.lines.filter((l) => l.key !== "base").map((l) => l.key);
+    expect(after(property)).toEqual(after(catalog));
+    expect(property.lines.find((l) => l.key.startsWith("addon:"))!.amountCents).toBe(3500);
+    expect(property.totalCents).toBe(sumOfLines(property.lines));
+    expect(property.outcome).toBe("firm");
+  });
+
+  it("brings a low property price up to the service's minimum", () => {
+    const spec = service({ pricing: bands, modifiers: { ...defaultModifiers(), minimumCents: 15000 } });
+    const result = quote(spec, { area: 500, propertyPrice: { baseCents: 9000 } });
+    expect(result.lines.find((l) => l.key === "base")!.amountCents).toBe(9000);
+    expect(result.totalCents).toBe(15000);
+  });
+
+  it("does not ask for the size or a walkthrough the property's price already settled", () => {
+    const sized = service({ pricing: bands });
+    expect(quote(sized, {}).outcome).toBe("incomplete");
+    expect(quote(sized, { propertyPrice: own }).outcome).toBe("firm");
+    expect(quote(sized, { area: 9000 }).outcome).toBe("walkthrough");
+    expect(quote(sized, { area: 9000, propertyPrice: own }).totalCents).toBe(18500);
+    const walkthrough = service({ pricing: { method: "custom_quote", fromCents: 15000, laborMinutes: 240 } });
+    const priced = quote(walkthrough, { propertyPrice: own });
+    expect(priced.outcome).toBe("firm");
+    expect(priced.totalCents).toBe(18500);
+    expect(priced.time.laborMinutes).toBe(240);
+  });
+
+  it("uses the property's own time when it has one, else the method's, else the service's usual", () => {
+    const spec = service({ pricing: bands });
+    expect(quote(spec, { area: 1500, propertyPrice: own }).time.laborMinutes).toBe(180);
+    expect(quote(spec, { propertyPrice: own }).time.laborMinutes).toBe(120);
+    expect(quote(spec, { area: 1500, propertyPrice: { ...own, laborMinutes: 300 } }).time.laborMinutes).toBe(300);
+  });
+
+  it("turns an hourly service into the property's flat price, with no hours estimate", () => {
+    const spec = service({ pricing: { method: "hourly_per_cleaner", rateCents: 4000, incrementMinutes: 30, minimumHours: 2, estimatedLaborMinutes: 240 } });
+    const result = quote(spec, { propertyPrice: own });
+    expect(result.outcome).toBe("firm");
+    expect(result.totalCents).toBe(18500);
+  });
+
+  it("prices a monthly package's per-visit average from the property's monthly price", () => {
+    const spec = service({ pricing: { method: "recurring_package", basis: "included", monthlyCents: 40000, includedVisits: 4, extraVisitCents: null, laborMinutesPerVisit: 150, schedule: "every_7_days" } });
+    const result = quote(spec, { propertyPrice: { baseCents: 36000 } });
+    expect(result.lines.find((l) => l.key === "base")!.label).toBe("Monthly price for this property");
+    expect(result.lines.find((l) => l.key === "per_visit")!.detail).toContain("$360.00 ÷ 4");
+    expect(result.totalCents).toBe(36000);
+  });
+});
+
+describe("a property's own extras", () => {
+  const spec = service({
+    pricing: { method: "fixed", amountCents: 15000, laborMinutes: 120 },
+    included: [{ id: "counters", label: "Counters", section: "Kitchen", requiresPhoto: false }],
+    addOns: [
+      { id: "oven", label: "Inside the oven", priceCents: 3500, per: "item", itemWord: "oven", laborMinutes: 30, maxQuantity: 1 },
+      { id: "windows", label: "Interior windows", priceCents: 500, per: "item", itemWord: "window", laborMinutes: 5, maxQuantity: 30 },
+      { id: "counters-x", label: "Counters again", priceCents: 900, per: "visit", laborMinutes: 10, maxQuantity: 1, coversItemId: "counters" },
+    ],
+  });
+  const chosen: QuoteInput["addOns"] = [
+    { id: "oven", quantity: 1 },
+    { id: "windows", quantity: 10 },
+  ];
+
+  it("includes an extra at no charge, but still plans its time", () => {
+    const usual = quote(spec, { addOns: chosen });
+    const here = quote(spec, { addOns: chosen, propertyPrice: { baseCents: 15000, extras: [{ id: "oven", included: true, priceCents: null }] } });
+    expect(usual.totalCents).toBe(15000 + 3500 + 5000);
+    expect(here.totalCents).toBe(15000 + 5000);
+    expect(here.lines.find((l) => l.key === "addon:oven")).toMatchObject({ kind: "info", detail: "Included at this property", amountCents: 0 });
+    expect(here.time.laborMinutes).toBe(usual.time.laborMinutes);
+  });
+
+  it("charges an extra at the property's own price, per unit", () => {
+    const here = quote(spec, { addOns: chosen, propertyPrice: { baseCents: 15000, extras: [{ id: "windows", included: false, priceCents: 400 }] } });
+    expect(here.lines.find((l) => l.key === "addon:windows")).toMatchObject({ amountCents: 4000, detail: "10 × $4.00 per window, this property's price" });
+    expect(here.totalCents).toBe(sumOfLines(here.lines));
+  });
+
+  it("never charges an extra the service already includes, whatever the property says", () => {
+    const here = quote(spec, { addOns: [{ id: "counters-x", quantity: 1 }], propertyPrice: { baseCents: 15000, extras: [{ id: "counters-x", included: false, priceCents: 900 }] } });
+    expect(here.lines.find((l) => l.key === "addon:counters-x")).toMatchObject({ amountCents: 0, detail: "Already included in this service, so not charged" });
+  });
+});
