@@ -366,15 +366,49 @@ function CompanyDialog({ detail, onClose }: { detail?: Detail; onClose: () => vo
   );
 }
 
+type Impact = FunctionReturnType<typeof api.subcontractors.endImpact>;
+
+/** The accepted jobs and open offers ending the relationship touches, before the Owner decides. */
+function EndImpact({ impact }: { impact: Impact | undefined }) {
+  if (impact === undefined) return <Skeleton className="h-14 rounded-xl" />;
+  if (impact.workers.length === 0) return <p className="rounded-xl bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">No current workers come through this company.</p>;
+  if (impact.accepted === 0 && impact.offered === 0) {
+    return <p className="rounded-xl bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">None of their {impact.workers.length === 1 ? "worker" : `${impact.workers.length} workers`} has upcoming work or an open offer.</p>;
+  }
+  return (
+    <div className="grid gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-sm">
+      <p className="font-medium text-strong">
+        {impact.accepted > 0 ? `${impact.accepted} accepted ${impact.accepted === 1 ? "job stays" : "jobs stay"} as ${impact.accepted === 1 ? "it is" : "they are"} and ${impact.accepted === 1 ? "goes" : "go"} to a person in Dispatch to decide.` : ""}
+        {impact.accepted > 0 && impact.offered > 0 ? " " : ""}
+        {impact.offered > 0 ? `${impact.offered} open ${impact.offered === 1 ? "offer" : "offers"} can no longer be accepted.` : ""}
+      </p>
+      <ul className="grid gap-1">
+        {impact.workers
+          .filter((worker) => worker.accepted.length > 0 || worker.offered > 0)
+          .map((worker) => (
+            <li key={worker.cleanerId}>
+              <span className="font-medium text-strong">{worker.name}</span>
+              <span className="text-muted-foreground">
+                {worker.accepted.length > 0 ? `: ${worker.accepted.map((job) => job.label).join("; ")}` : ""}
+                {worker.offered > 0 ? `${worker.accepted.length > 0 ? "," : ":"} ${worker.offered} open ${worker.offered === 1 ? "offer" : "offers"}` : ""}
+              </span>
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}
+
 function StatusDialog({ detail, to, onClose }: { detail: Detail; to: "active" | "paused" | "ended"; onClose: () => void }) {
   const { companyId } = useCompany();
   const setStatus = useMutation(api.subcontractors.setStatus);
   const { busy, error, run } = useRun();
   const [reason, setReason] = useState("");
   const title = to === "ended" ? `End the relationship with ${detail.name}` : to === "paused" ? `Pause ${detail.name}` : `Resume ${detail.name}`;
+  const impact = useQuery(api.subcontractors.endImpact, to === "ended" ? { companyId, subcontractorId: detail.subcontractorId } : "skip");
   const description =
     to === "ended"
-      ? "Their contact's access ends. Their workers keep their records and history, and nobody is taken off a job they accepted."
+      ? "Their contact's access ends, and no new work is offered to their workers through them. Their workers keep their records and history, and nobody is taken off a job they accepted: those jobs go to a person to decide."
       : to === "paused"
         ? "Nothing about their workers changes. Use this while you sort something out with them."
         : "Work with them as before.";
@@ -390,6 +424,7 @@ function StatusDialog({ detail, to, onClose }: { detail: Detail; to: "active" | 
           });
         }}
       >
+        {to === "ended" ? <EndImpact impact={impact} /> : null}
         <Field label="Reason" hint="Kept with the company's history.">
           <TextArea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} required maxLength={500} />
         </Field>

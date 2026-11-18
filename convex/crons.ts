@@ -61,6 +61,8 @@ crons.daily("renew gmail push watches", { hourUTC: 9, minuteUTC: 41 }, internal.
 // Cleaners: routine follow-ups (each re-checked before it goes) and requirements that pass their validity.
 crons.interval("cleaners follow-ups", { minutes: 30 }, internal.cleanerFollowUps.sweep, {});
 crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.requirements.expireDue, {});
+// Booking Experiences: holds that ended, and sessions customers walked away from.
+crons.interval("bookings let go of ended holds", { minutes: 5 }, internal.bookingOps.sweep, {});
 
 // Sales: lapsed holds and Dispatch handoffs that need another try; recurring plans made to their horizon.
 crons.interval("sales bookings sweep", { minutes: 10 }, internal.bookings.sweep, {});

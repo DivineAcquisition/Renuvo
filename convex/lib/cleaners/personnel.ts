@@ -36,7 +36,7 @@ export async function upcomingWork(ctx: QueryCtx | MutationCtx, company: Doc<"co
 }
 
 /** Upcoming accepted jobs go to a person, in Dispatch's queue, never removed by this workspace. */
-async function handOverJobs(ctx: MutationCtx, company: Doc<"companies">, cleaner: Doc<"cleaners">, why: string, actor: Actor): Promise<string> {
+export async function handOverJobs(ctx: MutationCtx, company: Doc<"companies">, cleaner: Doc<"cleaners">, why: string, actor: Actor): Promise<string> {
   const work = await upcomingWork(ctx, company, cleaner._id);
   if (work.accepted.length === 0) return work.offered > 0 ? ` ${work.offered} open offer${work.offered === 1 ? "" : "s"} can no longer be accepted.` : "";
   const taskId = await openTask(ctx, {
@@ -50,7 +50,12 @@ async function handOverJobs(ctx: MutationCtx, company: Doc<"companies">, cleaner
     key: `cleaners.jobs_after_change:${cleaner._id}:${Date.now()}`,
     actor,
   });
-  await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: `Nothing was changed on these jobs. Keep ${cleaner.name} on them, or cover them in Dispatch.`, dueAt: Date.now() + 24 * 60 * 60 * 1000, withPersonSince: Date.now() }, actor);
+  // A question carries its own details: the task's state keeps only the question, so the jobs are named in it.
+  const one = work.accepted.length === 1;
+  const shown = work.accepted.slice(0, 6).map((row) => row.label).join("; ");
+  const more = work.accepted.length > 6 ? ` and ${work.accepted.length - 6} more` : "";
+  const openQuestion = `${cleaner.name} was ${why}. Nothing was changed on ${one ? "this job" : "these jobs"}: ${shown}${more}. Keep ${cleaner.name} on ${one ? "it" : "each"}, or cover ${one ? "it" : "them"} in Dispatch.`;
+  await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion, dueAt: Date.now() + 24 * 60 * 60 * 1000, withPersonSince: Date.now() }, actor);
   return ` ${work.accepted.length} accepted job${work.accepted.length === 1 ? " was" : "s were"} left as they are and handed to a person to decide.`;
 }
 

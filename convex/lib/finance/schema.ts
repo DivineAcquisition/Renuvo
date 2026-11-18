@@ -187,7 +187,8 @@ export const financeTables = {
     nextInvoiceNumber: v.number(),
     invoicePrefix: v.string(),
     revision: v.number(),
-    updatedBy: v.id("members"),
+    /** Absent when the row was first made by an online booking taking the next invoice number. */
+    updatedBy: v.optional(v.id("members")),
     updatedAt: v.number(),
   }).index("by_company", ["companyId"]),
 
@@ -268,9 +269,13 @@ export const financeTables = {
     issuedBy: v.optional(v.id("members")),
     /** How the customer was given the link. Selestial does not email or text customers yet. */
     shared: v.optional(v.object({ how: v.union(v.literal("link_copied"), v.literal("marked_sent")), at: v.number(), by: v.id("members") })),
-    voided: v.optional(v.object({ at: v.number(), by: v.id("members"), reason: v.string() })),
+    /** `by` is absent when Selestial voided it itself (a booking whose price changed before it was paid). */
+    voided: v.optional(v.object({ at: v.number(), by: v.optional(v.id("members")), reason: v.string() })),
     paidAt: v.optional(v.number()),
-    createdBy: v.id("members"),
+    /** The member who made it. Absent on an invoice a customer's online booking made (`bookingSessionId`). */
+    createdBy: v.optional(v.id("members")),
+    /** The online booking this invoice collects for (convex/lib/booking/payments.ts). */
+    bookingSessionId: v.optional(v.id("bookingSessions")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

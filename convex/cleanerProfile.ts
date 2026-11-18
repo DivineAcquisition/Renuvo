@@ -13,6 +13,8 @@ import { cleanerReadiness, companyDefinitions, initialsOf } from "./lib/cleaners
 import { engagementValidator } from "./lib/cleaners/schema";
 import { cleanerTime, commitmentsBetween, jobLabel } from "./lib/cleaners/schedule";
 import { cleanersSettings, DAY } from "./lib/cleaners/settings";
+import { onJobNow, STANDING_WORDS, standingOf } from "./lib/cleaners/teams";
+import { jobAssignments } from "./lib/dispatch/facts";
 import { actorWords, eventText, MESSAGE_STATE_WORDS, PURPOSE_WORDS, type TimelineEntry } from "./lib/cleaners/words";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
@@ -59,7 +61,14 @@ export const profile = companyQuery({
     const crews = [];
     for (const row of memberships) {
       const crew = await ctx.db.get(row.crewId);
-      if (crew) crews.push({ crewId: crew._id, name: crew.name, kind: crew.kind, role: row.role, from: row.from, to: row.to ?? null, current: row.to === undefined && crew.status === "active", jobId: crew.jobId ?? null });
+      if (!crew) continue;
+      // A team for one job is current only while the job is ahead and they are still on it: a decline, a drop
+      // or a replacement is read from the job's assignments, not from the team.
+      const job = crew.kind === "temporary" && crew.jobId ? await ctx.db.get(crew.jobId) : null;
+      const onJob = job ? standingOf(await jobAssignments(ctx, job), cleaner._id) : null;
+      const open = row.to === undefined && crew.status === "active";
+      const current = crew.kind === "temporary" ? open && job !== null && job.status === "scheduled" && job.endsAt > args.asOf && onJobNow(onJob) : open;
+      crews.push({ crewId: crew._id, name: crew.name, kind: crew.kind, role: row.role, from: row.from, to: row.to ?? null, current, jobId: crew.jobId ?? null, onJobWords: onJob ? STANDING_WORDS[onJob] : null });
     }
 
     // The subcontractor company now and in the past.

@@ -258,6 +258,11 @@ export const FINANCE_PAGES: readonly { path: string; label: string; purpose: str
   { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account, its invoice settings (tax, terms, numbering), pay tiers, tips and expense categories." },
 ];
 
+/** Pages inside Sales › Booking Forms. The list links to each experience's builder. */
+export const BOOKING_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/agents/sales/booking-forms/[id]`, label: "Booking experience", purpose: "One booking experience: its live preview, its words, look and behavior, test bookings, versions and publishing." },
+];
+
 /** Pages inside Cleaners. They have no sidebar entry of their own: the directory links to them. */
 export const CLEANER_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/cleaners/[id]/[[...section]]`, label: "Cleaner", purpose: "One person's profile, each section at its own address: overview, availability and jobs, onboarding and documents, skills and equipment, performance and coaching, pay, and activity." },
@@ -350,7 +355,8 @@ export const AGENTS: readonly AgentNav[] = [
       ["quotes-proposals", "Quotes & Proposals", LIVE],
       ["follow-ups", "Follow-ups"],
       ["calls-messages", "Calls & Messages"],
-      ["booking-forms", "Booking Forms"],
+      // Booking Experiences (docs/booking/00-architecture.md): built before the Sales agent itself is released.
+      ["booking-forms", "Booking Forms", LIVE],
       ["playbook", "Playbook"],
     ],
   }),

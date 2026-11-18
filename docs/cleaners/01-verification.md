@@ -169,6 +169,77 @@ permission for. The office makes the link and sends it; that is said on screen. 
 summaries are Phase 4). A subcontractor worker's pay goes through their company, which Dispatch cannot yet
 state on an offer, so such a worker is shown as not offerable for that reason.
 
+### Phase 3, second pass (November 18)
+
+Main's Phase 3 was checked against the brief's Phase 3 list and its required tests (overlapping jobs, changed
+availability, crew membership changes, reassignment, access revocation). Four gaps were found and fixed.
+
+- **A job's team is shown against the job.**
+  - Before: the "Teams for jobs" card and the profile listed the people a team was assembled with, as if they
+    were all still on the job. Someone who declined, dropped out or was released stayed listed, and a
+    replacement Dispatch put on the job was missing.
+  - Now: each person shows where they stand, read from the job's own assignments (`lib/cleaners/teams.ts`):
+    Accepted, Offer out, Declined, Did not answer in time, or No longer on this job. Anyone on the job who was
+    not assembled with the team is listed as "Added to the job in Dispatch".
+  - The card shows the job's places (accepted, offered, open). The team still records who it was assembled with.
+  - On a profile, a job team is current only while the job is ahead and the person is still on it.
+- **Ending a subcontractor relationship stops new work through it.**
+  - Before: workers of an ended subcontractor stayed "Ready for assignments" and could be offered work.
+  - Now: their readiness says they are not taking work, and why. Dispatch excludes them, and an offer already
+    out can no longer be accepted.
+  - Jobs they accepted are left as they are and handed to a person in Dispatch.
+  - The end dialog lists those jobs and open offers before the Owner confirms. The worker's profile shows
+    "Relationship ended" on the company.
+  - Pausing still changes nothing about the workers, as its screen says.
+- **Accepting an offer re-checks readiness for that job.**
+  - Before: acceptance re-checked engagement status, overlaps and time off, but not requirements. A document
+    that lapsed, or a requirement applied after the offer went out, did not stop an acceptance.
+  - Now: it does, with the requirement named. A job someone already has is never touched.
+- **Hand-offs name what they are about.**
+  - Before: the "Decide X's upcoming jobs" task (suspend, end, or a subcontractor ending) and the "reminders went
+    unanswered" task lost their details when they became questions for a person.
+  - Now: the question itself names the reason and the jobs, or what the reminders were about.
+
+**Tests added** to `convex/cleanersCrews.test.ts`:
+
+- **Drop and replacement:**
+  - A team member drops out and Dispatch puts someone else on the job. The team card, the team record and both
+    profiles say so.
+  - The dropped cleaner's portal no longer shows the job or its street. The lead's portal shows the replacement.
+- **Overlapping and back-to-back work:**
+  - A crew member with an overlapping visit is not counted for the crew and is refused when chosen. The other
+    members are offered, and the open place stays visible.
+  - A visit inside the company's time between jobs is refused.
+  - Releasing the first visit frees the member for both.
+- **Claimed skills:** a skill claimed from the portal stays out of Dispatch until a manager confirms it. Office
+  cannot confirm it, and a declined claim never becomes a skill.
+- **Ending a subcontractor:**
+  - The Owner sees the preview first; Office cannot read it.
+  - Pausing changes nothing.
+  - Ending: the worker is not taking work, the accepted job stays theirs and goes to a person with the job
+    named, the open offer cannot be accepted, and Dispatch and a manual offer both refuse them.
+- **Lapsed requirement:** a requirement applied after an offer went out stops its acceptance until a person sets
+  it aside.
+
+The new Dispatch and subcontractor tests were also run with their fix switched off, and failed.
+
+**Visually inspected** against a local backend with seeded data, at 1440 and 390 wide:
+
+- the crews page, including a job team after a drop and a replacement;
+- the crew builder for a job that overlaps a crew's other visit, and for a commercial job with a member away;
+- a profile's crews after a drop;
+- a worker whose subcontractor relationship ended (profile and builder);
+- the subcontractor end dialog with its preview;
+- the crews page as Office.
+
+Found while inspecting: the worker's profile did not say their company's relationship had ended. Fixed.
+
+**Not done, and why:**
+
+- A travel limit is still shown, not enforced. Selestial has no drive times to check it against.
+- Offers that can no longer be accepted are not withdrawn when a relationship ends; they expire. The same holds
+  when an engagement ends.
+
 ## Phase 4: performance, coaching, check-ins, Chat, pay
 
 **Works end to end (functions, tests and screens):**
