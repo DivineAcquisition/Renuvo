@@ -133,7 +133,15 @@ changed, the settings used, effects on price, payment and booking, and readiness
 and never changes a price, deposit or agreement. These are workspace tools; the Sales agent is not
 released, so nothing acts on its own.
 
-## 5. Settings this uses
+## 5. Plans
+
+Booking pages are in both plans (the owner's decision of November 18, 2026): Operate and Expand each
+build, publish and take bookings on `link.selestial.io/b/<handle>/<page>`, with instant booking,
+deposits, agreements and requests. Expand adds, when built, the company's own domain for booking pages
+(`custom_domain` in `convex/lib/billing/catalog.ts`) and the customer portal (`customer_portal`). Without
+an active Operate or Expand plan, the publish checklist blocks publishing.
+
+## 6. Settings this uses
 
 | Need | Comes from | Shown in the builder as |
 |---|---|---|
@@ -149,7 +157,7 @@ released, so nothing acts on its own.
 Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET`, `LINK_ORIGIN`,
 `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_CONNECT_WEBHOOK_SECRET`, and an email provider.
 
-## 6. Feature parity with the reference flow
+## 7. Feature parity with the reference flow
 
 | Reference behavior | Selestial |
 |---|---|
@@ -167,7 +175,7 @@ Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET
 | Mobile bottom bar | Implemented |
 | Memberships, bundles of visits, focused-area add-on pricing | Not carried over (see section 7) |
 
-## 7. Status
+## 8. Status
 
 ### Implemented and verified
 
@@ -228,7 +236,7 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
 | Bundles of several visits priced together | A multi-visit price in the services engine |
 | Legally stronger signatures | An e-signature provider adapter in Agreements |
 | Calendar sync for cleaners | A calendar integration |
-| Custom domains for booking pages | Domain verification on the link host |
+| Custom domains for booking pages (Expand, `custom_domain` in the plan catalog) | Domain verification, attaching the domain on Vercel, and routing it to the company's pages |
 | Customer portal (history, saved cards, self-serve reschedule) | The higher-plan portal product |
 | Charging the balance off-session after the visit | Saved payment methods in Finance |
 | Sales agent following up on requests and recoveries on its own | The Sales agent's release; today these are tasks for people |
