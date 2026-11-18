@@ -131,6 +131,7 @@ import type * as lib_booking_readiness from "../lib/booking/readiness.js";
 import type * as lib_booking_session from "../lib/booking/session.js";
 import type * as lib_booking_settings from "../lib/booking/settings.js";
 import type * as lib_booking_tokens from "../lib/booking/tokens.js";
+import type * as lib_booking_unsubscribe from "../lib/booking/unsubscribe.js";
 import type * as lib_builders from "../lib/builders.js";
 import type * as lib_chat_agreementTools from "../lib/chat/agreementTools.js";
 import type * as lib_chat_artifacts from "../lib/chat/artifacts.js";
@@ -475,6 +476,7 @@ declare const fullApi: ApiFromModules<{
   "lib/booking/session": typeof lib_booking_session;
   "lib/booking/settings": typeof lib_booking_settings;
   "lib/booking/tokens": typeof lib_booking_tokens;
+  "lib/booking/unsubscribe": typeof lib_booking_unsubscribe;
   "lib/builders": typeof lib_builders;
   "lib/chat/agreementTools": typeof lib_chat_agreementTools;
   "lib/chat/artifacts": typeof lib_chat_artifacts;

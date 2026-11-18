@@ -65,6 +65,8 @@ export const bookingSettingsFields = {
     logo: v.optional(v.id("_storage")),
     brandColor: v.string(),
     accentColor: v.string(),
+    /** The company's postal address, printed in marketing email (the "finish your booking" reminder). */
+    mailingAddress: v.optional(v.string()),
   }),
   scheduling: v.object({
     /** "capacity": times are offered from cleaners' availability and held. "request": the customer names a preferred time and the office confirms. */

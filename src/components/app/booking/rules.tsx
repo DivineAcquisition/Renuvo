@@ -40,7 +40,7 @@ function RulesForm({ rules, onClose }: { rules: RulesData; onClose: () => void }
   const [saved, setSaved] = useState(false);
   const [state, setState] = useState(() => ({
     handle: rules.handle ?? "",
-    profile: { displayName: rules.profile.displayName, phone: rules.profile.phone ?? "", email: rules.profile.email ?? "", website: rules.profile.website ?? "", logo: rules.profile.logo as Id<"_storage"> | undefined, brandColor: rules.profile.brandColor, accentColor: rules.profile.accentColor },
+    profile: { displayName: rules.profile.displayName, phone: rules.profile.phone ?? "", email: rules.profile.email ?? "", website: rules.profile.website ?? "", logo: rules.profile.logo as Id<"_storage"> | undefined, brandColor: rules.profile.brandColor, accentColor: rules.profile.accentColor, mailingAddress: rules.profile.mailingAddress ?? "" },
     scheduling: rules.scheduling,
     policies: rules.paymentPolicies as Policy[],
     agreements: rules.agreements as Agreement[],
@@ -83,6 +83,9 @@ function RulesForm({ rules, onClose }: { rules: RulesData; onClose: () => void }
           </div>
           <Field label="Website">
             <TextInput value={state.profile.website} placeholder="https://" onChange={(e) => set({ profile: { ...state.profile, website: e.target.value } })} />
+          </Field>
+          <Field label="Mailing address" hint="Printed in reminders to finish a booking, which count as marketing email and must include it.">
+            <TextInput value={state.profile.mailingAddress} placeholder="Street, city, state ZIP" onChange={(e) => set({ profile: { ...state.profile, mailingAddress: e.target.value } })} />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             {(["brandColor", "accentColor"] as const).map((k) => (
@@ -212,7 +215,7 @@ function RulesForm({ rules, onClose }: { rules: RulesData; onClose: () => void }
                   companyId,
                   expectedRevision: state.revision,
                   handle: state.handle || undefined,
-                  profile: { displayName: state.profile.displayName, phone: state.profile.phone || undefined, email: state.profile.email || undefined, website: state.profile.website || undefined, logo: state.profile.logo, brandColor: state.profile.brandColor, accentColor: state.profile.accentColor },
+                  profile: { displayName: state.profile.displayName, phone: state.profile.phone || undefined, email: state.profile.email || undefined, website: state.profile.website || undefined, logo: state.profile.logo, brandColor: state.profile.brandColor, accentColor: state.profile.accentColor, mailingAddress: state.profile.mailingAddress || undefined },
                   scheduling: state.scheduling,
                   paymentPolicies: state.policies,
                   agreements: state.agreements,

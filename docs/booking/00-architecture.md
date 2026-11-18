@@ -184,8 +184,10 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
   the exact words shown under the email field ("<Company> will email your booking details, confirmation
   and updates to this address.") and the booking reference; the confirmation goes out under it. Nothing
   is recorded for an existing customer matched by email. The "finish your booking" reminder is marketing:
-  it needs separately recorded marketing permission, counts toward the weekly marketing limit, says how to
-  stop, and never creates a customer record for an abandoned booking.
+  it needs separately recorded marketing permission, counts toward the weekly marketing limit, prints the
+  company's mailing address, carries a one-click unsubscribe link (`/b/unsubscribe#<token>`, signed per
+  message, in the fragment) that adds a marketing suppression and withdraws the permission, and never
+  creates a customer record for an abandoned booking.
 - Logos and hero images: PNG, JPEG or WebP only (no SVG), registered to the company that uploaded them
   (`bookingImages`); another company's file, or an old unregistered one, is refused.
 - Residential instant booking without payment, with a deposit through the fake Stripe including
@@ -212,9 +214,8 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
 - Sending the confirmation and recovery emails: an email provider for the messaging outbox, and the
   company's sending address in Settings › Messaging. Until then messages are recorded as not sent, with
   the reason, on the booking.
-- Marketing email opt-out: the reminder tells people to reply "unsubscribe", which a person has to act on
-  (there is no automatic email unsubscribe in Messaging yet), and it carries no postal address. Both are
-  usually required for commercial email; add them before sending reminders at volume.
+- Reminders to finish a booking (marketing email): the company's mailing address in Booking rules, and
+  `ACTION_LINK_SECRET` for the unsubscribe link. Without either, a reminder is refused with the reason.
 - `PUBLIC_FORM_SECRET` on both Next and Convex (starts are refused without it), `ACTION_LINK_SECRET` and
   `LINK_ORIGIN` for links.
 - The company's own agreement templates approved in Agreements, if an agreement rule is turned on.

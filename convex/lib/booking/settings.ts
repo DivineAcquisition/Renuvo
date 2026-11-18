@@ -52,7 +52,7 @@ export async function bookingSettingsOf(ctx: QueryCtx, company: Doc<"companies">
 }
 
 const HANDLE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
-const RESERVED = new Set(["r", "resume", "embed", "preview", "admin", "app", "api", "manage", "test", "selestial"]);
+const RESERVED = new Set(["r", "resume", "unsubscribe", "embed", "preview", "admin", "app", "api", "manage", "test", "selestial"]);
 
 export function normalizeHandle(value: string): string {
   const handle = value.trim().toLowerCase();
@@ -177,6 +177,7 @@ export function normalizeSettings(input: SettingsInput): Omit<BookingSettings, "
       ...(email ? { email: email.toLowerCase() } : {}),
       ...(website(input.profile.website) ? { website: website(input.profile.website) } : {}),
       ...(input.profile.logo ? { logo: input.profile.logo } : {}),
+      ...(input.profile.mailingAddress?.trim() ? { mailingAddress: plain(input.profile.mailingAddress.replace(/\s*\n\s*/g, ", "), "The mailing address", 200, false) } : {}),
       brandColor: hex(input.profile.brandColor, "The brand color"),
       accentColor: hex(input.profile.accentColor, "The accent color"),
     },

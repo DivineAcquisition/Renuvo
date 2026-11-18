@@ -27,6 +27,7 @@ import { queueBookingMessage } from "./lib/booking/messages";
 import { blockersOf, catalogOf, FIX_LINKS, readiness } from "./lib/booking/readiness";
 import { bookingAgreementValidator, paymentPolicyValidator } from "./lib/booking/schema";
 import { bookingSettingsOf, normalizeSettings, settingsRow, slugify, normalizeSlug, SCHEDULING_LIMITS } from "./lib/booking/settings";
+import { unsubscribeLinksConfigured } from "./lib/booking/unsubscribe";
 import { customerName } from "./lib/booking/session";
 import { newToken, OPEN_SESSION_LIFE, tokenHash } from "./lib/booking/tokens";
 import { canonical } from "./lib/services/store";
@@ -559,7 +560,7 @@ export const saveRules = ownerMutation({
   args: {
     expectedRevision: v.number(),
     handle: v.optional(v.string()),
-    profile: v.object({ displayName: v.string(), phone: v.optional(v.string()), email: v.optional(v.string()), website: v.optional(v.string()), logo: v.optional(v.id("_storage")), brandColor: v.string(), accentColor: v.string() }),
+    profile: v.object({ displayName: v.string(), phone: v.optional(v.string()), email: v.optional(v.string()), website: v.optional(v.string()), logo: v.optional(v.id("_storage")), brandColor: v.string(), accentColor: v.string(), mailingAddress: v.optional(v.string()) }),
     scheduling: v.object({ mode: v.union(v.literal("capacity"), v.literal("request")), noticeHours: v.number(), horizonDays: v.number(), slotMinutes: v.number(), holdMinutes: v.number(), defaultWindowMinutes: v.number() }),
     paymentPolicies: v.array(paymentPolicyValidator),
     agreements: v.array(bookingAgreementValidator),
@@ -697,6 +698,9 @@ export const sendRecovery = managerMutation({
     if (session.recoveryOfferedAt) throw userError("A reminder was already sent for this booking.");
     const experience = await ctx.db.get(session.experienceId);
     if (!experience || experience.draft.behavior.offerRecovery === false) throw userError("Reminders are turned off for this experience.");
+    // Marketing email carries the company's postal address and a working unsubscribe link.
+    if (!(await bookingSettingsOf(ctx, ctx.company)).profile.mailingAddress) throw userError("Add the company's mailing address in Booking rules first: reminders are marketing email, which must include it.");
+    if (!unsubscribeLinksConfigured()) throw userError("Unsubscribe links aren't set up on this deployment yet, so reminders can't be sent.");
     // A reminder is marketing: it needs recorded permission, which only an existing customer can have. A
     // visitor with no customer record is told no here, and no record is made for an unfinished booking.
     if (!session.customerId) {
