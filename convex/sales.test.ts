@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addMember, company, NOW, readyCleaner, refusal, start } from "../tests/harness";
 import { api } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { cadenceDates, cadenceProblem, localInstant, previewVisits, pricingSchedule, visitsPerMonth } from "./lib/sales/cadence";
 import { homeSpec, publish } from "../tests/salesHarness";
 

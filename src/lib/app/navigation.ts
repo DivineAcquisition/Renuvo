@@ -237,6 +237,7 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 export const SALES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/agents/sales/new`, label: "New booking or proposal", purpose: "Starts a workspace draft from Sales, a customer or Dispatch, with what they know filled in." },
   { path: `${APP_ROOT}/agents/sales/book/[draftId]`, label: "Booking workspace", purpose: "Book one-time or recurring service, or prepare a commercial, office or short-term rental proposal." },
+  { path: `${APP_ROOT}/agents/sales/plans/[planId]`, label: "Recurring plan", purpose: "One recurring plan: upcoming visits, staffing, billing, agreement, exceptions and history, and changes to a visit or the series." },
 ];
 
 export const SERVICES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
