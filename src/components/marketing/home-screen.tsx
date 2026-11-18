@@ -4,7 +4,7 @@ import { CheckCircle2, Clock, Hand, TriangleAlert, type LucideIcon } from "@/com
 import { AgentMark, AgentName } from "@/components/marketing/agent-mark";
 import { useCycle } from "@/components/marketing/motion";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { EXAMPLE_LABEL, HOME_SCREEN } from "@/lib/marketing/content";
+import { AGENT_STATUS, EXAMPLE_LABEL, HOME_SCREEN } from "@/lib/marketing/content";
 
 type ItemState = (typeof HOME_SCREEN.items)[number]["state"];
 
@@ -49,7 +49,7 @@ export function HomeScreen() {
       <ul className="mt-2 grid grid-cols-2 gap-2">
         {HOME_SCREEN.agents.map((row) => (
           <li key={row.agent} className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-2">
-            <AgentMark id={row.agent} size="sm" live />
+            <AgentMark id={row.agent} size="sm" live={AGENT_STATUS[row.agent].live} />
             <span className="min-w-0">
               <AgentName id={row.agent} className="block text-xs" />
               <span className="block truncate text-[11px] text-muted-foreground" aria-live="off">

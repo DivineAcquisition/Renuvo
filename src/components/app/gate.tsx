@@ -222,6 +222,23 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, children }: 
 function Companies({ userId, children }: { userId: string; children: React.ReactNode }) {
   const router = useRouter();
   const mine = useQuery(api.companies.mine, {});
+  const reconnect = useMutation(api.companies.reconnect);
+  // Someone with no company may have one under an earlier sign-in (the sign-in service changed). Look
+  // once, before offering to create a company; a reconnected membership arrives through `mine`.
+  const [looked, setLooked] = useState(false);
+  const empty = mine !== undefined && mine.length === 0;
+  useEffect(() => {
+    if (!empty || looked) return;
+    let live = true;
+    reconnect({})
+      .catch(() => null)
+      .finally(() => {
+        if (live) setLooked(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [empty, looked, reconnect]);
   const [chosen, setChosen] = useState<string | null>(() => {
     try {
       return window.localStorage.getItem(STORED);
@@ -230,7 +247,7 @@ function Companies({ userId, children }: { userId: string; children: React.React
     }
   });
   if (mine === undefined) return <Loading />;
-  if (mine.length === 0) return <Onboarding />;
+  if (mine.length === 0) return looked ? <Onboarding /> : <Loading />;
   const current = mine.find((row) => row.companyId === chosen) ?? mine[0];
   // Switching company changes the whole workspace, so it lands on Home: a page for one company's
   // record means nothing in another.

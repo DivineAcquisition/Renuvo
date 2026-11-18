@@ -16,7 +16,8 @@ export const ASSESSMENT_PATH = "/assessment";
 export const NAV = {
   links: [
     { href: "#agents", label: "The agents" },
-    { href: "#how-it-works", label: "How it works" },
+    { href: "#see-it-work", label: "See it work" },
+    { href: "#platform", label: "Platform" },
     { href: "#pricing", label: "Pricing" },
     { href: "#philosophy", label: "Our philosophy" },
   ],
@@ -31,13 +32,21 @@ export const HERO = {
   eyebrow: "The AI operating platform for cleaning companies",
   headline: "Your business shouldn’t wait on you for everything.",
   supporting:
-    "Meet your AI team for sales, recruiting, dispatch, and retention. Selestial is being built to move the daily work forward—from following up with a new inquiry to keeping a recurring customer—within the standards you set.",
+    "Meet your AI team for sales, recruiting, dispatch, and retention. Selestial moves the daily work forward—from answering a new inquiry to covering tomorrow’s schedule—within the standards you set. Sales, Recruiter and Dispatch are working today; Retention is on the way.",
   primaryCta: "Get early access",
   secondaryCta: "Meet your AI team",
   trust: "Four coordinated agents. Clear responsibilities. You stay in control.",
 } as const;
 
 export type AgentId = "sales" | "recruiter" | "dispatch" | "retention";
+
+/** Whether an agent is working in the product today. Matches `AGENT_PROFILES[agent].built` in convex/lib/departments.ts. */
+export const AGENT_STATUS: Record<AgentId, { live: boolean; label: string }> = {
+  sales: { live: true, label: "Working today" },
+  recruiter: { live: true, label: "Working today" },
+  dispatch: { live: true, label: "Working today" },
+  retention: { live: false, label: "In development" },
+};
 
 export const AGENTS: ReadonlyArray<{ id: AgentId; name: string; headline: string; body: string; outcome: string }> = [
   {
@@ -85,12 +94,12 @@ export const HOME_SCREEN = {
     { agent: "sales", statuses: ["Following up on a quote", "Collecting cleaning details", "Checking capacity"] },
     { agent: "recruiter", statuses: ["Tracking onboarding", "Coordinating an interview", "Checking requirements"] },
     { agent: "dispatch", statuses: ["Requesting acceptance", "Confirming coverage", "Watching tomorrow"] },
-    { agent: "retention", statuses: ["Collecting feedback", "Following up on a concern", "Offering a recurring plan"] },
+    { agent: "retention", statuses: ["In development"] },
   ],
   items: [
     { state: "resolved", label: "Resolved", agent: "dispatch", body: "Tomorrow’s uncovered visit now has an accepted replacement." },
     { state: "progress", label: "In progress", agent: "sales", body: "Three qualified inquiries are awaiting customer responses; follow-ups are scheduled." },
-    { state: "decision", label: "Needs your decision", agent: "retention", body: "A customer requested compensation beyond your authorized limit." },
+    { state: "decision", label: "Needs your decision", agent: "sales", body: "A customer asked for a discount beyond your authorized limit." },
     { state: "concern", label: "Capacity concern", agent: "recruiter", body: "Upcoming recurring work exceeds confirmed cleaner availability; recruiting needs attention." },
   ],
 } as const;
@@ -201,8 +210,16 @@ export const PRICING = {
       price: "$299",
       period: "/month",
       summary: "Keep sales, hiring, dispatch, and retention moving from one workspace.",
-      today: ["Dispatch: offers, coverage, live jobs and cleaner text-message links", "Recruiter: your hiring inbox, invitations, applications, interviews and offers", "Company Chat", "Agreements, templates and AI-guided drafting", "A monthly allowance of Selestial Credits for AI work"],
-      later: ["Sales and Retention, included when released"],
+      today: [
+        "Sales: inquiries by text and email, quotes customers accept online, follow-ups and bookings",
+        "Booking pages for your website, priced from your own services",
+        "Dispatch: offers, coverage, live jobs and cleaner text-message links",
+        "Recruiter: your hiring inbox, invitations, applications, interviews and offers",
+        "Clients & Properties, Cleaners, Services & Pricing and Finance",
+        "Company Chat, approvals, and agreements with AI-guided drafting",
+        "A monthly allowance of Selestial Credits for AI work",
+      ],
+      later: ["Retention, included when released"],
     },
     {
       id: "expand",
@@ -217,7 +234,7 @@ export const PRICING = {
   allowanceNote: "Each plan includes a monthly allowance of Selestial Credits, and Expand includes twice Operate's. Your Usage page shows your allowance, what each piece of AI work costs, and what used it.",
   services: "Bespoke implementation, migration and custom development are scoped separately.",
   faqs: [
-    { q: "Which agents does each plan include?", a: "Operate includes Sales, Retention, Recruiter and Dispatch. Expand adds Marketing, Quality, Customer Care and Team Coordinator. Today Dispatch and Recruiter are working; the others are included in their plan when each is released, and no plan or purchase makes one available sooner." },
+    { q: "Which agents does each plan include?", a: "Operate includes Sales, Retention, Recruiter and Dispatch. Expand adds Marketing, Quality, Customer Care and Team Coordinator. Today Sales, Dispatch and Recruiter are working; the others are included in their plan when each is released, and no plan or purchase makes one available sooner." },
     { q: "What uses credits?", a: "Selestial Credits pay for defined AI work, such as one Company Chat answer, one hiring email read by AI, or one generated image. Each is charged once when it is completed. Viewing records, opening or answering a cleaner’s link, accepting a job, status changes and scheduled reminders use no credits." },
     { q: "What happens when credits run out?", a: "New AI work pauses and the Owner is told. Schedules, records, cleaner links, active jobs and everything that does not use AI keep working. Nothing is bought automatically; you can buy a top-up or wait for the monthly reset." },
     { q: "Do top-ups unlock agents?", a: "No. A top-up adds credits only. Agents and features come with the plan, and only once they are released." },
@@ -377,46 +394,217 @@ export const TASK_TRAIL = {
 } as const;
 
 /**
- * The connections planned for launch. None is live yet, and the page says so. `icon` is a file in
- * public/brand/integrations; a connection with no icon file shows its initial instead.
+ * Connections. `live` matches `BUILT` in convex/lib/integrations.ts; everything else is planned and says
+ * so. `icon` is a file in public/brand/integrations; a connection with no icon file shows its initial.
  */
 export const INTEGRATIONS = {
   id: "connections",
   headline: "Works with the tools you already use.",
-  lead: "Selestial is being built to connect to the places your leads, applicants, calendar and payments already live.",
-  status: "Planned",
+  lead: "Selestial connects to the places your leads, applicants, calendar and payments already live. Some connections work today; the rest are on the way, and each says which.",
+  liveLabel: "Live",
+  plannedLabel: "Planned",
   groups: [
     {
-      title: "Leads",
+      title: "Leads and customers",
       items: [
-        { name: "Meta lead ads", icon: "meta", body: "New leads from Facebook and Instagram go straight to Sales." },
-        { name: "Google Ads", icon: "google-ads", body: "Leads from your ads arrive with their source attached." },
-        { name: "Google reviews", icon: "google", body: "Retention invites every customer to leave a review." },
+        { name: "Google Ads", catalogId: "google-ads", icon: "google-ads", live: true, body: "Lead-form leads arrive in Sales with their source attached." },
+        { name: "Google Business Profile", catalogId: "google-business-profile", icon: "google", live: true, body: "Your business profile, connected to the workspace." },
+        { name: "Business texting", catalogId: "texting-number", icon: null, live: true, body: "Text customers and cleaners from your company’s own number." },
+        { name: "Meta lead ads", catalogId: "meta-lead-ads", icon: "meta", live: false, body: "New leads from Facebook and Instagram go straight to Sales." },
       ],
     },
     {
       title: "Hiring",
       items: [
-        { name: "Indeed", icon: "indeed", body: "Recruiter reads new applications from your hiring inbox." },
-        { name: "ZipRecruiter", icon: null, body: "Recruiter reads new applications from your hiring inbox." },
-        { name: "Gmail", icon: "gmail", body: "Connect the mailbox your applications arrive in." },
-        { name: "Outlook", icon: "outlook", body: "Connect the mailbox your applications arrive in." },
+        { name: "Gmail", catalogId: "gmail", icon: "gmail", live: true, body: "Recruiter reads applications from the mailbox they arrive in." },
+        { name: "Indeed", catalogId: "indeed", icon: "indeed", live: false, body: "Applications from your job posts, read by Recruiter." },
+        { name: "ZipRecruiter", catalogId: null, icon: null, live: false, body: "Applications from your job posts, read by Recruiter." },
+        { name: "Outlook", catalogId: "outlook", icon: "outlook", live: false, body: "Connect the mailbox your applications arrive in." },
       ],
     },
     {
-      title: "Scheduling",
+      title: "Scheduling and files",
       items: [
-        { name: "Google Calendar", icon: "google-calendar", body: "Interviews and visits appear on the calendar you already keep." },
-        { name: "Google Maps", icon: "googlemaps", body: "Real travel time between jobs, so the day is one cleaners can keep." },
+        { name: "Google Calendar", catalogId: "google-calendar", icon: "google-calendar", live: true, body: "Interviews and visits appear on the calendar you already keep." },
+        { name: "Google Drive", catalogId: "google-drive", icon: null, live: true, body: "Agreements and documents filed where your team looks for them." },
+        { name: "Google Maps", catalogId: null, icon: "googlemaps", live: false, body: "Real travel time between jobs, so the day is one cleaners can keep." },
       ],
     },
     {
       title: "Money",
       items: [
-        { name: "Stripe", icon: "stripe", body: "Deposits, balances, plans and cleaner payouts." },
-        { name: "QuickBooks", icon: "quickbooks", body: "Charges and payouts sent to your books." },
+        { name: "Stripe", catalogId: "stripe", icon: "stripe", live: true, body: "Card payments, deposits and invoices your customers pay online." },
+        { name: "QuickBooks", catalogId: "quickbooks-online", icon: "quickbooks", live: false, body: "Charges and payouts sent to your books." },
       ],
     },
   ],
-  note: "Planned connections. None is live yet. Names and logos belong to their owners.",
+  note: "Names and logos belong to their owners.",
+} as const;
+
+/**
+ * The activity strip under the hero. Each line is the kind of thing an agent records in the product;
+ * every name, time and price is made up.
+ */
+export const ACTIVITY = {
+  label: "Example activity",
+  items: [
+    { agent: "sales", text: "Sent a quote · Standard clean, $185.00" },
+    { agent: "dispatch", text: "Coverage confirmed for Thursday 9:00" },
+    { agent: "recruiter", text: "Interview scheduled with an applicant" },
+    { agent: "sales", text: "Booked Friday 9:00 · capacity held" },
+    { agent: "dispatch", text: "Replacement accepted the visit" },
+    { agent: "sales", text: "Followed up on an unanswered quote" },
+    { agent: "recruiter", text: "Requirements checked · ready for your review" },
+    { agent: "sales", text: "Asked a prospect for their ZIP code" },
+    { agent: "dispatch", text: "Tomorrow’s schedule has no gaps" },
+  ],
+} as const;
+
+/**
+ * The scripted demo. Each scenario plays one piece of work the way it appears in the product: what the
+ * other person said, what the agent did and on what evidence, and the record it left. Made-up names and
+ * figures throughout.
+ */
+export const DEMO = {
+  id: "see-it-work",
+  eyebrow: "See it work",
+  headline: "Watch the work move, step by step.",
+  lead: "A scripted example played with the same pieces owners see in Selestial: the conversation, every step the agent took and why, and the record it leaves behind.",
+  conversationTitle: "Conversation",
+  workTitle: "What the agent did",
+  resultTitle: "The record it left",
+  play: "Play",
+  pause: "Pause",
+  replay: "Replay",
+  waiting: "Waiting for the next step",
+  typing: "typing",
+  scenarios: [
+    {
+      id: "sales",
+      agent: "sales",
+      tab: "New inquiry",
+      summary: "Sales answers, prices from your services, and books the time.",
+      contact: "Maria L. · text message",
+      steps: [
+        { kind: "in", text: "Hi! Do you clean houses in 78701? 3 bed, 2 bath. How much?" },
+        { kind: "work", text: "Read the message: 3 bedrooms, 2 bathrooms, ZIP 78701 — inside your service area." },
+        { kind: "work", text: "Matched the request to Standard clean in Services & Pricing." },
+        { kind: "work", text: "Priced from your rules: $185.00 per visit. Within the limits you set, so no approval needed." },
+        { kind: "out", text: "Hi Maria, this is Alpha Cleaning’s assistant. Your quote for Standard clean is ready: $185.00 per visit. Review what’s included and accept it here: alpha.selestial.io/q/7Kd2" },
+        { kind: "result", result: "quote" },
+        { kind: "in", text: "Accepted! Friday morning works for me." },
+        { kind: "work", text: "Checked Friday 9:00 against your cleaners’ availability: capacity is open. Time held." },
+        { kind: "result", result: "booking" },
+        { kind: "out", text: "You’re booked: Standard clean on Friday at 9:00 AM. We’re arranging your cleaning team and will be in touch before the visit." },
+      ],
+    },
+    {
+      id: "dispatch",
+      agent: "dispatch",
+      tab: "Cleaner cancels",
+      summary: "Dispatch finds a replacement before the customer feels it.",
+      contact: "Jo T. · cleaner",
+      steps: [
+        { kind: "in", text: "So sorry — I can’t make tomorrow’s 9:00 at Oak Street." },
+        { kind: "work", text: "Released Jo from the visit and marked it uncovered." },
+        { kind: "work", text: "Ranked eligible cleaners by skills, distance and time between jobs." },
+        { kind: "result", result: "ranking" },
+        { kind: "out", text: "Hi Priya — can you take a Standard clean tomorrow at 9:00, 6 miles from you? Tap to accept: alpha.selestial.io/j/4Qm" },
+        { kind: "in", text: "Yes, I can take it." },
+        { kind: "work", text: "Priya accepted. Coverage confirmed and the schedule updated." },
+        { kind: "result", result: "coverage" },
+      ],
+    },
+    {
+      id: "recruiter",
+      agent: "recruiter",
+      tab: "New applicant",
+      summary: "Recruiter moves an applicant to an interview you approve.",
+      contact: "Dana K. · application by email",
+      steps: [
+        { kind: "in", text: "Hi, I saw your posting. I have 3 years of residential cleaning experience and my own car." },
+        { kind: "work", text: "Read the application from your hiring inbox." },
+        { kind: "work", text: "Checked it against your requirements: experience, transportation, service area." },
+        { kind: "out", text: "Thanks Dana! You meet our requirements. Pick an interview time that suits you: alpha.selestial.io/a/9Pz" },
+        { kind: "in", text: "Booked Tuesday at 2:00." },
+        { kind: "work", text: "Interview added to the calendar. The decision is yours." },
+        { kind: "result", result: "applicant" },
+      ],
+    },
+  ],
+} as const;
+
+/** The workspace bento. Each card is a small picture of a real screen, with made-up figures. */
+export const PLATFORM = {
+  id: "platform",
+  eyebrow: "The platform",
+  headline: "One workspace behind every agent.",
+  lead: "The agents work from the same records your team does: your services and prices, your clients and properties, your cleaners and your money. Nothing is guessed, and every change is visible.",
+  cards: {
+    pricing: {
+      title: "Services & Pricing",
+      body: "Every quote is built from your published services. Change a price once and every agent uses it.",
+      service: "Standard clean",
+      lines: [
+        { label: "Base price", value: "$120.00" },
+        { label: "2 more bedrooms", value: "$40.00" },
+        { label: "1 more bathroom", value: "$25.00" },
+      ],
+      total: { label: "Per visit", value: "$185.00" },
+      status: "Live",
+    },
+    booking: {
+      title: "Booking pages",
+      body: "Put a booking page on your site. Customers see your price and pick a time with real capacity.",
+      service: "Standard clean",
+      fields: [
+        { label: "Bedrooms", value: "3" },
+        { label: "Bathrooms", value: "2" },
+      ],
+      price: "$185.00",
+      cta: "Book Friday 9:00",
+    },
+    clients: {
+      title: "Clients & Properties",
+      body: "Every client, property, access note and plan in one place.",
+      name: "Maria Lopez",
+      property: "214 Oak Street, Austin",
+      tags: ["Every 2 weeks", "Access on record"],
+    },
+    cleaners: {
+      title: "Cleaners",
+      body: "Availability, skills and readiness, kept current by the people who know.",
+      rows: [
+        { name: "Priya S.", state: "Available" },
+        { name: "Maria R.", state: "On a job" },
+        { name: "Jo T.", state: "Off tomorrow" },
+      ],
+    },
+    finance: {
+      title: "Finance",
+      body: "Invoices, payments, deposits and team pay, with every figure traceable.",
+      invoice: "Invoice 1042",
+      amount: "$185.00",
+      status: "Paid",
+    },
+    approvals: {
+      title: "Approvals",
+      body: "Anything beyond the limits you set waits for you, with the reason attached.",
+      request: "Discount above your 10% limit",
+      approve: "Approve",
+      decline: "Decline",
+    },
+    chat: {
+      title: "Company Chat",
+      body: "Ask about your business and get answers from your own records.",
+      question: "Who can cover Friday morning?",
+      answer: "Priya and Maria are free from 9:00, and both are cleared for deep cleans.",
+    },
+    agreements: {
+      title: "Agreements",
+      body: "Service agreements drafted with AI, signed online, filed with the client.",
+      name: "Service agreement · Maria Lopez",
+      status: "Signed",
+    },
+  },
 } as const;

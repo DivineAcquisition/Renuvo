@@ -13,6 +13,8 @@ export const staffTables = {
   staff: defineTable({
     /** The sign-in subject. Set when the person first signs in as staff. */
     userId: v.optional(v.string()),
+    /** The sign-in service `userId` came from; see members.userIssuer. */
+    userIssuer: v.optional(v.string()),
     /** Confirmed email, lower case. Staff are matched by it until they have signed in once. */
     email: v.string(),
     name: v.string(),

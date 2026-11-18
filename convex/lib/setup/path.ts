@@ -195,6 +195,7 @@ export function stepsFor(primary: Priority | undefined, secondary: Priority[]): 
     { id: "team", stage: "company", optional: true },
     { id: "priority", stage: "priority", optional: false },
     ...questionsFor(primary, secondary).map((question) => ({ id: `q:${question.id}`, stage: "priority" as const, optional: question.optional })),
+    { id: "records", stage: "prepare", optional: true },
     { id: "prepare", stage: "prepare", optional: false },
     { id: "review", stage: "review", optional: false },
   ];
@@ -212,4 +213,22 @@ export function progress(input: { primary?: Priority; secondary: Priority[]; ste
 /** Required questions still unanswered: what stops "Review & start" from being offered as complete. */
 export function unanswered(primary: Priority | undefined, secondary: Priority[], answers: Record<string, string | string[]>): Question[] {
   return questionsFor(primary, secondary).filter((question) => !question.optional && !answered(answers[question.id]));
+}
+
+export type Connection = { id: string; title: string; does: string; href: string; for: Priority[] };
+
+/** Connections that already work in Selestial, in business words, by the priority they help. Nothing here is a connector that does not exist. */
+export const CONNECTIONS: Connection[] = [
+  { id: "google-calendar", title: "Google Calendar", does: "Check existing appointments and keep visits on your calendar.", href: "/app/integrations", for: ["dispatch", "retention", "sales"] },
+  { id: "gmail", title: "Gmail hiring inbox", does: "Find applicants who already applied by email.", href: "/app/agents/recruiter", for: ["recruiter"] },
+  { id: "google-business", title: "Google Business Profile", does: "Read and answer your Google reviews.", href: "/app/integrations", for: ["retention", "sales"] },
+  { id: "google-ads", title: "Google Ads lead forms", does: "Read incoming customer inquiries from your ads.", href: "/app/integrations", for: ["sales"] },
+  { id: "stripe", title: "Stripe", does: "Collect customer payments and deposits.", href: "/app/finance", for: ["booking", "sales"] },
+  { id: "google-drive", title: "Google Drive", does: "Bring in price lists and documents you already keep.", href: "/app/integrations", for: ["pricing", "booking"] },
+];
+
+export function connectionsFor(primary: Priority | undefined, secondary: Priority[]): Connection[] {
+  if (!primary) return [];
+  const chosen = [primary, ...secondary];
+  return CONNECTIONS.filter((row) => row.for.some((value) => chosen.includes(value))).sort((a, b) => Number(b.for.includes(primary)) - Number(a.for.includes(primary))).slice(0, 4);
 }

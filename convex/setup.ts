@@ -20,6 +20,11 @@ import { agentReadiness } from "./lib/setup/readiness";
 import { factValueValidator, methodValidator, priorityValidator } from "./lib/setup/schema";
 import { businessSettingsOf } from "./lib/settings/business";
 import { text } from "./lib/text";
+import { createExperience } from "./bookingExperiences";
+import { createAgreement } from "./lib/agreements/store";
+import { experienceKindValidator } from "./lib/booking/definition";
+import { createDraft } from "./lib/services/workflow";
+import { TEMPLATES } from "./lib/services/templates";
 
 const STALE = "Your setup was changed somewhere else, on another tab or device. Nothing was lost: we have loaded the latest, so check it and continue.";
 
@@ -64,7 +69,9 @@ export const state = companyQuery({
           contextConfirmed: setup.milestones.contextConfirmedAt !== undefined,
         }
       : null;
+    const prepared = setup?.prepared ? await preparedView(ctx, ctx.companyId, setup.prepared) : { service: null, agreement: null, booking: null };
     return {
+      prepared,
       /** Only an Owner who has not yet entered the workspace is taken to setup. Nobody else, ever. */
       required: owner && setup?.status === "in_progress",
       canEdit: owner,
@@ -177,5 +184,76 @@ export const enter = ownerMutation({
     await ctx.db.patch(setup._id, { status: "entered", milestones: { ...setup.milestones, enteredAt: now }, revision: setup.revision + 1, updatedAt: now });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "setup.workspace_entered", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { priority: setup.priority ?? "none", contextConfirmed: setup.milestones.contextConfirmedAt !== undefined } });
     return null;
+  },
+});
+
+// ── Preparing first drafts ──────────────────────────────────────────────────────────────────────
+// Setup prepares through the same paths the workspace uses, and only drafts: nothing here is published,
+// approved or sent. Each kind is prepared once; asking again opens the same draft.
+
+type Prepared = NonNullable<Doc<"companySetups">["prepared"]>;
+
+async function preparedView(ctx: QueryCtx, companyId: Id<"companies">, prepared: Prepared) {
+  const service = prepared.serviceId ? await ctx.db.get(prepared.serviceId) : null;
+  const agreement = prepared.agreementId ? await ctx.db.get(prepared.agreementId) : null;
+  const booking = prepared.experienceId ? await ctx.db.get(prepared.experienceId) : null;
+  const live = await ctx.db
+    .query("services")
+    .withIndex("by_company_status", (q) => q.eq("companyId", companyId).eq("status", "active"))
+    .take(1);
+  return {
+    service: service ? { id: service._id, name: service.name, status: service.status, href: `/app/services/${service._id}` } : null,
+    agreement: agreement ? { id: agreement._id, title: agreement.title, workflow: agreement.workflow, href: `/app/agreements/${agreement._id}` } : null,
+    booking: booking ? { id: booking._id, name: booking.name, status: booking.status, href: `/app/agents/sales/booking-forms/${booking._id}`, canTakeBookings: live.length > 0 } : null,
+  };
+}
+
+async function markPrepared(ctx: MutationCtx, setup: Doc<"companySetups">, patch: Partial<Prepared>) {
+  const now = Date.now();
+  await ctx.db.patch(setup._id, { prepared: { ...(setup.prepared ?? {}), ...patch }, milestones: { ...setup.milestones, ...(setup.milestones.firstArtifactAt === undefined ? { firstArtifactAt: now } : {}) }, revision: setup.revision + 1, updatedAt: now });
+}
+
+async function ownSetup(ctx: MutationCtx & { companyId: Id<"companies"> }) {
+  const setup = await setupOf(ctx, ctx.companyId);
+  if (!setup) throw userError("Setup has not been started for this company.");
+  return setup;
+}
+
+/** Starts one service from a template, named as the owner's website names it when they choose that. Its template prices stay marked as examples. */
+export const prepareService = ownerMutation({
+  args: { templateId: v.string(), name: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const template = TEMPLATES.find((row) => row.id === args.templateId);
+    if (!template) throw userError("That starting point is not available.");
+    const setup = await ownSetup(ctx);
+    if (setup.prepared?.serviceId && (await ctx.db.get(setup.prepared.serviceId))) return { serviceId: setup.prepared.serviceId, already: true };
+    const name = args.name?.trim() ? text(args.name, "The service name", 80) : template.spec.name;
+    const { serviceId } = await createDraft(ctx, { category: template.category, spec: { ...template.spec, name }, origin: "template", templateId: template.id, via: "workspace", actor: byMember(ctx) });
+    await markPrepared(ctx, setup, { serviceId });
+    return { serviceId, already: false };
+  },
+});
+
+/** Starts one agreement from Selestial's starting text. It is a draft: nobody has reviewed or approved it. */
+export const prepareAgreement = ownerMutation({
+  args: { docType: v.union(v.literal("one_time_residential"), v.literal("recurring_residential"), v.literal("office_janitorial"), v.literal("commercial_msa"), v.literal("str_turnover")) },
+  handler: async (ctx, args) => {
+    const setup = await ownSetup(ctx);
+    if (setup.prepared?.agreementId && (await ctx.db.get(setup.prepared.agreementId))) return { agreementId: setup.prepared.agreementId, already: true };
+    const agreementId = await createAgreement(ctx, { docType: args.docType, origin: "manual", note: "Prepared during setup" });
+    await markPrepared(ctx, setup, { agreementId });
+    return { agreementId, already: false };
+  },
+});
+
+/** Starts one booking page. It can take bookings only once it is published with a live service. */
+export const prepareBooking = ownerMutation({
+  args: { kind: experienceKindValidator },
+  handler: async (ctx, args) => {
+    const setup = await ownSetup(ctx);
+    if (setup.prepared?.experienceId && (await ctx.db.get(setup.prepared.experienceId))) return { experienceId: setup.prepared.experienceId, already: true };
+    const experienceId = await createExperience(ctx, args.kind);
+    await markPrepared(ctx, setup, { experienceId });
+    return { experienceId, already: false };
   },
 });

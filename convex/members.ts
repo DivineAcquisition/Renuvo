@@ -57,7 +57,7 @@ export const join = signedInMutation({
     for (const row of rows.filter((candidate) => candidate.status === "invited")) {
       const invitation = await invitationOfMember(ctx, row);
       if (!invitation || invitationState(invitation, now) !== "pending") continue;
-      const joined = await joinByInvitation(ctx, invitation, ctx.userId);
+      const joined = await joinByInvitation(ctx, invitation, ctx.userId, ctx.issuer);
       if (joined) return joined.memberId;
     }
     notFound();

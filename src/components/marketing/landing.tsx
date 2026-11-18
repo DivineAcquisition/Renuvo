@@ -1,16 +1,19 @@
 import type { ReactNode } from "react";
 
+import { ActivityTicker } from "@/components/marketing/activity-ticker";
 import { TaskTrail } from "@/components/marketing/agent-visuals";
 import { AutonomyDial } from "@/components/marketing/autonomy-dial";
 import { EarlyAccessLink, outlineCta } from "@/components/marketing/chrome";
 import { CoordinationMap } from "@/components/marketing/coordination-map";
 import { HomeScreen } from "@/components/marketing/home-screen";
+import { LiveDemo } from "@/components/marketing/live-demo";
 import { OwnerDecision } from "@/components/marketing/owner-decision";
+import { PlatformBento } from "@/components/marketing/platform-bento";
 import { BeamFrame, ShinyLabel } from "@/components/marketing/saas-frame";
 import { AgentsGrid, ControlCards, IntegrationsGrid, LooseEnds, PricingPlans } from "@/components/marketing/sections";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { Button } from "@/components/ui/button";
-import { AGENTS_SECTION, CONTROL, COORDINATION, FINAL_CTA, HERO, INTEGRATIONS, PHILOSOPHY, PRICING, PROBLEM } from "@/lib/marketing/content";
+import { AGENTS_SECTION, CONTROL, COORDINATION, DEMO, FINAL_CTA, HERO, INTEGRATIONS, PHILOSOPHY, PLATFORM, PRICING, PROBLEM } from "@/lib/marketing/content";
 import { marketingDisplayTitle, marketingLead, marketingPageGutter, marketingSectionTitle, marketingShell, marketingSubhead } from "@/lib/marketing/ui";
 import { sectionLabel } from "@/lib/ui";
 import { cn } from "@/lib/utils";
@@ -51,6 +54,7 @@ export function LandingPage({ trustSection }: { trustSection?: ReactNode }) {
             <HomeScreen />
           </BeamFrame>
         </div>
+        <ActivityTicker className={cn(marketingShell, "mt-14 sm:mt-20")} />
       </section>
 
       <Section id={PROBLEM.id} headline={PROBLEM.headline}>
@@ -67,8 +71,16 @@ export function LandingPage({ trustSection }: { trustSection?: ReactNode }) {
         <AgentsGrid />
       </Section>
 
+      <Section id={DEMO.id} eyebrow={DEMO.eyebrow} headline={DEMO.headline} lead={DEMO.lead}>
+        <LiveDemo />
+      </Section>
+
       <Section id={COORDINATION.id} headline={COORDINATION.headline} lead={COORDINATION.lead}>
         <CoordinationMap />
+      </Section>
+
+      <Section id={PLATFORM.id} eyebrow={PLATFORM.eyebrow} headline={PLATFORM.headline} lead={PLATFORM.lead}>
+        <PlatformBento />
       </Section>
 
       <Section id={CONTROL.id} headline={CONTROL.headline}>

@@ -50,6 +50,10 @@ export const FACTS = {
   "scale.cleaners": { label: "People who clean", many: false },
   "tools.current": { label: "What you use today", many: true },
   "tools.other": { label: "Other tools", many: false },
+  "contact.phone": { label: "Phone", many: false },
+  "contact.email": { label: "Email", many: false },
+  "company.about": { label: "How you describe the company", many: false },
+  "policies.published": { label: "A policy on your website", many: false },
 } as const;
 export type FactKey = keyof typeof FACTS;
 export const isFactKey = (key: string): key is FactKey => key in FACTS;
@@ -89,6 +93,30 @@ export async function stateFact(ctx: MutationCtx, companyId: Id<"companies">, me
   await ctx.db.patch(row._id, { value, source: same(row.value, value) ? row.source : "owner", state: "confirmed", confirmedBy: memberId, confirmedAt: now, conflict: undefined, updatedAt: now });
 }
 
+/**
+ * A fact found on a page or in a file. It is a suggestion: it never replaces what a person confirmed. A
+ * different value for a confirmed fact is kept beside it as a conflict for the owner to settle.
+ */
+export async function foundFact(ctx: MutationCtx, companyId: Id<"companies">, key: FactKey, value: string | string[], source: "website" | "import", sourceRef: string): Promise<"added" | "updated" | "conflict" | "same"> {
+  if (empty(value)) return "same";
+  const row = await ctx.db
+    .query("companyFacts")
+    .withIndex("by_company_key", (q) => q.eq("companyId", companyId).eq("key", key))
+    .first();
+  const now = Date.now();
+  if (!row) {
+    await ctx.db.insert("companyFacts", { companyId, key, value, source, sourceRef, retrievedAt: now, state: "found", updatedAt: now });
+    return "added";
+  }
+  if (same(row.value, value)) return "same";
+  if (row.state === "found") {
+    await ctx.db.patch(row._id, { value, source, sourceRef, retrievedAt: now, updatedAt: now });
+    return "updated";
+  }
+  await ctx.db.patch(row._id, { conflict: { value, source, sourceRef }, updatedAt: now });
+  return "conflict";
+}
+
 const labelOf = (choices: Choice[], value: string) => choices.find((choice) => choice.value === value)?.label ?? value;
 
 /** Confirmed facts in words, for Chat and the agents. Found-but-unconfirmed facts are left out. */
@@ -105,5 +133,8 @@ export function factLines(rows: Doc<"companyFacts">[]): string[] {
   const tools = [...many("tools.current").map((value) => labelOf(TOOL_CHOICES, value).toLowerCase()), one("tools.other")].filter(Boolean);
   if (tools.length) lines.push(`- Runs the business today on: ${tools.join(", ")}.`);
   if (one("company.website")) lines.push(`- Website: ${one("company.website")}.`);
+  if (one("contact.phone") || one("contact.email")) lines.push(`- Public contact: ${[one("contact.phone"), one("contact.email")].filter(Boolean).join(", ")}.`);
+  if (one("company.about")) lines.push(`- In their own words: ${one("company.about")}`);
+  if (one("policies.published")) lines.push(`- Published policy (their wording, not a rule Selestial applies): ${one("policies.published")}`);
   return lines;
 }

@@ -21,7 +21,9 @@ import { cn } from "@/lib/utils";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import { CATEGORY_CHOICES, SCALE_CHOICES, TOOL_CHOICES, WORKFORCE_CHOICES, type Choice } from "../../../../convex/lib/setup/facts";
-import { PRIORITY_INFO, QUESTIONS, STAGES, stepsFor, UNSURE } from "../../../../convex/lib/setup/path";
+import { connectionsFor, PRIORITY_INFO, QUESTIONS, STAGES, stepsFor, UNSURE } from "../../../../convex/lib/setup/path";
+import { ClientImport } from "./import";
+import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
 
 type View = FunctionReturnType<typeof api.setup.state>;
@@ -154,6 +156,8 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   const { companyId } = useCompany();
   const router = useRouter();
   const save = useMutation(api.setup.save);
+  const startRead = useMutation(api.setupWebsite.start);
+  const [useFound, setUseFound] = useState<string[]>([]);
   const enter = useMutation(api.setup.enter);
 
   const [revision, setRevision] = useState(setup.revision);
@@ -164,7 +168,8 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   const [answers, setAnswers] = useState<Record<string, Value>>(setup.answers);
   const [name, setName] = useState(view.company.name);
   const [timezone, setTimezone] = useState(view.company.timezone);
-  const [facts, setFacts] = useState<Record<string, Value>>(() => Object.fromEntries(Object.entries(view.facts).map(([key, row]) => [key, row.value])));
+  // Only what a person confirmed fills the fields. Anything found on a page is offered beside the field instead.
+  const [facts, setFacts] = useState<Record<string, Value>>(() => Object.fromEntries(Object.entries(view.facts).filter(([, row]) => row.state === "confirmed").map(([key, row]) => [key, row.value])));
   const [state, setState] = useState<"saved" | "saving" | "failed">("saved");
   const [error, setError] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -183,12 +188,13 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
     setState("saving");
     setError(null);
     try {
+      if (step.id === "start" && methods.includes("website") && to !== step.id) await startRead({ companyId, url: one(facts["company.website"]) });
       type Own = { methods?: Method[]; priority?: Priority; secondary?: Priority[]; company?: { name: string; timezone: string }; facts?: Record<string, Value>; answers?: Record<string, Value> };
       const own: Own =
         step.id === "start"
           ? { methods, facts: { "company.website": methods.includes("website") ? one(facts["company.website"]) : "" } }
           : step.id === "basics"
-            ? { company: { name, timezone }, facts: { "company.location": one(facts["company.location"]), "company.areas": one(facts["company.areas"]), "services.categories": many(facts["services.categories"]) } }
+            ? { company: { name, timezone }, facts: { "company.location": one(facts["company.location"]), "company.areas": one(facts["company.areas"]), "services.categories": many(facts["services.categories"]), ...Object.fromEntries(useFound.map((key) => [key, view.facts[key]?.value ?? ""])) } }
             : step.id === "team"
               ? { facts: { "workforce.arrangement": many(facts["workforce.arrangement"]), "scale.cleaners": one(facts["scale.cleaners"]), "tools.current": many(facts["tools.current"]), "tools.other": one(facts["tools.other"]) } }
               : step.id === "priority"
@@ -319,15 +325,21 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                   <Field label="Company name">
                     <TextInput value={name} onChange={(event) => setName(event.target.value)} maxLength={160} autoComplete="organization" required />
                   </Field>
-                  <Field label="Where you are based" hint="City and state is enough.">
-                    <TextInput value={one(facts["company.location"])} onChange={(event) => fact("company.location", event.target.value)} placeholder="Austin, TX" maxLength={120} />
-                  </Field>
+                  <div className="grid content-start gap-1.5">
+                    <Field label="Where you are based" hint="City and state is enough.">
+                      <TextInput value={one(facts["company.location"])} onChange={(event) => fact("company.location", event.target.value)} placeholder="Austin, TX" maxLength={120} />
+                    </Field>
+                    <Suggestion found={view.facts["company.location"]} current={facts["company.location"]} onUse={(value) => fact("company.location", value)} />
+                  </div>
                   <Field label="Time zone" hint="Schedules, availability and deadlines are shown on this clock. Type to search.">
                     <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} list="setup-zones" autoComplete="off" required />
                   </Field>
-                  <Field label="Areas you serve" hint="Cities or neighborhoods, in your own words.">
-                    <TextInput value={one(facts["company.areas"])} onChange={(event) => fact("company.areas", event.target.value)} placeholder="Austin, Round Rock, Cedar Park" maxLength={300} />
-                  </Field>
+                  <div className="grid content-start gap-1.5">
+                    <Field label="Areas you serve" hint="Cities or neighborhoods, in your own words.">
+                      <TextInput value={one(facts["company.areas"])} onChange={(event) => fact("company.areas", event.target.value)} placeholder="Austin, Round Rock, Cedar Park" maxLength={300} />
+                    </Field>
+                    <Suggestion found={view.facts["company.areas"]} current={facts["company.areas"]} onUse={(value) => fact("company.areas", value)} />
+                  </div>
                   <datalist id="setup-zones">
                     {allZones.map((zone) => (
                       <option key={zone} value={zone} />
@@ -336,12 +348,30 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                 </div>
                 <fieldset className="grid gap-2">
                   <legend className="mb-1 text-sm font-medium text-strong">Who do you clean for?</legend>
+                  <Suggestion found={view.facts["services.categories"]} current={facts["services.categories"]} onUse={(value) => fact("services.categories", value)} words={(value) => many(value).map((item) => labelOf(CATEGORY_CHOICES, item)).join(", ")} />
                   <div className="grid gap-2 sm:grid-cols-2">
                     {CATEGORY_CHOICES.map((choice) => (
                       <ChoiceCard key={choice.value} choice={choice} multi selected={many(facts["services.categories"]).includes(choice.value)} onPress={() => fact("services.categories", toggle(many(facts["services.categories"]), choice.value))} />
                     ))}
                   </div>
                 </fieldset>
+                {(["contact.phone", "contact.email", "company.about", "policies.published"] as const).some((key) => view.facts[key]?.state === "found") ? (
+                  <fieldset className="grid gap-2 rounded-xl border border-border p-3">
+                    <legend className="px-1 text-sm font-medium text-strong">Also found on your website</legend>
+                    <p className="text-xs text-muted-foreground">Tick what is right. Anything you leave unticked stays a suggestion and is not used.</p>
+                    {(["contact.phone", "contact.email", "company.about", "policies.published"] as const)
+                      .filter((key) => view.facts[key]?.state === "found")
+                      .map((key) => (
+                        <label key={key} className="flex items-start gap-2.5 text-sm">
+                          <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-[#6838ef]" checked={useFound.includes(key)} onChange={() => setUseFound(toggle(useFound, key))} />
+                          <span className="min-w-0">
+                            <span className="block text-xs text-muted-foreground">{FOUND_LABELS[key]}</span>
+                            <span className="block break-words text-strong">{one(view.facts[key]?.value)}</span>
+                          </span>
+                        </label>
+                      ))}
+                  </fieldset>
+                ) : null}
                 <Why>These tailor the services, agreements and booking pages Selestial prepares. They do not publish or price anything.</Why>
               </>
             ) : null}
@@ -441,9 +471,41 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
               </>
             ) : null}
 
+            {step.id === "records" ? (
+              <>
+                <StepHeading eyebrow="Prepare your workspace" title="Bring in what you already have" lead="Optional. Anything you bring in now saves you typing it later. Nothing is contacted because it was imported." />
+                <section className="grid gap-2" aria-labelledby="clients-heading">
+                  <h2 id="clients-heading" className="text-sm font-semibold text-strong">
+                    Your clients
+                  </h2>
+                  <ClientImport />
+                  <p className="text-xs text-muted-foreground">Using Jobber or Housecall Pro? A direct connection is coming next. Until then, export your client list from it and choose the file here.</p>
+                </section>
+                {connectionsFor(priority ?? undefined, secondary).length ? (
+                  <section className="grid gap-2" aria-labelledby="connect-heading">
+                    <h2 id="connect-heading" className="text-sm font-semibold text-strong">
+                      Connections that help with this
+                    </h2>
+                    <ul className="grid gap-2 sm:grid-cols-2">
+                      {connectionsFor(priority ?? undefined, secondary).map((connection) => (
+                        <li key={connection.id}>
+                          <a href={connection.href} target="_blank" rel="noreferrer" className="flex h-full flex-col gap-0.5 rounded-xl border border-border px-3.5 py-3 text-sm hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500">
+                            <span className="font-medium text-strong">{connection.title}</span>
+                            <span className="text-muted-foreground">{connection.does}</span>
+                            <span className="mt-1 text-xs font-medium text-brand-700 dark:text-brand-300">Set up in a new tab</span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-muted-foreground">None of these is required. You can continue without any of them.</p>
+                  </section>
+                ) : null}
+              </>
+            ) : null}
+
             {step.id === "prepare" ? (
               <>
-                <StepHeading eyebrow="Prepare your workspace" title="Here is where each part of your team stands" lead="Read from your company's record right now. An agent is ready when what it needs exists, not because setup is finished." />
+                <StepHeading eyebrow="Prepare your workspace" title="Your first drafts, and what your team needs" lead="Drafts are prepared for you to review; nothing is published or sent. Each agent's readiness is read from your company's record right now, not from whether setup is finished." />
                 {info ? (
                   <p className="flex gap-2 rounded-xl border border-brand-500/30 bg-brand-500/8 px-3.5 py-3 text-sm text-strong">
                     <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
@@ -452,6 +514,8 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     </span>
                   </p>
                 ) : null}
+                <PrepareDrafts priority={priority} secondary={secondary} categories={many(facts["services.categories"])} prepared={view.prepared} />
+                <h2 className="text-sm font-semibold text-strong">Where each part of your team stands</h2>
                 <ul className="grid gap-2.5">
                   {[...view.agents].sort((a, b) => Number(b.agent === info?.agent) - Number(a.agent === info?.agent)).map((agent) => (
                     <li key={agent.agent} className="rounded-xl border border-border p-3.5">
@@ -561,6 +625,26 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   );
 }
 
+const FOUND_LABELS = { "contact.phone": "Phone", "contact.email": "Email", "company.about": "How you describe the company", "policies.published": "A policy, in your website's words" } as const;
+
+/** A value found on the owner's website, offered beside the field. It is used only if they choose it. */
+function Suggestion({ found, current, onUse, words }: { found: View["facts"][string] | undefined; current: Value | undefined; onUse: (value: Value) => void; words?: (value: Value) => string }) {
+  const show = (value: Value) => (words ? words(value) : one(value));
+  const offer = found?.conflict && found.conflict.source === "website" ? found.conflict.value : found && found.source === "website" && found.state === "found" ? found.value : null;
+  if (!offer || JSON.stringify(offer) === JSON.stringify(current)) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-xs text-strong">
+      <Globe className="size-3.5 text-brand-600" aria-hidden />
+      <span className="min-w-0">
+        {found?.conflict ? "Your website says" : "Found on your website"}: <span className="font-medium">{show(offer)}</span>
+      </span>
+      <button type="button" className="font-medium text-brand-700 underline underline-offset-4 dark:text-brand-300" onClick={() => onUse(offer)}>
+        Use this
+      </button>
+    </p>
+  );
+}
+
 const AGENT_TONE = { ready_to_work: "success", waiting_for_information: "warning", connection_needed: "info", plan_needed: "info", paused: "outline", not_available: "outline" } as const;
 const AGENT_WORDS = { ready_to_work: "Ready to work", waiting_for_information: "Waiting for information", connection_needed: "Connection needed", plan_needed: "Plan needed", paused: "Paused", not_available: "Not available yet" } as const;
 
@@ -583,6 +667,7 @@ function Summary({ name, timezone, facts, priority, secondary, agents, postalCod
   const first = PRIORITY_INFO.find((item) => item.id === priority);
   return (
     <div className="grid gap-4">
+      <WebsiteProgress />
       <dl className="grid gap-2 text-sm">
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2">

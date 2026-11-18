@@ -272,7 +272,7 @@ export const accept = signedInMutation({
     if (!ctx.emailVerified || !ctx.email) return { status: "unverified" };
     if (ctx.email !== invitation.email) return { status: "wrong_account", emailHint: emailHint(invitation.email) };
 
-    const joined = await joinByInvitation(ctx, invitation, ctx.userId);
+    const joined = await joinByInvitation(ctx, invitation, ctx.userId, ctx.issuer);
     // The invited row is gone, which only happens when the invitation was closed some other way.
     if (!joined) return { status: "revoked" };
     return { status: joined.status, companyId };
