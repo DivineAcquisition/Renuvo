@@ -53,7 +53,7 @@ export async function visitInput(ctx: QueryCtx, company: Doc<"companies">, spec:
 }
 
 /** Saves a quote with the exact version and inputs it was given for. The same inputs and version always give the same price. */
-export async function saveQuote(ctx: MutationCtx, input: { companyId: Id<"companies">; service: Doc<"services">; version: Doc<"serviceVersions">; quoteInput: QuoteInput; result: Quote; purpose: "visit" | "chat" | "studio"; actor: Actor; jobId?: Id<"jobs"> }): Promise<Id<"serviceQuotes">> {
+export async function saveQuote(ctx: MutationCtx, input: { companyId: Id<"companies">; service: Doc<"services">; version: Doc<"serviceVersions">; quoteInput: QuoteInput; result: Quote; purpose: "visit" | "chat" | "studio" | "sales"; actor: Actor; jobId?: Id<"jobs"> }): Promise<Id<"serviceQuotes">> {
   return ctx.db.insert("serviceQuotes", {
     companyId: input.companyId,
     serviceId: input.service._id,

@@ -103,6 +103,15 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("expenses"), id: v.id("expenses") }),
   v.object({ table: v.literal("expenseRules"), id: v.id("expenseRules") }),
   v.object({ table: v.literal("expenseImports"), id: v.id("expenseImports") }),
+  // Sales: bookings, quotes, recurring plans and proposals (convex/lib/sales/schema.ts).
+  v.object({ table: v.literal("salesOpportunities"), id: v.id("salesOpportunities") }),
+  v.object({ table: v.literal("salesDrafts"), id: v.id("salesDrafts") }),
+  v.object({ table: v.literal("salesQuotes"), id: v.id("salesQuotes") }),
+  v.object({ table: v.literal("bookings"), id: v.id("bookings") }),
+  v.object({ table: v.literal("recurringPlans"), id: v.id("recurringPlans") }),
+  v.object({ table: v.literal("proposals"), id: v.id("proposals") }),
+  v.object({ table: v.literal("assessments"), id: v.id("assessments") }),
+  v.object({ table: v.literal("serviceSetups"), id: v.id("serviceSetups") }),
 );
 export type Subject = typeof subjectValidator.type;
 

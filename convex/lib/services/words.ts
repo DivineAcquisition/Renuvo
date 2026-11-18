@@ -20,6 +20,7 @@ export function areaWord(unit: AreaUnit, count = 2): string {
 export const SCHEDULE_LABELS: Record<Schedule, string> = {
   every_7_days: "Every 7 days",
   every_14_days: "Every 14 days",
+  every_28_days: "Every 28 days",
   twice_per_month: "Twice per calendar month",
   once_per_month: "Once per calendar month",
 };

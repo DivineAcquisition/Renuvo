@@ -21,6 +21,7 @@ import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
+import { salesTables } from "./lib/sales/schema";
 import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
@@ -806,6 +807,9 @@ export default defineSchema({
 
   // ── Finance: the cleaning company's own money, never Selestial's subscription (convex/lib/finance) ─
   ...financeTables,
+
+  // ── Sales: the booking and proposal workspace and what it commits the company to (convex/lib/sales) ─
+  ...salesTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({
