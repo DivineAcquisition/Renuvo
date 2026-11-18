@@ -6,6 +6,7 @@
  * Any member can take a booking. The member who saves is recorded from their sign-in, never from a typed
  * name. Money shown here is always the engine's, on the published service version.
  */
+import { discountInBand } from "./lib/sales/settings";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -412,7 +413,7 @@ export const price = companyQuery({
       missing: pricing.visit?.quote.missing ?? [],
       firstOutcome: pricing.first?.quote.outcome ?? null,
       capacity: capacity?.state ?? null,
-      overrideNeedsApproval: Boolean(pricing.override) && !isOwner(ctx.role),
+      overrideNeedsApproval: Boolean(pricing.override) && !isOwner(ctx.role) && !discountInBand(ctx.company, pricing.override!),
       segment: draft.segment,
       bookingKind: draft.bookingKind,
     });
