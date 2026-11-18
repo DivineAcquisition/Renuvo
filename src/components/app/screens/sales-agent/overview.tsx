@@ -62,10 +62,11 @@ function Measures({ measures }: { measures: Overview["measures"] }) {
               </li>
             ))}
           </ol>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <Stat label="Median time to first reply" value={measures.medianResponseMinutes === null ? "—" : measures.medianResponseMinutes < 1 ? "< 1 min" : `${measures.medianResponseMinutes} min`} hint={`Across the ${measures.responded} that got a reply`} />
             <Stat label="Quoted value" value={usd(measures.quotedValueCents)} hint="The total of quotes sent. Not booked, and not money." />
             <Stat label="Booked value" value={usd(measures.bookedValueCents)} hint="Accepted quotes that became confirmed bookings. Not yet paid." />
+            <Stat label="Money received" value={measures.collectedCents === null ? "Owner only" : usd(measures.collectedCents)} hint="What Finance’s ledger shows as paid on these bookings’ invoices." />
             <Stat label="With a person involved" value={String(measures.withPersonInvolved)} hint="Inquiries where someone edited, approved, took over or decided something." />
           </div>
           <div className="grid gap-4 text-sm sm:grid-cols-2">
