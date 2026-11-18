@@ -48,8 +48,54 @@ export const setupTables = {
       firstActionAt: v.optional(v.number()),
       enteredAt: v.optional(v.number()),
     }),
+    /** What setup prepared, so going through it again opens the same drafts instead of making new ones. */
+    prepared: v.optional(v.object({ serviceId: v.optional(v.id("services")), agreementId: v.optional(v.id("agreements")), experienceId: v.optional(v.id("bookingExperiences")) })),
     updatedAt: v.number(),
   }).index("by_company", ["companyId"]),
+
+  /**
+   * One reading of the owner's own website. Each page read is recorded as it is read, so the screen shows
+   * real progress. The first completed read is free; a failed or stopped read does not count.
+   */
+  websiteReads: defineTable({
+    companyId: v.id("companies"),
+    host: v.string(),
+    status: v.union(v.literal("queued"), v.literal("reading"), v.literal("ready"), v.literal("failed"), v.literal("stopped")),
+    pages: v.array(v.object({ url: v.string(), title: v.string(), ok: v.boolean(), note: v.optional(v.string()), at: v.number() })),
+    /** What the pages name as services. An advertised price is kept as the page's own words, never as a price. */
+    services: v.array(v.object({ name: v.string(), category: v.union(v.string(), v.null()), advertised: v.union(v.string(), v.null()), sourceRef: v.string() })),
+    found: v.number(),
+    /** Whether the model also read the pages, or only the rules did. */
+    reader: v.union(v.literal("rules"), v.literal("rules_and_model")),
+    free: v.boolean(),
+    problem: v.optional(v.string()),
+    requestedBy: v.id("members"),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  }).index("by_company_started", ["companyId", "startedAt"]),
+
+  /** One import of clients, kept under the key the screen sent, so sending it twice imports once. */
+  clientImportRuns: defineTable({
+    companyId: v.id("companies"),
+    importKey: v.string(),
+    source: v.union(v.literal("csv"), v.literal("jobber"), v.literal("housecall_pro")),
+    label: v.string(),
+    results: v.array(v.object({ index: v.number(), name: v.string(), outcome: v.union(v.literal("created"), v.literal("skipped"), v.literal("failed")), reason: v.optional(v.string()), customerId: v.optional(v.id("customers")) })),
+    created: v.number(),
+    skipped: v.number(),
+    failed: v.number(),
+    by: v.id("members"),
+    createdAt: v.number(),
+  }).index("by_company_key", ["companyId", "importKey"]),
+
+  /** Which client a record in another system became, so importing it again finds it instead of adding it twice. */
+  importedRecords: defineTable({
+    companyId: v.id("companies"),
+    source: v.string(),
+    externalId: v.string(),
+    customerId: v.id("customers"),
+    createdAt: v.number(),
+  }).index("by_company_source_external", ["companyId", "source", "externalId"]),
 
   /** One thing known about the company, with its source and whether a person confirmed it. */
   companyFacts: defineTable({

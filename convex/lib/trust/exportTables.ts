@@ -71,6 +71,9 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   // Company setup and the shared company context (convex/lib/setup/schema.ts).
   { table: "companySetups", index: "by_company" },
   { table: "companyFacts", index: "by_company_key" },
+  { table: "websiteReads", index: "by_company_started" },
+  { table: "clientImportRuns", index: "by_company_key" },
+  { table: "importedRecords", index: "by_company_source_external" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
   { table: "chatActionSteps", index: "by_company_key" },

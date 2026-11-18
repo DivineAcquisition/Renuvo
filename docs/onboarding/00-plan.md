@@ -2,7 +2,7 @@
 
 **"Tell us enough about your company. Watch Selestial prepare useful work. Review what matters. Start operating."**
 
-Status: Phase 1 built November 18, 2026. Each phase is marked here as it is built and verified.
+Status: Phase 1 merged (#110). Phase 2a built November 18, 2026. Each phase is marked here as it is built and verified.
 
 ## What was there before
 
@@ -40,10 +40,60 @@ Inspected on `main` at `2cbf867`.
 | Phase | Delivers | State |
 |---|---|---|
 | 1 | Resumable guided flow, priority, adaptive questions, shared facts, readiness, responsive screens | Built |
-| 2 | Website discovery, imports, integration guidance, service, agreement and booking drafts | Not started |
+| 2a | Website reader, client import, integration guidance, service, agreement and booking drafts | Built |
+| 2b | Jobber connection (OAuth), Housecall Pro key import | Not started |
 | 3 | First work per built agent, with prerequisite checks | Not started |
 | 4 | Exact-action review, authority, safe execution, "Your first work" | Not started |
 | 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Not started |
+
+## Decisions made by the Owner (November 18)
+
+| Area | Decision |
+|---|---|
+| Website | Selestial's own bounded reader: up to ten pages of the owner's own site, safety limits, no logins. |
+| Credits | The first completed read during setup is free; a failed or stopped read does not count. Reading another site is not offered in setup yet. |
+| Retention | Prepare, never send, until Retention is built (Phase 3). |
+| Leaving setup | Any step. |
+| Imports | Spreadsheet import recognizing Jobber, Housecall Pro and BookingKoala exports. |
+| Jobber | A real OAuth connection; the Owner registers the app and adds `JOBBER_CLIENT_ID` / `JOBBER_CLIENT_SECRET` (2b). |
+| Housecall Pro | API key import for MAX-plan owners, plus the spreadsheet path (2b). |
+| BookingKoala | Spreadsheet only, until its API is documented. |
+| First batch | One review screen in setup across agents (Phase 4). |
+| Delivery | One PR per phase. |
+
+## Phase 2a: verified
+
+- **Website reader** (`lib/setup/website.ts`, `setupWebsite.ts`):
+  - Reads only a public site name: no IP addresses, internal names, ports or credentials. Each host is
+    resolved through a public DNS-over-HTTPS service, and any private or reserved answer stops the read.
+    Redirects are followed only within the same site, at most three.
+  - Up to ten pages, chosen by what they are likely about (services, pricing, areas, contact, policies);
+    login, cart and file links are skipped. Each page is capped in size and time.
+  - Each page is recorded as it is read, so the screen shows real progress, and the read can be stopped.
+  - Rules take plain statements (structured business data, contact links, "serving X, Y and Z", a
+    policy sentence in the page's own words) and services named in headings, with any advertised price
+    kept as the page's words, never as a price. The model, when available, may only suggest the same
+    kinds of facts, each tied to a page that was read; code checks every one.
+  - Everything found is saved as found, never confirmed. A different value for something the owner
+    confirmed is kept as a conflict. Found values are offered beside the field and used only if chosen.
+  - Residual risk, stated: the address is resolved before it is fetched, so a name that changes what it
+    points to between the two checks is not fully excluded by this runtime.
+- **Client import** (`lib/clients/importing.ts`, `clientImports.ts`): check first (problems, likely
+  duplicates, already imported, repeated in the file), then commit in batches of 100 under fixed keys, so a
+  retry imports nothing twice; an ID from the old system is remembered so importing the same export again
+  finds it. A failed row does not stop the others and is reported with its reason. Imported contacts get no
+  permission to be texted or emailed.
+- **Drafts** (`setup.prepareService`, `prepareAgreement`, `prepareBooking`): through the workspace's own
+  paths, once each. Template prices stay marked as examples; the agreement is a draft nobody has reviewed;
+  the booking page says it cannot take bookings until a service is published.
+- **Tests**: `convex/lib/setup/website.test.ts`, `convex/setupWebsite.test.ts` (a stand-in website: found not
+  confirmed, conflicts, private addresses, redirects off the site, failed reads not counting, model output
+  checked), `convex/clientImports.test.ts`, and draft preparation in `convex/setup.test.ts`.
+- **Rendered** at 1440 and 390 wide: found suggestions on the basics step, the records step with a Jobber
+  export (recognized, mapped, checked, imported), and the prepared drafts.
+- **Found while rendering:** found website values were pre-filled into the fields, so continuing would have
+  confirmed them without the owner choosing; they are now offered beside the field. A row with a bad email
+  was counted as "left as it was" instead of "not imported".
 
 ## Phase 1: verified
 
@@ -60,10 +110,11 @@ Inspected on `main` at `2cbf867`.
 - **Milestones recorded so far:** setup started, context confirmed, workspace entered. The artifact and
   action milestones have fields and are set in later phases.
 
-## Phase 1: not done yet
+## Not done yet
 
-- "Use my website" keeps the address only. Nothing reads the site until Phase 2.
-- "Connect or upload" records the choice only. Imports and connections come in Phase 2.
-- The Prepare step shows readiness; it does not prepare drafts yet (Phases 2 and 3).
+- Jobber and Housecall Pro connections (2b). Until then their exports work through the spreadsheet import.
+- Recurring schedules from an import are kept as notes on the client; turning them into recurring plans
+  needs a published service.
+- Agent first work (Phase 3), first-batch review and "Your first work" (Phase 4).
 - Help is written guidance per question. Chat inside setup is not wired.
 - Home has no "continue setup" entry yet; `/app/setup` is reachable directly (Phase 4).
