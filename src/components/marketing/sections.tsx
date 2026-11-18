@@ -2,7 +2,7 @@ import { ArrowRight, Hand, ListChecks, ScrollTextIcon, ShieldCheck, type LucideI
 import { AgentMark } from "@/components/marketing/agent-mark";
 import { AgentVisual } from "@/components/marketing/agent-visuals";
 import { SpotlightCard } from "@/components/marketing/saas-frame";
-import { AGENTS, CONTROL, INTEGRATIONS, PRICING, PROBLEM } from "@/lib/marketing/content";
+import { AGENT_STATUS, AGENTS, CONTROL, INTEGRATIONS, PRICING, PROBLEM } from "@/lib/marketing/content";
 
 /** The four loose ends from the problem section, each beside the agent that will carry it. */
 export function LooseEnds() {
@@ -26,8 +26,18 @@ export function AgentsGrid() {
         <SpotlightCard key={agent.id} className="p-6 sm:p-7">
           <div className="flex h-full flex-col">
             <div className="flex items-center gap-3">
-              <AgentMark id={agent.id} size="lg" />
+              <AgentMark id={agent.id} size="lg" live={AGENT_STATUS[agent.id].live} />
               <p className="text-[11px] font-semibold tracking-[0.14em] text-brand-300 uppercase">{agent.name}</p>
+              <span
+                className={
+                  AGENT_STATUS[agent.id].live
+                    ? "ml-auto inline-flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success-foreground"
+                    : "ml-auto rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                }
+              >
+                {AGENT_STATUS[agent.id].live ? <span className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" aria-hidden /> : null}
+                {AGENT_STATUS[agent.id].label}
+              </span>
             </div>
             <h3 className="mt-5 font-heading text-xl tracking-tight text-strong sm:text-2xl">{agent.headline}</h3>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-[15px]">{agent.body}</p>
@@ -96,7 +106,14 @@ export function IntegrationsGrid() {
                   <span className="min-w-0">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="text-sm font-medium text-strong">{item.name}</span>
-                      <span className="rounded-full border border-border px-1.5 py-px text-[10px] font-medium text-muted-foreground">{INTEGRATIONS.status}</span>
+                      {item.live ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/10 px-1.5 py-px text-[10px] font-medium text-success-foreground">
+                          <span className="size-1.5 rounded-full bg-success" aria-hidden />
+                          {INTEGRATIONS.liveLabel}
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-border px-1.5 py-px text-[10px] font-medium text-muted-foreground">{INTEGRATIONS.plannedLabel}</span>
+                      )}
                     </span>
                     <span className="mt-0.5 block text-sm leading-relaxed text-muted-foreground">{item.body}</span>
                   </span>
