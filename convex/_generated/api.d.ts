@@ -310,6 +310,7 @@ import type * as personnel from "../personnel.js";
 import type * as portal from "../portal.js";
 import type * as portalAccess from "../portalAccess.js";
 import type * as properties from "../properties.js";
+import type * as proposals from "../proposals.js";
 import type * as recruiter from "../recruiter.js";
 import type * as recruiterGmailWatch from "../recruiterGmailWatch.js";
 import type * as recruiterInbox from "../recruiterInbox.js";
@@ -641,6 +642,7 @@ declare const fullApi: ApiFromModules<{
   portal: typeof portal;
   portalAccess: typeof portalAccess;
   properties: typeof properties;
+  proposals: typeof proposals;
   recruiter: typeof recruiter;
   recruiterGmailWatch: typeof recruiterGmailWatch;
   recruiterInbox: typeof recruiterInbox;

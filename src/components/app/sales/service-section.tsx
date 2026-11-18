@@ -55,7 +55,7 @@ function Scope({ spec }: { spec: Spec }) {
   return (
     <details className="rounded-xl border border-border px-3 py-2 text-sm">
       <summary className="cursor-pointer font-medium text-strong">
-        What's included <span className="font-normal text-muted-foreground">({spec.included.length} tasks{spec.excluded.length ? `, ${spec.excluded.length} not included` : ""})</span>
+        What’s included <span className="font-normal text-muted-foreground">({spec.included.length} tasks{spec.excluded.length ? `, ${spec.excluded.length} not included` : ""})</span>
       </summary>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
         <ul className="grid gap-1 text-xs text-strong">

@@ -51,10 +51,10 @@ export function PaymentSection({ n, working, setBody, summary, done }: { n: numb
       {payment.policy === "deposit" ? (
         <div className="grid max-w-md gap-1">
           <MoneyInput label="Deposit" unit="due now" cents={payment.depositCents ?? null} onCents={(depositCents) => setBody((b) => ({ ...b, payment: { ...b.payment, depositCents: depositCents ?? undefined } }))} hint={firstCents !== null ? `First visit ${money(firstCents)}. The deposit must be less.` : undefined} />
-          {payment.depositCents !== undefined && firstCents !== null && payment.depositCents >= firstCents ? <p className="text-sm text-destructive-foreground">A deposit must be less than the first visit. Choose "Pay in full now" instead.</p> : null}
+          {payment.depositCents !== undefined && firstCents !== null && payment.depositCents >= firstCents ? <p className="text-sm text-destructive-foreground">A deposit must be less than the first visit. Choose “Pay in full now“ instead.</p> : null}
         </div>
       ) : null}
-      {payment.policy === "external" ? <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">Selestial won't mark anything paid because of this choice. When the money arrives, record it on the invoice in Finance.</p> : null}
+      {payment.policy === "external" ? <p className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">Selestial won’t mark anything paid because of this choice. When the money arrives, record it on the invoice in Finance.</p> : null}
       {recurring ? (
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-medium text-strong">Billing for later visits</legend>
@@ -71,7 +71,7 @@ export function PaymentSection({ n, working, setBody, summary, done }: { n: numb
           <input type="checkbox" className="mt-0.5 accent-brand-500" checked={agreement.required === true} onChange={(e) => setBody((b) => ({ ...b, agreement: { ...b.agreement, required: e.target.checked, docType: b.agreement?.docType ?? types[recurring ? 1 : 0]?.id ?? types[0]?.id } }))} />
           <span>
             <span className="font-medium text-strong">The customer signs an agreement before service</span>
-            <span className="block text-xs text-muted-foreground">Sent as a secure link. Saying the terms were discussed on the phone doesn't count as a signature.</span>
+            <span className="block text-xs text-muted-foreground">Sent as a secure link. Saying the terms were discussed on the phone doesn’t count as a signature.</span>
           </span>
         </label>
         {agreement.required ? (

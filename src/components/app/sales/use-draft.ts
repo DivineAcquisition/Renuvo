@@ -42,6 +42,7 @@ export function useDraft(companyId: Id<"companies">, draftId: Id<"salesDrafts">)
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef<Working | null>(null);
+  const again = useRef<() => void>(() => undefined);
 
   // Adopt the server's copy on first load, and whenever it moved on while nothing local is pending.
   useEffect(() => {
@@ -58,7 +59,6 @@ export function useDraft(companyId: Id<"companies">, draftId: Id<"salesDrafts">)
     };
     revision.current = data.draft.revision;
     latest.current = next;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the server copy is the source until the person edits.
     setWorking(next);
     setState({ kind: "saved", at: data.draft.updatedAt });
   }, [data]);
@@ -85,12 +85,15 @@ export function useDraft(companyId: Id<"companies">, draftId: Id<"salesDrafts">)
       // Edits made while saving are saved next.
       if (latest.current === value) dirty.current = false;
       setState(dirty.current ? { kind: "dirty" } : { kind: "saved", at: Date.now() });
-      if (dirty.current) timer.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
+      if (dirty.current) timer.current = setTimeout(() => again.current(), SAVE_DELAY_MS);
     } catch (caught) {
       const message = messageOf(caught);
       setState(/another window/.test(message) ? { kind: "conflict" } : { kind: "error", message });
     }
   }, [companyId, draftId, save]);
+  useEffect(() => {
+    again.current = () => void flush();
+  }, [flush]);
 
   const update = useCallback(
     (change: Partial<Working> | ((current: Working) => Working)) => {

@@ -233,6 +233,12 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 ];
 
 /** Pages inside Services & Pricing. The first four are its tabs; the rest are reached from them. They have no sidebar entry of their own. */
+/** Pages inside Sales that are not tabs: the booking and proposal workspace and its entry point. */
+export const SALES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/agents/sales/new`, label: "New booking or proposal", purpose: "Starts a workspace draft from Sales, a customer or Dispatch, with what they know filled in." },
+  { path: `${APP_ROOT}/agents/sales/book/[draftId]`, label: "Booking workspace", purpose: "Book one-time or recurring service, or prepare a commercial, office or short-term rental proposal." },
+];
+
 export const SERVICES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/services/studio`, label: "Pricing Studio", purpose: "Test example jobs against live or draft services: price, time, crew, costs and what remains." },
   { path: `${APP_ROOT}/services/research`, label: "Research & Insights", purpose: "Research briefs: what was found, what is comparable, what is uncertain, with every source." },
@@ -339,7 +345,7 @@ export const AGENTS: readonly AgentNav[] = [
     backendAgent: "sales",
     tabs: [
       ["pipeline", "Pipeline"],
-      ["quotes-proposals", "Quotes & Proposals"],
+      ["quotes-proposals", "Quotes & Proposals", LIVE],
       ["follow-ups", "Follow-ups"],
       ["calls-messages", "Calls & Messages"],
       ["booking-forms", "Booking Forms"],

@@ -81,7 +81,7 @@ function CalendarPreview({ cadence, firstDate, endDate, hours }: { cadence: Cade
         </p>
       ) : null}
       <p className="text-xs text-muted-foreground">
-        Days shorter than the chosen day of the month use the month's last day. A visit that falls on a closed day or a date the company blocks is never moved on its own: it goes to Dispatch as an exception to reschedule with the customer.
+        Days shorter than the chosen day of the month use the month’s last day. A visit that falls on a closed day or a date the company blocks is never moved on its own: it goes to Dispatch as an exception to reschedule with the customer.
       </p>
     </div>
   );
@@ -208,7 +208,7 @@ export function ScheduleSection({ n, data, working, setBody, summary, done, comp
         <input type="checkbox" className="mt-0.5 accent-brand-500" checked={schedule.proposed === true} onChange={(e) => setSchedule({ proposed: e.target.checked })} />
         <span>
           <span className="font-medium text-strong">Proposed date only</span>
-          <span className="block text-xs text-muted-foreground">The customer hasn't confirmed this time. The booking request carries it as a proposal; it is not confirmed until a time is held.</span>
+          <span className="block text-xs text-muted-foreground">The customer hasn’t confirmed this time. The booking request carries it as a proposal; it is not confirmed until a time is held.</span>
         </span>
       </label>
 

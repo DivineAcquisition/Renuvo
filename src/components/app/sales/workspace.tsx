@@ -111,7 +111,7 @@ function CustomerPreview({ working, data, onClose }: { working: Working; data: N
               ) : null}
             </dl>
             {working.body.notes?.customer ? <p className="rounded-lg bg-muted/40 p-3 text-strong">{working.body.notes.customer}</p> : null}
-            {working.body.agreement?.required ? <p className="text-xs text-muted-foreground">You'll be asked to review and sign a service agreement.</p> : null}
+            {working.body.agreement?.required ? <p className="text-xs text-muted-foreground">You’ll be asked to review and sign a service agreement.</p> : null}
             <p className="text-xs text-muted-foreground">Access notes and office notes are not shown to the customer.</p>
           </div>
         ) : (
@@ -223,7 +223,7 @@ export function SalesWorkspace({ draftId }: { draftId: Id<"salesDrafts"> }) {
             <Button type="submit" size="sm" disabled={!question.trim()}>
               Ask
             </Button>
-            <p className="basis-full text-xs text-muted-foreground">Chat reads this draft and prepares changes; you apply them here. It can't send, charge or confirm anything.</p>
+            <p className="basis-full text-xs text-muted-foreground">Chat reads this draft and prepares changes; you apply them here. It can’t send, charge or confirm anything.</p>
           </form>
         ) : null}
         <FormError message={chatError} />

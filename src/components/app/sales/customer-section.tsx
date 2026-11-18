@@ -130,7 +130,7 @@ function FindOrAdd({ companyId, draftId, onPick }: { companyId: Id<"companies">;
             {dupes.map((d) => d.name).join(", ")} has the same {dupes[0]?.why}. Choose them above, or confirm this is a different customer.
             <div className="mt-2">
               <Button size="sm" onClick={() => create(true)} disabled={busy}>
-                It's a different customer, add them
+                It’s a different customer, add them
               </Button>
             </div>
           </div>
@@ -273,7 +273,7 @@ export function CustomerSection({ n, data, working, update, setBody, done, compa
               {newAddress ? (
                 <div className="grid gap-3 rounded-xl border border-border p-3">
                   <AddressInputs value={newAddress} onChange={setNewAddress} />
-                  {inArea(data.serviceAreas, newAddress.postalCode) === false ? <p className="text-sm text-destructive-foreground">The company doesn't serve {newAddress.postalCode}. You can still save the address.</p> : null}
+                  {inArea(data.serviceAreas, newAddress.postalCode) === false ? <p className="text-sm text-destructive-foreground">The company doesn’t serve {newAddress.postalCode}. You can still save the address.</p> : null}
                   <FormError message={error} />
                   <div className="flex gap-2">
                     <Button
@@ -302,8 +302,8 @@ export function CustomerSection({ n, data, working, update, setBody, done, compa
                   </Button>
                 </div>
               )}
-              {area === true && data.serviceAreas.length ? <p className="text-xs text-success-foreground">In the company's service area.</p> : null}
-              {area === false ? <p className="text-sm text-destructive-foreground">This address is outside the company's service area. It can't be booked until the area is added under Business & hours.</p> : null}
+              {area === true && data.serviceAreas.length ? <p className="text-xs text-success-foreground">In the company’s service area.</p> : null}
+              {area === false ? <p className="text-sm text-destructive-foreground">This address is outside the company’s service area. It can’t be booked until the area is added under Business & hours.</p> : null}
             </fieldset>
           ) : null}
           <details className="rounded-xl border border-border px-3 py-2" open={Boolean(contacts.billing?.name || contacts.site?.name)}>

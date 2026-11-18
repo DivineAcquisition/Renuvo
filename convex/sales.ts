@@ -12,7 +12,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, type MemberAccess } from "./lib/builders";
-import { matchesFor, normalEmail, normalPhone, WHY_WORDS } from "./lib/cleaners/duplicates";
+import { matchesFor, normalPhone, WHY_WORDS } from "./lib/cleaners/duplicates";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { isOwner } from "./lib/roles";
