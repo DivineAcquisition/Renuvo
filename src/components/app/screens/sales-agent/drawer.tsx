@@ -792,7 +792,7 @@ function Body({ opportunityId, now, initial }: { opportunityId: string; now: num
   const { busy, error, run } = useRun();
   const [tab, setTab] = useState<TabId | null>(null);
   // Chat is offered the customer this opportunity is about.
-  useOfferChatContext(detail?.customer ? [{ table: "customers", id: detail.customer.customerId }] : null);
+  useOfferChatContext(detail ? [{ table: "salesOpportunities", id: opportunityId }, ...(detail.customer ? [{ table: "customers" as const, id: detail.customer.customerId }] : [])] : null);
 
   if (detail === undefined) {
     return (

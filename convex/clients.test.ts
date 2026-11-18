@@ -109,7 +109,7 @@ describe("Clients & Properties", () => {
     expect(await names(as, companyId, "prospects")).toEqual(["Priya Nair"]);
     const [row] = (await as.query(api.clients.directory, { companyId, view: "prospects", paginationOpts: page })).page;
     const customerId = row.customerId;
-    // The lead's Sales task is about this record and shows as follow-up.
+    // The lead's Sales opportunity is about this person, and its task shows as their follow-up.
     expect((await as.query(api.clients.overview, { companyId })).attention.find((a) => a.kind === "followup")?.count).toBe(1);
     // Booking the first visit makes the prospect a client, on the same record.
     const propertyId = await as.mutation(api.properties.create, { companyId, customerId, address: address("5 River Rd"), kind: "home" });

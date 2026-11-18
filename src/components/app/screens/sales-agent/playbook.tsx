@@ -232,7 +232,7 @@ function Editor({ playbook, justSaved, onSaved }: { playbook: Playbook; justSave
 
       <Panel title="5 · Discounts">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="The most Sales may take off without asking" hint="A percent of the cleaning amount. 0 means never. More than this, or any discount below a service’s minimum, needs your approval.">
+          <Field label="The most your team may take off a price without asking you" hint="A percent of the calculated price. 0 means every price change comes to you. A bigger discount, or a higher price, always needs your approval. The Sales agent itself never discounts.">
             <div className="flex items-center gap-2">
               <TextInput inputMode="numeric" value={String(settings.discounts.maxPercent)} disabled={!can} onChange={(event) => patch("discounts", { ...settings.discounts, maxPercent: Math.max(0, Math.min(30, Number(event.target.value.replace(/\D/g, "")) || 0)) })} className="w-24" />
               <span className="text-sm text-muted-foreground">percent (up to 30)</span>

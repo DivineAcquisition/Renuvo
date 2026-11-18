@@ -19,7 +19,7 @@ import { STATUS_WORDS as PROPOSAL_WORDS } from "./proposals";
 const SALES = "/app/agents/sales";
 
 const STAGE_WORDS: Record<Doc<"salesOpportunities">["stage"], string> = { new: "New", qualifying: "Qualifying", quoting: "Quoting", won: "Won", lost: "Lost" };
-const QUOTE_WORDS: Record<Doc<"salesQuotes">["status"], string> = { saved: "Saved, not sent", sent: "Sent", accepted: "Accepted", expired: "Expired", superseded: "Replaced by a newer quote", withdrawn: "Withdrawn", declined: "Declined", awaiting_approval: "Waiting for approval" };
+const QUOTE_WORDS: Record<Doc<"salesQuotes">["status"], string> = { saved: "Saved, not sent", awaiting_approval: "Waiting for the Owner's approval", sent: "Sent", accepted: "Accepted", declined: "Declined", expired: "Expired", superseded: "Replaced by a newer quote", withdrawn: "Withdrawn" };
 const BOOKING_WORDS: Record<Doc<"bookings">["status"], string> = { requested: "Requested, not confirmed", awaiting: "Waiting on what it needs", confirmed: "Confirmed", cancelled: "Cancelled" };
 const PAYMENT_WORDS: Record<Doc<"bookings">["requirements"]["payment"]["state"], string> = { not_required: "No payment needed first", link_needed: "Payment link not sent", awaiting: "Waiting for payment", paid: "Paid", failed: "Payment failed", approval_needed: "Price waiting for the Owner" };
 const AGREEMENT_WORDS: Record<Doc<"bookings">["requirements"]["agreement"]["state"], string> = { not_required: "No agreement needed", to_send: "Agreement not sent", sent: "Agreement sent, not signed", signed: "Agreement signed", declined: "Agreement declined" };
@@ -31,7 +31,9 @@ export const forClient = companyQuery({
   handler: async (ctx, args) => {
     const customer = await owned(ctx, args.customerId);
     const byCustomer = { companyId: ctx.companyId, customerId: customer._id };
-    const propertyName = async (id: Id<"properties">) => {
+    // A quote can be made before there is a property (an inquiry the Sales agent priced).
+    const propertyName = async (id: Id<"properties"> | undefined) => {
+      if (!id) return "No property yet";
       const p = await ctx.db.get(id);
       return p ? p.label?.trim() || p.address.line1 : "A property";
     };
@@ -74,7 +76,7 @@ export const forClient = companyQuery({
       .take(50);
     const quotes = [];
     for (const q of quoteRows.sort((a, b) => b.createdAt - a.createdAt).slice(0, 15)) {
-      quotes.push({ id: q._id, kind: q.kind, property: q.propertyId ? await propertyName(q.propertyId) : null, visitCents: q.visit.totalCents, firstCents: q.first?.totalCents ?? null, cadence: q.cadence ? cadenceLabel(q.cadence as Cadence) : null, status: q.status, statusWords: q.status === "sent" && q.expiresAt < Date.now() ? "Expired" : QUOTE_WORDS[q.status], expiresAt: q.expiresAt, createdAt: q.createdAt, href: `${SALES}/book/${q.draftId}` });
+      quotes.push({ id: q._id, kind: q.kind, property: await propertyName(q.propertyId), visitCents: q.visit.totalCents, firstCents: q.first?.totalCents ?? null, cadence: q.cadence ? cadenceLabel(q.cadence as Cadence) : null, status: q.status, statusWords: q.status === "sent" && q.expiresAt < Date.now() ? "Expired" : QUOTE_WORDS[q.status], expiresAt: q.expiresAt, createdAt: q.createdAt, href: `${SALES}/book/${q.draftId}` });
     }
 
     const proposalRows = await ctx.db
