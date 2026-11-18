@@ -49,7 +49,7 @@ const shelfValidator = v.union(v.literal("active"), v.literal("archived"));
 
 // ── Context ──────────────────────────────────────────────────────────────────────────────────────
 
-const CONTEXT_TABLES: readonly ContextRef["table"][] = ["customers", "properties", "cleaners", "jobs", "tasks", "applications", "hiringNeeds", "chatArtifacts", "invoices"];
+const CONTEXT_TABLES: readonly ContextRef["table"][] = ["customers", "properties", "cleaners", "jobs", "tasks", "applications", "hiringNeeds", "chatArtifacts", "invoices", "salesOpportunities"];
 
 /** Records a person attached, checked against the company and their role. Labels come from the record, never the browser. */
 async function checkedContext(ctx: Ctx, refs: { table: string; id: string }[]): Promise<ContextRef[]> {
