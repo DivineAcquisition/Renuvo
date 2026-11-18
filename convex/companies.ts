@@ -8,6 +8,7 @@ import { byMember, recordEvent } from "./lib/events";
 import { roleOf } from "./lib/roles";
 import { agentValidator } from "./lib/statuses";
 import { text } from "./lib/text";
+import { startSetup } from "./setup";
 import { currentVersion } from "./lib/trust/documents";
 
 function timezone(value: string): string {
@@ -55,6 +56,8 @@ export const create = signedInMutation({
     await recordEvent(ctx, { companyId, type: "company.created", actor: { kind: "member", memberId }, subject: { table: "companies", id: companyId } });
     // In the same transaction as the company, so a company never exists without the acceptance it was made with.
     if (args.acceptTerms !== undefined) await acceptTerms(ctx, { companyId, documentId: args.acceptTerms, memberId, userId: ctx.userId });
+    // A new company starts in setup. Companies made before setup existed have no row and are never sent through it.
+    await startSetup(ctx, companyId);
     return companyId;
   },
 });

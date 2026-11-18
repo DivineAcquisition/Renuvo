@@ -211,7 +211,7 @@ export const PRICING = {
       period: "/month",
       summary: "Add marketing, quality, customer care, and team coordination, with customer portals and advanced controls.",
       today: ["Everything in Operate", "Creative Studio for images and video", "Advanced approval routing and template governance for agreements", "A larger monthly credit allowance"],
-      later: ["Marketing, Quality, Customer Care and Team Coordinator, included when released", "Customer portal, advanced workflow customization, and team and location governance, when available"],
+      later: ["Marketing, Quality, Customer Care and Team Coordinator, included when released", "Customer portal, your own domain for booking pages, advanced workflow customization, and team and location governance, when available"],
     },
   ],
   allowanceNote: "Each plan includes a monthly allowance of Selestial Credits, and Expand includes twice Operate's. Your Usage page shows your allowance, what each piece of AI work costs, and what used it.",
