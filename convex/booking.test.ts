@@ -114,7 +114,7 @@ type Setup = Awaited<ReturnType<typeof setup>>;
 async function begin(s: Setup, visitorKey = "visitor-1") {
   const got = await s.as.query(api.bookingExperiences.get, { companyId: s.companyId, experienceId: s.experienceId });
   const started = await s.t.mutation(api.bookingPublic.start, { secret: SECRET, handle: "alpha-clean", slug: got.experience.slug, postalCode: "78701", attribution, visitorKey });
-  if (!("token" in started)) throw new Error("refused");
+  if (!started.token) throw new Error("refused");
   return started.token;
 }
 

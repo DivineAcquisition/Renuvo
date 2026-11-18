@@ -132,6 +132,9 @@ export async function commitBooking(ctx: MutationCtx, sessionId: Id<"bookingSess
       return "needs_attention";
     }
   }
+  // Taking details after payment is supported, but a visit is never made without them: the booking
+  // waits as "payment received, details incomplete" and is finished when the customer adds them.
+  if (session.answersState !== "complete") return "blocked";
   if (session.blockers.length) {
     if (paid) {
       await needsAttention(ctx, session, L, `The payment was received, but the booking can't be confirmed yet: ${session.blockers.join(" ")}`);

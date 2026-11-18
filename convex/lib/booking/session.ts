@@ -276,6 +276,9 @@ export async function recalc(ctx: MutationCtx, sessionId: Id<"bookingSessions">)
 
 export type OfferView = {
   serviceKey: string;
+  /** The service's own name and summary in Services & Pricing, before any display wording. */
+  serviceName: string;
+  summary: string;
   name: string;
   blurb: string;
   benefits: string[];
@@ -320,6 +323,8 @@ export async function offersFor(ctx: Ctx, session: Doc<"bookingSessions">, L: Lo
     const request = L.def.behavior.mode !== "instant" ? REQUEST_WORDS[L.def.behavior.mode === "estimate_request" ? "estimate" : "walkthrough"] : blocked ? blocked : q.outcome === "walkthrough" ? "This property needs a walkthrough before a firm price." : q.outcome === "estimate" ? "This is an estimate. The team confirms the price." : null;
     out.push({
       serviceKey: row.service.key,
+      serviceName: spec.name,
+      summary: spec.summary,
       name: row.offered.displayName || spec.name,
       blurb: row.offered.blurb || spec.summary,
       benefits: row.offered.benefits.length ? row.offered.benefits : spec.included.slice(0, 6).map((item) => (item.section ? `${item.section}: ${item.label}` : item.label)),

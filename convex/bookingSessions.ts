@@ -329,6 +329,8 @@ export const setDetails = bookingMutation({
     await ctx.db.patch(ctx.session._id, { address, answers, accessNotes: access.length ? access.join("\n").slice(0, 3000) : undefined, accessAnswered });
     const after = await recalc(ctx, ctx.session._id);
     if (after.answersState === "complete") await reached(ctx, after, "checkout", "details");
+    // Paid before the details were given: finishing the details finishes the booking.
+    if (after.answersState === "complete" && after.paymentState === "succeeded" && !after.test) await commitBooking(ctx, after._id);
     return { complete: after.answersState === "complete" };
   },
 });

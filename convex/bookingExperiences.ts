@@ -42,8 +42,6 @@ import { startingCents } from "./lib/services/engine";
 import { CATEGORY_LABELS, type Category } from "./lib/services/spec";
 import { scheduleLabel } from "./lib/services/words";
 
-type Ctx = (QueryCtx | MutationCtx) & MemberAccess;
-
 export const STALE_EXPERIENCE = "Someone else saved this experience after you opened it.";
 
 async function memberName(ctx: QueryCtx, id: Id<"members"> | undefined): Promise<string> {
