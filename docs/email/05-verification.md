@@ -50,7 +50,10 @@ Other checks:
 1. **DNS at GoDaddy.** Replace the two `_dmarc` TXT records with one:
    `v=DMARC1; p=none; rua=mailto:<a mailbox you read>; adkim=r; aspf=r`. With two records, DMARC
    isn't applied at all. Every Resend sending subdomain is already verified.
-2. **Convex settings on the live backend (terrific-avocet-835), before merging:**
+2. **Convex settings on the live backend (terrific-avocet-835).** Done on 2026-11-18: `APP_ORIGIN`,
+   `LINK_ORIGIN`, `NOTIFY_EMAIL_FROM` and `SALES_REPLY_DOMAIN` are set. `COMPANY_EMAIL_FROM` and
+   `PLATFORM_REPLY_TO` are left unset: company mail keeps `RECRUITER_EMAIL_FROM`, and notices carry no
+   Reply-To. Set the same values on stoic-gazelle-731 if it is ever used. The full list:
    - `APP_ORIGIN=https://app.selestial.io`. Without it, notices go without buttons or images, and
      member invitations aren't emailed.
    - `LINK_ORIGIN=https://link.selestial.io`.
@@ -59,7 +62,9 @@ Other checks:
      `RECRUITER_EMAIL_FROM` is used.
    - `PLATFORM_REPLY_TO=<a monitored Selestial inbox>`. Optional.
    - `SALES_REPLY_DOMAIN=reply.selestial.io`.
-3. **Resend webhook for the live backend.** Add an endpoint
+3. **Resend webhook for the live backend.** Done on 2026-11-18. Its secret is stored as
+   `RESEND_WEBHOOK_SECRET` on terrific-avocet-835. A forged request gets 401 and a signed one gets
+   200. The setup was:
    `https://terrific-avocet-835.convex.site/webhooks/resend` with these events: delivered, bounced,
    complained, failed, suppressed, delivery_delayed, received. Put its signing secret in
    `RESEND_WEBHOOK_SECRET` on that deployment. Today the only endpoint points at stoic-gazelle-731.
