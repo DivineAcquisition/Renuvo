@@ -17,6 +17,7 @@ import { STATUS_WORDS } from "./lib/cleaners/enroll";
 import { crewOptionsForJob } from "./lib/cleaners/crewOptions";
 import { companyFacts, initialsOf, readinessOf } from "./lib/cleaners/records";
 import { jobLabel } from "./lib/cleaners/schedule";
+import { onJobNow, STANDING_ORDER, STANDING_WORDS, standingOf, teamView, type Standing } from "./lib/cleaners/teams";
 import { staffing } from "./lib/dispatch/crew";
 import { jobAssignments, jobHistory } from "./lib/dispatch/facts";
 import { offerProblem, personRules, placeOffer } from "./lib/dispatch/offers";
@@ -52,15 +53,40 @@ export const list = companyQuery({
         // A team for a job that is long done is history, not a crew to work with.
         if (!job || job.endsAt < args.asOf - 7 * 86_400_000) continue;
       }
-      const memberships = await currentMembers(ctx, crew._id);
+      const memberships = (await currentMembers(ctx, crew._id)).filter((item) => item.to === undefined);
+      const job = crew.jobId ? await ctx.db.get(crew.jobId) : null;
+      // A team for a job is shown against the job's own assignments: who is still on it, and who joined it
+      // through Dispatch after the team was put together.
+      const assignments = crew.kind === "temporary" && job ? await jobAssignments(ctx, job) : [];
+      const team = crew.kind === "temporary" && job ? teamView(job, assignments, memberships.map((row) => row.cleanerId)) : null;
+      const people: { cleanerId: Id<"cleaners">; role: "lead" | "member" | null; fromTeam: boolean }[] = [
+        ...memberships.map((row) => ({ cleanerId: row.cleanerId, role: row.role, fromTeam: true })),
+        ...(team?.addedElsewhere ?? []).map((cleanerId) => ({ cleanerId, role: null, fromTeam: false })),
+      ];
       const members = [];
-      for (const row of memberships.filter((item) => item.to === undefined)) {
+      for (const row of people) {
         const cleaner = await ctx.db.get(row.cleanerId);
         if (!cleaner) continue;
-        members.push({ cleanerId: cleaner._id, name: cleaner.name, initials: initialsOf(cleaner.name), role: row.role, status: cleaner.status, statusWords: STATUS_WORDS[cleaner.status], readiness: readinessOf(cleaner, facts, ctx.company, args.asOf).state });
+        const standing: Standing | null = team ? standingOf(assignments, row.cleanerId) : null;
+        members.push({
+          cleanerId: cleaner._id,
+          name: cleaner.name,
+          initials: initialsOf(cleaner.name),
+          role: row.role,
+          status: cleaner.status,
+          statusWords: STATUS_WORDS[cleaner.status],
+          readiness: readinessOf(cleaner, facts, ctx.company, args.asOf).state,
+          /** For a team for a job: where they stand on it now. Null for a permanent crew. */
+          onJob: standing,
+          onJobWords: standing ? STANDING_WORDS[standing] : null,
+          /** False for someone on the job who was not assembled with the team, such as a replacement. */
+          fromTeam: row.fromTeam,
+        });
       }
-      members.sort((a, b) => Number(b.role === "lead") - Number(a.role === "lead") || a.name.localeCompare(b.name));
-      const job = crew.jobId ? await ctx.db.get(crew.jobId) : null;
+      members.sort(
+        (a, b) =>
+          (a.onJob ? STANDING_ORDER[a.onJob] : 0) - (b.onJob ? STANDING_ORDER[b.onJob] : 0) || Number(b.role === "lead") - Number(a.role === "lead") || Number(b.fromTeam) - Number(a.fromTeam) || a.name.localeCompare(b.name),
+      );
       const sub = crew.subcontractorId ? await ctx.db.get(crew.subcontractorId) : null;
       out.push({
         crewId: crew._id,
@@ -69,9 +95,12 @@ export const list = companyQuery({
         equipment: crew.equipment,
         notes: crew.notes ?? null,
         subcontractor: sub ? { id: sub._id, name: sub.name } : null,
-        job: job ? { jobId: job._id, label: jobLabel(job, (await ctx.db.get(job.customerId))?.name ?? null, ctx.company.timezone), startsAt: job.startsAt } : null,
+        job: job ? { jobId: job._id, label: jobLabel(job, (await ctx.db.get(job.customerId))?.name ?? null, ctx.company.timezone), startsAt: job.startsAt, status: job.status } : null,
         members,
         ready: members.filter((member) => member.readiness === "ready").length,
+        /** For a team for a job: the job's places, so incomplete staffing stays visible on the team. */
+        staffing: team?.staffing ?? null,
+        onJobNow: team ? members.filter((member) => onJobNow(member.onJob)).length : null,
       });
     }
     return out.sort((a, b) => Number(a.kind === "temporary") - Number(b.kind === "temporary") || a.name.localeCompare(b.name));
@@ -84,10 +113,12 @@ export const get = companyQuery({
   handler: async (ctx, args) => {
     const crew = await owned(ctx, args.crewId);
     const memberships = await currentMembers(ctx, crew._id);
+    const job = crew.kind === "temporary" && crew.jobId ? await ctx.db.get(crew.jobId) : null;
+    const team = job ? teamView(job, await jobAssignments(ctx, job), memberships.map((row) => row.cleanerId)) : null;
     const rows = [];
     for (const row of memberships) {
       const cleaner = await ctx.db.get(row.cleanerId);
-      rows.push({ cleanerId: row.cleanerId, name: cleaner?.name ?? "Former worker", role: row.role, from: row.from, to: row.to ?? null });
+      rows.push({ cleanerId: row.cleanerId, name: cleaner?.name ?? "Former worker", role: row.role, from: row.from, to: row.to ?? null, onJob: team?.standings.get(row.cleanerId) ?? null });
     }
     return { crewId: crew._id, name: crew.name, kind: crew.kind, status: crew.status, jobId: crew.jobId ?? null, equipment: crew.equipment, members: rows.sort((a, b) => a.from - b.from) };
   },

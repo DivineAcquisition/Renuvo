@@ -15,6 +15,7 @@
  */
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
+import { recordEvent, type Actor } from "../events";
 import type { ClientView, Relationship } from "./schema";
 
 const YEAR = 365 * 24 * 60 * 60 * 1000;
@@ -183,4 +184,19 @@ export async function possibleDuplicates(ctx: QueryCtx, companyId: Id<"companies
     }
   }
   return [...found.values()].slice(0, 5);
+}
+
+/**
+ * A visit was booked for this client, by a person, a plan or the online booking page. Booking makes a
+ * prospect a client, on the same record with its history, and the directory is rebuilt for them.
+ */
+export async function visitBooked(ctx: MutationCtx, customerId: Id<"customers">, actor: Actor): Promise<void> {
+  const customer = await ctx.db.get(customerId);
+  if (!customer) return;
+  if (customer.relationship === "prospect") {
+    const now = Date.now();
+    await ctx.db.patch(customer._id, { relationship: "active", relationshipAt: now, revision: (customer.revision ?? 0) + 1, updatedAt: now });
+    await recordEvent(ctx, { companyId: customer.companyId, type: "customer.became_client", actor, subject: { table: "customers", id: customer._id }, data: { reason: "first visit booked" } });
+  }
+  await refreshClient(ctx, customer._id);
 }

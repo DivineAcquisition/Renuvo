@@ -8,7 +8,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { owned } from "../access";
-import { refreshClient } from "../clients/directory";
+import { refreshClient, visitBooked } from "../clients/directory";
 import { endAssignment } from "../dispatch/assignmentState";
 import { applyTemplate } from "../dispatch/templates";
 import { coverJob } from "../dispatch/workflow";
@@ -169,12 +169,7 @@ export async function createVisit(ctx: Ctx, actor: Actor, args: CreateVisitArgs,
     if (own?.addedTasks?.length) await addPropertyTasks(ctx, ctx.companyId, jobId, own.addedTasks);
     await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: actor, subject: { table: "jobs", id: jobId }, data: template ? { checklistVersion: template.version } : undefined });
     await coverJob(ctx, jobId);
-    // Booking a visit makes a prospect a client, on the same record, with its history.
-    if (customer.relationship === "prospect") {
-      await ctx.db.patch(customer._id, { relationship: "active", relationshipAt: Date.now(), revision: (customer.revision ?? 0) + 1, updatedAt: Date.now() });
-      await recordEvent(ctx, { companyId: ctx.companyId, type: "customer.became_client", actor: actor, subject: { table: "customers", id: customer._id }, data: { reason: "first visit booked" } });
-    }
-    await refreshClient(ctx, customer._id);
+    await visitBooked(ctx, customer._id, actor);
     return jobId;
 }
 

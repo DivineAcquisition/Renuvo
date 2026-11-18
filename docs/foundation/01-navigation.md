@@ -167,8 +167,8 @@ Three states describe each destination:
 
 ### Agent destinations
 
-Only Dispatch has a workflow. Every other agent's overview and tabs are
-planned.
+Dispatch has a workflow, and Sales › Booking Forms is live. Every other
+agent's overview and tabs are planned.
 
 | Destination | Path | Today |
 |---|---|---|
@@ -177,7 +177,8 @@ planned.
 | Dispatch › Schedule | `/app/agents/dispatch/schedule` | **Live.** Cleaner lanes by day or week. `/app/schedule` redirects here. |
 | Dispatch › Offers & Coverage | `/app/agents/dispatch/offers-coverage` | **Live.** Open offers, places that lost a cleaner, places nobody is asked for, and history. Starting a broadcast or a Recruiter request by hand is not built. |
 | Dispatch › Live Jobs, Action Links, Playbook | `/app/agents/dispatch/<tab>` | **Live.** |
-| All tabs of the other seven agents | `/app/agents/<agent>/<tab>` | **Planned.** |
+| Sales › Booking Forms | `/app/agents/sales/booking-forms` | **Live** (November 18, 2026). Titled "Booking Experiences": each experience, booking rules, recent bookings and requests. One experience's builder is `/app/agents/sales/booking-forms/[id]`; the public pages are `/b/<handle>/<slug>` on the link host. See `docs/booking/00-architecture.md`. |
+| All other tabs of the other seven agents | `/app/agents/<agent>/<tab>` | **Planned.** |
 
 The exact path of every tab is `tabPath(agent, tab)` in `navigation.ts`; tab
 ids are the kebab-case of the label (`quotes-proposals`, `re-cleans`,
