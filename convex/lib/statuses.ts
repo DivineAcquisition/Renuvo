@@ -113,8 +113,8 @@ export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 export const messageStatusValidator = literals(MESSAGE_STATUSES);
 export const MESSAGE_CHANGES: Record<MessageStatus, readonly MessageStatus[]> = {
   queued: ["sending", "held", "not_sent", "failed"],
-  held: ["sending", "not_sent", "failed"],
-  sending: ["sent", "delivered", "failed", "queued", "unconfirmed"],
+  held: ["sending", "not_sent", "failed", "queued"],
+  sending: ["sent", "delivered", "failed", "queued", "unconfirmed", "held"],
   sent: ["delivered", "failed"],
   delivered: [],
   failed: [],

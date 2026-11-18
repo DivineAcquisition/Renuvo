@@ -222,7 +222,7 @@ export const storeAccount = internalMutation({
     const now = Date.now();
     let account = await accountFor(ctx, args.companyId, args.env);
     const ledger = args.ledger ? (JSON.parse(args.ledger) as Doc<"billingAccounts">["ledger"]) : undefined;
-    const fields = { plan: projection.plan, subscription: projection.subscription, credits: projection.credits, syncedAt: now, syncProblem: undefined, ...(invoices.length ? { invoices } : {}), ...(ledger ? { ledger } : {}) };
+    const fields = { plan: projection.plan, subscription: projection.subscription, credits: projection.credits, syncedAt: now, syncProblem: undefined, ...(projection.messaging ? { messaging: { ...projection.messaging, at: now } } : {}), ...(invoices.length ? { invoices } : {}), ...(ledger ? { ledger } : {}) };
     if (account) await ctx.db.patch(account._id, fields);
     else {
       const id = await ctx.db.insert("billingAccounts", { companyId: args.companyId, env: args.env, customerId: args.customerId, controls: DEFAULT_CONTROLS, alertsSent: { period: "", percents: [] }, notices: [], invoices, ...fields });

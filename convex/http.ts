@@ -116,7 +116,7 @@ http.route({
       if (event.kind === "receipt") {
         await ctx.runMutation(internal.messaging.receipt, { provider: "telnyx", eventId: event.eventId, providerMessageId: event.providerMessageId, outcome: event.outcome, problem: event.problem ?? undefined });
       } else if (event.kind === "inbound") {
-        await ctx.runMutation(internal.inbound.telnyx, { eventId: event.eventId, to: event.to, from: event.from, body: event.text, receivedAt: event.receivedAt });
+        await ctx.runMutation(internal.inbound.telnyx, { eventId: event.eventId, to: event.to, from: event.from, body: event.text, receivedAt: event.receivedAt, ...(event.providerMessageId ? { providerMessageId: event.providerMessageId } : {}), ...(event.parts ? { parts: event.parts } : {}), media: event.media });
       }
     },
   }),

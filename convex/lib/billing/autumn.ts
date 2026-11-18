@@ -133,6 +133,46 @@ export function finalizeLock(input: { customerId: string; lockId: string; action
   );
 }
 
+// ── The messaging balance: lock, finalize, track ──────────────────────────────────────────────────
+
+/**
+ * Holds `amount` units of the messaging balance for one message. Outbound sends use "reject": no hold unless
+ * the whole estimate is there. Inbound uses "overflow", because an inbound text cannot be refused; Selestial
+ * bounds that exposure itself before asking (see lib/messagingBilling/inbound).
+ */
+export function lockMessaging(input: { customerId: string; lockId: string; amount: number; expiresAt: number; overflow?: boolean; properties: Record<string, string | number> }) {
+  return call<CheckData>(
+    "/v1/balances.check",
+    {
+      customer_id: input.customerId,
+      feature_id: AUTUMN.messaging,
+      required_balance: input.amount,
+      send_event: true,
+      properties: input.properties,
+      lock: { enabled: true, lock_id: input.lockId, expires_at: input.expiresAt, ...(input.overflow ? { overage_behavior: "overflow" } : {}) },
+    },
+    { idempotencyKey: `mlock:${input.lockId}`, degradable: true },
+  );
+}
+
+/** Confirms (for the final amount, never above the hold) or releases a messaging hold. A replay answers `replayed`. */
+export function finalizeMessaging(input: { customerId: string; lockId: string; action: "confirm" | "release"; amount?: number }) {
+  return call<{ success: boolean }>(
+    "/v1/balances.finalize",
+    { customer_id: input.customerId, lock_id: input.lockId, action: input.action, ...(input.action === "confirm" && input.amount !== undefined ? { override_value: input.amount } : {}) },
+    { idempotencyKey: `m${input.action}:${input.lockId}`, degradable: true },
+  );
+}
+
+/** Records usage directly: a negative value credits the balance back (a refund). Keyed so it happens once. */
+export function trackMessaging(input: { customerId: string; amount: number; key: string; properties: Record<string, string | number> }) {
+  return call<{ customer_id: string; balance: RawBalance | null }>(
+    "/v1/balances.track",
+    { customer_id: input.customerId, feature_id: AUTUMN.messaging, value: input.amount, properties: input.properties, async: false },
+    { idempotencyKey: `mtrack:${input.key}`, degradable: true },
+  );
+}
+
 // ── Plans, top-ups and the billing portal ────────────────────────────────────────────────────────
 
 export type AttachData = { customer_id: string; payment_url: string | null; required_action?: { code: string; reason?: string }; invoice?: { status: string; total: number; currency: string; hosted_invoice_url: string | null } };

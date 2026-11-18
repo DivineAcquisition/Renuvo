@@ -52,6 +52,7 @@ crons.daily("remove abandoned agreement uploads", { hourUTC: 8, minuteUTC: 29 },
 crons.interval("creative studio follows up quiet generations", { minutes: 5 }, internal.media.sweep, {});
 // Billing: settlements that failed are retried, holds left behind by stopped work are released, and work that never reported back is closed.
 crons.interval("billing settles and recovers AI work", { minutes: 5 }, internal.billing.sweep, {});
+crons.interval("messaging charges settle and recover", { minutes: 5 }, internal.messagingBilling.sweep, {});
 
 // Google: the job worker, calendar sync and watches, reviews, Local Services leads, conversions, drive times and Gmail watches.
 crons.interval("google works its queue", { minutes: 1 }, internal.googleWork.tick, {});

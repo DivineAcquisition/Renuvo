@@ -31,6 +31,8 @@ import { cleanerMessageAtSend } from "./lib/cleaners/outbox";
 import { portalUrl } from "./lib/cleaners/portal";
 import { sendProblem, type ApplicantPurpose } from "./lib/recruiter/outbox";
 import { recruiterSettings } from "./lib/recruiter/settings";
+import { captureCharge, markPending, planOutbound, releaseCharge } from "./lib/messagingBilling/ledger";
+import { reserveCharge } from "./messagingBilling";
 
 const MAX_ATTEMPTS = 3;
 const ROUTINE_CLEANER: readonly Doc<"messages">["purpose"][] = ["portal_invitation", "onboarding_reminder", "availability_check", "idle_check_in", "verification_code"];
@@ -185,16 +187,35 @@ export const claim = internalMutation({
       fromName = sales.fromName;
       via = sales.via;
     }
+    // Messaging billing: free (included, or the company's own Gmail), refused (no rate for the route), held
+    // (funds, limits, billing unreachable; the message and its content are kept) or reserved before it goes.
+    const sendIntent = await intentOf(ctx, message);
+    const billed = await planOutbound(ctx, message, { body, viaGmail: via !== null, agent: message.agent ?? sendIntent.agent, memberId: message.authorId, origin: sendIntent.origin });
+    if (billed.kind === "refuse") {
+      await ctx.db.patch(message._id, { status: "not_sent", problem: billed.words, refusal: billed.code });
+      await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose, policy: billed.code } });
+      if (message.assignmentId && (message.purpose === "offer" || message.purpose === "backup_offer")) await ctx.scheduler.runAfter(0, internal.dispatchOps.offerTextRefused, { messageId: message._id, byAgent: sendIntent.agent !== undefined });
+      return null;
+    }
+    if (billed.kind === "hold") {
+      await ctx.db.patch(message._id, { status: "held", holdReason: billed.reason, heldAt: message.heldAt ?? Date.now(), problem: billed.words });
+      await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose, policy: billed.reason } });
+      if (billed.reason === "billing_unavailable") await ctx.scheduler.runAfter(10 * 60_000, internal.messaging.deliver, { messageId: message._id });
+      return null;
+    }
+    if (billed.kind === "reserve") body = billed.body;
+    const channelNow = message.channel ?? "sms";
+    const sentVia = via ? "gmail" : channelNow === "email" ? (emailProvider()?.name ?? "email") : (messagingProvider()?.name ?? "sms");
     const attempt = message.attempts + 1;
-    await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now() });
+    await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now(), sentVia, holdReason: undefined });
     // A text goes from the company's own number. The send policy has already checked it is set and approved.
     const from = (message.channel ?? "sms") === "sms" ? ((await readProfile(ctx, message.companyId)).messaging.smsNumber ?? "") : "";
-    return { to: message.to, from, body, attempt, channel: message.channel ?? ("sms" as const), subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName, via };
+    return { to: message.to, from, body, attempt, channel: message.channel ?? ("sms" as const), subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName, via, billing: billed.kind === "reserve" ? { chargeId: billed.chargeId, needsLock: billed.needsLock } : null };
   },
 });
 
 const resultValidator = v.union(
-  v.object({ ok: v.literal(true), providerMessageId: v.string(), delivered: v.boolean() }),
+  v.object({ ok: v.literal(true), providerMessageId: v.string(), delivered: v.boolean(), parts: v.optional(v.number()) }),
   v.object({ ok: v.literal(false), retryable: v.boolean(), problem: v.string(), bounced: v.optional(v.boolean()) }),
 );
 
@@ -207,19 +228,31 @@ export const settle = internalMutation({
     const now = Date.now();
     const subject = { table: "messages" as const, id: message._id };
     const result = args.result;
+    const charge = await ctx.db
+      .query("messagingCharges")
+      .withIndex("by_message", (q) => q.eq("messageId", message._id))
+      .first();
     if (result.ok) {
-      await ctx.db.patch(message._id, { status: result.delivered ? "delivered" : "sent", providerMessageId: result.providerMessageId, sentAt: now, ...(result.delivered ? { deliveredAt: now } : {}), problem: undefined });
+      // The provider that actually carried it, so its delivery reports find this message.
+      const carrier = message.sentVia ?? message.provider;
+      await ctx.db.patch(message._id, { status: result.delivered ? "delivered" : "sent", providerMessageId: result.providerMessageId, provider: carrier, sentAt: now, ...(result.delivered ? { deliveredAt: now } : {}), ...(result.parts ? { segments: result.parts } : {}), problem: undefined });
+      // Charged on what the provider took: the segments it counted for a text, the recipients for an email.
+      if (charge) await captureCharge(ctx, charge._id, { count: (message.channel ?? "sms") === "sms" ? result.parts : message.recipients, provider: carrier ?? "unknown", providerMessageId: result.providerMessageId });
       await recordEvent(ctx, { companyId: message.companyId, type: "message.sent", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempt: message.attempts } });
       if (result.delivered) await recordEvent(ctx, { companyId: message.companyId, type: "message.delivered", actor: { kind: "system" }, subject, data: { purpose: message.purpose } });
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "accepted");
+      // A delivery report that arrived before this settled is applied now instead of being lost.
+      if (message.earlyReceipt && !result.delivered) await applyOutcome(ctx, (await ctx.db.get(message._id))!, message.earlyReceipt.outcome, message.earlyReceipt.problem);
       return null;
     }
     if (result.retryable && message.attempts < MAX_ATTEMPTS) {
+      // The hold stays for the next try of the same message: a retry is never a second charge.
       await ctx.db.patch(message._id, { status: "queued", problem: result.problem });
       await ctx.scheduler.runAfter(message.attempts * 30_000, internal.messaging.deliver, { messageId: message._id });
       return null;
     }
     await ctx.db.patch(message._id, { status: "failed", failedAt: now, problem: result.problem, ...(result.bounced ? { bouncedAt: now } : {}) });
+    if (charge) await releaseCharge(ctx, charge._id, "The provider did not take the message, so nothing was charged.");
     await recordEvent(ctx, { companyId: message.companyId, type: result.bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem: result.problem });
@@ -264,6 +297,18 @@ export const deliver = internalAction({
   handler: async (ctx, args) => {
     const claimed = await ctx.runMutation(internal.messaging.claim, { messageId: args.messageId, code: args.code });
     if (!claimed) return null;
+    if (claimed.billing?.needsLock) {
+      // The estimate is held in Autumn before the provider is asked. Not held: the message waits, unsent.
+      const held = await reserveCharge(ctx, claimed.billing.chargeId);
+      if (held !== "reserved") {
+        await ctx.runMutation(internal.messagingBilling.holdMessage, {
+          messageId: args.messageId,
+          reason: held === "denied" ? "messaging_balance" : "billing_unavailable",
+          words: held === "denied" ? "The messaging balance doesn't cover this message, so it is waiting with its content kept. Add funds to send it." : "Messaging billing could not be checked, so this message is waiting. It will be tried again; nothing was charged.",
+        });
+        return null;
+      }
+    }
     if (claimed.channel === "email" && claimed.via) {
       const result = await sendThroughMailbox(ctx, args.messageId, claimed.via, claimed);
       await ctx.runMutation(internal.messaging.settle, { messageId: args.messageId, result });
@@ -309,7 +354,18 @@ export const receipt = internalMutation({
       .query("messages")
       .withIndex("by_provider_message", (q) => q.eq("provider", args.provider).eq("providerMessageId", args.providerMessageId))
       .first();
+    if (message?.status === "sending") {
+      // The report beat the send's own answer. Kept, and applied when the send settles.
+      await ctx.db.patch(message._id, { earlyReceipt: { outcome: args.outcome, problem: args.problem, at: Date.now() } });
+      return "deferred" as const;
+    }
     if (!message || (message.status !== "sent" && message.status !== "unconfirmed")) return "ignored" as const;
+    return applyOutcome(ctx, message, args.outcome, args.problem);
+  },
+});
+
+async function applyOutcome(ctx: MutationCtx, message: Doc<"messages">, outcome: "delivered" | "failed" | "bounced", reported?: string) {
+    const args = { outcome, problem: reported };
     const now = Date.now();
     const subject = { table: "messages" as const, id: message._id };
     if (args.outcome === "delivered") {
@@ -325,8 +381,7 @@ export const receipt = internalMutation({
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem });
     else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "failed", problem });
     return "failed" as const;
-  },
-});
+}
 
 /** Run on a schedule: a send that started and never settled is marked unconfirmed and handed on. */
 export const sweepStuck = internalMutation({
@@ -339,6 +394,12 @@ export const sweepStuck = internalMutation({
     for (const message of stuck) {
       const problem = "The send was started and never finished, so it is not known whether the message went. It was not sent again.";
       await ctx.db.patch(message._id, { status: "unconfirmed", problem });
+      // Not known whether the provider took it: the hold stays until it is reconciled, and is released uncharged if it never is.
+      const charge = await ctx.db
+        .query("messagingCharges")
+        .withIndex("by_message", (q) => q.eq("messageId", message._id))
+        .first();
+      if (charge) await markPending(ctx, charge._id);
       await recordEvent(ctx, { companyId: message.companyId, type: "message.unconfirmed", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
       else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "unconfirmed", problem });

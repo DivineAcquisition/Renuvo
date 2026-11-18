@@ -22,6 +22,7 @@ import { CATEGORIES, categoryValidator, type Recipient } from "./lib/compliance/
 import type { Actor } from "./lib/events";
 import { clientsAtPhone, fileClientText } from "./lib/clients/conversations";
 import { queueReply } from "./lib/messaging/outbox";
+import { chargeInbound } from "./lib/messagingBilling/ledger";
 import { allow } from "./lib/rateLimit";
 import type { Agent } from "./lib/statuses";
 import { liveTaskByKey, openTask, setTaskState } from "./lib/taskState";
@@ -78,7 +79,7 @@ export const sms = internalMutation({
  * so a STOP is not confirmed twice and a reply does not open two tasks.
  */
 export const telnyx = internalMutation({
-  args: { eventId: v.string(), to: v.string(), from: v.string(), body: v.string(), receivedAt: v.number() },
+  args: { eventId: v.string(), to: v.string(), from: v.string(), body: v.string(), receivedAt: v.number(), providerMessageId: v.optional(v.string()), parts: v.optional(v.number()), media: v.optional(v.number()) },
   handler: async (ctx, args): Promise<InboundResult> => {
     const seen = await ctx.db
       .query("providerReceipts")
@@ -86,15 +87,18 @@ export const telnyx = internalMutation({
       .first();
     if (seen) return { kind: "duplicate", replied: false };
     await ctx.db.insert("providerReceipts", { provider: "telnyx", eventId: args.eventId, receivedAt: Date.now() });
-    return handleSms(ctx, { ...args, providerId: `telnyx:${args.eventId}` });
+    return handleSms(ctx, { to: args.to, from: args.from, body: args.body, receivedAt: args.receivedAt, providerId: `telnyx:${args.eventId}`, billing: { providerMessageId: args.providerMessageId ?? args.eventId, parts: args.parts, mms: (args.media ?? 0) > 0 } });
   },
 });
 
-async function handleSms(ctx: MutationCtx, args: { to: string; from: string; body: string; receivedAt: number; providerId?: string }): Promise<InboundResult> {
+async function handleSms(ctx: MutationCtx, args: { to: string; from: string; body: string; receivedAt: number; providerId?: string; billing?: { providerMessageId: string; parts?: number; mms: boolean } }): Promise<InboundResult> {
   {
     const to = normalAddress("sms", args.to);
     const companyId = to ? await companyForNumber(ctx, to) : null;
     if (!companyId) return { kind: "unknown_number", replied: false };
+    // An incoming text costs money whether or not the balance covers it, and is always received and handled:
+    // it is charged (within the overdraft bound, with the Owner and staff told) and never refused.
+    if (args.billing) await chargeInbound(ctx, { companyId, providerMessageId: args.billing.providerMessageId, provider: "telnyx", mms: args.billing.mms, parts: args.billing.parts, activity: args.billing.mms ? "Incoming picture message" : "Incoming text" });
     const from = normalAddress("sms", args.from);
     if (!from) return { kind: "bad_number", replied: false };
     const kind = classify(args.body);

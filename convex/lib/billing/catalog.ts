@@ -17,6 +17,10 @@ export type PlanId = (typeof PLAN_IDS)[number];
 export const AUTUMN = {
   credits: "selestial_credits",
   topUpPlan: "credit_top_up",
+  /** The prepaid messaging balance, in units of $0.0001. One-off grants: it never resets with the monthly credits. */
+  messaging: "messaging_balance",
+  /** One-off purchase of messaging funds, priced $0.0001 per unit, bought in any validated quantity. */
+  messagingTopUpPlan: "messaging_top_up",
   plans: { operate: "operate", expand: "expand" } as Record<PlanId, string>,
 } as const;
 
