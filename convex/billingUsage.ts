@@ -213,7 +213,8 @@ export const usage = ownerQuery({
       .withIndex("by_company_queued", (q) => q.eq("companyId", ctx.companyId).gte("queuedAt", from).lt("queuedAt", to))
       .take(5000);
     const channel = (name: "sms" | "email") => {
-      const list = messages.filter((row) => (row.channel ?? "sms") === name);
+      // Selestial's own notices to members are free and aren't the company's messaging, so they aren't counted.
+      const list = messages.filter((row) => (row.channel ?? "sms") === name && row.purpose !== "member_notice");
       return { total: list.length, sent: list.filter((row) => row.status === "sent" || row.status === "delivered").length, failed: list.filter((row) => row.status === "failed" || row.status === "not_sent").length };
     };
 

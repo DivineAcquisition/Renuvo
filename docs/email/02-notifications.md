@@ -38,7 +38,7 @@ sent, retried, swept and tracked exactly like every other message.
   - their address is suppressed;
   - the thing it's about is no longer true (an approval was decided, an inbox was reconnected, a
     payment was settled).
-- **Links never act.** Approval notices open `/app/approvals?open=<id>` behind sign-in. Unsubscribe pages
+- **Links never act.** Approval notices open `/app/approvals?open=approval:<id>` behind sign-in; a visit opens `/app/schedule?open=job:<id>`. Both use the app's shared detail panel. Unsubscribe pages
   ask before doing anything. Only a POST unsubscribes.
 - **No AI.** Planning and writing a notice uses templates and records. It costs no credits.
 
@@ -106,17 +106,6 @@ Where a suppression lands:
 - Applicant bounces still go through Recruiter's own follow-up. The suppression helper is idempotent,
   so nothing is added twice.
 
-## Still to wire (Phase 5)
+## Wired
 
-The notices below are built, tested and previewed. Nothing calls `notifyMembers` for them yet, except
-where the tests do:
-
-- welcome
-- security changes
-- approvals
-- payment failure (plan)
-- credits exhausted
-- customer payment failed
-- inbox reconnection
-
-The Dispatch escalation and the weekly digest also need their composers.
+See docs/email/04-wiring.md for which recorded events send which notice, and what's not wired yet.

@@ -10,6 +10,7 @@
  *   unsubscribe     turn it off, from the page's button, through Selestial's web server
  * Internal:
  *   notify          plan a notice for everyone it reaches (called by the code where things happen)
+ *   hourly          the weekly summary on Monday morning, and approval reminders two hours before a deadline
  *   oneClick        the mail program's own Unsubscribe button (List-Unsubscribe-Post)
  */
 import { v } from "convex/values";
@@ -21,6 +22,8 @@ import { recordEvent } from "./lib/events";
 import { CATEGORY_INFO, EVENT_INFO, noticeCategoryValidator, noticeEventValidator, noticeFactsValidator } from "./lib/notify/catalog";
 import { noticeSuppression, preferenceView, preferencesOf, setEmail as storeEmail, SUPPRESSION_WORDS, type Via } from "./lib/notify/preferences";
 import { notifyMembers } from "./lib/notify/route";
+import { lastWeekStart } from "./lib/notify/digest";
+import { localParts } from "./lib/availability";
 import { noticeForToken } from "./lib/notify/unsubscribe";
 import { roleOf } from "./lib/roles";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -135,5 +138,37 @@ export const notify = internalMutation({
   handler: async (ctx, args) => {
     const { planned, skipped } = await notifyMembers(ctx, args);
     return { planned: planned.length, skipped: skipped.length };
+  },
+});
+
+const HOUR = 3_600_000;
+
+/**
+ * Every hour: the weekly summary for each company whose clock just reached Monday 7 AM, and a reminder for
+ * each proposal still undecided with one to two hours left. Each is planned once (dedupe), so running this
+ * twice in an hour sends nothing twice.
+ */
+export const hourly = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    let digests = 0;
+    let reminders = 0;
+    for await (const company of ctx.db.query("companies")) {
+      if (company.suspendedAt !== undefined) continue;
+      const local = localParts(now, company.timezone);
+      // Monday, 7:00 to 7:59 company time.
+      if (local.weekday === 1 && Math.floor(local.minute / 60) === 7) {
+        const weekStart = lastWeekStart(now, company.timezone);
+        const planned = await notifyMembers(ctx, { companyId: company._id, event: "weekly_digest", key: String(weekStart), facts: { weekStart } });
+        digests += planned.planned.length;
+      }
+      const due = await ctx.db
+        .query("approvals")
+        .withIndex("by_company_status_decideBy", (q) => q.eq("companyId", company._id).eq("status", "pending").gt("decideBy", now + HOUR).lte("decideBy", now + 2 * HOUR))
+        .take(50);
+      for (const approval of due) reminders += (await notifyMembers(ctx, { companyId: company._id, event: "approval_expiring", ref: approval._id })).planned.length;
+    }
+    return { digests, reminders };
   },
 });

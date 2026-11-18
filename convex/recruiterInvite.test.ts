@@ -43,7 +43,7 @@ describe("Recruiter: invitation, the application page, reminders and replies", (
     expect(Object.keys(out)).not.toContain("openedAt");
     // The token is nowhere at rest: not in the message row, the link row or the event log.
     const token = tokenFor(MARIA, "apply");
-    const everything = await s.t.run(async (ctx) => JSON.stringify([await ctx.db.query("messages").collect(), await ctx.db.query("applicantLinks").collect(), await ctx.db.query("events").collect(), await ctx.db.query("toolRuns").collect()]));
+    const everything = await s.t.run(async (ctx) => JSON.stringify([await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")), await ctx.db.query("applicantLinks").collect(), await ctx.db.query("events").collect(), await ctx.db.query("toolRuns").collect()]));
     expect(everything).not.toContain(token);
     expect(everything).not.toContain(token.split(".")[1]);
   });
@@ -100,7 +100,7 @@ describe("Recruiter: invitation, the application page, reminders and replies", (
     const s = await setup();
     const { applicationId } = await invited(s);
     expect(mockEmails).toHaveLength(1);
-    const messageId = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect())[0]._id);
+    const messageId = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")))[0]._id);
     // The worker runs again, the workflow is asked again, another notification arrives, and the agent's tool is called twice.
     await s.t.action(internal.messaging.deliver, { messageId });
     await s.t.action(internal.messaging.deliver, { messageId });
@@ -155,7 +155,7 @@ describe("Recruiter: invitation, the application page, reminders and replies", (
   it("also records a bounce the email service reports later", async () => {
     const s = await setup();
     const { applicationId } = await invited(s, indeedApplication({ text: "Slow Sam applied to House Cleaner.\nEmail: slow.sam@example.test" }));
-    const sent = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect())[0]);
+    const sent = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")))[0]);
     expect(sent).toMatchObject({ status: "sent" });
     expect(sent.deliveredAt).toBeUndefined();
     await s.t.mutation(internal.messaging.receipt, { provider: "mock-email", eventId: "evt-1", providerMessageId: sent.providerMessageId!, outcome: "bounced" });

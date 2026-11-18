@@ -4,7 +4,7 @@
  * Owner looks at is exactly what the tests check.
  */
 import { applicantInvitationEmail, bookingConfirmationEmail, proposalDeliveryEmail, type CompanyBrand } from "./company";
-import { agentApprovalEmail, dispatchEscalationEmail, inboxReconnectEmail, memberInvitationEmail, paymentFailureEmail, securityEmail, weeklyDigestEmail, welcomeEmail } from "./platform";
+import { agentActedEmail, agentApprovalEmail, dispatchEscalationEmail, inboxReconnectEmail, memberInvitationEmail, paymentFailureEmail, securityEmail, weeklyDigestEmail, welcomeEmail } from "./platform";
 import type { Email } from "./shared";
 
 export type PreviewKind = "platform" | "company";
@@ -92,6 +92,27 @@ export const PREVIEWS: readonly Preview[] = [
           { label: "Quote", value: "$168 per visit, biweekly" },
           { label: "Was", value: "$145 per visit, weekly" },
         ],
+      }),
+  },
+  {
+    id: "acted",
+    name: "Agent acted for you",
+    kind: "platform",
+    from: "Selestial <notify@notify.selestial.io>",
+    when: "When an agent set to Act and notify me does something on its own.",
+    category: "What your agents did",
+    render: (origin) =>
+      agentActedEmail({
+        ...member(origin),
+        agent: "dispatch",
+        did: "Find cover when a cleaner drops out or does not arrive",
+        at: NOW - 25 * 60_000,
+        about: [
+          { label: "Visit", value: "Standard clean · 3 bed, 2 bath" },
+          { label: "Customer", value: "Priya Raman" },
+          { label: "Cleaner", value: "Luis Ortega (replacing Ana Morales)" },
+        ],
+        path: "/app/schedule?open=job:sample",
       }),
   },
   {

@@ -79,7 +79,7 @@ describe("Selestial prepares, the Owner approves", () => {
     expect(queue.waiting[0].body).toContain("$240.00");
     expect(queue.waiting[0].body).toContain("{link}");
     // Nothing went anywhere.
-    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect()).length)).toBe(0);
+    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice"))).length)).toBe(0);
 
     // A week late, the overdue step replaces the waiting note.
     vi.setSystemTime(NOW + 15 * DAY);
@@ -236,6 +236,6 @@ describe("Chat over Finance", () => {
     expect(prepared.data).toMatchObject({ sent: 0 });
     expect(prepared.data.prepared).toHaveLength(1);
     expect((await s.as.query(api.financeMessages.queue, { companyId: s.companyId })).waiting).toHaveLength(1);
-    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect()).length)).toBe(0);
+    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice"))).length)).toBe(0);
   });
 });

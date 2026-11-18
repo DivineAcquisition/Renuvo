@@ -59,6 +59,28 @@ export const mockEmailProvider: EmailProvider = {
   },
 };
 
+/** Selestial's notices to members, as the mock sent them: kept apart from mail to customers and applicants. */
+export const mockNotices: (EmailInput & { result: "accepted" | "failed" | "bounced" | "threw" })[] = [];
+
+/** The test double for notices: the same answers as the email mock, recorded in `mockNotices`. */
+const mockNoticeProvider: EmailProvider = {
+  name: "mock-email",
+  async send(input) {
+    const before = mockEmails.length;
+    try {
+      return await mockEmailProvider.send(input);
+    } finally {
+      // Moved, not copied: a test about a customer's mail never sees a member's notice.
+      mockNotices.push(...mockEmails.splice(before));
+    }
+  },
+};
+
+/** The provider Selestial's notices to members go through: the shared one, or the notice mock in tests. */
+export function noticeEmailProvider(): EmailProvider | null {
+  return process.env.EMAIL_PROVIDER?.trim().toLowerCase() === "mock" ? mockNoticeProvider : emailProvider();
+}
+
 /** An applicant email's text as simple HTML: the company is the sender, so it carries no Selestial branding. */
 export function plainHtml(text: string): string {
   const escape = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

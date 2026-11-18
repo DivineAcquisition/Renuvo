@@ -436,11 +436,11 @@ describe("a residential booking with no payment", () => {
       const token = await begin(s, "new-customer");
       await throughDetails(s, token);
       expect(await s.t.mutation(api.bookingSessions.confirm, { token })).toMatchObject({ ok: true });
-      const records = await s.t.run(async (ctx) => ({ customers: await ctx.db.query("customers").collect(), messages: await ctx.db.query("messages").collect(), permissions: await ctx.db.query("contactPermissions").collect() }));
+      const records = await s.t.run(async (ctx) => ({ customers: await ctx.db.query("customers").collect(), messages: await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")), permissions: await ctx.db.query("contactPermissions").collect() }));
       expect(records.permissions.filter((p) => p.recipient.kind === "customer")).toEqual([expect.objectContaining({ recipient: { kind: "customer", id: records.customers[0]._id }, channel: "email", category: "operational", status: "granted", source: "web_form", disclosureText: "Alpha Cleaning will email your booking details, confirmation and updates to this address.", recordedBy: { kind: "recipient" } })]);
       expect(records.messages).toEqual([expect.objectContaining({ purpose: "booking_confirmation", status: "queued", to: "dana@example.com" })]);
       await settle(s.t);
-      const sent = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect())[0]);
+      const sent = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")))[0]);
       expect(sent.body).toContain("{link}");
       expect(sent.status).not.toBe("not_sent");
 
@@ -450,7 +450,7 @@ describe("a residential booking with no payment", () => {
       const second = await begin(s, "existing-customer");
       await throughDetails(s, second, { email: "lee@example.com" });
       expect(await s.t.mutation(api.bookingSessions.confirm, { token: second })).toMatchObject({ ok: true });
-      const after = await s.t.run(async (ctx) => ({ messages: await ctx.db.query("messages").collect(), permissions: await ctx.db.query("contactPermissions").collect() }));
+      const after = await s.t.run(async (ctx) => ({ messages: await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")), permissions: await ctx.db.query("contactPermissions").collect() }));
       expect(after.permissions.filter((p) => p.recipient.id === existing)).toHaveLength(0);
       expect(after.messages.find((m) => m.customerId === existing)).toMatchObject({ status: "not_sent" });
     } finally {
@@ -495,7 +495,7 @@ describe("a residential booking with no payment", () => {
       });
       const sent = await s.as.mutation(api.bookingExperiences.sendRecovery, { companyId: s.companyId, sessionId: await sessionOf("lee@example.com") });
       expect(sent).toMatchObject({ status: "queued" });
-      const messages = await s.t.run(async (ctx) => ctx.db.query("messages").collect());
+      const messages = await s.t.run(async (ctx) => ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")));
       expect(messages.filter((m) => m.purpose === "booking_recovery" && m.status !== "not_sent")).toHaveLength(1);
       expect(messages.find((m) => m.customerId === leeId)!.body).toContain("Alpha Cleaning, 100 Congress Ave, Austin, TX 78701");
 
@@ -504,7 +504,7 @@ describe("a residential booking with no payment", () => {
       await settle(s.t);
       const delivered = mockEmails.find((m) => m.to === "lee@example.com")!;
       const link = /https:\/\/link\.selestial\.test\/b\/unsubscribe#(\S+)/.exec(delivered.text)![1];
-      expect((await s.t.run(async (ctx) => ctx.db.query("messages").collect())).find((m) => m.customerId === leeId)!.body).toContain("{unsubscribe}");
+      expect((await s.t.run(async (ctx) => ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")))).find((m) => m.customerId === leeId)!.body).toContain("{unsubscribe}");
       expect(await s.t.query(api.bookingPublic.unsubscribeInfo, { token: link })).toEqual({ company: "Alpha Cleaning", done: false });
       expect(await s.t.query(api.bookingPublic.unsubscribeInfo, { token: `${link}x` })).toBeNull();
       expect(await refusal(s.t.mutation(api.bookingPublic.unsubscribe, { secret: "wrong-secret-value-wrong-secret-value", token: link } as never))).toBeTruthy();
@@ -706,7 +706,7 @@ describe("a deposit through Finance and Stripe", () => {
     expect(await refusal(s.t.mutation(api.bookingSessions.startPayment, { token, clientKey: "client-key-3-0000" }))).toContain("test booking");
     await s.t.mutation(api.bookingSessions.simulatePayment, { token });
     expect((await view(s.t, token)).status).toBe("confirmed");
-    const records = await s.t.run(async (ctx) => ({ jobs: await ctx.db.query("jobs").collect(), messages: await ctx.db.query("messages").collect(), payments: await ctx.db.query("payments").collect() }));
+    const records = await s.t.run(async (ctx) => ({ jobs: await ctx.db.query("jobs").collect(), messages: await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")), payments: await ctx.db.query("payments").collect() }));
     expect(records).toMatchObject({ jobs: [], messages: [], payments: [] });
     const live = await s.as.query(api.bookingExperiences.analytics, { companyId: s.companyId, experienceId: s.experienceId, days: 30 });
     expect(live.confirmed).toBe(0);

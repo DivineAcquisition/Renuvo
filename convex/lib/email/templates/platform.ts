@@ -44,7 +44,7 @@ export function welcomeEmail(input: Recipient & { ownerName?: string | null; ste
 // ── Security ─────────────────────────────────────────────────────────────────────────────────────
 
 export type SecurityChange =
-  | { kind: "role_changed"; memberName: string; from: string; to: string }
+  | { kind: "role_changed"; memberName: string; from?: string | null; to: string }
   | { kind: "member_removed"; memberName: string }
   | { kind: "inbox_connected"; address: string; purposes: string[] }
   | { kind: "inbox_disconnected"; address: string }
@@ -55,7 +55,7 @@ export type SecurityChange =
 function securityWords(change: SecurityChange, by: string, timezone?: string): { subject: string; heading: string; body: string; rows: { label: string; value: string | null }[]; path: string; button: string } {
   switch (change.kind) {
     case "role_changed":
-      return { subject: `${change.memberName}'s role changed to ${change.to}`, heading: "A team member's access changed", body: `${by} changed ${change.memberName}'s role from ${change.from} to ${change.to}.`, rows: [{ label: "Person", value: change.memberName }, { label: "New role", value: change.to }, { label: "Previous role", value: change.from }], path: "/app/settings/people", button: "Review people & access" };
+      return { subject: `${change.memberName}'s role changed to ${change.to}`, heading: "A team member's access changed", body: `${by} changed ${change.memberName}'s role ${change.from ? `from ${change.from} ` : ""}to ${change.to}.`, rows: [{ label: "Person", value: change.memberName }, { label: "New role", value: change.to }, { label: "Previous role", value: change.from ?? null }], path: "/app/settings/people", button: "Review people & access" };
     case "member_removed":
       return { subject: `${change.memberName} no longer has access`, heading: "Someone's access was removed", body: `${by} removed ${change.memberName} from the company. They can't sign in to it any more.`, rows: [{ label: "Person", value: change.memberName }], path: "/app/settings/people", button: "Review people & access" };
     case "inbox_connected":
@@ -122,7 +122,7 @@ export function agentApprovalEmail(input: Recipient & {
       facts([...(input.about ?? []), { label: "Decide by", value: deadline }], "Details"),
       input.authorizes ? alert({ tone: "info", title: "Approving lets it", body: input.authorizes }) : { html: "", text: "" },
       input.ifWaiting ? paragraph(`If nobody decides by then: ${input.ifWaiting}`) : { html: "", text: "" },
-      action({ label: "Review and decide", url: appLink(input.origin, `/app/approvals?open=${encodeURIComponent(input.approvalId)}`) ?? "" }),
+      action({ label: "Review and decide", url: appLink(input.origin, `/app/approvals?open=approval:${encodeURIComponent(input.approvalId)}`) ?? "" }),
       paragraph("Opening this doesn't approve anything. You'll see the full proposal and can approve, change or skip it."),
     ],
     footer: memberFooter({ ...input, because: `${agent} is set to ask you first` }),
@@ -172,7 +172,7 @@ export function dispatchEscalationEmail(input: Recipient & {
         "The visit",
       ),
       checklist({ heading: "What Dispatch already did", items: input.tried }),
-      action({ label: "Open the visit", url: appLink(input.origin, `/app/schedule?job=${encodeURIComponent(input.jobId)}`) ?? "" }),
+      action({ label: "Open the visit", url: appLink(input.origin, `/app/schedule?open=job:${encodeURIComponent(input.jobId)}`) ?? "" }),
     ],
     footer: memberFooter({ ...input, because: "urgent operations alerts are on" }),
   });
@@ -360,5 +360,25 @@ export function alertEmail(input: Recipient & {
       action({ label: input.button.label, url: appLink(input.origin, input.button.path) ?? "" }),
     ],
     footer: memberFooter({ ...input, essential: input.essential, because: input.because }),
+  });
+}
+
+// ── An agent acted (Act and notify me) ───────────────────────────────────────────────────────────
+
+export function agentActedEmail(input: Recipient & { agent: AgentId; did: string; at: number; about: { label: string; value: string | null }[]; path: string | null }): Email {
+  const agent = AGENT_FACES[input.agent].name;
+  return finish({
+    origin: input.origin,
+    subject: `${agent} did this for you: ${oneLine(input.did)}`,
+    preheader: `${agent} acted on its own at ${timeOf(input.at, input.timezone)}, as you allowed. Here's what it did.`,
+    blocks: [
+      agentStatus({ agent, state: "Done on its own", tone: "success", avatarUrl: emailAssets(input.origin).agent(input.agent) }),
+      title(input.did),
+      lead(`${agent} did this without asking first, because it's set to Act and notify me for this.`),
+      facts([...input.about, { label: "When", value: when(input.at, input.timezone) }]),
+      input.path ? action({ label: "See what it did", url: appLink(input.origin, input.path) ?? "" }) : { html: "", text: "" },
+      textLink({ before: "Want to be asked first next time?", label: "Change it in Agent controls", url: appLink(input.origin, "/app/settings/agents") ?? "" }),
+    ],
+    footer: memberFooter({ ...input, because: `${agent} is set to act and notify you` }),
   });
 }

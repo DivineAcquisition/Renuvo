@@ -57,7 +57,7 @@ export type Priority = "critical" | "high" | "normal" | "digest";
 /** Who gets it, by role. "connector" adds the member who connected the thing it's about. */
 export type Audience = "owner" | "managers" | "everyone";
 
-export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect"] as const;
+export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "agent_acted", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect"] as const;
 export type NoticeEvent = (typeof NOTICE_EVENTS)[number];
 export const noticeEventValidator = v.union(...NOTICE_EVENTS.map((e) => v.literal(e)));
 
@@ -76,6 +76,7 @@ export const EVENT_INFO: Record<NoticeEvent, EventInfo> = {
   security_change: { category: "security", priority: "critical", audience: "owner", owner: "selestial", when: "A role changes, someone is removed, an inbox is connected, the payout account changes, deletion is requested, or an export is ready." },
   approval_needed: { category: "approvals", priority: "high", audience: "managers", owner: "selestial", when: "An agent set to Ask me first proposes something." },
   approval_expiring: { category: "approvals", priority: "high", audience: "managers", owner: "selestial", when: "Two hours before an undecided proposal's deadline." },
+  agent_acted: { category: "activity", priority: "normal", audience: "managers", owner: "selestial", when: "An agent set to Act and notify me did something on its own." },
   dispatch_escalation: { category: "escalations", priority: "critical", audience: "everyone", owner: "selestial", when: "A cleaner hasn't checked in, may not show, or nobody has taken a visit close to its start." },
   weekly_digest: { category: "digest", priority: "digest", audience: "everyone", owner: "selestial", when: "Mondays at 7:30 AM company time." },
   plan_payment_failed: { category: "account", priority: "critical", audience: "owner", owner: "selestial", when: "The Selestial plan payment is declined." },

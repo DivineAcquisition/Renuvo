@@ -11,13 +11,13 @@
  *  - Once: one notice per event, record and person (`dedupeKey`), however often the event is reported.
  *  - When: critical notices at once; others wait out the night on the company's clock.
  *
- * Planning a notice costs no AI credits and writes no message text into the event log.
+ * Planning a notice costs no AI credits. Notices stay out of the company's activity log: they are listed
+ * on their own rows and in each person's Recent notices.
  */
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { emailProvider } from "../email/provider";
-import { recordEvent } from "../events";
 import { quietUntil } from "../messaging/policy";
 import { roleOf } from "../roles";
 import { CATEGORY_INFO, EVENT_INFO, NIGHT, rolesFor, type NoticeEvent, type NoticeFacts } from "./catalog";
@@ -110,13 +110,8 @@ export async function notifyMembers(ctx: MutationCtx, input: NoticeInput): Promi
       refusal: suppressed ? "suppressed" : undefined,
       queuedAt: now,
     });
-    await recordEvent(ctx, {
-      companyId: input.companyId,
-      type: `message.${status}`,
-      actor: { kind: "system" },
-      subject: { table: "messages", id: messageId },
-      data: { purpose: "member_notice", event: input.event, category: info.category, memberId: member._id, ...(waitUntil !== null ? { retryAt: waitUntil } : {}) },
-    });
+    // A notice is Selestial's own mail to a member, not something the business did: it is kept on its
+    // row and in the person's "Recent notices", not in the company's activity log.
     if (status === "queued") await ctx.scheduler.runAfter(0, internal.messaging.deliver, { messageId });
     if (status === "held") await ctx.scheduler.runAt(waitUntil!, internal.messaging.deliver, { messageId });
     planned.push({ memberId: member._id, messageId, status });

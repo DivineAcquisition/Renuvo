@@ -11,8 +11,12 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { addressOf, companySender, isVerifiedFrom, platformSender } from "./lib/email/senders";
 import { cleanHeaders, emailProvider as sharedProvider } from "./lib/email/provider";
-import { mockEmails } from "./lib/messaging/email";
+import { mockNotices as mockEmails } from "./lib/messaging/email";
 import { noticeToken } from "./lib/notify/unsubscribe";
+import { requestApproval } from "./lib/approvalQueue";
+import { recordEvent } from "./lib/events";
+import { lastWeekStart } from "./lib/notify/digest";
+import { dispatchJob, dispatchPlace, seedVisit } from "../tests/harness";
 
 const SECRET = "test-only-secret-for-action-links-0123456789";
 // Wednesday Nov 18 2026, 11:00 AM in Chicago: daytime, so nothing waits for the morning.
@@ -68,13 +72,16 @@ const notices = (t: T, companyId: Id<"companies">) =>
         .query("messages")
         .withIndex("by_company_queued", (q) => q.eq("companyId", companyId))
         .collect()
-    ).filter((m) => m.purpose === "member_notice"),
+    ).filter((m) => m.purpose === "member_notice" && m.notice?.event !== "welcome"),
   );
 
 describe("who gets a notice", () => {
   it("reaches the roles the event is for, once each, and never another company's members", async () => {
     const s = await setup();
     const other = await company(s.t, "owner-b", "Beta Cleaning");
+    // Beta's own welcome goes to its Owner; this test is about Alpha's approval.
+    await settle(s.t);
+    mockEmails.length = 0;
     const approvalId = await approval(s.t, s.companyId);
     const first = await s.t.mutation(internal.notifications.notify, { companyId: s.companyId, event: "approval_needed", ref: approvalId });
     expect(first).toEqual({ planned: 2, skipped: 0 });
@@ -108,6 +115,8 @@ describe("who gets a notice", () => {
   it("names a person directly, still only inside the company", async () => {
     const s = await setup();
     const other = await company(s.t, "owner-b", "Beta Cleaning");
+    await settle(s.t);
+    mockEmails.length = 0;
     const outsider = await s.t.run(async (ctx) => (await ctx.db.query("members").withIndex("by_company", (q) => q.eq("companyId", other.companyId)).first())!._id);
     const result = await s.t.mutation(internal.notifications.notify, { companyId: s.companyId, event: "security_change", key: "role-1", facts: { kind: "role_changed", memberName: "Olive", from: "Office", to: "Manager", byName: "Owner A" }, only: [s.ids.office, outsider] });
     expect(result.planned).toBe(1);
@@ -127,7 +136,7 @@ describe("what a notice says, written when it goes", () => {
     expect(mail.from).toBe('"Selestial" <messages@mail.selestial.test>');
     expect(mail.subject).toBe("Sales needs your decision: Send a revised quote to the Hendersons");
     expect(mail.html).toContain("Review and decide");
-    expect(mail.html).toContain(`https://app.selestial.test/app/approvals?open=${approvalId}`);
+    expect(mail.html).toContain(`https://app.selestial.test/app/approvals?open=approval:${approvalId}`);
     expect(mail.text).toContain("Opening this doesn't approve anything.");
     expect(mail.headers?.["List-Unsubscribe"]).toMatch(/^<https:\/\/deployment\.convex\.site\/notify\/unsubscribe\?t=/);
     expect(mail.headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
@@ -296,5 +305,140 @@ describe("a sign-in code", () => {
     const row = await s.t.run((ctx) => ctx.db.get(messageId));
     expect(row?.status).toBe("not_sent");
     expect(mockEmails.some((m) => m.text.includes("{code}"))).toBe(false);
+  });
+});
+
+describe("what sends a notice in the product", () => {
+  const allNotices = (t: T, companyId: Id<"companies">) =>
+    t.run(async (ctx) => (await ctx.db.query("messages").withIndex("by_company_queued", (q) => q.eq("companyId", companyId)).collect()).filter((m) => m.purpose === "member_notice"));
+
+  it("welcomes only the Owner who created the company, with its real setup state", async () => {
+    const t = start();
+    const { companyId } = await company(t, "founder", "Gamma Cleaning");
+    await settle(t);
+    const rows = await allNotices(t, companyId);
+    expect(rows.map((r) => [r.notice?.event, r.to, r.status])).toEqual([["welcome", "founder@example.com", "delivered"]]);
+    expect(rows[0].body).toContain("- Add your cleaners (To do)");
+    expect(rows[0].subject).toBe("Gamma Cleaning is set up on Selestial");
+    // Creating a company is never noisy: the activity log shows the company being created, not an email.
+    const types = await t.run(async (ctx) => (await ctx.db.query("events").collect()).filter((e) => e.companyId === companyId).map((e) => e.type));
+    expect(types.filter((type) => type.startsWith("message."))).toEqual([]);
+  });
+
+  it("tells the Owner and the person when a role changes", async () => {
+    const s = await setup();
+    await s.owner.mutation(api.members.setRole, { companyId: s.companyId, memberId: s.ids.office, role: "manager" });
+    await settle(s.t);
+    const sent = mockEmails.filter((m) => m.subject.includes("role changed"));
+    expect(sent.map((m) => m.to).sort()).toEqual(["olive@example.com", "owner-a@example.com"]);
+    expect(sent[0].subject).toBe("Security notice: olive's role changed to Manager");
+    expect(sent[0].text).toContain("owner-a changed olive's role to Manager.");
+  });
+
+  it("asks the deciders when an agent at Ask me first proposes something, and reminds them before the deadline", async () => {
+    const s = await setup();
+    const approvalId = await s.t.run((ctx) => requestApproval(ctx, { companyId: s.companyId, action: "dispatch.broadcast_offer", summary: "Offer Tuesday's visit to three cleaners at once", reason: "Rosa declined and nobody else answered.", decideBy: DAYTIME + 3 * HOUR, authorizes: "Text three nearby cleaners the same offer." }));
+    await settle(s.t);
+    const asked = mockEmails.filter((m) => m.subject.startsWith("Dispatch needs your decision"));
+    expect(asked.map((m) => m.to).sort()).toEqual(["manny@example.com", "owner-a@example.com"]);
+    expect(asked[0].html).toContain(`open=approval:${approvalId}`);
+    mockEmails.length = 0;
+    // An hour and a half before the deadline the hourly sweep reminds them, once.
+    vi.setSystemTime(DAYTIME + 90 * 60_000);
+    await s.t.mutation(internal.notifications.hourly, {});
+    await s.t.mutation(internal.notifications.hourly, {});
+    await settle(s.t);
+    expect(mockEmails.map((m) => m.subject)).toEqual(["Still waiting: Dispatch needs your decision: Offer Tuesday's visit to three cleaners at once", "Still waiting: Dispatch needs your decision: Offer Tuesday's visit to three cleaners at once"]);
+  });
+
+  it("escalates a missed check-in with what Dispatch already did, and not once the cleaner checks in", async () => {
+    const s = await setup();
+    const visit = await seedVisit(s.owner, s.companyId);
+    const assignmentId = await s.t.run((ctx) => ctx.db.insert("assignments", { companyId: s.companyId, jobId: visit.jobId, cleanerId: visit.cleanerId, status: "accepted", scope: "standard", payCents: 9000, offeredAt: DAYTIME - 2 * HOUR, respondBy: DAYTIME - HOUR }));
+    await s.t.run((ctx) => recordEvent(ctx, { companyId: s.companyId, type: "assignment.no_check_in_alerted", actor: { kind: "agent", agent: "dispatch" }, subject: { table: "assignments", id: assignmentId } }));
+    await settle(s.t);
+    const urgent = mockEmails.filter((m) => m.subject.startsWith("Urgent:"));
+    // Everyone in the company, at any hour.
+    expect(urgent.map((m) => m.to).sort()).toEqual(["manny@example.com", "olive@example.com", "owner-a@example.com"]);
+    expect(urgent[0].subject).toContain("Rosa hasn't checked in for Dana Whitfield");
+    expect(urgent[0].text).toContain("Area: Austin, 78701");
+    expect(urgent[0].html).toContain(`open=job:${visit.jobId}`);
+
+    mockEmails.length = 0;
+    await s.t.run((ctx) => ctx.db.patch(assignmentId, { checkIn: { at: Date.now() } as never }));
+    await s.t.run((ctx) => recordEvent(ctx, { companyId: s.companyId, type: "assignment.no_show_suspected", actor: { kind: "agent", agent: "dispatch" }, subject: { table: "assignments", id: assignmentId } }));
+    await settle(s.t);
+    expect(mockEmails).toEqual([]);
+  });
+
+  it("tells the deciders what an agent at Act and notify me did, in its permission's words", async () => {
+    const s = await setup();
+    const visit = await seedVisit(s.owner, s.companyId);
+    const eventId = await s.t.run((ctx) => recordEvent(ctx, { companyId: s.companyId, type: "dispatch.reported", actor: { kind: "agent", agent: "dispatch" }, subject: { table: "jobs", id: visit.jobId }, data: { action: "dispatch.run_backup_coverage", jobId: visit.jobId, cleanerId: visit.cleanerId } }));
+    await settle(s.t);
+    const sent = mockEmails.filter((m) => m.subject.startsWith("Dispatch did this for you"));
+    expect(sent.map((m) => m.to).sort()).toEqual(["manny@example.com", "owner-a@example.com"]);
+    expect(sent[0].subject).toBe("Dispatch did this for you: Find cover when a cleaner drops out or does not arrive");
+    expect(sent[0].text).toContain("Cleaner: Rosa");
+    expect(sent[0].text).toContain("Change it in Agent controls");
+    // Act and notify notices can be turned off; they carry a one-click unsubscribe.
+    expect(sent[0].headers?.["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
+    // A person who turned "What your agents did" off doesn't get the next one.
+    await s.manager.mutation(api.notifications.setEmail, { companyId: s.companyId, category: "activity", on: false });
+    mockEmails.length = 0;
+    await s.t.run((ctx) => recordEvent(ctx, { companyId: s.companyId, type: "dispatch.reported", actor: { kind: "agent", agent: "dispatch" }, subject: { table: "jobs", id: visit.jobId }, data: { action: "dispatch.close_visit", jobId: visit.jobId } }));
+    await settle(s.t);
+    expect(mockEmails.map((m) => m.to)).toEqual(["owner-a@example.com"]);
+    expect(eventId).toBeTruthy();
+  });
+
+  it("sends the weekly summary on Monday morning, from the records, once", async () => {
+    const s = await setup();
+    // Monday Nov 23 2026, 7:20 AM in Chicago.
+    const monday = Date.UTC(2026, 10, 23, 13, 20);
+    vi.setSystemTime(monday);
+    await s.t.mutation(internal.notifications.hourly, {});
+    await s.t.mutation(internal.notifications.hourly, {});
+    await settle(s.t);
+    const digests = mockEmails.filter((m) => m.subject.startsWith("Your week at Alpha Cleaning"));
+    expect(digests.map((m) => m.to).sort()).toEqual(["manny@example.com", "olive@example.com", "owner-a@example.com"]);
+    expect(digests[0].text).toContain("It was a quiet week: nothing was recorded for this company.");
+    expect(digests[0].text).toMatch(/WEEKLY SUMMARY · NOVEMBER 16 – NOVEMBER 22, 2026/);
+    expect(lastWeekStart(monday, "America/Chicago")).toBe(Date.UTC(2026, 10, 16, 6, 0));
+    // Not on another day or hour.
+    mockEmails.length = 0;
+    vi.setSystemTime(monday + 3 * HOUR);
+    await s.t.mutation(internal.notifications.hourly, {});
+    await settle(s.t);
+    expect(mockEmails.filter((m) => m.subject.startsWith("Your week"))).toEqual([]);
+  });
+
+  it("tells the Owner and Managers when a customer's card payment fails, unless a later try went through", async () => {
+    const s = await setup();
+    // A real invoice, through Finance.
+    const place = await dispatchPlace(s.owner, s.companyId);
+    const jobId = await dispatchJob(s.owner, s.companyId, place, { priceCents: 18500 });
+    const visit = { customerId: place.customerId };
+    const customerName = (await s.t.run((ctx) => ctx.db.get(place.customerId)))!.name;
+    await s.t.run((ctx) => ctx.db.patch(jobId, { status: "completed" }));
+    const { invoiceId } = await s.owner.mutation(api.finance.createInvoice, { companyId: s.companyId, jobId });
+    const draft = await s.owner.query(api.finance.invoice, { companyId: s.companyId, invoiceId });
+    await s.owner.mutation(api.finance.issueInvoice, { companyId: s.companyId, invoiceId, revision: draft.revision, dueDate: null });
+    const number = (await s.t.run((ctx) => ctx.db.get(invoiceId)))!.number!;
+    const paymentId = await s.t.run((ctx) =>
+      ctx.db.insert("payments", { companyId: s.companyId, invoiceId, customerId: visit.customerId, amountCents: 18500, method: "card", status: "failed", source: "stripe", clientKey: "test-key", refundedCents: 0, problem: "The card was declined.", createdAt: Date.now(), updatedAt: Date.now() }),
+    );
+    await s.t.run((ctx) => recordEvent(ctx, { companyId: s.companyId, type: "payment.failed", actor: { kind: "system" }, subject: { table: "payments", id: paymentId } }));
+    await settle(s.t);
+    const failed = mockEmails.filter((m) => m.subject.includes("didn't go through"));
+    expect(failed.map((m) => m.to).sort()).toEqual(["manny@example.com", "owner-a@example.com"]);
+    expect(failed[0].text).toContain(`${customerName}'s $185.00 card payment was declined.`);
+    expect(failed[0].text).toContain(`Invoice: ${number}`);
+    // A later try that went through: the notice doesn't go.
+    mockEmails.length = 0;
+    await s.t.run((ctx) => ctx.db.patch(paymentId, { status: "succeeded" }));
+    await s.t.mutation(internal.notifications.notify, { companyId: s.companyId, event: "customer_payment_failed", ref: paymentId, key: "again" });
+    await settle(s.t);
+    expect(mockEmails).toEqual([]);
   });
 });

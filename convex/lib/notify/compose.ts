@@ -7,8 +7,10 @@
 import type { Doc } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { platformSender } from "../email/senders";
-import { agentApprovalEmail, alertEmail, inboxReconnectEmail, paymentFailureEmail, securityEmail, welcomeEmail, type SecurityChange } from "../email/templates/platform";
-import { money, type AgentId, type Email, type MemberRole } from "../email/templates/shared";
+import { agentActedEmail, agentApprovalEmail, alertEmail, dispatchEscalationEmail, inboxReconnectEmail, paymentFailureEmail, securityEmail, weeklyDigestEmail, welcomeEmail, type SecurityChange } from "../email/templates/platform";
+import { money, timeOf, type AgentId, type Email, type MemberRole } from "../email/templates/shared";
+import { weeklyDigestData } from "./digest";
+import { actionDef } from "../permissionCatalog";
 import { readProfile } from "../compliance/profile";
 import { appOrigin } from "../invitations";
 import { quietUntil } from "../messaging/policy";
@@ -62,7 +64,7 @@ async function welcome(ctx: MutationCtx, company: Doc<"companies">, member: Doc<
 function securityChange(facts: NoticeFacts | undefined): SecurityChange | null {
   switch (str(facts, "kind")) {
     case "role_changed":
-      return str(facts, "memberName") && str(facts, "from") && str(facts, "to") ? { kind: "role_changed", memberName: str(facts, "memberName")!, from: str(facts, "from")!, to: str(facts, "to")! } : null;
+      return str(facts, "memberName") && str(facts, "to") ? { kind: "role_changed", memberName: str(facts, "memberName")!, from: str(facts, "from"), to: str(facts, "to")! } : null;
     case "member_removed":
       return str(facts, "memberName") ? { kind: "member_removed", memberName: str(facts, "memberName")! } : null;
     case "inbox_connected":
@@ -131,6 +133,103 @@ async function inboxReconnect(ctx: MutationCtx, ref: string | undefined, facts: 
   });
 }
 
+/** What an agent did on its own, in its permission's own words, about the record it touched. */
+async function agentActed(ctx: MutationCtx, company: Doc<"companies">, facts: NoticeFacts | undefined, at: number, c: Context): Promise<Built> {
+  const agent = str(facts, "agent") as AgentId | null;
+  if (!agent || !["sales", "recruiter", "dispatch", "retention"].includes(agent)) return { problem: "The notice didn't say which agent acted." };
+  const def = str(facts, "action") ? actionDef(str(facts, "action")!) : undefined;
+  const kind = str(facts, "kind")?.replace(/_/g, " ");
+  const did = def?.label ?? (kind ? `Sent a ${kind}` : null);
+  if (!did) return { problem: "The notice didn't say what the agent did." };
+  const about: { label: string; value: string | null }[] = [];
+  let path: string | null = null;
+  const jobId = str(facts, "jobId") ? ctx.db.normalizeId("jobs", str(facts, "jobId")!) : null;
+  const job = jobId ? await ctx.db.get(jobId) : null;
+  if (job && job.companyId === company._id) {
+    const customer = await ctx.db.get(job.customerId);
+    about.push({ label: "Visit", value: job.serviceSnapshot?.name ?? job.serviceType }, { label: "Customer", value: customer?.name ?? null });
+    path = `/app/schedule?open=job:${job._id}`;
+  }
+  const cleanerId = str(facts, "cleanerId") ? ctx.db.normalizeId("cleaners", str(facts, "cleanerId")!) : null;
+  const cleaner = cleanerId ? await ctx.db.get(cleanerId) : null;
+  if (cleaner && cleaner.companyId === company._id) about.push({ label: "Cleaner", value: cleaner.name });
+  const opportunityId = str(facts, "opportunityId") ? ctx.db.normalizeId("salesOpportunities", str(facts, "opportunityId")!) : null;
+  const opportunity = opportunityId ? await ctx.db.get(opportunityId) : null;
+  if (opportunity && opportunity.companyId === company._id) {
+    const customer = opportunity.customerId ? await ctx.db.get(opportunity.customerId) : null;
+    about.push({ label: "Customer", value: customer?.name ?? null });
+    path ??= "/app/agents/sales";
+  }
+  return agentActedEmail({ ...c, agent, did, at: num(facts, "at") ?? at, about, path });
+}
+
+async function customerPaymentFailed(ctx: MutationCtx, ref: string | undefined, c: Context): Promise<Built> {
+  const id = ref ? ctx.db.normalizeId("payments", ref) : null;
+  const payment = id ? await ctx.db.get(id) : null;
+  if (!payment) return { problem: "The payment no longer exists." };
+  if (payment.status !== "failed") return { problem: "The payment went through on a later try before this notice went." };
+  const customer = await ctx.db.get(payment.customerId);
+  const invoice = await ctx.db.get(payment.invoiceId);
+  const who = customer?.name ?? "A customer";
+  return alertEmail({
+    ...c,
+    eyebrow: "Payments",
+    subject: `A payment from ${who} didn't go through`,
+    heading: "A customer payment didn't go through",
+    body: `${who}'s ${money(payment.amountCents)} card payment was declined. Nothing was charged, and the invoice is still open.`,
+    tone: "warning",
+    facts: [
+      { label: "Customer", value: customer?.name ?? null },
+      { label: "Amount", value: money(payment.amountCents) },
+      { label: "Invoice", value: invoice?.number ?? null },
+      { label: "Reason", value: payment.problem ?? null },
+    ],
+    button: { label: "Open the invoice", path: `/app/finance?tab=invoices&invoice=${encodeURIComponent(payment.invoiceId)}` },
+    because: "notices about what your agents and customers did are on",
+  });
+}
+
+/** What Dispatch already did about this visit, from the texts it recorded. */
+async function dispatchEscalation(ctx: MutationCtx, ref: string | undefined, kind: "no_check_in" | "no_show", c: Context): Promise<Built> {
+  const id = ref ? ctx.db.normalizeId("assignments", ref) : null;
+  const assignment = id ? await ctx.db.get(id) : null;
+  if (!assignment) return { problem: "The assignment no longer exists." };
+  if (assignment.status !== "accepted") return { problem: "The cleaner is no longer on this visit, so there's nothing to escalate." };
+  if (assignment.checkIn) return { problem: "The cleaner checked in before this notice went." };
+  const job = await ctx.db.get(assignment.jobId);
+  if (!job || job.status === "cancelled") return { problem: "The visit was cancelled before this notice went." };
+  const [customer, cleaner, property] = await Promise.all([ctx.db.get(job.customerId), ctx.db.get(assignment.cleanerId), ctx.db.get(job.propertyId)]);
+  const texts = (
+    await ctx.db
+      .query("messages")
+      .withIndex("by_company_assignment", (q) => q.eq("companyId", assignment.companyId).eq("assignmentId", assignment._id))
+      .take(50)
+  )
+    .filter((m) => m.purpose === "reminder" || m.purpose === "check_in_nudge" || m.purpose === "assignment_confirmed")
+    .sort((a, b) => a.queuedAt - b.queuedAt);
+  const first = cleaner?.name.split(" ")[0] ?? "the cleaner";
+  const tried = texts.map((m) => {
+    const what = m.purpose === "check_in_nudge" ? "Asked" : m.purpose === "reminder" ? "Reminded" : "Confirmed with";
+    const at = timeOf(m.sentAt ?? m.queuedAt, c.timezone);
+    const delivered = m.status === "delivered" || m.status === "sent";
+    return { text: `${what} ${first} by text at ${at}${delivered ? "." : ` (${m.status === "failed" ? "it didn't arrive" : "not sent"}).`}`, state: (delivered ? "done" : "failed") as "done" | "failed" };
+  });
+  if (assignment.contact?.contactedAt && !tried.length) tried.push({ text: `Tried to reach ${first} at ${timeOf(assignment.contact.contactedAt, c.timezone)}.`, state: "done" });
+  tried.push({ text: `No check-in from ${first} yet.`, state: "failed" });
+  return dispatchEscalationEmail({
+    ...c,
+    kind,
+    jobId: job._id,
+    service: job.serviceSnapshot?.name ?? job.serviceType,
+    customerName: customer?.name ?? "the customer",
+    area: property ? `${property.address.city}, ${property.address.postalCode}` : null,
+    startsAt: job.startsAt,
+    cleanerName: cleaner?.name ?? null,
+    tried,
+    need: kind === "no_show" ? `Confirm whether ${first} is coming, and arrange cover if not.` : `Decide whether to call ${first}, send someone else, or tell the customer the visit may start late.`,
+  });
+}
+
 async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"companies">, member: Doc<"members">, c: Context): Promise<Built> {
   const notice = message.notice!;
   const facts = notice.facts;
@@ -146,6 +245,8 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
       return approval(ctx, notice.ref, false, c);
     case "approval_expiring":
       return approval(ctx, notice.ref, true, c);
+    case "agent_acted":
+      return agentActed(ctx, company, facts, message.queuedAt, c);
     case "plan_payment_failed":
       return planPaymentFailed(ctx, company, facts, c);
     case "credits_exhausted":
@@ -160,31 +261,17 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
         button: { label: "Add credits", path: "/app/settings/billing" },
         essential: true,
       });
-    case "customer_payment_failed": {
-      const amount = num(facts, "amountCents");
-      const customer = str(facts, "customerName");
-      return alertEmail({
-        ...c,
-        eyebrow: "Payments",
-        subject: `A payment from ${customer ?? "a customer"} didn't go through`,
-        heading: "A customer payment didn't go through",
-        body: `${customer ?? "A customer"}'s ${amount !== null ? `${money(amount)} ` : ""}card payment was declined. Nothing was charged.`,
-        tone: "warning",
-        facts: [
-          { label: "Customer", value: customer },
-          { label: "Amount", value: amount !== null ? money(amount) : null },
-          { label: "Invoice", value: str(facts, "invoiceNumber") },
-          { label: "Card issuer said", value: str(facts, "reason") },
-        ],
-        button: { label: "Open the invoice", path: str(facts, "invoiceId") ? `/app/finance?tab=invoices&invoice=${encodeURIComponent(str(facts, "invoiceId")!)}` : "/app/finance?tab=invoices" },
-        because: "notices about what your agents and customers did are on",
-      });
-    }
+    case "customer_payment_failed":
+      return customerPaymentFailed(ctx, notice.ref, c);
     case "inbox_reconnect":
       return inboxReconnect(ctx, notice.ref, facts, c);
     case "dispatch_escalation":
-    case "weekly_digest":
-      return { problem: "This notice isn't sent yet." };
+      return dispatchEscalation(ctx, notice.ref, notice.ref && message.dedupeKey.includes(":no_show:") ? "no_show" : "no_check_in", c);
+    case "weekly_digest": {
+      const weekStart = num(facts, "weekStart");
+      if (weekStart === null) return { problem: "The notice didn't say which week it was for." };
+      return weeklyDigestEmail({ ...c, memberName: member.name, ...(await weeklyDigestData(ctx, company, member, weekStart)) });
+    }
   }
 }
 

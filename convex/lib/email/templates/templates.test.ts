@@ -81,7 +81,7 @@ describe("every email in the gallery", () => {
 describe("what the emails promise", () => {
   it("never lets a link approve, accept or sign: the approval opens the review page and says so", () => {
     const mail = PREVIEWS.find((p) => p.id === "approval")!.render(ORIGIN);
-    expect(hrefs(mail.html)).toContain(`${ORIGIN}/app/approvals?open=sample`);
+    expect(hrefs(mail.html)).toContain(`${ORIGIN}/app/approvals?open=approval:sample`);
     expect(mail.text).toContain("Opening this doesn't approve anything.");
     const proposal = PREVIEWS.find((p) => p.id === "proposal")!.render(ORIGIN);
     expect(proposal.text).toContain("Opening the proposal doesn't accept it.");
