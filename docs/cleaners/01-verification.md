@@ -278,8 +278,8 @@ Found while inspecting: the worker's profile did not say their company's relatio
   approved in chat, then Recruiter's permission applies, and nobody gets a second); a crew suggestion for a
   job; explaining a cleaner's score; drafting a coaching note. Office is not offered the last three.
 - **Pay**: the Owner's summary shows the arrangement, its history, and the pay each job's offer stated; the
-  cleaner sees their own behind a code. Finance is not built in Selestial, so approved earnings and payments
-  cannot be shown; both screens say so rather than showing a number that does not exist.
+  cleaner sees their own behind a code. Approved earnings and payments come from Finance › Team Pay (see the
+  second pass below); the cleaner sees those through their earnings statement link.
 
 **Tests:** `convex/lib/cleaners/performance.test.ts` (no score with little history, silence versus a no,
 missing check-ins, company-side cancellations, crew completion, disputes, deterministic scoring with parts
@@ -297,6 +297,60 @@ list with coaching drafts and a disputed record.
 not yours", which confirmed it existed; it now answers "Not found." The score's note repeated itself, and
 "Not enough history" was said twice.
 
-**Not done, and why:** Selestial has no Quality agent and no Finance workspace, so there is no quality
-measure (no inspections or customer ratings exist to measure) and no paid-earnings figure. Team Coordinator
-does not exist; Dispatch and Recruiter run the routine follow-ups that belong to their own work.
+**Not done, and why:** Selestial has no Quality agent, so there is no quality measure (no inspections or
+customer ratings exist to measure). Team Coordinator does not exist; Dispatch and Recruiter run the routine
+follow-ups that belong to their own work.
+
+### Phase 4, second pass (November 18)
+
+Main's Phase 4 was checked against the brief's Phase 4 list, its gate and its required tests (missing
+history, disputed records, duplicate follow-ups, permissions, changes requiring human approval). Four gaps
+were found and fixed.
+
+- **Sensitive requests rest on records, and a dispute stops them.**
+  - Before: a disciplinary record, suspension, ending or rehire restriction could not name the job records it
+    was about, and nothing stopped one being approved while those records were disputed.
+  - Now: the request dialog lists the person's own records of concern (with what each shows) to attach, and
+    the request keeps them.
+  - A record still in dispute blocks approval until the dispute is decided. A record corrected after a
+    dispute blocks approval, and cannot be attached to a new request. Declining is always possible.
+  - Another person's record answers "Not found."; a pay change cannot rest on job records.
+  - The request card shows each record and its dispute, and Approve is disabled while one blocks it.
+- **Pay reads Team Pay in full.**
+  - Before: three totals only.
+  - Now also: payments recorded in Team Pay (day, method, status, the jobs covered, and a reference shown
+    only by its last four characters, so an account or routing number typed there never shows); adjustments
+    waiting for the Owner's approval, with their reasons; approved earnings; and, beside the pay each job's
+    offer stated, where Team Pay has that job.
+  - Still Owner only. No second ledger: every figure is read from Team Pay.
+- **The score says how fresh it is**: the newest record it counts, and that it is worked out live from the
+  records as they are now.
+- **Late check-ins are called check-ins**: "Checked in late, without word" instead of "Late without word", so
+  a check-in time is not read as a confirmed late arrival. The coaching draft about arrival times tells the
+  cleaner how to have the record corrected if they arrived on time.
+
+**Tests added** to `convex/cleanersPerformance.test.ts`:
+
+- **A finding to an outcome:**
+  - The finding lists its record, and the score reports its freshness.
+  - A disciplinary request rests on that record.
+  - The cleaner disputes it from her portal, and approval is refused until it is decided.
+  - Once the record is corrected, approval is refused, and a new request on it is refused; the request is
+    declined with a note and nothing about her changes.
+  - A request on a record that stands is approved and carried out.
+- **Pay from Team Pay:** approved, paid and waiting figures, the adjustment waiting, the payment with its
+  reference masked (the full account and routing numbers appear nowhere in the answer), each job's Team Pay
+  state beside its stated pay, and Manager refused.
+
+The approval test was also run with the dispute check switched off, and failed.
+
+**Visually inspected** against a local backend with seeded records, at 1440 and 390 wide: performance and
+coaching with a disputed record and a draft from the no-show; Pay with payments, an adjustment waiting and
+each job's Team Pay state; the request dialog with records to attach; the request card blocked by a dispute;
+a cleaner with too little history; the section as Office.
+
+**Found and fixed while inspecting:**
+
+- On phones, the profile's cards were 9 pixels wider than the screen, with their right edge cut off, because a
+  long job name held the column open. The cards now shrink to the screen in every section.
+- A long record name made its checkbox smaller than the others.

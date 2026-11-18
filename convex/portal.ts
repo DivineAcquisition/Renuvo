@@ -495,7 +495,7 @@ export const verifyCode = portalMutation({
   },
 });
 
-/** Their pay arrangement and the pay each job stated, once a code unlocked it. Finance is not built. */
+/** Their pay arrangement and the pay each job stated, once a code unlocked it. What was approved and paid is on their Team Pay earnings statement. */
 export const earnings = portalQuery({
   args: { asOf: v.number() },
   handler: async (ctx, args) => {
