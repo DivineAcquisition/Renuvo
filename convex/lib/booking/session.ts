@@ -242,10 +242,18 @@ export async function recalc(ctx: MutationCtx, sessionId: Id<"bookingSessions">)
   const agreementState: Doc<"bookingSessions">["agreementState"] = !L.agreementRule || request ? "not_required" : acceptance && prepared?.ok && acceptance.contentHash === prepared.hash ? "accepted" : "pending";
   const payment = session.paymentId ? await ctx.db.get(session.paymentId) : null;
   const pays = !request && Boolean(quote && quote.dueNowCents > 0);
+  // Money that arrived (or is arriving) is never forgotten, even if the booking no longer asks for any.
+  const moneyIn = payment !== null && (payment.status === "succeeded" || payment.status === "processing");
   let paymentState: Doc<"bookingSessions">["paymentState"] = pays ? "pending" : "not_required";
   if (session.paymentState === "simulated") paymentState = "simulated";
-  else if (payment && pays) paymentState = payment.status === "succeeded" ? "succeeded" : payment.status === "processing" ? "processing" : payment.status === "failed" ? "failed" : payment.status === "awaiting_customer" || payment.status === "checking" ? "started" : "pending";
+  else if (payment && (pays || moneyIn)) paymentState = payment.status === "succeeded" ? "succeeded" : payment.status === "processing" ? "processing" : payment.status === "failed" ? "failed" : payment.status === "awaiting_customer" || payment.status === "checking" ? "started" : "pending";
   const quoteState: Doc<"bookingSessions">["quoteState"] = !quote ? "none" : session.accepted && (session.accepted.inputHash !== quote.inputHash || session.accepted.grandTotalCents !== quote.grandTotalCents) ? "changed" : quote.outcome;
+  // A received payment counts only for the booking it paid for: the same total, and at least what is due now.
+  let paymentMismatch = false;
+  if (payment?.status === "succeeded") {
+    const invoice = await ctx.db.get(payment.invoiceId);
+    paymentMismatch = request || !quote || quote.grandTotalCents === null || !invoice || invoice.totals.totalCents !== quote.grandTotalCents || payment.amountCents < quote.dueNowCents;
+  }
   const complete = answersComplete(session, L, request);
   const gate = confirmationGate({
     request,
@@ -255,7 +263,8 @@ export async function recalc(ctx: MutationCtx, sessionId: Id<"bookingSessions">)
     agreementRequired: agreementState !== "not_required",
     agreementAccepted: agreementState === "accepted",
     paymentRequired: pays,
-    paymentSucceeded: paymentState === "succeeded" || paymentState === "simulated",
+    paymentSucceeded: (paymentState === "succeeded" && !paymentMismatch) || paymentState === "simulated",
+    paymentMismatch,
     capacity: capacityState,
     eligible: L.eligible.ok,
     eligibilityWhy: L.eligible.why,

@@ -12,6 +12,7 @@ import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { normalizeDefinition, defaultDefinition, type Definition } from "./lib/booking/definition";
 import { confirmationGate, sizePlan } from "./lib/booking/logic";
+import { bookingPaymentChanged } from "./lib/booking/payments";
 import { setStripeTransportForTests, signForTests } from "./lib/finance/stripe";
 import { blankSpec, type Spec } from "./lib/services/spec";
 
@@ -194,6 +195,7 @@ describe("the experience definition", () => {
     expect(confirmationGate({ ...base, capacity: "expired" }).blockers).toContain("The reserved time expired.");
     expect(confirmationGate({ ...base, paymentSucceeded: false }).blockers).toContain("The payment hasn't been received.");
     expect(confirmationGate({ ...base, accepted: { inputHash: "h", grandTotalCents: 90 } }).blockers).toContain("The price changed and needs to be accepted again.");
+    expect(confirmationGate({ ...base, paymentMismatch: true }).blockers).toContain("The payment received doesn't match this booking as it now stands.");
   });
 });
 
@@ -428,6 +430,72 @@ describe("a deposit through Finance and Stripe", () => {
     expect(records.invoices).toHaveLength(1);
     expect(records.invoices[0]).toMatchObject({ depositCents: 3500, jobId: records.jobs[0]._id, status: "open" });
     expect(records.invoices[0].totals).toMatchObject({ totalCents: 14000, paidCents: 3500, balanceCents: 10500 });
+  });
+
+  const succeeded = (s: Setup, intentId: string, id: string) => webhook(s.t, { id, type: "payment_intent.succeeded", account: [...stripe.state.accounts.keys()][0], livemode: false, data: { object: { id: intentId, object: "payment_intent" } } });
+
+  it("keeps what was paid for: nothing priced can change once the money is in, and finishing the details confirms it", async () => {
+    const s = await paidSetup();
+    await edit(s.as, s.companyId, s.experienceId, (def) => {
+      def.behavior.detailsTiming = "after_payment";
+    });
+    await publish(s.as, s.companyId, s.experienceId);
+    const token = await begin(s, "details-later");
+    await contact(s.t, token);
+    await s.t.mutation(api.bookingSessions.setHome, { token, bedrooms: 2, bathrooms: 1, halfBaths: 0 });
+    await s.t.mutation(api.bookingSessions.selectService, { token, serviceKey: s.serviceKey, addOns: [], answers: {} });
+    const slot = (await s.t.query(api.bookingSessions.slots, { token, date: TUESDAY }))!.find((x) => x.available)!;
+    await s.t.mutation(api.bookingSessions.chooseTime, { token, startsAt: slot.startsAt });
+    const v = await view(s.t, token);
+    await s.t.mutation(api.bookingSessions.acceptQuote, { token, inputHash: v.quote!.inputHash, grandTotalCents: v.quote!.grandTotalCents! });
+    const started = await s.t.mutation(api.bookingSessions.startPayment, { token, clientKey: "client-key-lock-000" });
+    await settle(s.t);
+    const [intent] = stripe.intentsFor((started as { paymentId: Id<"payments"> }).paymentId);
+    stripe.settle(intent.id, "succeeded");
+    await succeeded(s, intent.id, "evt_lock");
+    await settle(s.t);
+    expect(await view(s.t, token)).toMatchObject({ status: "active", states: { payment: "succeeded" } });
+
+    // A bigger clean, another size, another time or another ZIP would no longer match the $35 received.
+    expect(await refusal(s.t.mutation(api.bookingSessions.selectService, { token, serviceKey: s.serviceKey, addOns: [{ id: "oven", quantity: 1 }], answers: {} }))).toContain("payment for this booking has been received");
+    expect(await refusal(s.t.mutation(api.bookingSessions.setHome, { token, bedrooms: 4 }))).toContain("has been received");
+    expect(await refusal(s.t.mutation(api.bookingSessions.chooseTime, { token, startsAt: slot.startsAt + HOUR }))).toContain("has been received");
+    expect(await refusal(s.t.mutation(api.bookingSessions.setLocation, { token, postalCode: "78702" }))).toContain("has been received");
+
+    await s.t.mutation(api.bookingSessions.setDetails, { token, address: { line1: "12 Elm St", city: "Austin", region: "TX", postalCode: "78701" }, answers: { pets: "No pets", access: "Key under the mat" } });
+    expect((await view(s.t, token)).status).toBe("confirmed");
+    const records = await s.t.run(async (ctx) => ({ jobs: await ctx.db.query("jobs").collect(), invoices: await ctx.db.query("invoices").collect() }));
+    expect(records.jobs).toHaveLength(1);
+    expect(records.invoices[0].totals).toMatchObject({ totalCents: 14000, paidCents: 3500 });
+  });
+
+  it("cancels an unfinished card form when the choice changes, and never confirms against money paid for the old choice", async () => {
+    const s = await paidSetup();
+    const token = await begin(s, "changes-mind");
+    await throughDetails(s, token);
+    const started = await s.t.mutation(api.bookingSessions.startPayment, { token, clientKey: "client-key-change-0" });
+    await settle(s.t);
+    const oldPaymentId = (started as { paymentId: Id<"payments"> }).paymentId;
+    const [intent] = stripe.intentsFor(oldPaymentId);
+
+    await s.t.mutation(api.bookingSessions.selectService, { token, serviceKey: s.serviceKey, addOns: [{ id: "oven", quantity: 1 }], answers: {} });
+    await settle(s.t);
+    expect(intent.status).toBe("canceled");
+    const changed = await view(s.t, token);
+    expect(changed.states.payment).toBe("pending");
+    expect(changed.quote!.grandTotalCents).toBe(17500);
+
+    // Even if the old $35 had gone through before the cancel reached Stripe, it doesn't confirm the $175 booking.
+    await s.t.run(async (ctx) => {
+      await ctx.db.patch(oldPaymentId, { status: "succeeded" });
+      await bookingPaymentChanged(ctx, (await ctx.db.get(oldPaymentId))!);
+    });
+    await settle(s.t);
+    const after = await view(s.t, token);
+    expect(after.status).toBe("needs_attention");
+    const records = await s.t.run(async (ctx) => ({ jobs: await ctx.db.query("jobs").collect(), tasks: await ctx.db.query("tasks").collect() }));
+    expect(records.jobs).toHaveLength(0);
+    expect(records.tasks.find((task) => task.key?.startsWith("booking-recovery:"))?.nextAction ?? "").toMatch(/doesn't match/);
   });
 
   it("opens a visible recovery case when payment arrives after the hold ended and the time is gone", async () => {

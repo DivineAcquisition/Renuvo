@@ -99,7 +99,9 @@ Publish, rollback, unpublish, archive and booking rules are the Owner's; drafts 
 7. **Payment.** A Finance invoice (with `depositCents`) and payment are created idempotently
    (`clientKey`), and Stripe is called on the company's own connected account with the payment's own
    idempotency key. The return redirect proves nothing: only the verified `payment_intent.succeeded`
-   webhook (deduplicated by `providerReceipts`) moves `paymentState` to succeeded.
+   webhook (deduplicated by `providerReceipts`) moves `paymentState` to succeeded. From then on nothing
+   priced can be changed on the page, and a payment only counts for the booking it paid for: the same
+   invoice total and at least the amount due now.
 8. **Confirmation.** `confirmationGate` checks answers, quote, agreement, payment and capacity
    independently. If the money arrived but the time can no longer be held (the hold expired and the
    slot is gone, a cleaner took time off), the session becomes `needs_attention` and a Sales task
@@ -165,8 +167,8 @@ Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET
 
 ### Implemented and verified
 
-Verified by `convex/booking.test.ts` (22 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
-(890 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
+Verified by `convex/booking.test.ts` (24 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
+(892 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
 Chromium at desktop and phone widths against the real Convex functions (screenshots in
 `docs/screenshots/booking/`).
 
@@ -179,6 +181,10 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
   in the browser run is fixed and covered); hold expiry; payment after the time was lost becoming a
   recovery task.
 - Price changed after acceptance requiring a new acceptance.
+- Once a payment is processing or received, the ZIP, size, service, time and acceptance are locked (the
+  customer is sent to the company); an unfinished card form is cancelled when the choice changes; a
+  received payment that doesn't match the booking as it stands (another total, too little, or the booking
+  became a request) never confirms it and opens the recovery task instead, and is never dropped.
 - Commercial walkthrough requests, short-term rental turnovers, recurring requests.
 - Test bookings never charge and are kept out of live analytics.
 - Links: expiry, revocation, rotation; tokens only hashed; start only through the server with rate

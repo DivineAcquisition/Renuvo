@@ -227,6 +227,8 @@ export type ConfirmationFacts = {
   paymentRequired: boolean;
   /** Verified by the payment provider, never by a page. */
   paymentSucceeded: boolean;
+  /** Money was received, but not for this booking as it now stands (a different price, or it became a request). */
+  paymentMismatch?: boolean;
   capacity: "none" | "held" | "expired" | "committed" | "requested" | "unavailable";
   /** The company can take this booking: still publishing, still serving the area, not suspended. */
   eligible: boolean;
@@ -249,6 +251,7 @@ export function confirmationGate(f: ConfirmationFacts): Gate {
     if (f.capacity !== "held" && f.capacity !== "committed") blockers.push(f.capacity === "expired" ? "The reserved time expired." : f.capacity === "unavailable" ? "The chosen time is no longer available." : "No time is reserved.");
   }
   if (f.agreementRequired && !f.agreementAccepted) blockers.push("The service agreement hasn't been signed.");
-  if (!f.request && f.paymentRequired && !f.paymentSucceeded) blockers.push("The payment hasn't been received.");
+  if (f.paymentMismatch) blockers.push("The payment received doesn't match this booking as it now stands.");
+  else if (!f.request && f.paymentRequired && !f.paymentSucceeded) blockers.push("The payment hasn't been received.");
   return { ready: blockers.length === 0, blockers };
 }

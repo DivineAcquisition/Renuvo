@@ -16,6 +16,7 @@ import { localParts } from "./lib/availability";
 import { bookingMutation, bookingQuery } from "./lib/builders";
 import { acquireHold, candidateStarts, dayStartOf, loadSupply, occupied, releaseHolds, slotOf, spareCrew, hasSupply } from "./lib/booking/capacity";
 import { checkAnswer, plain } from "./lib/booking/definition";
+import { cancelStartedPayments } from "./finance";
 import { funnel } from "./lib/booking/funnel";
 import { commitBooking, submitRequest } from "./lib/booking/handoff";
 import { BATHROOM_CHOICES } from "./lib/booking/logic";
@@ -131,9 +132,27 @@ async function reached(ctx: MutationCtx, session: Doc<"bookingSessions">, step: 
   await funnel(ctx, session, "step_completed", { step: completed });
 }
 
+/**
+ * What the customer pays for can't change once money is moving: a payment that is processing or received
+ * is for exactly this booking, and changes go through the company. A card form that was opened but not
+ * finished is cancelled, so it can't be completed for the old choice.
+ */
+async function beforeChanging(ctx: MutationCtx & { session: Doc<"bookingSessions">; company: Doc<"companies"> }) {
+  const state = ctx.session.paymentState;
+  if (state === "processing" || state === "succeeded") {
+    const L = await load(ctx, ctx.session, ctx.company);
+    throw userError(`Your payment for this booking has been received, so it can't be changed here. Please contact ${L.settings.profile.displayName || ctx.company.name} to change it.`);
+  }
+  if (state === "started" && ctx.session.invoiceId) {
+    await cancelStartedPayments(ctx, ctx.session.invoiceId);
+    await ctx.db.patch(ctx.session._id, { paymentId: undefined, paymentState: "pending" });
+  }
+}
+
 export const setLocation = bookingMutation({
   args: { postalCode: v.string() },
   handler: async (ctx, args) => {
+    await beforeChanging(ctx);
     const postal = normalizePostalCode(args.postalCode);
     if (!/^[A-Z0-9][A-Z0-9 -]{1,9}[A-Z0-9]$/.test(postal)) throw userError("Enter a valid ZIP code.");
     const L = await load(ctx, ctx.session, ctx.company);
@@ -177,6 +196,7 @@ const number = (value: number | undefined, label: string, max: number, step = 1)
 export const setHome = bookingMutation({
   args: { sizeKey: v.optional(v.string()), area: v.optional(v.number()), bedrooms: v.optional(v.number()), bathrooms: v.optional(v.number()), halfBaths: v.optional(v.number()), beds: v.optional(v.number()) },
   handler: async (ctx, args) => {
+    await beforeChanging(ctx);
     const L = await load(ctx, ctx.session, ctx.company);
     const home = { ...ctx.session.home };
     if (args.sizeKey !== undefined) {
@@ -215,6 +235,7 @@ export const selectService = bookingMutation({
     answers: v.record(v.string(), v.union(v.string(), v.number(), v.boolean())),
   },
   handler: async (ctx, args) => {
+    await beforeChanging(ctx);
     const L = await load(ctx, ctx.session, ctx.company);
     const row = L.offered.find((r) => r.service.key === args.serviceKey);
     if (!row) throw userError("That service isn't offered here.");
@@ -257,6 +278,7 @@ export const selectService = bookingMutation({
 export const chooseTime = bookingMutation({
   args: { startsAt: v.number() },
   handler: async (ctx, args) => {
+    await beforeChanging(ctx);
     const L = await load(ctx, ctx.session, ctx.company);
     const n = need(L, ctx.session);
     if (!n) throw userError("Choose a service first.");
@@ -287,6 +309,7 @@ export const chooseTime = bookingMutation({
 export const acceptQuote = bookingMutation({
   args: { inputHash: v.string(), grandTotalCents: v.number() },
   handler: async (ctx, args) => {
+    await beforeChanging(ctx);
     const session = await recalc(ctx, ctx.session._id);
     const quote = session.quote;
     if (!quote || quote.grandTotalCents === null) throw userError("There's no price to accept yet.");
