@@ -45,6 +45,14 @@ export function PipelineScreen() {
     setError(null);
     work().catch((caught: unknown) => setError(messageOf(caught)));
   };
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  /** Moves a deal by the menu or by dragging. Losing a deal asks why first. */
+  const moveTo = (opportunityId: string, next: (typeof STAGES)[number]["id"]) => {
+    const closedReason = next === "lost" ? (window.prompt("Why was the deal lost?") ?? "") : undefined;
+    if (next === "lost" && !closedReason) return;
+    run(() => update({ companyId, opportunityId: opportunityId as Id<"salesOpportunities">, stage: next, ...(closedReason ? { closedReason } : {}) }));
+  };
   if (data === undefined) return <Skeleton className="h-[60vh] rounded-2xl" />;
   const stats = data.last30;
   return (
@@ -114,14 +122,45 @@ export function PipelineScreen() {
         {STAGES.map((stage) => {
           const rows = data.opportunities.filter((o) => o.stage === stage.id);
           return (
-            <section key={stage.id} aria-labelledby={`stage-${stage.id}`} className="flex min-w-64 flex-col gap-2 rounded-2xl border border-border bg-muted/30 p-2.5">
+            <section
+              key={stage.id}
+              aria-labelledby={`stage-${stage.id}`}
+              onDragOver={(event) => {
+                if (!dragging) return;
+                event.preventDefault();
+                setOver(stage.id);
+              }}
+              onDragLeave={() => setOver((current) => (current === stage.id ? null : current))}
+              onDrop={(event) => {
+                event.preventDefault();
+                const id = dragging;
+                setDragging(null);
+                setOver(null);
+                const row = data.opportunities.find((o) => o._id === id);
+                // The server checks the stage's condition whoever moves the card; a refusal is shown above.
+                if (row && row.stage !== stage.id) moveTo(row._id, stage.id);
+              }}
+              className={cn("flex min-w-64 flex-col gap-2 rounded-2xl border p-2.5 transition-colors", over === stage.id ? "border-brand-500 bg-brand-500/5" : "border-border bg-muted/30")}
+            >
               <h2 id={`stage-${stage.id}`} className="flex items-center justify-between px-1 text-sm font-semibold text-strong">
                 {stage.label} <span className="text-xs font-normal text-muted-foreground tabular-nums">{rows.length}</span>
               </h2>
               {rows.map((row) => {
                 const when = due(row.nextActionAt);
                 return (
-                  <article key={row._id} className="grid gap-2 rounded-xl border border-border bg-card p-3 text-sm shadow-xs">
+                  <article
+                    key={row._id}
+                    draggable={stage.id !== "won" && stage.id !== "lost"}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      setDragging(row._id);
+                    }}
+                    onDragEnd={() => {
+                      setDragging(null);
+                      setOver(null);
+                    }}
+                    className={cn("grid gap-2 rounded-xl border border-border bg-card p-3 text-sm shadow-xs", dragging === row._id ? "opacity-50" : "")}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-medium text-strong">{row.title}</p>
                       {row.estimateCents ? <span className="text-xs text-muted-foreground tabular-nums">{money(row.estimateCents)}</span> : null}
@@ -176,10 +215,7 @@ export function PipelineScreen() {
                           value=""
                           onChange={(e) => {
                             const next = e.target.value as (typeof STAGES)[number]["id"];
-                            if (!next) return;
-                            const closedReason = next === "lost" ? (window.prompt("Why was the deal lost?") ?? "") : undefined;
-                            if (next === "lost" && !closedReason) return;
-                            run(() => update({ companyId, opportunityId: row._id as Id<"salesOpportunities">, stage: next, ...(closedReason ? { closedReason } : {}) }));
+                            if (next) moveTo(row._id, next);
                           }}
                         >
                           <option value="">Move…</option>
