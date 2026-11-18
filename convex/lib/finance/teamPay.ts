@@ -46,6 +46,20 @@ export function splitEvenly(cents: number, cleanerIds: Id<"cleaners">[]): { clea
   return cleanerIds.map((cleanerId, i) => ({ cleanerId, cents: each + (i < extra ? 1 : 0) }));
 }
 
+/** Where a job's pay stands, in the cleaner's words and the Owner's. */
+export const EARNING_STATE_WORDS = { calculated: "Being reviewed", needs_review: "Being reviewed", approved: "Approved, not paid yet", payment_started: "Payment on its way", paid: "Paid", void: "Set aside" } as const;
+export const TEAM_PAY_METHOD_WORDS = { zelle: "Zelle", venmo: "Venmo", cash: "Cash", check: "Check", bank_transfer: "Bank transfer", payroll: "Payroll", other: "Other" } as const;
+
+/**
+ * A payment's reference (a check number, a transfer or payroll reference) by its last four characters, so a
+ * full account or routing number typed there never shows on an ordinary screen.
+ */
+export function maskReference(reference: string | undefined): string | null {
+  const clean = reference?.replace(/\s+/g, "") ?? "";
+  if (!clean) return null;
+  return clean.length <= 4 ? "on file" : `ending ${clean.slice(-4)}`;
+}
+
 export const liveAdjustments = (earning: Pick<Doc<"earnings">, "adjustments">) => earning.adjustments.filter((a) => !a.reversed).reduce((sum, a) => sum + a.cents, 0);
 
 /** The tips received for a job, as cents per cleaner. */

@@ -105,9 +105,17 @@ export type Measure = {
   disputed: number;
 };
 
+/** How fresh a score is: the latest job among the records it counts. Null with none. */
+type Freshness = { newestRecordAt: number | null };
+
 export type Score =
-  | { state: "not_enough"; version: string; words: string; needed: number; have: number }
-  | { state: "scored"; version: string; value: number; lines: { key: MeasureKey; words: string; points: number | null }[]; words: string };
+  | ({ state: "not_enough"; version: string; words: string; needed: number; have: number } & Freshness)
+  | ({ state: "scored"; version: string; value: number; lines: { key: MeasureKey; words: string; points: number | null }[]; words: string } & Freshness);
+
+const newestCounted = (items: Measure[]): number | null => {
+  const times = items.flatMap((item) => item.records.filter((row) => row.counts).map((row) => row.at));
+  return times.length ? Math.max(...times) : null;
+};
 
 export type Performance = { periodStart: number; periodEnd: number; measures: Record<MeasureKey, Measure>; score: Score };
 
@@ -254,8 +262,8 @@ export function performanceFrom(input: { now: number; facts: AssignmentFact[]; d
     onTime + lateTold + lateUntold,
     [
       { label: "On time", count: onTime, tone: "good" },
-      { label: "Late, told the office beforehand", count: lateTold, tone: "neutral" },
-      { label: "Late without word", count: lateUntold, tone: "concern" },
+      { label: "Checked in late, told the office beforehand", count: lateTold, tone: "neutral" },
+      { label: "Checked in late, without word", count: lateUntold, tone: "concern" },
       { label: "No check-in recorded (not counted)", count: noCheckIn, tone: "neutral" },
     ],
     punctualityRows,
@@ -310,6 +318,7 @@ export function scoreOf(measures: Record<MeasureKey, Measure>): Score {
       version: SCORE_VERSION,
       needed: MINIMUM.reliability,
       have: base.denominator,
+      newestRecordAt: newestCounted([base]),
       words: `Not enough history: ${plural(base.denominator, "accepted job")} in the last ${PERIOD_DAYS} days, and a score needs ${MINIMUM.reliability}. The records are shown as they are.`,
     };
   }
@@ -327,7 +336,8 @@ export function scoreOf(measures: Record<MeasureKey, Measure>): Score {
     }
   }
   const value = Math.round((weighted / total) * 100);
-  return { state: "scored", version: SCORE_VERSION, value, lines, words: `${value} out of 100 from ${lines.filter((line) => line.points !== null).length} of 3 parts over the last ${PERIOD_DAYS} days.` };
+  const counted = (Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[]).map((key) => measures[key]).filter((item) => item.enough && item.rate !== null);
+  return { state: "scored", version: SCORE_VERSION, value, lines, newestRecordAt: newestCounted(counted), words: `${value} out of 100 from ${lines.filter((line) => line.points !== null).length} of 3 parts over the last ${PERIOD_DAYS} days.` };
 }
 
 // ── Recommendations ──────────────────────────────────────────────────────────────────────────────────

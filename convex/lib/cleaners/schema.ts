@@ -416,6 +416,8 @@ export const cleanersTables = {
       summary: v.optional(v.string()),
       /** For a rehire restriction: until when, or absent for no end date. */
       until: v.optional(v.number()),
+      /** The job records it rests on, named as they were when it was asked for. */
+      evidence: v.optional(v.array(v.object({ assignmentId: v.id("assignments"), label: v.string() }))),
     }),
     reason: v.string(),
     status: v.union(v.literal("pending"), v.literal("approved"), v.literal("declined"), v.literal("withdrawn")),
