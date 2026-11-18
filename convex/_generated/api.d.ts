@@ -47,6 +47,7 @@ import type * as coaching from "../coaching.js";
 import type * as companies from "../companies.js";
 import type * as companyAgreements from "../companyAgreements.js";
 import type * as compliance from "../compliance.js";
+import type * as connectors from "../connectors.js";
 import type * as consent from "../consent.js";
 import type * as contactPortal from "../contactPortal.js";
 import type * as creative from "../creative.js";
@@ -194,6 +195,9 @@ import type * as lib_compliance_permissions from "../lib/compliance/permissions.
 import type * as lib_compliance_profile from "../lib/compliance/profile.js";
 import type * as lib_compliance_readiness from "../lib/compliance/readiness.js";
 import type * as lib_compliance_recipients from "../lib/compliance/recipients.js";
+import type * as lib_connectors_common from "../lib/connectors/common.js";
+import type * as lib_connectors_housecall from "../lib/connectors/housecall.js";
+import type * as lib_connectors_jobber from "../lib/connectors/jobber.js";
 import type * as lib_departments from "../lib/departments.js";
 import type * as lib_dispatch_assignmentState from "../lib/dispatch/assignmentState.js";
 import type * as lib_dispatch_coverage from "../lib/dispatch/coverage.js";
@@ -462,6 +466,7 @@ declare const fullApi: ApiFromModules<{
   companies: typeof companies;
   companyAgreements: typeof companyAgreements;
   compliance: typeof compliance;
+  connectors: typeof connectors;
   consent: typeof consent;
   contactPortal: typeof contactPortal;
   creative: typeof creative;
@@ -609,6 +614,9 @@ declare const fullApi: ApiFromModules<{
   "lib/compliance/profile": typeof lib_compliance_profile;
   "lib/compliance/readiness": typeof lib_compliance_readiness;
   "lib/compliance/recipients": typeof lib_compliance_recipients;
+  "lib/connectors/common": typeof lib_connectors_common;
+  "lib/connectors/housecall": typeof lib_connectors_housecall;
+  "lib/connectors/jobber": typeof lib_connectors_jobber;
   "lib/departments": typeof lib_departments;
   "lib/dispatch/assignmentState": typeof lib_dispatch_assignmentState;
   "lib/dispatch/coverage": typeof lib_dispatch_coverage;

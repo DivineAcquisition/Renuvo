@@ -97,6 +97,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "mediaAllowances", index: "by_company_month" },
   // Google (convex/lib/google/schema.ts). What was connected, chosen, received and sent; never a credential.
   { table: "googleConnections", index: "by_company" },
+  { table: "connectorConnections", index: "by_company_system" },
   { table: "googleResources", index: "by_company_kind" },
   { table: "googleJobs", index: "by_company_status", omit: ["payload"], why: "Internal work instructions; what each job did is in its result and in the event log." },
   { table: "googleCalendarLinks", index: "by_company_subject" },
@@ -205,6 +206,9 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   googleWatches: "Notification channels with Google, renewed automatically; their secrets must not leave.",
   googleChoices: "A short-lived copy of what Google listed for the Owner to choose from.",
   googleBusy: "A short-lived copy of busy times read from Google Calendar; the calendar itself is the record.",
+  connectorCredentials: "A sealed authorization to the company's Jobber or Housecall Pro account; it opens that account, so a copy must never leave. The connection itself is exported.",
+  connectorStates: "Ten-minute, single-use records of a Jobber sign-in in progress; nothing in them is about the business.",
+  connectorReads: "A copy of another system's client list kept for a day while the owner checks it; what was imported is exported as clients and properties.",
   googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
   portalCodes: "Hashes of one-time codes that unlock a portal for ten minutes; nothing in them is about the business.",
   capacityHolds: "Short-lived reservations of a day's minutes while a booking waits; the booking keeps what matters.",

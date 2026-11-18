@@ -7,6 +7,7 @@
  * POST /webhooks/autumn         plan, purchase and balance changes from Autumn. Needs AUTUMN_WEBHOOK_SECRET.
  * GET  /oauth/google/callback   where Google sends an Owner back after they allowed access: the company's
  *                               Google connection (convex/google.ts) or a Gmail hiring inbox, told apart by the state.
+ * GET  /oauth/jobber/callback   where Jobber sends an Owner back after they allowed Selestial to read their clients.
  * POST /webhooks/google/calendar  Calendar push notifications, checked against each channel's own secret token.
  * POST /webhooks/google/pubsub    Gmail and Business Profile notifications through Pub/Sub, with Google's signed OIDC token.
  * POST /webhooks/google/leads     Google Ads lead form leads, with the company's lead key.
@@ -19,6 +20,7 @@ import { exchangeCode, googleApp } from "./lib/recruiter/gmail";
 import { hashToken, seal } from "./lib/recruiter/secrets";
 import { afterConnect, googleRedirectUri } from "./recruiterMailbox";
 import { afterGoogle } from "./google";
+import { jobberCallback } from "./connectors";
 import { exchange as googleExchange, googleApp as googleConnectApp, identityFrom, redirectUri as googleConnectRedirect } from "./lib/google/oauth";
 import { endpoints as googleEndpoints } from "./lib/google/platform";
 import { googleKeys, pushData, verifyOidc } from "./lib/google/pubsub";
@@ -144,6 +146,13 @@ http.route({
       return new Response(file, { status: 200, headers: { "content-type": file.type || "application/octet-stream", "cache-control": `private, max-age=${seconds}`, "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
     },
   }),
+});
+
+/** Where Jobber sends the Owner back after they allowed Selestial to read their clients (convex/connectors.ts). */
+http.route({
+  path: "/oauth/jobber/callback",
+  method: "GET",
+  handler: oauthCallback({ handler: (ctx, params) => jobberCallback(ctx, params) }),
 });
 
 http.route({

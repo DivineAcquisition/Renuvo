@@ -2,7 +2,7 @@
 
 **"Tell us enough about your company. Watch Selestial prepare useful work. Review what matters. Start operating."**
 
-Status: Phase 1 merged (#110). Phase 2a built November 18, 2026. Each phase is marked here as it is built and verified.
+Status: Phase 1 merged (#110), Phase 2a merged (#116). Phase 2b built November 18, 2026. Each phase is marked here as it is built and verified.
 
 ## What was there before
 
@@ -40,8 +40,8 @@ Inspected on `main` at `2cbf867`.
 | Phase | Delivers | State |
 |---|---|---|
 | 1 | Resumable guided flow, priority, adaptive questions, shared facts, readiness, responsive screens | Built |
-| 2a | Website reader, client import, integration guidance, service, agreement and booking drafts | Built |
-| 2b | Jobber connection (OAuth), Housecall Pro key import | Not started |
+| 2a | Website reader, client import, integration guidance, service, agreement and booking drafts | Merged (#116) |
+| 2b | Jobber connection (OAuth), Housecall Pro key import | Built |
 | 3 | First work per built agent, with prerequisite checks | Not started |
 | 4 | Exact-action review, authority, safe execution, "Your first work" | Not started |
 | 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Not started |
@@ -60,6 +60,42 @@ Inspected on `main` at `2cbf867`.
 | BookingKoala | Spreadsheet only, until its API is documented. |
 | First batch | One review screen in setup across agents (Phase 4). |
 | Delivery | One PR per phase. |
+
+## Phase 2b: verified
+
+- **Jobber** (`lib/connectors/jobber.ts`, `connectors.ts`, route `/oauth/jobber/callback`):
+  - Off until `JOBBER_CLIENT_ID` and `JOBBER_CLIENT_SECRET` are set; the card then says it is not available and
+    points to the export path. To switch it on, register an app in Jobber's Developer Center with the redirect
+    address `<CONVEX_SITE_URL>/oauth/jobber/callback` and read access to clients and scheduling, and set both
+    values on the Convex deployment. `MAILBOX_TOKEN_KEY` must be set too (tokens are sealed with it).
+  - Only the Owner connects. The sign-in state is single-use, lasts ten minutes, and only its hash is kept.
+  - Jobber rotates refresh tokens, so the new token is sealed and stored before anything is read.
+  - Reads clients (archived left out), each client's first property, and visits in the next 60 days, through
+    read-only GraphQL queries. Jobber's encoded ids are turned into the client number its exports show, so a
+    client imported earlier from a Jobber spreadsheet is recognized.
+  - Written against API version `2025-04-16`. The field names follow Jobber's public schema; the first real
+    connection after registration is the check that they match. If they don't, the read fails with a plain
+    message and nothing is imported.
+- **Housecall Pro** (`lib/connectors/housecall.ts`): an Admin's API key (Housecall Pro offers its API on the MAX
+  plan). The key is sealed at once, checked against `/company` in the background, and removed if refused.
+  Reads customers, their service address and upcoming jobs (cancelled ones left out), with GET requests only.
+- **Both:**
+  - Up to 1,000 clients per read, as with a spreadsheet; more is said plainly. Upcoming visits become a
+    schedule note on the client ("Not booked in Selestial"); no job is created and no cleaner is offered work.
+  - The read is kept for a day for the owner to check, then deleted (or cleared sooner). Importing goes through
+    `clientImports`, so duplicates, retries, "imported before" and "no permission to contact" work as for a file.
+  - A credential the other system stops accepting is deleted and the card asks to connect again.
+  - Disconnecting deletes the credential and the read at once. Jobber's own record of the app is removed in
+    Jobber (Settings › Apps); the card says so.
+  - Credentials and reads are kept out of the data export; the connection record is exported.
+- **Tests**: `convex/connectors.test.ts` (12), against stand-ins for both systems: missing configuration, Owner
+  only, token rotation and sealing, read-only requests, mapping, re-import finding the same clients, a client
+  from an earlier Jobber spreadsheet recognized, single-use and expiring sign-in state, an ended authorization,
+  company isolation, a refused key, and disconnecting.
+- **Rendered** at 1440 and 390 wide: Jobber connected with a read ready, a refused Housecall Pro key, the check,
+  and an import with one row refused for its email.
+- **Not changed:** the Integrations page still lists Jobber and Housecall Pro as planned; pointing it at setup is
+  left for Phase 5.
 
 ## Phase 2a: verified
 
@@ -112,7 +148,6 @@ Inspected on `main` at `2cbf867`.
 
 ## Not done yet
 
-- Jobber and Housecall Pro connections (2b). Until then their exports work through the spreadsheet import.
 - Recurring schedules from an import are kept as notes on the client; turning them into recurring plans
   needs a published service.
 - Agent first work (Phase 3), first-batch review and "Your first work" (Phase 4).

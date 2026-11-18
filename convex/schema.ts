@@ -26,6 +26,7 @@ import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/setti
 import { salesSettingsValidator } from "./lib/sales/agentSchema";
 import { salesTables } from "./lib/sales/schema";
 import { setupTables } from "./lib/setup/schema";
+import { connectorTables } from "./lib/connectors/schema";
 import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
@@ -902,6 +903,7 @@ export default defineSchema({
   ...chatTables,
   ...agreementTables,
   ...googleTables,
+  ...connectorTables,
   // ── Cleaners: subcontractors, requirements, crews, portal, follow-ups, coaching, personnel ──────
   ...cleanersTables,
   ...clientsTables,

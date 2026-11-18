@@ -22,6 +22,7 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import { CATEGORY_CHOICES, SCALE_CHOICES, TOOL_CHOICES, WORKFORCE_CHOICES, type Choice } from "../../../../convex/lib/setup/facts";
 import { connectionsFor, PRIORITY_INFO, QUESTIONS, STAGES, stepsFor, UNSURE } from "../../../../convex/lib/setup/path";
+import { ConnectedImport } from "./connectors";
 import { ClientImport } from "./import";
 import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
@@ -478,8 +479,9 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                   <h2 id="clients-heading" className="text-sm font-semibold text-strong">
                     Your clients
                   </h2>
+                  <ConnectedImport />
+                  <p className="text-xs text-muted-foreground">Or from a spreadsheet, including an export from Jobber, Housecall Pro or BookingKoala:</p>
                   <ClientImport />
-                  <p className="text-xs text-muted-foreground">Using Jobber or Housecall Pro? A direct connection is coming next. Until then, export your client list from it and choose the file here.</p>
                 </section>
                 {connectionsFor(priority ?? undefined, secondary).length ? (
                   <section className="grid gap-2" aria-labelledby="connect-heading">

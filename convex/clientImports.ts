@@ -12,26 +12,13 @@ import type { Id } from "./_generated/dataModel";
 import { managerMutation, managerQuery } from "./lib/builders";
 import { possibleDuplicates, refreshClient } from "./lib/clients/directory";
 import { COMMIT_LIMIT, hasAddress, kindOf, ROW_LIMIT, rowProblems, typeOf, type ImportRow } from "./lib/clients/importing";
+import { importRowValidator } from "./lib/connectors/schema";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { optionalEmail, optionalText, text } from "./lib/text";
 import { cleanAddress } from "./properties";
 
-const rowValidator = v.object({
-  name: v.string(),
-  type: v.optional(v.string()),
-  kind: v.optional(v.string()),
-  email: v.optional(v.string()),
-  phone: v.optional(v.string()),
-  line1: v.optional(v.string()),
-  line2: v.optional(v.string()),
-  city: v.optional(v.string()),
-  region: v.optional(v.string()),
-  postalCode: v.optional(v.string()),
-  notes: v.optional(v.string()),
-  schedule: v.optional(v.string()),
-  externalId: v.optional(v.string()),
-});
+const rowValidator = importRowValidator;
 const sourceValidator = v.union(v.literal("csv"), v.literal("jobber"), v.literal("housecall_pro"));
 
 type Ctx = Parameters<typeof possibleDuplicates>[0];
