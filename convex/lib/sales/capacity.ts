@@ -115,11 +115,19 @@ const WHY: Partial<Record<ExclusionCode, (count: number) => string>> = {
 };
 
 /** The company's own rules for a time: its area, its hours, and how much notice it asks for. Null when the time is inside them. */
-export function ruleProblem(company: Doc<"companies">, need: Pick<Need, "postalCode">, span: Span, now: number): string | null {
+/** Why no time at all can be offered at this address, whatever the hour. Null when the company works there. */
+export function areaProblem(company: Doc<"companies">, need: Pick<Need, "postalCode">): string | null {
   const settings = businessSettingsOf(company);
   const code = normalizePostalCode(need.postalCode);
   if (!code) return "The property's postal code is not known yet.";
   if (settings.serviceAreas.length > 0 && !settings.serviceAreas.includes(code)) return `The company does not work in ${code}.`;
+  return null;
+}
+
+export function ruleProblem(company: Doc<"companies">, need: Pick<Need, "postalCode">, span: Span, now: number): string | null {
+  const settings = businessSettingsOf(company);
+  const area = areaProblem(company, need);
+  if (area) return area;
   if (span.startsAt >= span.endsAt) return "The time is not valid.";
   const notice = salesSettings(company).booking.minimumNoticeHours;
   if (span.startsAt < now + notice * HOUR) return notice > 0 ? `Bookings need at least ${notice} hours' notice.` : "That time has passed.";
@@ -199,7 +207,8 @@ export async function openSlots(ctx: Ctx, company: Doc<"companies">, need: Need,
   const limit = Math.min(input.limit ?? 6, 12);
   const first = startOfLocalDay(now, tz);
   const range = { startsAt: now, endsAt: addLocalDays(first, days + 1, tz) };
-  if (ruleProblem(company, need, { startsAt: range.endsAt - 2 * HOUR, endsAt: range.endsAt - HOUR }, 0)?.includes("does not work in")) return [];
+  // Outside the service area, or with no postal code, no hour is open: nothing to search.
+  if (areaProblem(company, need)) return [];
   const loaded = await loadCapacity(ctx, company, need, range);
   if (loaded.cleaners.length === 0) return [];
   const hours = businessSettingsOf(company).hours;

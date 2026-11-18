@@ -343,7 +343,7 @@ export function SalesPlaybookScreen() {
   return (
     <>
       <PageHeader title="Playbook" lead="How Sales works for you: what it says, what it handles, when it follows up, and what a booking needs." />
-      <div className="grid gap-5">
+      <div className="grid gap-5" aria-busy={playbook === undefined || permissions === undefined}>
         <Panel
           title="What Sales may do without asking"
           action={

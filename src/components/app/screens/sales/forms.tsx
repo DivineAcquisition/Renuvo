@@ -82,7 +82,7 @@ function FormsList({ onOpen }: { onOpen: (id: string) => void }) {
   return (
     <>
       <PageHeader title="Booking Forms" lead="Forms people fill in to ask for a price or a time. Each submission becomes an opportunity, and what was typed on the form is never asked again." />
-      <div className="grid gap-5">
+      <div className="grid gap-5" aria-busy={forms === undefined || templates === undefined}>
         <Panel title="Start a form">
           {templates === undefined ? (
             <Skeleton className="h-24 rounded-xl" />
