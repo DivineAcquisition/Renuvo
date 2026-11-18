@@ -78,7 +78,6 @@ export const claim = internalMutation({
     // Messages to applicants are asked this too, and then also pass the Recruiter's own gate below.
     const answer = await checkSend(ctx, { companyId: message.companyId, channel: message.channel ?? "sms", to: message.to, now: Date.now(), messageId: message._id, ...(await intentOf(ctx, message)) });
     if (!answer.ok) {
-      const subject = { table: "messages" as const, id: message._id };
       // A sign-in code is only useful now, and its code travels only in this call: it is never held for later.
       if (answer.retryAt !== undefined && message.purpose !== "verification_code") {
         await ctx.db.patch(message._id, { status: "held", problem: answer.words });
@@ -238,7 +237,6 @@ export const claim = internalMutation({
  */
 async function claimNotice(ctx: MutationCtx, message: Doc<"messages">) {
   const now = Date.now();
-  const subject = { table: "messages" as const, id: message._id };
   const composed = await composeNotice(ctx, message, now);
   if (!composed.ok) {
     if (composed.retryAt !== undefined) {
@@ -282,7 +280,6 @@ export const settle = internalMutation({
     // Only a send that is in flight can be settled, so a late or repeated answer changes nothing.
     if (!message || message.status !== "sending") return null;
     const now = Date.now();
-    const subject = { table: "messages" as const, id: message._id };
     const result = args.result;
     if (result.ok) {
       await ctx.db.patch(message._id, { status: result.delivered ? "delivered" : "sent", providerMessageId: result.providerMessageId, sentAt: now, ...(result.delivered ? { deliveredAt: now } : {}), problem: undefined });
@@ -423,7 +420,6 @@ export const receipt = internalMutation({
       .first();
     if (!message) return "ignored" as const;
     const now = Date.now();
-    const subject = { table: "messages" as const, id: message._id };
     const open = message.status === "sent" || message.status === "unconfirmed";
 
     if (args.outcome === "complained") {
