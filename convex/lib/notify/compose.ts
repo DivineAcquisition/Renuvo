@@ -17,6 +17,7 @@ import { CATEGORY_INFO, EVENT_INFO, NIGHT, type NoticeFacts } from "./catalog";
 import { emailOn, noticeSuppression, preferencesOf, SUPPRESSION_WORDS } from "./preferences";
 import { unsubscribable } from "./route";
 import { unsubscribeFor } from "./unsubscribe";
+import { waitingMessages } from "../inbox/events";
 
 export type Composed =
   | { ok: true; email: Email; from: string; replyTo?: string; headers: Record<string, string> }
@@ -66,6 +67,8 @@ function securityChange(facts: NoticeFacts | undefined): SecurityChange | null {
       return str(facts, "memberName") ? { kind: "member_removed", memberName: str(facts, "memberName")! } : null;
     case "inbox_connected":
       return str(facts, "address") ? { kind: "inbox_connected", address: str(facts, "address")!, purposes: list(facts, "purposes") } : null;
+    case "inbox_disconnected":
+      return str(facts, "address") ? { kind: "inbox_disconnected", address: str(facts, "address")! } : null;
     case "payout_account_changed":
       return { kind: "payout_account_changed", accountEnding: str(facts, "accountEnding") };
     case "deletion_requested":
@@ -114,6 +117,7 @@ async function inboxReconnect(ctx: MutationCtx, ref: string | undefined, facts: 
   const mailbox = id ? await ctx.db.get(id) : null;
   if (!mailbox) return { problem: "The inbox is no longer connected to this company." };
   if (mailbox.status === "connected") return { problem: "The inbox was reconnected before this notice went." };
+  if (mailbox.status === "disconnected") return { problem: "The inbox was disconnected on purpose, so there's nothing to reconnect." };
   const purposes = list(facts, "purposes");
   return inboxReconnectEmail({
     ...c,
@@ -121,8 +125,9 @@ async function inboxReconnect(ctx: MutationCtx, ref: string | undefined, facts: 
     purposes: purposes.length ? purposes : ["Hiring"],
     agents: purposes.length ? (list(facts, "agents") as AgentId[]).filter((a) => a in { sales: 1, recruiter: 1, dispatch: 1, retention: 1 }) : ["recruiter"],
     since: num(facts, "since") ?? mailbox.lastSyncAt ?? mailbox.createdAt,
-    reason: mailbox.status === "expired" ? "expired" : mailbox.status === "disconnected" ? "revoked" : "error",
-    held: num(facts, "held") ?? 0,
+    reason: mailbox.status === "expired" ? "expired" : "error",
+    // Counted now, so the notice says how many are waiting at the moment it goes.
+    held: (await waitingMessages(ctx, mailbox.companyId)).length,
   });
 }
 

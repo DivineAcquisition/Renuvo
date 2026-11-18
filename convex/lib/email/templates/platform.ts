@@ -47,6 +47,7 @@ export type SecurityChange =
   | { kind: "role_changed"; memberName: string; from: string; to: string }
   | { kind: "member_removed"; memberName: string }
   | { kind: "inbox_connected"; address: string; purposes: string[] }
+  | { kind: "inbox_disconnected"; address: string }
   | { kind: "payout_account_changed"; accountEnding?: string | null }
   | { kind: "deletion_requested"; deleteAfter: number }
   | { kind: "export_ready"; expiresAt: number };
@@ -59,6 +60,8 @@ function securityWords(change: SecurityChange, by: string, timezone?: string): {
       return { subject: `${change.memberName} no longer has access`, heading: "Someone's access was removed", body: `${by} removed ${change.memberName} from the company. They can't sign in to it any more.`, rows: [{ label: "Person", value: change.memberName }], path: "/app/settings/people", button: "Review people & access" };
     case "inbox_connected":
       return { subject: `${change.address} was connected to Selestial`, heading: "An inbox was connected", body: `${by} connected ${change.address}. Selestial can now read it${change.purposes.length ? ` for ${listWords(change.purposes)}` : ""} and send from it where you allowed.`, rows: [{ label: "Inbox", value: change.address }, { label: "Used for", value: listWords(change.purposes) || null }], path: "/app/settings/integrations?tool=gmail", button: "Review connected inbox" };
+    case "inbox_disconnected":
+      return { subject: `${change.address} was disconnected from Selestial`, heading: "An inbox was disconnected", body: `${by} disconnected ${change.address}. Selestial no longer reads it or sends from it, and its stored access was deleted.`, rows: [{ label: "Inbox", value: change.address }], path: "/app/settings/integrations?tool=gmail", button: "Review connected inboxes" };
     case "payout_account_changed":
       return { subject: "Your payout account changed", heading: "Where customer payments are paid out changed", body: `${by} changed the bank account that customer payments are paid out to.`, rows: [{ label: "New account", value: change.accountEnding ? `Ending ${change.accountEnding}` : null }], path: "/app/finance", button: "Review payouts" };
     case "deletion_requested":

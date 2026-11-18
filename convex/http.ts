@@ -24,7 +24,7 @@ import { afterConnect, googleRedirectUri } from "./recruiterMailbox";
 import { afterGoogle } from "./google";
 import { exchange as googleExchange, googleApp as googleConnectApp, identityFrom, redirectUri as googleConnectRedirect } from "./lib/google/oauth";
 import { endpoints as googleEndpoints } from "./lib/google/platform";
-import { googleKeys, pushData, verifyOidc } from "./lib/google/pubsub";
+import { googleKeys, pushData, tokenKid, verifyOidc } from "./lib/google/pubsub";
 import { receivedEmailId, verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
 import { parseEvent, signingProvider, verifyBody } from "./lib/agreements/signing";
 import { photoRequestValid } from "./lib/dispatch/photoLinks";
@@ -196,23 +196,25 @@ http.route({
       }
       const taken = await ctx.runMutation(internal.recruiterMailbox.takeState, { stateHash });
       if (!taken) return afterConnect("expired");
+      // Connected from Connected apps with purposes: the Owner goes back there.
+      const shared = taken.purposes !== null;
       const app = googleApp();
       const redirectUri = googleRedirectUri();
-      if (!code || params.get("error") || !app || !redirectUri) return afterConnect("failed", taken.returnOrigin);
+      if (!code || params.get("error") || !app || !redirectUri) return afterConnect("failed", taken.returnOrigin, shared);
       const tokens = await exchangeCode(app, code, redirectUri);
-      if (!tokens) return afterConnect("failed", taken.returnOrigin);
+      if (!tokens) return afterConnect("failed", taken.returnOrigin, shared);
       const scopes = tokens.scope.split(" ").filter(Boolean);
-      if (!scopes.includes("https://www.googleapis.com/auth/gmail.readonly")) return afterConnect("failed", taken.returnOrigin);
+      if (!scopes.includes("https://www.googleapis.com/auth/gmail.readonly")) return afterConnect("failed", taken.returnOrigin, shared);
       // The mailbox is whichever address the Owner signed in with at Google, read from Gmail itself.
       const profile = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: { Authorization: `Bearer ${tokens.accessToken}` } })
         .then((response) => (response.ok ? (response.json() as Promise<{ emailAddress?: string }>) : null))
         .catch(() => null);
-      if (!profile?.emailAddress) return afterConnect("failed", taken.returnOrigin);
-      const connectionId = await ctx.runMutation(internal.recruiterMailbox.completeConnect, { companyId: taken.companyId, memberId: taken.memberId, address: profile.emailAddress, folder: taken.folder, sources: taken.sources, processFrom: taken.processFrom, canSend: taken.canSend, scopes });
+      if (!profile?.emailAddress) return afterConnect("failed", taken.returnOrigin, shared);
+      const connectionId = await ctx.runMutation(internal.recruiterMailbox.completeConnect, { companyId: taken.companyId, memberId: taken.memberId, address: profile.emailAddress, folder: taken.folder, sources: taken.sources, processFrom: taken.processFrom, canSend: taken.canSend, scopes, purposes: taken.purposes });
       const sealed = await seal(tokens.refreshToken, connectionId);
-      if (!sealed) return afterConnect("failed", taken.returnOrigin);
+      if (!sealed) return afterConnect("failed", taken.returnOrigin, shared);
       await ctx.runMutation(internal.recruiterMailbox.storeCredential, { companyId: taken.companyId, connectionId, sealedRefreshToken: sealed, scopes });
-      return afterConnect("connected", taken.returnOrigin);
+      return afterConnect("connected", taken.returnOrigin, shared);
     },
   }),
 });
@@ -248,7 +250,7 @@ http.route({
       const email = process.env.GOOGLE_PUBSUB_PUSH_SERVICE_ACCOUNT?.trim();
       const token = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
       if (!audience || !email || !token) return false;
-      return (await verifyOidc(token, await googleKeys(), { audience, email })) !== null;
+      return (await verifyOidc(token, await googleKeys(tokenKid(token)), { audience, email })) !== null;
     },
     handler: async (ctx, body) => {
       const message = pushData(body);

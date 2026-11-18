@@ -24,7 +24,8 @@ import { emailProvider } from "./lib/messaging/email";
 import { companyEmail } from "./lib/messaging/companyMail";
 import { composeNotice } from "./lib/notify/compose";
 import { suppressAfterProblem } from "./lib/notify/delivery";
-import { accessToken, googleApp, rawMessage, sendFromGmail } from "./lib/recruiter/gmail";
+import { accessToken, googleApp, rawMessage, replySubject, sendFromGmail, threadReplyHeaders } from "./lib/recruiter/gmail";
+import { inboxPurposeOf, routeFor, threadFor, WAITING_FOR_INBOX } from "./lib/inbox/mailboxes";
 import { MailboxAuthError } from "./lib/recruiter/mailbox";
 import { unseal } from "./lib/recruiter/secrets";
 import { messagingProvider } from "./lib/messaging/provider";
@@ -139,19 +140,7 @@ export const claim = internalMutation({
       }
       if (link && token) body = body.replace("{link}", `${siteOrigin()}${applicantLinkPath(link.purpose, token)}`);
       fromName = recruiterSettings(company!).fromName;
-      // A company that connected its own mailbox and allowed sending: the email goes from its own address.
-      if ((message.channel ?? "sms") === "email") {
-        const own = (
-          await ctx.db
-            .query("mailboxConnections")
-            .withIndex("by_company", (q) => q.eq("companyId", message.companyId))
-            .take(20)
-        ).find((row) => row.provider === "gmail" && row.canSend && row.status === "connected");
-        if (own) {
-          via = { connectionId: own._id, address: own.address };
-          await ctx.db.patch(message._id, { provider: "gmail" });
-        }
-      }
+      // Whether it goes from the company's own inbox is decided below, with every other message's.
     }
     if (message.purpose === "earnings_statement") {
       const statement = await statementClaim(ctx, message);
@@ -199,6 +188,20 @@ export const claim = internalMutation({
       via = sales.via;
     }
     const channel = message.channel ?? ("sms" as const);
+    // Which way it goes: the company's own inbox for this purpose, waiting for that inbox, or Selestial's
+    // shared sender (convex/lib/inbox/mailboxes.ts). One way only, decided here for every message.
+    let threadId: string | null = null;
+    const inboxPurpose = inboxPurposeOf(message);
+    if (inboxPurpose) {
+      const route = await routeFor(ctx, message.companyId, inboxPurpose);
+      if (route.kind === "wait") {
+        await ctx.db.patch(message._id, { status: "held", problem: route.words, refusal: WAITING_FOR_INBOX });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose, policy: WAITING_FOR_INBOX } });
+        return null;
+      }
+      via = route.kind === "gmail" ? { connectionId: route.connectionId, address: route.address } : null;
+      if (via) threadId = await threadFor(ctx, message, via.connectionId);
+    }
     // Email through Selestial's shared sender goes as "{Company} via Selestial", in the company's frame.
     let email: { from: string; html: string; text: string; headers: Record<string, string> } | null = null;
     if (channel === "email" && !via) {
@@ -216,7 +219,7 @@ export const claim = internalMutation({
     await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now(), provider });
     // A text goes from the company's own number. The send policy has already checked it is set and approved.
     const from = channel === "sms" ? ((await readProfile(ctx, message.companyId)).messaging.smsNumber ?? "") : "";
-    return { to: message.to, from, body, attempt, channel, subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName, via, email };
+    return { to: message.to, from, body, attempt, channel, subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName, via, email, threadId };
   },
 });
 
@@ -253,12 +256,13 @@ async function claimNotice(ctx: MutationCtx, message: Doc<"messages">) {
     fromName: "",
     via: null,
     email: { from: composed.from, html: composed.email.html, text: composed.email.text, headers: composed.headers },
+    threadId: null,
   };
 }
 
 const resultValidator = v.union(
   v.object({ ok: v.literal(true), providerMessageId: v.string(), delivered: v.boolean() }),
-  v.object({ ok: v.literal(false), retryable: v.boolean(), problem: v.string(), bounced: v.optional(v.boolean()) }),
+  v.object({ ok: v.literal(false), retryable: v.boolean(), problem: v.string(), bounced: v.optional(v.boolean()), waitForInbox: v.optional(v.boolean()) }),
 );
 
 export const settle = internalMutation({
@@ -275,6 +279,13 @@ export const settle = internalMutation({
       await recordEvent(ctx, { companyId: message.companyId, type: "message.sent", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempt: message.attempts } });
       if (result.delivered) await recordEvent(ctx, { companyId: message.companyId, type: "message.delivered", actor: { kind: "system" }, subject, data: { purpose: message.purpose } });
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "accepted");
+      return null;
+    }
+    // The company's inbox stopped letting Selestial send as it tried: nothing went, so the message waits
+    // for the inbox to be reconnected rather than failing or going another way.
+    if (result.waitForInbox) {
+      await ctx.db.patch(message._id, { status: "held", problem: result.problem, refusal: WAITING_FOR_INBOX });
+      await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: WAITING_FOR_INBOX } });
       return null;
     }
     if (result.retryable && message.attempts < MAX_ATTEMPTS && message.purpose !== "verification_code") {
@@ -302,8 +313,8 @@ async function sendThroughMailbox(
   ctx: ActionCtx,
   messageId: Id<"messages">,
   via: { connectionId: Id<"mailboxConnections">; address: string },
-  claimed: { to: string; body: string; subject: string; replyTo: string; fromName: string },
-): Promise<{ ok: true; providerMessageId: string; delivered: boolean } | { ok: false; retryable: boolean; problem: string }> {
+  claimed: { to: string; body: string; subject: string; replyTo: string; fromName: string; threadId: string | null },
+): Promise<{ ok: true; providerMessageId: string; delivered: boolean } | { ok: false; retryable: boolean; problem: string; waitForInbox?: boolean }> {
   const app = googleApp();
   const credential = await ctx.runQuery(internal.recruiterMailbox.credentialFor, { connectionId: via.connectionId });
   const refreshToken = credential ? await unseal(credential.sealedRefreshToken, via.connectionId) : null;
@@ -314,13 +325,28 @@ async function sendThroughMailbox(
   } catch (error) {
     if (error instanceof MailboxAuthError) {
       await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
-      return { ok: false, retryable: false, problem: "The company's mailbox no longer lets Selestial send. Reconnect it." };
+      return { ok: false, retryable: false, problem: `${via.address} no longer lets Selestial send. It's waiting until the inbox is reconnected.`, waitForInbox: true };
     }
     return { ok: false, retryable: true, problem: "Google did not answer." };
   }
-  const raw = rawMessage({ from: via.address, fromName: claimed.fromName, to: claimed.to, replyTo: claimed.replyTo || undefined, subject: claimed.subject, text: claimed.body, messageId });
-  const result = await sendFromGmail({ token, raw });
-  if (!result.ok && result.problem.startsWith("The company's mailbox no longer")) await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+  // A reply joins the person's own thread: Gmail needs the thread id and a matching subject, their mail
+  // program needs In-Reply-To and References. A thread that can't be found means a new conversation.
+  let reply: Awaited<ReturnType<typeof threadReplyHeaders>> = null;
+  if (claimed.threadId) {
+    try {
+      reply = await threadReplyHeaders({ token, threadId: claimed.threadId });
+    } catch {
+      await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+      return { ok: false, retryable: false, problem: `${via.address} no longer lets Selestial send. It's waiting until the inbox is reconnected.`, waitForInbox: true };
+    }
+  }
+  const subject = reply?.subject ? replySubject(reply.subject) : claimed.subject;
+  const raw = rawMessage({ from: via.address, fromName: claimed.fromName, to: claimed.to, replyTo: claimed.replyTo || undefined, subject, text: claimed.body, messageId, inReplyTo: reply?.inReplyTo, references: reply?.references });
+  const result = await sendFromGmail({ token, raw, threadId: reply ? claimed.threadId! : undefined });
+  if (!result.ok && result.problem.startsWith("The company's mailbox no longer")) {
+    await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+    return { ok: false, retryable: false, problem: `${via.address} no longer lets Selestial send. It's waiting until the inbox is reconnected.`, waitForInbox: true };
+  }
   return result;
 }
 
