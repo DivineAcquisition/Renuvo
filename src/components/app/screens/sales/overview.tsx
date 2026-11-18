@@ -55,7 +55,7 @@ function Measures({ measures }: { measures: Overview["measures"] }) {
               <li key={row.label} className="grid grid-cols-[9.5rem_1fr_auto] items-center gap-3 text-sm">
                 <span className="text-muted-foreground">{row.label}</span>
                 <span className="h-2 overflow-hidden rounded-full bg-muted" aria-hidden>
-                  <span className="block h-full rounded-full bg-brand-500" style={{ width: `${n === 0 ? 0 : Math.max(2, Math.round((row.value / n) * 100))}%` }} />
+                  <span className="block h-full rounded-full bg-brand-500" style={{ width: `${row.value === 0 ? 0 : Math.max(2, Math.round((row.value / n) * 100))}%` }} />
                 </span>
                 <span className="min-w-20 text-right font-medium text-strong tabular-nums">
                   {row.value}
@@ -140,7 +140,7 @@ export function SalesOverviewScreen() {
   const batchWaiting = !overview.firstBatch.decided ? overview.firstBatch.waiting : 0;
 
   const briefing = [
-    counts.open === 0 ? "No inquiry is open." : `${plural(counts.open, "open opportunity", "open opportunities")}: ${counts.newInquiries} new, ${counts.awaitingDetails} waiting on details, ${counts.quotesWithCustomer} with a quote in hand, ${counts.bookingPending} booking.`,
+    counts.open === 0 ? "No inquiry is open." : `${plural(counts.open, "open opportunity", "open opportunities")}: ${counts.needsYou} waiting on you, ${counts.awaitingDetails} waiting on details from the customer, ${counts.quotesWithCustomer} with a quote in the customer’s hands, ${counts.bookingPending} accepted and being booked.`,
     counts.followUpsDue > 0 ? `${plural(counts.followUpsDue, "follow-up")} due in the next day.` : null,
     overview.reader === "rules" ? null : "An AI reader reads customer messages; your rules decide everything that is sent, priced or booked.",
   ].filter((line): line is string => Boolean(line));

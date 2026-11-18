@@ -201,7 +201,7 @@ export function SalesPipelineScreen() {
                       event.preventDefault();
                       void drop(id);
                     }}
-                    className={cn("flex w-[17.5rem] shrink-0 snap-start flex-col rounded-2xl border bg-card transition-colors", stage ? "w-full max-w-xl" : "", over === id ? "border-brand-500 bg-brand-500/5" : "border-border")}
+                    className={cn("flex w-[15.5rem] shrink-0 snap-start flex-col rounded-2xl border bg-card transition-colors", stage ? "w-full max-w-xl" : "", over === id ? "border-brand-500 bg-brand-500/5" : "border-border")}
                   >
                     <header className="border-b border-border px-3.5 py-3" title={info?.entry}>
                       <p className="flex items-center justify-between gap-2 text-sm font-semibold text-strong">
@@ -211,7 +211,7 @@ export function SalesPipelineScreen() {
                         </span>
                         <span className="text-xs font-medium text-muted-foreground tabular-nums">{inColumn.length}</span>
                       </p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{value > 0 ? `${money(value)} quoted` : id === "new" || id === "qualifying" ? "Not quoted yet" : " "}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{value > 0 ? `${money(value)} quoted` : id === "new" || id === "qualifying" ? "Not quoted yet" : "\u00a0"}</p>
                     </header>
                     <ul className="grid min-h-24 content-start gap-2 p-2.5">
                       {inColumn.length === 0 ? <li className="px-1 py-3 text-xs text-muted-foreground">{id === "won" ? "A card lands here when a job is created." : "Nothing here."}</li> : null}

@@ -40,7 +40,7 @@ function Preview({ item, body, onBody, editing, disabled }: { item: Item; body: 
         {item.recipient.to ? ` (${item.recipient.to})` : ""}
         {item.recipient.channel ? ` by ${item.recipient.channel === "sms" ? "text" : "email"}` : ""}
       </p>
-      {item.subject ? <p className="text-xs font-semibold text-strong">Subject: {item.subject}</p> : null}
+      {item.subject && item.channel === "email" ? <p className="text-xs font-semibold text-strong">Subject: {item.subject}</p> : null}
       {editing ? (
         <TextArea value={body} onChange={(event) => onBody(event.target.value)} rows={5} disabled={disabled} aria-label={`Message to ${item.recipient.name}`} />
       ) : (

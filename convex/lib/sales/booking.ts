@@ -50,7 +50,7 @@ export type Readiness = {
 };
 
 export function whenWords(span: Span, timezone: string): string {
-  return `${dayName(span.startsAt, timezone)}, ${new Intl.DateTimeFormat("en-US", { timeZone: timezone, month: "short", day: "numeric" }).format(new Date(span.startsAt))} at ${clock(span.startsAt, timezone)}`;
+  return `${dayName(span.startsAt, timezone)} at ${clock(span.startsAt, timezone)}`;
 }
 
 async function customerAgreements(ctx: Ctx, opportunity: Doc<"salesOpportunities">): Promise<Doc<"agreements">[]> {
