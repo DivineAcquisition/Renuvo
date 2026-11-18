@@ -53,7 +53,7 @@ const hasPage = (concrete: string) => PAGES.some((pattern) => served(concrete, p
 const SPEC: Record<string, Record<string, string[]>> = {
   Growth: {
     Marketing: ["Campaigns", "Content & Creative", "Promotions", "Lead Sources", "Performance", "Playbook"],
-    Sales: ["Pipeline", "Quotes & Proposals", "Follow-ups", "Calls & Messages", "Booking Forms", "Playbook"],
+    Sales: ["Pipeline", "Quotes & Proposals", "Follow-ups", "Conversations", "Booking Forms", "Playbook"],
     Retention: ["Recurring Customers", "Customer Health", "Feedback & Reviews", "Recurring Offers", "Win-back", "Referrals", "Playbook"],
   },
   Operations: {
@@ -214,7 +214,7 @@ describe("what is available today", () => {
       for (const backendAgent of department.agents) expect(AGENTS.find((agent) => agent.backendAgent === backendAgent)?.department, backendAgent).toBe(department.id);
     }
     expect(BACKEND_DEPARTMENTS.flatMap((row) => row.agents).sort()).toEqual([...BACKEND_AGENTS].sort());
-    expect(AGENTS.filter((agent) => agent.workflow === "built").map((agent) => agent.id)).toEqual(["dispatch", "recruiter"]);
+    expect(AGENTS.filter((agent) => agent.workflow === "built").map((agent) => agent.id)).toEqual(["sales", "dispatch", "recruiter"]);
     // The plan carries no numbers or states of its own: badges get their values from the record.
     expect(JSON.stringify({ AGENTS, NAV_ITEMS })).not.toMatch(/"count"|"badge"|"status":"(working|active)"/);
   });

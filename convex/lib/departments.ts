@@ -28,7 +28,7 @@ export const AGENT_PROFILES: Record<Agent, { name: string; responsibility: strin
     name: "Sales",
     responsibility: "Inquiries, quotes, follow-ups and bookings.",
     completion: "A suitable booking the company can fulfill, a clear decline, or a documented next step.",
-    built: false,
+    built: true,
   },
   recruiter: {
     name: "Recruiter",

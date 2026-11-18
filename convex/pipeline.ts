@@ -17,6 +17,8 @@ import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { literals } from "./lib/statuses";
 import { openTask } from "./lib/taskState";
+import { quiet } from "./lib/sales/actions";
+import { handBackConversation, takeOverConversation, view } from "./lib/sales/agentOpportunity";
 import { MILESTONES, segmentValidator, STAGES } from "./lib/sales/schema";
 import { cents, optionalText, text } from "./lib/text";
 
@@ -36,6 +38,7 @@ export const MILESTONE_WORDS: Record<(typeof MILESTONES)[number], string> = {
   service_activated: "Service started",
   declined: "Declined",
   expired: "Expired",
+  deferred: "Deferred",
 };
 
 async function describe(ctx: { db: import("./_generated/server").QueryCtx["db"] }, row: Doc<"salesOpportunities">) {
@@ -63,6 +66,10 @@ async function describe(ctx: { db: import("./_generated/server").QueryCtx["db"] 
     followUps: row.followUps,
     source: row.source ?? null,
     draftId: draft?._id ?? null,
+    /** The Sales agent works this deal: it came in as an inquiry. */
+    agent: row.intake !== undefined,
+    /** Who owes the next step on a deal the agent works. */
+    nextBy: row.nextBy ?? null,
     updatedAt: row.updatedAt,
   };
 }
@@ -151,6 +158,9 @@ export const update = companyMutation({
     if (args.ownerMemberId) await owned(ctx, args.ownerMemberId);
     if ((args.stage === "lost" || args.stage === "won") && args.stage !== row.stage && args.stage === "lost" && !args.closedReason?.trim()) throw userError("Say why the deal was lost.");
     const closing = args.stage === "lost" || args.stage === "won";
+    // A deal the agent works: closing it by hand also ends the agent's reminders and drafts.
+    const agentDeal = row.intake ? view(row) : null;
+    if (agentDeal && closing) await quiet(ctx, agentDeal, "A person closed the deal.", byMember(ctx));
     await ctx.db.patch(row._id, {
       ...(args.stage ? { stage: args.stage } : {}),
       ...(args.ownerMemberId ? { ownerMemberId: args.ownerMemberId } : {}),
@@ -171,6 +181,13 @@ export const takeOver = companyMutation({
   handler: async (ctx, args) => {
     const row = await owned(ctx, args.opportunityId);
     if (row.followUps === "stopped") throw userError("This deal is closed.");
+    // A deal the Sales agent works: taking it over also stops the agent's reminders and drafts, and handing it back wakes the agent.
+    const agent = row.intake ? view(row) : null;
+    if (agent) {
+      if (args.resume) await handBackConversation(ctx, agent, ctx.member);
+      else await takeOverConversation(ctx, agent, ctx.member);
+      return null;
+    }
     await ctx.db.patch(row._id, { ownerMemberId: ctx.member._id, followUps: args.resume ? "on" : "paused", updatedAt: Date.now() });
     return null;
   },
@@ -186,6 +203,8 @@ export const sweep = internalMutation({
       .withIndex("by_followup_due", (q) => q.eq("followUps", "on").lte("nextActionAt", now))
       .take(100);
     for (const row of due) {
+      // A deal the Sales agent works keeps its own task and its own customer reminders (convex/lib/sales/agent.ts).
+      if (row.intake && row.nextBy !== "owner") continue;
       if (row.stage === "won" || row.stage === "lost") {
         await ctx.db.patch(row._id, { followUps: "stopped" });
         continue;

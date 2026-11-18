@@ -2,7 +2,7 @@
  * The deployment's HTTP endpoints. Only provider webhooks live here, each verified before it is read
  * (convex/lib/builders.ts `providerWebhook`).
  *
- * POST /webhooks/resend         delivery reports, bounces and complaints for email. Needs RESEND_WEBHOOK_SECRET.
+ * POST /webhooks/resend         delivery reports, bounces and complaints for email, and email that arrived for the Sales agent. Needs RESEND_WEBHOOK_SECRET.
  * POST /webhooks/telnyx         delivery reports for texts, and texts coming in. Needs TELNYX_PUBLIC_KEY.
  * POST /webhooks/autumn         plan, purchase and balance changes from Autumn. Needs AUTUMN_WEBHOOK_SECRET.
  * GET  /oauth/google/callback   where Google sends an Owner back after they allowed access: the company's
@@ -22,7 +22,7 @@ import { afterGoogle } from "./google";
 import { exchange as googleExchange, googleApp as googleConnectApp, identityFrom, redirectUri as googleConnectRedirect } from "./lib/google/oauth";
 import { endpoints as googleEndpoints } from "./lib/google/platform";
 import { googleKeys, pushData, verifyOidc } from "./lib/google/pubsub";
-import { verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
+import { receivedEmailId, verifyWebhook, webhookOutcome } from "./lib/messaging/resend";
 import { parseEvent, signingProvider, verifyBody } from "./lib/agreements/signing";
 import { photoRequestValid } from "./lib/dispatch/photoLinks";
 import { telnyxEvent, verifyTelnyx } from "./lib/messaging/telnyx";
@@ -40,6 +40,12 @@ http.route({
       return verifyWebhook({ secret, id: request.headers.get("svix-id"), timestamp: request.headers.get("svix-timestamp"), signature: request.headers.get("svix-signature"), body, now: Date.now() });
     },
     handler: async (ctx, body, request) => {
+      // An email that arrived for the Sales agent: the notice has no body, so the message is fetched and filed in the background.
+      const received = receivedEmailId(body);
+      if (received) {
+        await ctx.scheduler.runAfter(0, internal.salesInbound.fetch, { emailId: received });
+        return;
+      }
       const outcome = webhookOutcome(body);
       if (!outcome) return;
       // The same report delivered twice is recognised by its event id and changes nothing the second time.

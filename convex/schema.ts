@@ -23,6 +23,7 @@ import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
+import { salesSettingsValidator } from "./lib/sales/agentSchema";
 import { salesTables } from "./lib/sales/schema";
 import { servicesTables } from "./lib/services/schema";
 import {
@@ -84,6 +85,7 @@ export const aboutValidator = v.union(
   v.object({ table: v.literal("applications"), id: v.id("applications") }),
   v.object({ table: v.literal("mailboxConnections"), id: v.id("mailboxConnections") }),
   v.object({ table: v.literal("bookingSessions"), id: v.id("bookingSessions") }),
+  v.object({ table: v.literal("salesOpportunities"), id: v.id("salesOpportunities") }),
 );
 
 /**
@@ -122,6 +124,11 @@ export const proposalValidator = v.union(
   v.object({ kind: v.literal("plan_change"), planId: v.id("recurringPlans"), version: v.number() }),
   /** A proposal version with custom rates, approved as exactly that content. Decided by the Owner. */
   v.object({ kind: v.literal("proposal_rates"), proposalId: v.id("proposals"), version: v.number(), hash: v.string() }),
+  // The Sales agent (convex/lib/sales/agentApprovals.ts carries these out).
+  /** Send one message the agent prepared, as written, if the conversation has not moved on since. */
+  v.object({ kind: v.literal("sales_action"), actionId: v.id("salesActions") }),
+  /** Let a quote the agent prepared go to the customer: this exact quote at this exact total. */
+  v.object({ kind: v.literal("sales_quote"), quoteId: v.id("salesQuotes"), totalCents: v.number() }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -230,6 +237,8 @@ export default defineSchema({
     recruiter: v.optional(recruiterSettingsValidator),
     /** How the Cleaners workspace works for this company: follow-up rules and who decides personnel requests. */
     cleaners: v.optional(cleanersSettingsValidator),
+    /** The Sales Playbook: voice, what the agent handles, approved answers, follow-up timing, deposits and quote terms (convex/lib/sales/settings.ts). */
+    sales: v.optional(salesSettingsValidator),
     /** Where the company works, when appointments may be, and its services (convex/lib/settings/business.ts). */
     businessSettings: v.optional(businessSettingsValidator),
     /** Counts saves of the business settings, so a stale browser tab cannot overwrite a newer save. Absent means zero. */
@@ -652,6 +661,11 @@ export default defineSchema({
       v.literal("proposal_sent"),
       v.literal("signature_request"),
       v.literal("assessment_link"),
+      // The Sales agent, to a person who asked about service (convex/lib/sales/outbox.ts).
+      v.literal("sales_reply"),
+      v.literal("sales_quote"),
+      v.literal("sales_follow_up"),
+      v.literal("sales_booking"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -667,7 +681,9 @@ export default defineSchema({
      * Sales messages: the links the body carries as placeholders, made at the moment of sending from the
      * record each names, so no token is ever at rest and a closed record sends nothing.
      */
-    salesLinks: v.optional(v.array(v.object({ placeholder: v.string(), kind: v.union(v.literal("pay"), v.literal("proposal"), v.literal("sign"), v.literal("assess")), id: v.string() }))),
+    salesLinks: v.optional(v.array(v.object({ placeholder: v.string(), kind: v.union(v.literal("pay"), v.literal("proposal"), v.literal("sign"), v.literal("assess"), v.literal("quote")), id: v.string() }))),
+    /** A message in a Sales conversation: the opportunity it belongs to. */
+    opportunityId: v.optional(v.id("salesOpportunities")),
     /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
     customerId: v.optional(v.id("customers")),
     invoiceId: v.optional(v.id("invoices")),
@@ -715,6 +731,7 @@ export default defineSchema({
     .index("by_company_invoice", ["companyId", "invoiceId"])
     .index("by_company_cleaner", ["companyId", "cleanerId", "queuedAt"])
     .index("by_company_customer", ["companyId", "customerId", "queuedAt"])
+    .index("by_company_opportunity", ["companyId", "opportunityId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
 

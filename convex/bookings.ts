@@ -45,6 +45,8 @@ import { businessSettingsOf, checkArea } from "./lib/settings/business";
 import { openTask } from "./lib/taskState";
 import { optionalText } from "./lib/text";
 import { setMilestone } from "./sales";
+import { agentBookingConfirmed } from "./lib/sales/agentBooking";
+import { SALES, view, type Opp } from "./lib/sales/agentOpportunity";
 import { internalMutation } from "./_generated/server";
 
 type MemberCtx = MutationCtx & MemberAccess;
@@ -262,7 +264,8 @@ async function sendBookingRequest(ctx: MutationCtx, booking: Doc<"bookings">, ac
   if (booking.requirements.agreement.state !== "not_required") lines.push("", "We'll also send you the service agreement to review and sign.");
   if (booking.instructions?.customer) lines.push("", booking.instructions.customer);
   lines.push("", "Your booking is confirmed once everything above is done. We'll let you know.");
-  await queueSalesMessage(ctx, { company, customer, purpose: "booking_request", channel: channelFor(customer), subject: `Your booking with ${company.name}`, body: lines.join("\n"), links, dedupeKey: `booking-request:${booking._id}`, actor });
+  const opportunity = booking.opportunityId ? await ctx.db.get(booking.opportunityId) : null;
+  await queueSalesMessage(ctx, { company, customer, opportunity: opportunity ? view(opportunity) : null, purpose: "booking_request", channel: opportunity?.channel ?? channelFor(customer), subject: `Your booking with ${company.name}`, body: lines.join("\n"), links, dedupeKey: `booking-request:${booking._id}`, actor });
 }
 
 async function startAgreement(ctx: MemberCtx, booking: Doc<"bookings">, pricing: Awaited<ReturnType<typeof priceBooking>>, body: DraftBody): Promise<Id<"agreements">> {
@@ -394,7 +397,8 @@ export const handoff = internalMutation({
       await setMilestoneSystem(ctx, booking, "service_activated");
       const customer = (await ctx.db.get(booking.customerId))!;
       const when = new Intl.DateTimeFormat("en-US", { timeZone: company.timezone, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(booking.slot.startsAt));
-      await queueSalesMessage(ctx, { company, customer, purpose: "booking_confirmed", channel: channelFor(customer), subject: `Booked: ${when}`, body: `Hi ${customer.name.split(" ")[0] || "there"},\n\nYou're booked with ${company.name} for ${when}. We'll send a reminder before the visit.`, links: [], dedupeKey: `booking-confirmed:${booking._id}`, actor: { kind: "system" } });
+      const opportunity = booking.opportunityId ? await ctx.db.get(booking.opportunityId) : null;
+      await queueSalesMessage(ctx, { company, customer, opportunity: opportunity ? view(opportunity) : null, purpose: "booking_confirmed", channel: opportunity?.channel ?? channelFor(customer), subject: `Booked: ${when}`, body: `Hi ${customer.name.split(" ")[0] || "there"},\n\nYou're booked with ${company.name} for ${when}. We'll send a reminder before the visit.`, links: [], dedupeKey: `booking-confirmed:${booking._id}`, actor: { kind: "system" } });
     } catch (caught) {
       const problem = caught instanceof Error ? caught.message.slice(0, 300) : "The handoff failed.";
       await ctx.db.patch(booking._id, { handoff: { state: "failed", attempts, problem }, updatedAt: Date.now() });
@@ -407,7 +411,9 @@ async function setMilestoneSystem(ctx: MutationCtx, booking: Doc<"bookings">, mi
   if (!booking.opportunityId) return;
   const opportunity = await ctx.db.get(booking.opportunityId);
   if (!opportunity) return;
-  await ctx.db.patch(opportunity._id, { milestone, stage: "won", nextAction: undefined, nextActionAt: undefined, followUps: "stopped", updatedAt: Date.now() });
+  await ctx.db.patch(opportunity._id, { milestone, stage: "won", nextAction: undefined, nextActionAt: undefined, nextBy: undefined, followUps: "stopped", ...(opportunity.wonAt === undefined ? { wonAt: Date.now(), closedAt: Date.now() } : {}), updatedAt: Date.now() });
+  // A deal the Sales agent worked: its reminders end, its open drafts are set aside and its task closes as won.
+  if (opportunity.intake) await agentBookingConfirmed(ctx, opportunity._id);
 }
 
 /** A person confirms the booking. Refused, with what is missing, unless every requirement is met. */
@@ -655,3 +661,150 @@ export async function afterSalesExpiry(ctx: MutationCtx, approval: Doc<"approval
   if (!booking || booking.requirements.payment.approvalId !== approval._id) return;
   await patchRequirement(ctx, booking, "payment", { ...booking.requirements.payment, state: "link_needed", approvalId: undefined });
 }
+
+// ── The Sales agent's bookings ───────────────────────────────────────────────────────────────────
+
+export type AgentBooked = { ok: true; bookingId: Id<"bookings">; confirmed: boolean; blockers: string[] } | { ok: false; problem: string };
+
+/**
+ * The Sales agent books an accepted quote: the same request a person makes from the workspace, from the
+ * opportunity's draft, priced on the server again and checked against the area, hours and capacity. No
+ * member stands behind it, so what needs one waits for one: a payment link is asked of an Owner or
+ * Manager (as an Office member's would be), and a required agreement is prepared by a person from the
+ * booking. With nothing outstanding the booking confirms on its own and goes to Dispatch.
+ *
+ * Asked twice for the same draft revision, it answers with the booking it already made. Nothing here
+ * throws for a problem with the booking: the problem comes back in words, and nothing was written.
+ */
+export async function requestFromAgent(ctx: MutationCtx, company: Doc<"companies">, opportunity: Opp): Promise<AgentBooked> {
+  const draft = opportunity.draftId ? await ctx.db.get(opportunity.draftId) : null;
+  if (!draft || draft.companyId !== company._id || draft.mode !== "booking") return { ok: false, problem: "There is no booking draft for this request." };
+  const key = `agent:${draft._id}:${draft.revision}`;
+  const again = await ctx.db
+    .query("bookings")
+    .withIndex("by_company_key", (q) => q.eq("companyId", company._id).eq("idempotencyKey", key))
+    .unique();
+  if (again) return { ok: true, bookingId: again._id, confirmed: again.status === "confirmed", blockers: [] };
+  if (draft.bookingId) {
+    const existing = await ctx.db.get(draft.bookingId);
+    if (existing && existing.status !== "cancelled") return { ok: true, bookingId: existing._id, confirmed: existing.status === "confirmed", blockers: [] };
+  }
+  if (!draft.customerId || !draft.propertyId) return { ok: false, problem: "The service address is not on record yet." };
+  const customer = await ctx.db.get(draft.customerId);
+  const property = await ctx.db.get(draft.propertyId);
+  if (!customer || !property || property.customerId !== customer._id || property.companyId !== company._id) return { ok: false, problem: "The service address belongs to a different customer." };
+  try {
+    checkArea(businessSettingsOf(company), property.address.postalCode);
+  } catch (caught) {
+    return { ok: false, problem: caught instanceof Error ? caught.message : "The address is outside the service area." };
+  }
+  const body = draft.body as DraftBody;
+  const recurring = draft.bookingKind === "recurring";
+  if (recurring) {
+    const cadence = body.recurring?.cadence;
+    const problem = cadence ? cadenceProblem(cadence) : "How often the service repeats is not known.";
+    if (problem) return { ok: false, problem };
+  }
+  const pricing = await priceBooking(ctx, company, body, draft.bookingKind, property.address.postalCode);
+  if (!pricing.visit) return { ok: false, problem: "The service is no longer published." };
+  for (const priced of [pricing.visit, pricing.first]) {
+    if (!priced) continue;
+    if (priced.quote.outcome === "incomplete") return { ok: false, problem: `The price needs: ${priced.quote.missing.join(", ")}.` };
+    if (priced.quote.outcome === "walkthrough" || priced.quote.totalCents === null) return { ok: false, problem: priced.quote.reasons.join(" ") || "This needs a walkthrough before it can be booked." };
+  }
+  if (pricing.startsAt === null || pricing.endsAt === null || pricing.crew === null || pricing.firstCents === null) return { ok: false, problem: "No time has been chosen yet." };
+  if (pricing.startsAt < Date.now()) return { ok: false, problem: "The chosen time has already passed." };
+  // The price booked is the one the customer accepted. If the engine now says otherwise, a person decides.
+  const quote = opportunity.quoteId ? await ctx.db.get(opportunity.quoteId) : null;
+  if (quote && quote.status === "accepted" && (quote.first?.totalCents ?? quote.visit.totalCents) !== pricing.firstCents) return { ok: false, problem: "The price changed since the customer accepted the quote. Review it before booking." };
+  const capacity = await checkCapacity(ctx, company, { startsAt: pricing.startsAt, endsAt: pricing.endsAt }, pricing.crew);
+  if (capacity.state !== "fits" && capacity.state !== "tight") return { ok: false, problem: capacity.why || "The chosen time could not be confirmed as open." };
+  const policy = body.payment?.policy ?? "after_service";
+  const dueNow = policy === "deposit" || policy === "full" ? (pricing.dueNowCents ?? 0) : 0;
+  const saveOne = async (priced: PricedVisit) => {
+    const found = (await publishedByKey(ctx, company._id, priced.serviceKey))!;
+    return saveQuote(ctx, { companyId: company._id, service: found.service, version: found.version, quoteInput: priced.input, result: priced.quote, purpose: "sales", actor: SALES });
+  };
+  const serviceQuoteId = await saveOne(pricing.visit);
+  const firstQuoteId = pricing.first ? await saveOne(pricing.first) : null;
+  const now = Date.now();
+  const bookingId = await ctx.db.insert("bookings", {
+    companyId: company._id,
+    draftId: draft._id,
+    opportunityId: opportunity._id,
+    ...(quote ? { quoteId: quote._id } : {}),
+    customerId: customer._id,
+    propertyId: property._id,
+    kind: draft.bookingKind,
+    status: "requested",
+    idempotencyKey: key,
+    serviceKey: pricing.visit.serviceKey,
+    versionId: pricing.visit.versionId,
+    quoteInput: pricing.visit.input,
+    serviceQuoteId,
+    priceCents: recurring ? pricing.visit.quote.totalCents! : pricing.firstCents,
+    ...(pricing.first && firstQuoteId
+      ? { first: { serviceKey: pricing.first.serviceKey, versionId: pricing.first.versionId, quoteInput: pricing.first.input, serviceQuoteId: firstQuoteId, priceCents: pricing.firstCents } }
+      : recurring && pricing.firstCents !== pricing.visit.quote.totalCents
+        ? { first: { serviceKey: pricing.visit.serviceKey, versionId: pricing.visit.versionId, quoteInput: pricing.visit.input, serviceQuoteId, priceCents: pricing.firstCents } }
+        : {}),
+    slot: { startsAt: pricing.startsAt, endsAt: pricing.endsAt, arrivalWindowMinutes: Math.max(0, Math.min(body.schedule?.windowMinutes ?? 60, 720)), crew: pricing.crew, proposed: false },
+    ...(recurring && body.recurring?.cadence ? { recurring: { cadence: body.recurring.cadence, ...(body.recurring.endDate ? { endDate: body.recurring.endDate } : {}), billing: body.recurring.billing ?? "per_visit" } } : {}),
+    requirements: {
+      payment: { policy, dueNowCents: dueNow, state: dueNow > 0 ? "link_needed" : "not_required" },
+      agreement: { state: body.agreement?.required ? "to_send" : "not_required", ...(body.agreement?.required && body.agreement.docType ? { docType: body.agreement.docType } : {}) },
+      schedule: { state: "held" },
+    },
+    instructions: { customer: optionalText(body.notes?.customer, "Customer note", 2000), cleaner: optionalText(body.notes?.cleaner, "Access notes", 2000), office: optionalText(body.notes?.office, "Office note", 2000) },
+    handoff: { state: "not_started", attempts: 0 },
+    createdAt: now,
+    updatedAt: now,
+  });
+  let booking = (await ctx.db.get(bookingId))!;
+  const held = await holdCapacity(ctx, company, { bookingId, startsAt: booking.slot.startsAt, endsAt: booking.slot.endsAt, crew: booking.slot.crew });
+  if (!held.ok) throw new Error(held.answer.why);
+  await patchRequirement(ctx, booking, "schedule", { state: "held", holdId: held.holdId });
+  booking = (await ctx.db.get(bookingId))!;
+  // A payment link is a person's to send: an Owner or Manager is asked, as for an Office member's booking.
+  if (booking.requirements.payment.state === "link_needed") {
+    const approvalId = await requestApproval(ctx, {
+      companyId: company._id,
+      action: "sales.reply_and_quote",
+      summary: `Send ${customer.name} a payment link for ${formatCents(booking.requirements.payment.dueNowCents)}`,
+      reason: `${customer.name} accepted the Sales agent's quote and chose a time. Your Playbook asks for ${booking.requirements.payment.policy === "deposit" ? "a deposit" : "payment"} before the booking is confirmed.`,
+      decideBy: Math.min(now + DAY, booking.slot.startsAt),
+      authorizes: "Issuing the booking's invoice at its server-calculated price and sending the customer its secure payment link.",
+      ifWaiting: "The link isn't sent and the booking can't be confirmed.",
+      proposal: { kind: "sales_payment_link", bookingId },
+      about: { table: "salesOpportunities", id: opportunity._id },
+    });
+    await patchRequirement(ctx, booking, "payment", { ...booking.requirements.payment, state: "approval_needed", approvalId });
+  }
+  await ctx.db.patch(draft._id, { bookingId, status: "requested", updatedAt: Date.now() });
+  await ctx.db.patch(opportunity._id, { bookingId, updatedAt: Date.now() });
+  await recordEvent(ctx, { companyId: company._id, type: "booking.requested", actor: SALES, subject: { table: "bookings", id: bookingId }, data: { kind: draft.bookingKind, firstCents: pricing.firstCents, proposed: false, by: "agent" } });
+  const status = await refreshStatus(ctx, bookingId, SALES);
+  return { ok: true, bookingId, confirmed: status.confirmed, blockers: status.blockers };
+}
+
+/**
+ * A person prepares the service agreement for a booking that needs one and has none yet (the Sales
+ * agent's bookings: an agreement is drafted under a person's authority). Started from the company's
+ * terms with what the booking knows, then reviewed and sent like any other.
+ */
+export const prepareAgreement = companyMutation({
+  args: { bookingId: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const booking = await owned(ctx, args.bookingId);
+    if (booking.status === "cancelled" || booking.status === "confirmed") throw userError("This booking is no longer waiting for an agreement.");
+    if (booking.requirements.agreement.state === "not_required") throw userError("This booking does not need an agreement.");
+    if (booking.requirements.agreement.agreementId) return booking.requirements.agreement.agreementId;
+    const draft = await owned(ctx, booking.draftId);
+    const property = await owned(ctx, booking.propertyId);
+    const body = draft.body as DraftBody;
+    const pricing = await priceBooking(ctx, ctx.company, body, booking.kind, property.address.postalCode);
+    const agreementId = await startAgreement(ctx, booking, pricing, body);
+    await patchRequirement(ctx, booking, "agreement", { ...booking.requirements.agreement, state: "to_send", agreementId });
+    return agreementId;
+  },
+});

@@ -73,5 +73,7 @@ crons.interval("sales bookings sweep", { minutes: 10 }, internal.bookings.sweep,
 crons.interval("recurring plans make their visits", { hours: 6 }, internal.plans.sweep, {});
 crons.interval("proposals past their expiry", { hours: 1 }, internal.proposals.sweep, {});
 crons.interval("sales follow-up reminders", { minutes: 30 }, internal.pipeline.sweep, {});
+// The Sales agent: runs that never finished, overdue next steps, expired quotes, and reminders whose timer was lost.
+crons.interval("sales agent picks up what a missed trigger left", { minutes: 5 }, internal.salesAgent.sweep, {});
 
 export default crons;

@@ -12,7 +12,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, type ActionCtx, type MutationCtx } from "./_generated/server";
 import { readProfile } from "./lib/compliance/profile";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
-import { salesClaim } from "./lib/sales/outbox";
+import { afterSalesMessage, salesClaim } from "./lib/sales/outbox";
 import { customerClaim } from "./lib/finance/outbox";
 import { bookingClaim } from "./lib/booking/messages";
 import { statementClaim } from "./lib/finance/cleanerOutbox";
@@ -174,10 +174,11 @@ export const claim = internalMutation({
       fromName = booking.fromName;
     } else if (message.salesLinks) {
       // A Sales message to a customer: every record it links still open, and its links made only now.
-      const sales = await salesClaim(ctx, message);
+      const sales = await salesClaim(ctx, message, (await intentOf(ctx, message)).agent !== undefined);
       if ("problem" in sales) {
         await ctx.db.patch(message._id, { status: "not_sent", problem: sales.problem });
         await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "not_sent", problem: sales.problem });
         return null;
       }
       body = sales.body;
@@ -222,6 +223,7 @@ export const settle = internalMutation({
     await recordEvent(ctx, { companyId: message.companyId, type: result.bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem: result.problem });
+    else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "failed", problem: result.problem });
     return null;
   },
 });
@@ -321,6 +323,7 @@ export const receipt = internalMutation({
     await recordEvent(ctx, { companyId: message.companyId, type: bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem });
+    else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "failed", problem });
     return "failed" as const;
   },
 });
@@ -339,6 +342,7 @@ export const sweepStuck = internalMutation({
       await recordEvent(ctx, { companyId: message.companyId, type: "message.unconfirmed", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
       else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "unconfirmed", problem });
+    else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "unconfirmed", problem });
     }
     return stuck.length;
   },

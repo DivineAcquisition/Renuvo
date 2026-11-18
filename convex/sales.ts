@@ -124,8 +124,8 @@ export const drafts = companyQuery({
     for (const row of rows) {
       if (row.status === "archived") continue;
       const customer = row.customerId ? await ctx.db.get(row.customerId) : null;
-      const by = await ctx.db.get(row.updatedBy);
-      out.push({ _id: row._id, mode: row.mode, segment: row.segment, bookingKind: row.bookingKind, status: row.status, customer: customer?.name ?? null, updatedAt: row.updatedAt, by: by?.name ?? null, bookingId: row.bookingId ?? null, proposalId: row.proposalId ?? null, quoteId: row.quoteId ?? null });
+      const by = row.updatedBy ? await ctx.db.get(row.updatedBy) : null;
+      out.push({ _id: row._id, mode: row.mode, segment: row.segment, bookingKind: row.bookingKind, status: row.status, customer: customer?.name ?? null, updatedAt: row.updatedAt, by: by?.name ?? (row.updatedBy ? null : "Sales agent"), bookingId: row.bookingId ?? null, proposalId: row.proposalId ?? null, quoteId: row.quoteId ?? null });
     }
     return out;
   },
@@ -142,8 +142,8 @@ export const draft = companyQuery({
           .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
           .take(50)
       : [];
-    const creator = await ctx.db.get(draft.createdBy);
-    const editor = await ctx.db.get(draft.updatedBy);
+    const creator = draft.createdBy ? await ctx.db.get(draft.createdBy) : null;
+    const editor = draft.updatedBy ? await ctx.db.get(draft.updatedBy) : null;
     const opportunity = draft.opportunityId ? await ctx.db.get(draft.opportunityId) : null;
     const catalog = (await publishedCatalog(ctx, ctx.companyId))
       .filter((row) => row.service.status === "active")
@@ -153,8 +153,8 @@ export const draft = companyQuery({
       customer,
       properties: properties.filter((p) => p.status === "active"),
       opportunity: opportunity ? { _id: opportunity._id, title: opportunity.title, milestone: opportunity.milestone ?? null, stage: opportunity.stage } : null,
-      createdBy: creator?.name ?? "A team member",
-      updatedBy: editor?.name ?? "A team member",
+      createdBy: creator?.name ?? (draft.createdBy ? "A team member" : "Sales agent"),
+      updatedBy: editor?.name ?? (draft.updatedBy ? "A team member" : "Sales agent"),
       catalog,
       timezone: ctx.company.timezone,
       role: ctx.role,
@@ -532,9 +532,9 @@ export const quotes = companyQuery({
     const out = [];
     for (const row of rows) {
       const customer = await ctx.db.get(row.customerId);
-      const by = await ctx.db.get(row.createdBy);
+      const by = row.createdBy ? await ctx.db.get(row.createdBy) : null;
       const status = (row.status === "saved" || row.status === "sent") && row.expiresAt < now ? ("expired" as const) : row.status;
-      out.push({ _id: row._id, draftId: row.draftId, customer: customer?.name ?? "Customer", kind: row.kind, status, totalCents: row.visit.totalCents, firstCents: row.first?.totalCents ?? null, service: (row.snapshot as { service?: string })?.service ?? row.visit.serviceKey, cadence: (row.snapshot as { cadence?: string | null })?.cadence ?? null, expiresAt: row.expiresAt, createdAt: row.createdAt, by: by?.name ?? null });
+      out.push({ _id: row._id, draftId: row.draftId, customer: customer?.name ?? "Customer", kind: row.kind, status, totalCents: row.visit.totalCents, firstCents: row.first?.totalCents ?? null, service: (row.snapshot as { service?: string })?.service ?? row.visit.serviceKey, cadence: (row.snapshot as { cadence?: string | null })?.cadence ?? null, expiresAt: row.expiresAt, createdAt: row.createdAt, by: by?.name ?? (row.createdBy ? null : "Sales agent") });
     }
     return out;
   },
