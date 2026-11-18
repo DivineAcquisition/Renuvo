@@ -173,6 +173,8 @@ export const clientsTables = {
   inboundMessages: defineTable({
     companyId: v.id("companies"),
     customerId: v.optional(v.id("customers")),
+    /** The contact whose number it came from. Absent: the client's own number. */
+    contactId: v.optional(v.id("clientContacts")),
     channel: v.union(v.literal("sms"), v.literal("email")),
     from: v.string(),
     body: v.string(),

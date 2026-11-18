@@ -626,6 +626,8 @@ export default defineSchema({
       v.literal("availability_check"),
       v.literal("idle_check_in"),
       v.literal("verification_code"),
+      // Clients & Properties, to a client: a message a person wrote, now or scheduled (convex/clientConversations.ts).
+      v.literal("customer_message"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -646,6 +648,14 @@ export default defineSchema({
     /** A Cleaners portal or task link the message carries. */
     portalLinkId: v.optional(v.id("portalLinks")),
     followUpId: v.optional(v.id("followUps")),
+    /** Client messages: the contact it went to (absent: the client's own phone or email), who wrote it, and what it is about. */
+    contactId: v.optional(v.id("clientContacts")),
+    authorId: v.optional(v.id("members")),
+    /** "agent": an agent drafted it and a person approved it. Agent follow-ups stop when the client replies or a person takes over. */
+    draftedBy: v.optional(v.union(v.literal("person"), v.literal("agent"))),
+    about: v.optional(v.object({ table: v.string(), id: v.string(), label: v.string() })),
+    /** A follow-up planned for later: held until then, and asked the sending policy again when it is due. */
+    scheduledFor: v.optional(v.number()),
     /** Where on the cleaner pages the link opens, for example "/delay". */
     linkPath: v.optional(v.string()),
     to: v.optional(v.string()),
