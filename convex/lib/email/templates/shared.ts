@@ -95,10 +95,11 @@ export const ROLE_WORDS = { owner: "the Owner", manager: "a Manager", office: "a
 export type MemberRole = keyof typeof ROLE_WORDS;
 
 /** The footer of a notification to a member: why they got it and where to change it. */
-export function memberFooter(input: { origin?: string | null; companyName: string; role: MemberRole; because?: string; essential?: boolean }): Footer {
+export function memberFooter(input: { origin?: string | null; companyName: string; role: MemberRole; because?: string; essential?: boolean; unsubscribeUrl?: string | null }): Footer {
   const company = oneLine(input.companyName);
   const reason = input.essential
     ? `You're getting this because you're ${ROLE_WORDS[input.role]} of ${company}. Security and account notices are always sent.`
     : `You're getting this because you're ${ROLE_WORDS[input.role]} of ${company}${input.because ? ` and ${input.because}` : ""}.`;
-  return { reason, preferencesUrl: appLink(input.origin, "/app/settings/notifications") };
+  // Security and account notices never carry an unsubscribe link, whatever is passed.
+  return { reason, preferencesUrl: appLink(input.origin, "/app/settings/notifications"), unsubscribeUrl: input.essential ? null : (input.unsubscribeUrl ?? null) };
 }

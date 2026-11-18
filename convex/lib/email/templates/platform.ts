@@ -8,7 +8,7 @@
 import { action, agentStatus, alert, checklist, digestSection, divider, eyebrow, facts, lead, oneLine, paragraph, renderEmail, stats, textLink, title, type Block } from "../kit";
 import { AGENT_FACES, appLink, count, dayOf, emailAssets, firstName, listWords, memberFooter, money, timeOf, when, type AgentId, type Email, type MemberRole } from "./shared";
 
-type Recipient = { origin?: string | null; companyName: string; timezone?: string; role: MemberRole };
+type Recipient = { origin?: string | null; companyName: string; timezone?: string; role: MemberRole; unsubscribeUrl?: string | null };
 
 function platform(origin: string | null | undefined) {
   return { kind: "platform" as const, markUrl: emailAssets(origin).mark };
@@ -324,4 +324,38 @@ export function memberInvitationEmail(input: { origin?: string | null; companyNa
     footer: { reason: "If you did not expect this invitation, you can ignore this email. Nothing happens unless you accept." },
   });
   return { subject: `${inviter} invited you to ${company} on Selestial`, preheader: invited, html, text };
+}
+
+// ── A short alert ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A notice that needs no template of its own: credits running out, a customer's payment failing. A
+ * heading, what happened, the facts, and the one place to deal with it.
+ */
+export function alertEmail(input: Recipient & {
+  eyebrow: string;
+  subject: string;
+  heading: string;
+  body: string;
+  tone: "warning" | "danger" | "info";
+  note?: string | null;
+  facts?: { label: string; value: string | null }[];
+  button: { label: string; path: string };
+  essential?: boolean;
+  because?: string;
+}): Email {
+  return finish({
+    origin: input.origin,
+    subject: input.subject,
+    preheader: input.body,
+    blocks: [
+      eyebrow(`${input.eyebrow} · ${oneLine(input.companyName)}`),
+      title(input.heading),
+      lead(input.body),
+      facts(input.facts ?? []),
+      input.note ? alert({ tone: input.tone, title: input.note }) : { html: "", text: "" },
+      action({ label: input.button.label, url: appLink(input.origin, input.button.path) ?? "" }),
+    ],
+    footer: memberFooter({ ...input, essential: input.essential, because: input.because }),
+  });
 }

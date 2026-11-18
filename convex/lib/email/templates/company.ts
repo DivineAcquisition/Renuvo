@@ -187,3 +187,35 @@ export function conversationEmail(input: { paragraphs: string[]; link?: { label:
   const text = `${[...lines, link?.text ?? "", sig.join("\n")].filter(Boolean).join("\n\n")}\n`;
   return { html, text };
 }
+
+// ── A company's written message ──────────────────────────────────────────────────────────────────
+
+const URL_IN_TEXT = /https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
+
+/** One paragraph of a person's text: escaped, line breaks kept, and web addresses made into links. */
+function letterParagraph(text: string): Block {
+  let html = "";
+  let last = 0;
+  for (const match of text.matchAll(URL_IN_TEXT)) {
+    const url = match[0];
+    html += escapeHtml(text.slice(last, match.index));
+    html += `<a href="${escapeHtml(url)}" target="_blank" style="color:${TOKENS.violetDeep};text-decoration:underline;word-break:break-all;" class="sx-link">${escapeHtml(url)}</a>`;
+    last = (match.index ?? 0) + url.length;
+  }
+  html += escapeHtml(text.slice(last));
+  return { html: `<p style="margin:0;font-family:${FONT};font-size:15px;line-height:24px;color:${TOKENS.text};" class="sx-text">${html.replace(/\n/g, "<br>")}</p>`, text };
+}
+
+/**
+ * A message a company's team or agent wrote (an invoice, a reminder, a reply), set in the company's own
+ * frame: its name or logo on top, the words as written, and a footer saying it was sent via Selestial.
+ * Nothing is added to what they wrote.
+ */
+export function companyLetter(input: { brand: CompanyBrand; text: string; reason: string; preheader?: string }): { html: string; text: string } {
+  const paragraphs = input.text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const first = paragraphs.find((p) => !/https?:\/\//.test(p)) ?? paragraphs[0] ?? "";
+  const { html } = renderEmail({ identity: identity(input.brand), preheader: input.preheader ?? first.slice(0, 140), blocks: paragraphs.map(letterParagraph), footer: { reason: input.reason } });
+  // The plain-text version is exactly what they wrote, with the footer.
+  const footer = `${oneLine(input.reason)}\n${oneLine(input.brand.name)} · sent via Selestial${input.brand.address ? ` · ${oneLine(input.brand.address)}` : ""}`;
+  return { html, text: `${paragraphs.join("\n\n")}\n\n—\n\n${footer}\n` };
+}

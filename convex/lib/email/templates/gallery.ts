@@ -151,7 +151,7 @@ export const PREVIEWS: readonly Preview[] = [
     id: "booking",
     name: "Booking confirmation",
     kind: "company",
-    from: `"${COMPANY} via Selestial" <sparkle-shine@mail.selestial.io>`,
+    from: `"${COMPANY} via Selestial" <messages@mail.selestial.io>`,
     when: "When a customer books, or the office confirms a booking request.",
     category: "Sent to the customer",
     render: () =>
@@ -178,7 +178,7 @@ export const PREVIEWS: readonly Preview[] = [
     id: "proposal",
     name: "Proposal delivery",
     kind: "company",
-    from: `"${COMPANY} via Selestial" <sparkle-shine@mail.selestial.io>`,
+    from: `"${COMPANY} via Selestial" <messages@mail.selestial.io>`,
     when: "When the office (or Sales, with approval) sends a proposal.",
     category: "Sent to the customer",
     render: () =>
@@ -202,7 +202,7 @@ export const PREVIEWS: readonly Preview[] = [
     id: "applicant",
     name: "Applicant invitation",
     kind: "company",
-    from: `"${COMPANY} Hiring Team via Selestial" <sparkle-shine@mail.selestial.io>`,
+    from: `"${COMPANY} Hiring Team via Selestial" <messages@mail.selestial.io>`,
     when: "When Recruiter (or the office) invites an applicant to the next step.",
     category: "Sent to the applicant",
     render: () =>

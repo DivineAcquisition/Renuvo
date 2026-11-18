@@ -10,11 +10,14 @@
  * POST /webhooks/google/calendar  Calendar push notifications, checked against each channel's own secret token.
  * POST /webhooks/google/pubsub    Gmail and Business Profile notifications through Pub/Sub, with Google's signed OIDC token.
  * POST /webhooks/google/leads     Google Ads lead form leads, with the company's lead key.
+ * POST /notify/unsubscribe       a mail program's own Unsubscribe button on a notice (List-Unsubscribe-Post), with the signed token.
+ * GET  /notify/unsubscribe       the same address opened in a browser: sent on to the app's page, which asks first.
  */
 import { httpRouter } from "convex/server";
 
 import { internal } from "./_generated/api";
-import { oauthCallback, providerWebhook, signedFileRoute } from "./lib/builders";
+import { oauthCallback, oneClickUnsubscribe, providerWebhook, signedFileRoute } from "./lib/builders";
+import { siteOrigin } from "./lib/dispatch/links";
 import { exchangeCode, googleApp } from "./lib/recruiter/gmail";
 import { hashToken, seal } from "./lib/recruiter/secrets";
 import { afterConnect, googleRedirectUri } from "./recruiterMailbox";
@@ -53,6 +56,15 @@ http.route({
     },
   }),
 });
+
+const unsubscribeRoute = oneClickUnsubscribe({
+  post: async (ctx, token) => {
+    await ctx.runMutation(internal.notifications.oneClick, { token });
+  },
+  page: (token) => `${siteOrigin()}/n/unsubscribe#${token}`,
+});
+http.route({ path: "/notify/unsubscribe", method: "POST", handler: unsubscribeRoute });
+http.route({ path: "/notify/unsubscribe", method: "GET", handler: unsubscribeRoute });
 
 /**
  * Autumn tells Selestial something changed for a customer. The body only says who; the record itself is

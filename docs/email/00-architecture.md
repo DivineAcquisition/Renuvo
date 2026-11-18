@@ -118,7 +118,7 @@ Rules that apply to all three:
 | Identity | From | Reply-To | Used for | Domain status |
 |---|---|---|---|---|
 | Selestial | `Selestial <notify@notify.selestial.io>` | `PLATFORM_REPLY_TO` (a monitored Selestial inbox) or none | Every platform notification: welcome, security, approvals, escalations, digest, billing, inbox problems, member invitations | Verified |
-| Company, via Selestial | `"{Company} via Selestial" <{company-slug}@mail.selestial.io>` | Company's reply address, or a signed `r-…@reply.selestial.io` when the reply should come back into Selestial | Bookings, proposals, quotes, invoices, portal invites, statements, applicant mail when no Gmail is connected | Verified |
+| Company, via Selestial | `"{Company} via Selestial" <COMPANY_EMAIL_FROM>` (one configured address on `mail.selestial.io`) | Company's reply address, or a signed `r-…@reply.selestial.io` when the reply should come back into Selestial | Bookings, proposals, quotes, invoices, portal invites, statements, applicant mail when no Gmail is connected | Verified |
 | Replies into Selestial | `r-{128-bit key}@reply.selestial.io` (receiving only) | — | Sales today; client and finance threads next | Verified; receiving MX present |
 | Selestial marketing | `Selestial <news@updates.selestial.io>` | — | Product news, opt-in only, never mixed with notices | Verified (not used yet) |
 | Auth | `auth.selestial.io` | — | **Not used.** Clerk keeps sending sign-in mail with Selestial's design. | Verified (kept for later) |

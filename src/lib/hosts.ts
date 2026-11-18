@@ -110,7 +110,8 @@ export function roleOfPath(pathname: string): PathRole {
   if (path === "/robots.txt" || path === "/icon.svg" || path === "/favicon.ico") return "shared";
   if (under(path, "/.well-known") || under(path, "/__clerk")) return "shared";
   if (under(path, "/app") || under(path, "/staff") || isAuthPath(path)) return "app";
-  if (under(path, "/c") || under(path, "/b")) return "link";
+  // Link pages need no sign-in: cleaner links (/c), booking (/b) and notice unsubscribe pages (/n).
+  if (under(path, "/c") || under(path, "/b") || under(path, "/n")) return "link";
   return "public";
 }
 

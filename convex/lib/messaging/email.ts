@@ -7,7 +7,21 @@
 import { emailProvider as sharedEmailProvider } from "../email/provider";
 import type { SendResult } from "./provider";
 
-export type EmailInput = { to: string; fromName: string; replyTo: string; subject: string; text: string; idempotencyKey: string; attempt: number };
+export type EmailInput = {
+  to: string;
+  fromName: string;
+  replyTo: string;
+  subject: string;
+  text: string;
+  idempotencyKey: string;
+  attempt: number;
+  /** A whole From from the sender registry (convex/lib/email/senders.ts). Without it, the old name-on-address From. */
+  from?: string;
+  /** The designed HTML. Without it, the text as simple HTML. */
+  html?: string;
+  /** List-Unsubscribe and the like, checked by the shared provider. */
+  headers?: Record<string, string>;
+};
 
 export type EmailResult = SendResult | { ok: false; retryable: false; problem: string; bounced: true };
 
@@ -68,7 +82,16 @@ export function emailProvider(): EmailProvider | null {
       // Until a company connects its own mailbox, applicant email goes from RECRUITER_EMAIL_FROM (for example
       // noreply@mail.selestial.io) under the company's name, with replies to the company's hiring inbox.
       const fromAddress = process.env.RECRUITER_EMAIL_FROM?.trim().toLowerCase() || undefined;
-      const result = await shared.send({ to: input.to, subject: input.subject, text: input.text, html: plainHtml(input.text), idempotencyKey: input.idempotencyKey, fromName: input.fromName, replyTo: input.replyTo, fromAddress });
+      const result = await shared.send({
+        to: input.to,
+        subject: input.subject,
+        text: input.text,
+        html: input.html ?? plainHtml(input.text),
+        idempotencyKey: input.idempotencyKey,
+        ...(input.from ? { from: input.from } : { fromName: input.fromName, fromAddress }),
+        replyTo: input.replyTo || undefined,
+        ...(input.headers && Object.keys(input.headers).length ? { headers: input.headers } : {}),
+      });
       // The provider took it. Whether it arrived comes later, from the webhook (convex/http.ts).
       return result.ok ? { ok: true, providerMessageId: result.providerMessageId, delivered: false } : result;
     },

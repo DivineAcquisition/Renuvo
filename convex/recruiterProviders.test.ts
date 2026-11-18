@@ -88,7 +88,10 @@ describe("Resend's webhook signature", () => {
     expect(await check({ secret: "not-a-secret" })).toBe(false);
     expect(webhookOutcome(body)).toEqual({ providerMessageId: "re_123", outcome: "bounced" });
     expect(webhookOutcome(JSON.stringify({ type: "email.delivered", data: { email_id: "re_9" } }))).toEqual({ providerMessageId: "re_9", outcome: "delivered" });
-    expect(webhookOutcome(JSON.stringify({ type: "email.complained", data: { email_id: "re_9" } }))?.outcome).toBe("bounced");
+    // A complaint is kept apart from a bounce: the address works, the person called the mail spam.
+    expect(webhookOutcome(JSON.stringify({ type: "email.complained", data: { email_id: "re_9" } }))?.outcome).toBe("complained");
+    expect(webhookOutcome(JSON.stringify({ type: "email.suppressed", data: { email_id: "re_9" } }))?.outcome).toBe("suppressed");
+    expect(webhookOutcome(JSON.stringify({ type: "email.delivery_delayed", data: { email_id: "re_9" } }))?.outcome).toBe("delayed");
     expect(webhookOutcome(JSON.stringify({ type: "email.opened", data: { email_id: "re_9" } }))).toBeNull();
     expect(webhookOutcome("not json")).toBeNull();
   });
