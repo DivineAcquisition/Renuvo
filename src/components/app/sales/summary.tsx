@@ -77,7 +77,7 @@ export function BookingSummary({ data, working, summary, saving }: { data: Draft
           <p id="summary-title" className="flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase opacity-90">
             <Sparkles aria-hidden className="size-3.5" /> Live quote {saving ? <span className="font-normal normal-case opacity-80">· updating</span> : null}
           </p>
-          <p className="mt-1 truncate text-sm opacity-95">{summary.visit ? summary.visit.name : "No service chosen"}</p>
+          <p className="mt-1 truncate text-sm opacity-95">{summary.first && summary.visit ? `${summary.first.name}, then ${summary.visit.name}` : summary.visit ? summary.visit.name : "No service chosen"}</p>
           <p className="truncate text-xs opacity-80">{property ? `${property.address.line1}, ${property.address.city}` : "No address yet"}</p>
           <p className="mt-3 font-heading text-3xl tracking-tight tabular-nums" aria-live="polite">
             {summary.firstCents !== null ? money(summary.firstCents) : summary.visit?.outcome === "walkthrough" ? "Walkthrough" : "—"}

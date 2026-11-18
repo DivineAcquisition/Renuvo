@@ -28,6 +28,10 @@ export type SaveState = { kind: "saved"; at: number } | { kind: "saving" } | { k
 
 const SAVE_DELAY_MS = 700;
 
+function fromServer(data: DraftData): Working {
+  return { mode: data.draft.mode, segment: data.draft.segment, bookingKind: data.draft.bookingKind, customerId: data.draft.customerId ?? null, propertyId: data.draft.propertyId ?? null, body: (data.draft.body ?? {}) as DraftBody };
+}
+
 /**
  * The draft as the person is editing it, autosaved a moment after they stop typing. The server's revision
  * guards against two windows overwriting each other; a change made by an action (for example a customer
@@ -36,12 +40,14 @@ const SAVE_DELAY_MS = 700;
 export function useDraft(companyId: Id<"companies">, draftId: Id<"salesDrafts">) {
   const data = useQuery(api.sales.draft, { companyId, draftId });
   const save = useMutation(api.sales.saveDraft);
-  const [working, setWorking] = useState<Working | null>(null);
-  const [state, setState] = useState<SaveState>({ kind: "saved", at: 0 });
-  const revision = useRef<number>(-1);
+  // When the draft is already loaded (for example from the cache) it is used from the first render.
+  const initial = data ? fromServer(data) : null;
+  const [working, setWorking] = useState<Working | null>(initial);
+  const [state, setState] = useState<SaveState>({ kind: "saved", at: data?.draft.updatedAt ?? 0 });
+  const revision = useRef<number>(data ? data.draft.revision : -1);
   const dirty = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latest = useRef<Working | null>(null);
+  const latest = useRef<Working | null>(initial);
   const again = useRef<() => void>(() => undefined);
 
   // Adopt the server's copy on first load, and whenever it moved on while nothing local is pending.
