@@ -155,7 +155,12 @@ export const overview = companyQuery({
     const responseMinutes = cohort.filter((row) => row.firstResponseAt !== undefined).map((row) => (row.firstResponseAt! - (row.receivedAt ?? row.createdAt)) / 60_000).sort((a, b) => a - b);
     let quotedValueCents = 0;
     let bookedValueCents = 0;
+    let collectedCents = 0;
     for (const row of cohort) {
+      // Money actually received on this inquiry's booking, from Finance's ledger. Not quoted, not booked: paid.
+      const booking = row.bookingId ? await ctx.db.get(row.bookingId) : null;
+      const invoice = booking?.invoiceId ? await ctx.db.get(booking.invoiceId) : null;
+      if (invoice && invoice.companyId === ctx.companyId && invoice.status !== "void") collectedCents += Math.max(0, invoice.totals.paidCents - invoice.totals.refundedCents);
       const quote = row.quoteId ? await ctx.db.get(row.quoteId) : null;
       if (!quote) continue;
       if (quote.sentAt !== undefined) quotedValueCents += quoteTotal(quote);
@@ -202,6 +207,8 @@ export const overview = companyQuery({
         bookings: cohort.filter((row) => row.stage === "won").length,
         quotedValueCents,
         bookedValueCents,
+        // Money received is Finance's, which only the Owner reads.
+        collectedCents: isOwner(ctx.role) ? collectedCents : null,
         lost: [...lost.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
         withPersonInvolved: cohort.filter((row) => (row.humanTouches ?? 0) > 0).length,
         messagesSent: salesMessages.filter((row) => row.status === "sent" || row.status === "delivered").length,

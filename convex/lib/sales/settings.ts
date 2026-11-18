@@ -113,3 +113,15 @@ export function depositFor(rule: DepositRule, totalCents: number): number | unde
   const cents = rule.kind === "percent" ? Math.round((totalCents * rule.percent) / 100) : rule.cents;
   return cents > 0 && cents < totalCents ? cents : undefined;
 }
+
+/**
+ * Whether a price a person lowered stays inside the Owner's discount band: lower than the calculated
+ * price by no more than the Playbook's percent, with a reason. A band of 0 means every change is asked
+ * about. A higher price, or one with nothing to compare against, is never "in band".
+ */
+export function discountInBand(company: Pick<Doc<"companies">, "sales">, change: { referenceCents: number | null; proposedCents: number; reason: string }): boolean {
+  const band = salesSettings(company).discounts.maxPercent;
+  if (band <= 0 || change.referenceCents === null || change.referenceCents <= 0) return false;
+  if (change.proposedCents >= change.referenceCents || !change.reason.trim()) return false;
+  return (change.referenceCents - change.proposedCents) * 100 <= band * change.referenceCents;
+}

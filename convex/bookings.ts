@@ -15,6 +15,7 @@
  * booking goes back to staff as a conflict with the money kept on the invoice. Confirming hands the work
  * to Dispatch through a step that is retried until it is done, so closing the browser interrupts nothing.
  */
+import { discountInBand } from "./lib/sales/settings";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
@@ -128,7 +129,8 @@ export const request = companyMutation({
     const serviceQuoteId = await saveVisitQuote(ctx, pricing.visit);
     const firstQuoteId = pricing.first ? await saveVisitQuote(ctx, pricing.first) : null;
     const owner = isOwner(ctx.role);
-    const overrideState = pricing.override ? (owner ? ("approved" as const) : ("waiting" as const)) : null;
+    // The Owner may change a price. Anyone else may lower it inside the Playbook's discount band; beyond that it waits for the Owner.
+    const overrideState = pricing.override ? (owner || discountInBand(ctx.company, pricing.override) ? ("approved" as const) : ("waiting" as const)) : null;
     const dueNow = policy === "deposit" || policy === "full" ? (pricing.dueNowCents ?? 0) : 0;
     const proposed = body.schedule?.proposed === true;
     const now = Date.now();

@@ -282,6 +282,24 @@ async function approvalDetail(ctx: Ctx, approvalId: Id<"approvals">, asOf: numbe
     context.push({ label: "Cleaner's pay for this visit", value: `$${(approval.proposal.payCents / 100).toFixed(2)}`, ref: null });
     context.push({ label: "Time to answer", value: `${approval.proposal.respondWithinMinutes} minutes`, ref: null });
   }
+  // A Sales proposal shows exactly what would go out and to whom, so the decision is made on the words themselves.
+  if (approval.proposal?.kind === "sales_action") {
+    const action = await ctx.db.get(approval.proposal.actionId);
+    if (action && action.companyId === ctx.companyId) {
+      const customer = await ctx.db.get(action.customerId);
+      context.push({ label: "To", value: `${customer?.name ?? "A prospect"}${action.channel ? ` by ${action.channel === "sms" ? "text" : "email"}` : ""}`, ref: null });
+      if (action.body) context.push({ label: "Message", value: action.body.replaceAll("{link}", "[quote link]").slice(0, 1200), ref: null });
+      for (const row of action.evidence.slice(0, 4)) context.push({ label: row.label, value: row.detail, ref: null });
+    }
+  }
+  if (approval.proposal?.kind === "sales_quote") {
+    const quote = await ctx.db.get(approval.proposal.quoteId);
+    if (quote && quote.companyId === ctx.companyId) {
+      const customer = await ctx.db.get(quote.customerId);
+      context.push({ label: "Quote for", value: customer?.name ?? "A prospect", ref: null });
+      context.push({ label: "Total", value: `$${(approval.proposal.totalCents / 100).toFixed(2)}`, ref: null });
+    }
+  }
   if (approval.taskId) context.push({ label: "Task", value: (await ctx.db.get(approval.taskId))?.title ?? "Task", ref: { kind: "task", id: approval.taskId } });
   const decider = approval.decidedBy ? await ctx.db.get(approval.decidedBy) : null;
   const pending = approval.status === "pending";

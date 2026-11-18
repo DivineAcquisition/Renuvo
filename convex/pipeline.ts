@@ -18,7 +18,7 @@ import { byMember, recordEvent } from "./lib/events";
 import { literals } from "./lib/statuses";
 import { openTask } from "./lib/taskState";
 import { quiet } from "./lib/sales/actions";
-import { handBackConversation, takeOverConversation, view } from "./lib/sales/agentOpportunity";
+import { entryProblem, handBackConversation, setStage, takeOverConversation, view } from "./lib/sales/agentOpportunity";
 import { MILESTONES, segmentValidator, STAGES } from "./lib/sales/schema";
 import { cents, optionalText, text } from "./lib/text";
 
@@ -160,9 +160,20 @@ export const update = companyMutation({
     const closing = args.stage === "lost" || args.stage === "won";
     // A deal the agent works: closing it by hand also ends the agent's reminders and drafts.
     const agentDeal = row.intake ? view(row) : null;
-    if (agentDeal && closing) await quiet(ctx, agentDeal, "A person closed the deal.", byMember(ctx));
+    // A deal the agent works keeps the agent's stage rules whoever moves the card: Won follows a confirmed
+    // booking and nothing else, and a stage is entered only when its condition holds.
+    let moved = false;
+    if (agentDeal && args.stage && args.stage !== row.stage) {
+      if (args.stage === "won") throw userError("Won means the booking is confirmed. Confirm the booking from the deal, and the stage follows.");
+      const to = args.stage === "lost" ? "closed_lost" : args.stage === "quoting" ? "quote_ready" : args.stage;
+      const problem = await entryProblem(ctx, agentDeal, to);
+      if (problem) throw userError(problem);
+      if (closing) await quiet(ctx, agentDeal, "A person closed the deal.", byMember(ctx));
+      await setStage(ctx, agentDeal, to, byMember(ctx), to === "closed_lost" ? { reason: "other", note: args.closedReason?.trim().slice(0, 300) } : {});
+      moved = true;
+    } else if (agentDeal && closing) await quiet(ctx, agentDeal, "A person closed the deal.", byMember(ctx));
     await ctx.db.patch(row._id, {
-      ...(args.stage ? { stage: args.stage } : {}),
+      ...(args.stage && !moved ? { stage: args.stage } : {}),
       ...(args.ownerMemberId ? { ownerMemberId: args.ownerMemberId } : {}),
       ...(args.nextAction !== undefined ? { nextAction: optionalText(args.nextAction, "Next action", 300) } : {}),
       ...(args.nextActionAt !== undefined ? { nextActionAt: args.nextActionAt ?? undefined } : {}),

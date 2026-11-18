@@ -9,6 +9,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { assignmentLinks, revokeLink } from "../dispatch/links";
 import type { Actor } from "../events";
+import { setStage, SYSTEM, view } from "../sales/agentOpportunity";
 
 export const ERASED_CUSTOMER = "Erased customer";
 export const ERASED_CLEANER = "Erased cleaner";
@@ -182,7 +183,51 @@ export async function eraseCustomerRecords(ctx: Ctx, customer: Doc<"customers">)
   const scrubbed = await scrubName(ctx, name, ERASED_CUSTOMER);
   steps.push({ step: "Name in tasks and approvals", state: "done", detail: `The name was replaced in ${scrubbed} task${scrubbed === 1 ? "" : "s"}, approval${scrubbed === 1 ? "" : "s"} or coverage note${scrubbed === 1 ? "" : "s"}.` });
 
-  steps.push({ step: "Queued messages", state: "done", detail: "Selestial does not message customers yet, so none were waiting." });
+  // What Sales holds: the conversation's words, what the customer told it, and anything still waiting to go.
+  const opportunities = await ctx.db
+    .query("salesOpportunities")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  let words = 0;
+  let stopped = 0;
+  for (const opportunity of opportunities) {
+    const thread = await ctx.db
+      .query("salesMessages")
+      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
+      .take(MAX_ROWS);
+    for (const row of thread) {
+      await ctx.db.patch(row._id, { body: "Erased.", subject: undefined });
+      words += 1;
+    }
+    const actions = await ctx.db
+      .query("salesActions")
+      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
+      .take(MAX_ROWS);
+    for (const action of actions) await ctx.db.patch(action._id, { body: undefined, subject: undefined, evidence: [], summary: "Erased.", reason: "Erased.", ...(action.status === "prepared" || action.status === "awaiting_approval" ? { status: "discarded" as const, result: "The customer's details were erased." } : {}) });
+    const reminders = await ctx.db
+      .query("salesFollowUps")
+      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
+      .take(MAX_ROWS);
+    for (const reminder of reminders) {
+      if (reminder.status === "scheduled") stopped += 1;
+      await ctx.db.patch(reminder._id, { preview: "Erased.", ...(reminder.status === "scheduled" ? { status: "cancelled" as const, stopReason: "The customer's details were erased." } : {}) });
+    }
+    const outbox = await ctx.db
+      .query("messages")
+      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
+      .take(MAX_ROWS);
+    for (const message of outbox) await ctx.db.patch(message._id, { body: "Erased.", to: undefined, subject: undefined, ...(message.status === "queued" || message.status === "held" ? { status: "not_sent" as const, problem: "The customer's details were erased before it went." } : {}) });
+    // What the customer told Sales goes; the reply address stops naming this conversation.
+    await ctx.db.patch(opportunity._id, { inquiry: opportunity.inquiry === undefined ? undefined : "Erased.", facts: opportunity.facts === undefined ? undefined : [], asked: opportunity.asked === undefined ? undefined : [], timing: undefined, replyKey: undefined });
+    const open = view((await ctx.db.get(opportunity._id))!);
+    if (open && open.agent.stage !== "won" && open.agent.stage !== "closed_lost") {
+      await ctx.db.patch(opportunity._id, { followUps: "stopped", nextAction: undefined, nextActionAt: undefined, nextBy: undefined });
+      await setStage(ctx, view((await ctx.db.get(opportunity._id))!)!, "closed_lost", SYSTEM, { reason: "other", note: "The customer's details were erased." });
+    }
+  }
+  steps.push({ step: "Sales conversations", state: "done", detail: `${opportunities.length} inquir${opportunities.length === 1 ? "y" : "ies"} closed or cleared; the words of ${words} message${words === 1 ? "" : "s"} and what the customer told Sales removed; ${stopped} planned reminder${stopped === 1 ? "" : "s"} cancelled. Quotes keep their amounts, for the company's records.` });
+
+  steps.push({ step: "Queued messages", state: "done", detail: "Any message still waiting to go to this customer was stopped." });
   steps.push({ step: "Action links", state: "done", detail: "Customers have no action links." });
 
   const withdrawn = await withdrawExports(ctx);
