@@ -21,6 +21,7 @@ import { readProfile } from "../compliance/profile";
 import { bookingSettingsOf } from "./settings";
 import { customerName } from "./session";
 import { newToken, tokenHash } from "./tokens";
+import { unsubscribeUrl } from "./unsubscribe";
 
 type Purpose = "booking_confirmation" | "booking_request_received" | "booking_recovery";
 
@@ -42,7 +43,7 @@ async function ownMailbox(ctx: MutationCtx, companyId: Id<"companies">) {
   ).find((row) => row.provider === "gmail" && row.canSend && row.status === "connected");
 }
 
-function compose(purpose: Purpose, session: Doc<"bookingSessions">, company: string, tz: string): { subject: string; body: string } {
+function compose(purpose: Purpose, session: Doc<"bookingSessions">, company: string, tz: string, mailingAddress: string | undefined): { subject: string; body: string } {
   const first = session.contact?.firstName || "there";
   const when = session.schedule
     ? new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(session.schedule.startsAt))
@@ -56,7 +57,7 @@ function compose(purpose: Purpose, session: Doc<"bookingSessions">, company: str
   if (purpose === "booking_request_received") {
     return { subject: `${company} received your request`, body: [`Hi ${first},`, "", `${company} received your request and will reply soon with next steps.`, "", "You can see what you sent here:", "{link}"].join("\n") };
   }
-  return { subject: `Finish your booking with ${company}`, body: [`Hi ${first},`, "", `You started a booking with ${company}. Your answers are saved, and you can pick up where you left off here:`, "{link}", "", "If you no longer need it, you can ignore this message.", `To stop emails like this, reply "unsubscribe" and ${company} will take you off the list.`].join("\n") };
+  return { subject: `Finish your booking with ${company}`, body: [`Hi ${first},`, "", `You started a booking with ${company}. Your answers are saved, and you can pick up where you left off here:`, "{link}", "", "If you no longer need it, you can ignore this message.", "", `Stop marketing email from ${company}: {unsubscribe}`, `${company}, ${mailingAddress ?? ""}`].join("\n") };
 }
 
 /** Plans one booking message and hands it to the sender. Asked twice with the same key, it answers with the first. */
@@ -69,7 +70,7 @@ export async function queueBookingMessage(ctx: MutationCtx, input: { sessionId: 
   const customer = (await ctx.db.get(session.customerId))!;
   const settings = await bookingSettingsOf(ctx, company);
   const name = settings.profile.displayName || company.name;
-  const { subject, body } = compose(input.purpose, session, name, company.timezone);
+  const { subject, body } = compose(input.purpose, session, name, company.timezone, settings.profile.mailingAddress);
   const to = normalAddress("email", customer.email);
   const provider = (await ownMailbox(ctx, company._id)) ? { name: "gmail" } : emailProvider();
   const intent = bookingIntent(customer._id, input.purpose);
@@ -125,11 +126,17 @@ export async function bookingClaim(ctx: MutationCtx, message: Doc<"messages">): 
   if (session.revokedAt) return { problem: "The booking's link was revoked before the message went out." };
   if (message.purpose === "booking_confirmation" && session.status !== "confirmed") return { problem: "The booking was no longer confirmed when the message was due." };
   if (message.purpose === "booking_recovery" && session.status !== "active") return { problem: "The booking was already finished when the reminder was due, so it wasn't sent." };
+  // A reminder is marketing email: it goes only with a working unsubscribe link and the company's mailing address.
+  let unsubscribe: string | null = null;
+  if (message.purpose === "booking_recovery") {
+    unsubscribe = await unsubscribeUrl(message._id);
+    if (!unsubscribe) return { problem: "Unsubscribe links aren't set up on this deployment, so the reminder wasn't sent." };
+  }
   const token = newToken();
   await ctx.db.patch(session._id, { linkTokenHash: tokenHash(token), ...(message.purpose === "booking_recovery" ? { expiresAt: Math.max(session.expiresAt, Date.now() + 3 * 24 * 60 * 60_000) } : {}) });
   const profile = await readProfile(ctx, message.companyId);
   const settings = await bookingSettingsOf(ctx, company);
-  return { body: message.body.replaceAll("{link}", `${siteOrigin()}/b/resume#${token}`), fromName: profile.messaging.senderName?.trim() || settings.profile.displayName || company.name };
+  return { body: message.body.replaceAll("{link}", `${siteOrigin()}/b/resume#${token}`).replaceAll("{unsubscribe}", unsubscribe ?? ""), fromName: profile.messaging.senderName?.trim() || settings.profile.displayName || company.name };
 }
 
 export { customerName };

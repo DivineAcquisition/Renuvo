@@ -13,6 +13,7 @@ import type { Id } from "./_generated/dataModel";
 import { normalizeDefinition, defaultDefinition, type Definition } from "./lib/booking/definition";
 import { confirmationGate, sizePlan } from "./lib/booking/logic";
 import { bookingPaymentChanged } from "./lib/booking/payments";
+import { mockEmails } from "./lib/messaging/email";
 import { setStripeTransportForTests, signForTests } from "./lib/finance/stripe";
 import { blankSpec, type Spec } from "./lib/services/spec";
 
@@ -461,6 +462,12 @@ describe("a residential booking with no payment", () => {
       await s.as.mutation(api.compliance.updateMessaging, { companyId: s.companyId, emailFromAddress: "hello@alpha.example", quietHours: null });
       const sessionOf = async (email: string) => s.t.run(async (ctx) => (await ctx.db.query("bookingSessions").collect()).find((x) => x.contact?.email === email)!._id);
 
+      // Marketing email needs the company's mailing address before anything is attempted.
+      const early = await begin(s, "too-early");
+      await contact(s.t, early, "early@example.com");
+      expect(await refusal(s.as.mutation(api.bookingExperiences.sendRecovery, { companyId: s.companyId, sessionId: await sessionOf("early@example.com") }))).toContain("mailing address");
+      await saveRules(s.as, s.companyId, { profile: { ...RULES().profile, mailingAddress: "100 Congress Ave\nAustin, TX 78701" } });
+
       // A visitor with no customer record can't have given permission: nothing is sent and no record is made.
       const stranger = await begin(s, "walked-away");
       await contact(s.t, stranger, "new@example.com");
@@ -486,7 +493,27 @@ describe("a residential booking with no payment", () => {
       expect(sent).toMatchObject({ status: "queued" });
       const messages = await s.t.run(async (ctx) => ctx.db.query("messages").collect());
       expect(messages.filter((m) => m.purpose === "booking_recovery" && m.status !== "not_sent")).toHaveLength(1);
-      expect(messages.find((m) => m.customerId === leeId)!.body).toMatch(/reply "unsubscribe"/);
+      expect(messages.find((m) => m.customerId === leeId)!.body).toContain("Alpha Cleaning, 100 Congress Ave, Austin, TX 78701");
+
+      // What arrives has a working unsubscribe link (in the fragment), and the stored message never holds it.
+      mockEmails.length = 0;
+      await settle(s.t);
+      const delivered = mockEmails.find((m) => m.to === "lee@example.com")!;
+      const link = /https:\/\/link\.selestial\.test\/b\/unsubscribe#(\S+)/.exec(delivered.text)![1];
+      expect((await s.t.run(async (ctx) => ctx.db.query("messages").collect())).find((m) => m.customerId === leeId)!.body).toContain("{unsubscribe}");
+      expect(await s.t.query(api.bookingPublic.unsubscribeInfo, { token: link })).toEqual({ company: "Alpha Cleaning", done: false });
+      expect(await s.t.query(api.bookingPublic.unsubscribeInfo, { token: `${link}x` })).toBeNull();
+      expect(await refusal(s.t.mutation(api.bookingPublic.unsubscribe, { secret: "wrong-secret-value-wrong-secret-value", token: link } as never))).toBeTruthy();
+      await s.t.mutation(api.bookingPublic.unsubscribe, { secret: SECRET, token: link });
+      expect(await s.t.query(api.bookingPublic.unsubscribeInfo, { token: link })).toEqual({ company: "Alpha Cleaning", done: true });
+      const lee = await s.t.run(async (ctx) => (await ctx.db.query("contactPermissions").collect()).find((p) => p.recipient.id === leeId && p.category === "marketing"));
+      expect(lee).toMatchObject({ status: "withdrawn", recordedBy: { kind: "recipient" } });
+
+      // Another reminder to that address is held back by the unsubscribe.
+      const again = await begin(s, "allowed-again");
+      await contact(s.t, again, "lee@example.com");
+      const leeSessions = await s.t.run(async (ctx) => (await ctx.db.query("bookingSessions").collect()).filter((x) => x.contact?.email === "lee@example.com" && !x.recoveryOfferedAt));
+      expect(await s.as.mutation(api.bookingExperiences.sendRecovery, { companyId: s.companyId, sessionId: leeSessions[0]._id })).toMatchObject({ status: "not_sent" });
       void customerId;
     } finally {
       delete process.env.EMAIL_PROVIDER;

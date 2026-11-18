@@ -16,6 +16,9 @@ import { inArea, load, recalc, agreementFor } from "./lib/booking/session";
 import { newToken, OPEN_SESSION_LIFE, sessionForToken, tokenHash } from "./lib/booking/tokens";
 import { businessSettingsOf, normalizePostalCode } from "./lib/settings/business";
 import { allow } from "./lib/rateLimit";
+import { bookingSettingsOf } from "./lib/booking/settings";
+import { messageForUnsubscribe } from "./lib/booking/unsubscribe";
+import { activeSuppressions, addSuppression, blockingSuppression, currentPermission, setPermission } from "./lib/compliance/permissions";
 import { plain } from "./lib/booking/definition";
 import type { QueryCtx } from "./_generated/server";
 
@@ -179,6 +182,45 @@ export const sign = serverMutation({
     await recordEvent(ctx, { companyId: company._id, type: "booking.agreement_signed", actor: { kind: "system" }, subject: { table: "bookingSessions", id: session._id }, data: { templateVersion: prepared.templateVersion } });
     const after = await recalc(ctx, session._id);
     await funnel(ctx, after, "agreement_completed");
+    return { ok: true };
+  },
+});
+
+/**
+ * The unsubscribe page for a "finish your booking" reminder: which company it is from, and whether this
+ * address is already off its marketing email. Null for a link that isn't one.
+ */
+export const unsubscribeInfo = publicQuery({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const message = await messageForUnsubscribe(ctx, args.token);
+    if (!message?.to) return null;
+    const company = await ctx.db.get(message.companyId);
+    if (!company) return null;
+    const settings = await bookingSettingsOf(ctx, company);
+    const done = blockingSuppression(await activeSuppressions(ctx, company._id, "email", message.to), "marketing") !== null;
+    return { company: settings.profile.displayName || company.name, done };
+  },
+});
+
+/**
+ * Takes the address a reminder went to off that company's marketing email: a suppression, and the
+ * customer's marketing email permission withdrawn. Email about their own bookings is unaffected.
+ */
+export const unsubscribe = serverMutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const message = await messageForUnsubscribe(ctx, args.token);
+    if (!message?.to) throw userError("This unsubscribe link isn't valid. Please contact the company directly.", "not_found");
+    const now = Date.now();
+    const actor = { kind: "system" } as const;
+    await addSuppression(ctx, { companyId: message.companyId, channel: "email", address: message.to, scope: "marketing", reason: "unsubscribe", note: "Unsubscribe link in a booking reminder.", at: now, actor });
+    if (message.customerId) {
+      const current = await currentPermission(ctx, message.companyId, { kind: "customer", id: message.customerId }, "email", "marketing");
+      if (current?.status === "granted") {
+        await setPermission(ctx, { companyId: message.companyId, recipient: { kind: "customer", id: message.customerId }, channel: "email", category: "marketing", status: "withdrawn", source: "web_form", evidence: "Unsubscribe link in a booking reminder.", recordedBy: { kind: "recipient" }, at: now, actor });
+      }
+    }
     return { ok: true };
   },
 });

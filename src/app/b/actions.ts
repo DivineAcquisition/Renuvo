@@ -61,3 +61,14 @@ export async function signBookingAgreement(input: { token: string; signerName: s
     return { ok: false, why: why(error) };
   }
 }
+
+export async function unsubscribeFromBookingEmail(input: { token: string }): Promise<{ ok: true } | { ok: false; why: string }> {
+  const c = client();
+  if (!c) return { ok: false, why: "This isn't available right now. Please contact the company directly." };
+  try {
+    await c.client.mutation(api.bookingPublic.unsubscribe, { secret: c.secret, token: input.token.slice(0, 200) });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, why: why(error) };
+  }
+}
