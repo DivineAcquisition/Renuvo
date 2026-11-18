@@ -138,6 +138,39 @@ describe("Company setup", () => {
     expect(both.filter((id) => id === "pricing.state")).toHaveLength(1);
     // A secondary priority adds its required questions only, never its optional ones.
     expect(questionsFor("pricing", ["recruiter"]).map((question) => question.id)).toEqual(["pricing.state", "hiring.now"]);
-    expect(stepsFor(undefined, []).map((step) => step.id)).toEqual(["start", "basics", "team", "priority", "prepare", "review"]);
+    expect(stepsFor(undefined, []).map((step) => step.id)).toEqual(["start", "basics", "team", "priority", "records", "prepare", "review"]);
+  });
+});
+
+describe("Preparing first drafts in setup", () => {
+  it("prepares one service, agreement and booking page through the workspace's own paths, once, and publishes nothing", async () => {
+    const t = start();
+    const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+    const service = await as.mutation(api.setup.prepareService, { companyId, templateId: "res-standard", name: "Standard Home Clean" });
+    expect(await as.mutation(api.setup.prepareService, { companyId, templateId: "com-office" })).toEqual({ serviceId: service.serviceId, already: true });
+    const agreement = await as.mutation(api.setup.prepareAgreement, { companyId, docType: "one_time_residential" });
+    expect((await as.mutation(api.setup.prepareAgreement, { companyId, docType: "str_turnover" })).already).toBe(true);
+    const booking = await as.mutation(api.setup.prepareBooking, { companyId, kind: "residential" });
+    expect((await as.mutation(api.setup.prepareBooking, { companyId, kind: "residential" })).already).toBe(true);
+
+    const { prepared } = await as.query(api.setup.state, { companyId });
+    expect(prepared.service).toMatchObject({ name: "Standard Home Clean", status: "draft", href: `/app/services/${service.serviceId}` });
+    expect(prepared.agreement).toMatchObject({ workflow: "draft", href: `/app/agreements/${agreement.agreementId}` });
+    expect(prepared.booking).toMatchObject({ status: "draft", canTakeBookings: false, href: `/app/agents/sales/booking-forms/${booking.experienceId}` });
+    expect(await t.run(async (ctx) => [(await ctx.db.query("services").collect()).length, (await ctx.db.query("agreements").collect()).length, (await ctx.db.query("bookingExperiences").collect()).length])).toEqual([1, 1, 1]);
+    // The template's prices are still examples, so the service cannot be submitted as it is.
+    const draft = await t.run(async (ctx) => (await ctx.db.query("serviceDrafts").collect())[0]);
+    expect(JSON.stringify(draft.spec)).toContain('"illustrative":true');
+    // The first prepared draft is recorded once as the first artifact.
+    const setup = await t.run(async (ctx) => (await ctx.db.query("companySetups").collect())[0]);
+    expect(setup.milestones.firstArtifactAt).toBeTypeOf("number");
+
+    // A draft the owner deleted is prepared again rather than pointing at nothing.
+    await t.run(async (ctx) => ctx.db.delete(booking.experienceId));
+    expect((await as.mutation(api.setup.prepareBooking, { companyId, kind: "residential" })).already).toBe(false);
+    // Staff cannot prepare through setup.
+    const manager = await addMember(t, as, companyId, "manager-a", "manager");
+    expect(await refusal(manager.mutation(api.setup.prepareService, { companyId, templateId: "res-standard" }))).toBe(NOT_ALLOWED);
+    expect(await refusal(as.mutation(api.setup.prepareService, { companyId, templateId: "made-up" }))).toContain("not available");
   });
 });
