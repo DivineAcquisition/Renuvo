@@ -30,6 +30,23 @@ const nextConfig: NextConfig = {
         source: "/c/pay/:path*",
         headers: [{ key: "Permissions-Policy", value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://js.stripe.com")' }],
       },
+      // Booking pages: a private booking link is a credential, so it is never passed on, cached or indexed.
+      // They run Stripe's payment form like the pay page.
+      {
+        source: "/b/:path*",
+        headers: [
+          { key: "Permissions-Policy", value: 'camera=(), microphone=(), geolocation=(), payment=(self "https://js.stripe.com")' },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      },
+      // The embeddable entry (a ZIP box) may sit inside a company's own website. It holds no session and
+      // sends the visitor to the full page in a new tab, so framing it exposes nothing.
+      {
+        source: "/b/:handle/:slug/embed",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors *" }],
+      },
     ];
   },
 };

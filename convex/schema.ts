@@ -9,6 +9,7 @@ import { cleanersSettingsValidator, cleanersTables, engagementValidator } from "
 import { googleTables } from "./lib/google/schema";
 import { aiTables } from "./lib/ai/schema";
 import { billingTables } from "./lib/billing/schema";
+import { bookingTables } from "./lib/booking/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
 import { financeTables } from "./lib/finance/schema";
@@ -80,6 +81,7 @@ export const aboutValidator = v.union(
   v.object({ table: v.literal("hiringNeeds"), id: v.id("hiringNeeds") }),
   v.object({ table: v.literal("applications"), id: v.id("applications") }),
   v.object({ table: v.literal("mailboxConnections"), id: v.id("mailboxConnections") }),
+  v.object({ table: v.literal("bookingSessions"), id: v.id("bookingSessions") }),
 );
 
 /**
@@ -300,7 +302,9 @@ export default defineSchema({
     preferences: v.optional(v.string()),
     status: recordStatusValidator,
     createdAt: v.number(),
-  }).index("by_company_status", ["companyId", "status"]),
+  })
+    .index("by_company_status", ["companyId", "status"])
+    .index("by_company_email", ["companyId", "email"]),
 
   properties: defineTable({
     companyId: v.id("companies"),
@@ -579,6 +583,10 @@ export default defineSchema({
       v.literal("availability_check"),
       v.literal("idle_check_in"),
       v.literal("verification_code"),
+      // Booking Experiences, to customers (convex/lib/booking/messages.ts).
+      v.literal("booking_confirmation"),
+      v.literal("booking_request_received"),
+      v.literal("booking_recovery"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -599,6 +607,8 @@ export default defineSchema({
     /** A Cleaners portal or task link the message carries. */
     portalLinkId: v.optional(v.id("portalLinks")),
     followUpId: v.optional(v.id("followUps")),
+    /** Booking messages: the session whose private link the message carries as "{link}". */
+    bookingSessionId: v.optional(v.id("bookingSessions")),
     /** Where on the cleaner pages the link opens, for example "/delay". */
     linkPath: v.optional(v.string()),
     to: v.optional(v.string()),
@@ -806,6 +816,8 @@ export default defineSchema({
 
   // ── Finance: the cleaning company's own money, never Selestial's subscription (convex/lib/finance) ─
   ...financeTables,
+  // ── Booking Experiences (convex/lib/booking/schema.ts) ───────────────────────────────────────────
+  ...bookingTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({
