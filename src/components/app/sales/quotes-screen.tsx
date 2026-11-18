@@ -108,7 +108,7 @@ export function QuotesProposalsScreen() {
             <ul className="divide-y divide-border">
               {proposals.map((p) => (
                 <li key={p._id}>
-                  <Link href={p.draftId ? `/app/agents/sales/book/${p.draftId}` : `/app/agents/sales/proposals/${p._id}`} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-muted/40">
+                  <Link href={p.setupId ? `/app/agents/sales/setups/${p.setupId}` : p.draftId ? `/app/agents/sales/book/${p.draftId}` : "/app/agents/sales/quotes-proposals"} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-muted/40">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-strong">{p.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
