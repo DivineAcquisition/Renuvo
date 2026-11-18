@@ -15,6 +15,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { bookingPaymentChanged } from "./lib/booking/payments";
 import { ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent, type Actor } from "./lib/events";
@@ -387,6 +388,8 @@ async function applyPayment(ctx: MutationCtx, paymentId: Id<"payments">, facts: 
   if (status === "succeeded" && payment.status !== "succeeded" && (payment.tipCents ?? 0) > 0) await tipReceived(ctx, payment);
   const before = (await ctx.db.get(payment.invoiceId))!;
   const after = await recompute(ctx, payment.invoiceId);
+  // An online booking's invoice: the booking follows the money (convex/lib/booking/payments.ts).
+  if (status !== payment.status && before.bookingSessionId) await bookingPaymentChanged(ctx, (await ctx.db.get(payment._id))!);
   if (before.status !== "paid" && after.status === "paid") {
     await recordEvent(ctx, { companyId: payment.companyId, type: "invoice.paid", actor: SYSTEM, subject: { table: "invoices", id: after._id }, data: { amountCents: after.totals.totalCents } });
     await cancelStartedPayments(ctx, after._id, payment._id);

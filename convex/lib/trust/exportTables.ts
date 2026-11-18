@@ -142,6 +142,14 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "recordDisputes", index: "by_company_cleaner" },
   { table: "personnelRequests", index: "by_company_status" },
   { table: "payArrangements", index: "by_company_cleaner" },
+  // Booking Experiences (convex/lib/booking/schema.ts).
+  { table: "bookingSettings", index: "by_company" },
+  { table: "bookingExperiences", index: "by_company_updated" },
+  { table: "bookingExperienceVersions", index: "by_company_experience_version" },
+  { table: "bookingSessions", index: "by_company_created", omit: ["tokenHash"], why: "A hash of a customer's private booking link." },
+  { table: "bookingHolds", index: "by_company_start" },
+  { table: "bookingAcceptances", index: "by_company_session", omit: ["ipHash"], why: "A one-way hash kept only as signing evidence." },
+  { table: "bookingEvents", index: "by_company_experience_at" },
 ];
 
 /** Company tables kept out of the export, and why. */
