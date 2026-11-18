@@ -528,7 +528,10 @@ export function OverviewSection({ profile, onSection }: { profile: Profile; onSe
         </Card>
         {profile.subcontractor ? (
           <Card title="Subcontractor company">
-            <p className="text-sm font-medium text-strong">{profile.subcontractor.name}</p>
+            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-strong">
+              {profile.subcontractor.name}
+              {profile.subcontractor.status !== "active" ? <Badge variant={profile.subcontractor.status === "ended" ? "outline" : "warning"}>{profile.subcontractor.status === "ended" ? "Relationship ended" : "Paused"}</Badge> : null}
+            </p>
             <p className="text-xs text-muted-foreground">
               Authorized contact: {profile.subcontractor.contact.name}
               {"email" in profile.subcontractor.contact && profile.subcontractor.contact.email ? ` · ${profile.subcontractor.contact.email}` : ""}
@@ -848,7 +851,10 @@ export function SkillsSection({ profile }: { profile: Profile }) {
                   <span className="font-medium text-strong">{crew.name}</span>
                   <span className="text-xs text-muted-foreground"> · {crew.kind === "temporary" ? "team for one job" : "permanent crew"}{crew.role === "lead" ? " · lead" : ""}</span>
                 </span>
-                <span className="text-xs text-muted-foreground">{crew.current ? "Current" : "Past"}</span>
+                <span className="text-xs text-muted-foreground">
+                  {crew.kind === "temporary" && crew.onJobWords ? `${crew.onJobWords} · ` : ""}
+                  {crew.current ? "Current" : "Past"}
+                </span>
               </li>
             ))}
           </ul>

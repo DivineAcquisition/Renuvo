@@ -6,7 +6,10 @@
 import { v } from "convex/values";
 
 import { owned } from "./lib/access";
-import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { companyQuery, managerMutation, managerQuery, ownerMutation } from "./lib/builders";
+import { handOverJobs, upcomingWork } from "./lib/cleaners/personnel";
 import { STATUS_WORDS } from "./lib/cleaners/enroll";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
@@ -122,6 +125,33 @@ export const update = managerMutation({
  * Pausing or ending a relationship with a subcontractor company is the Owner's, with a reason. Its workers
  * keep their records and their history; ending it never removes anyone from a job they accepted.
  */
+/** The people working through this company now: their own engagement is not ended. */
+async function currentWorkers(ctx: (QueryCtx | MutationCtx) & { companyId: Id<"companies"> }, subcontractorId: Id<"subcontractors">): Promise<Doc<"cleaners">[]> {
+  const rows = await ctx.db
+    .query("cleaners")
+    .withIndex("by_company_subcontractor", (q) => q.eq("companyId", ctx.companyId).eq("subcontractorId", subcontractorId))
+    .take(300);
+  return rows.filter((row) => row.status !== "ended");
+}
+
+/**
+ * What ending the relationship would touch, so the Owner sees it before deciding: each worker's accepted jobs
+ * from now on and the offers they could still accept. Nothing here changes any of it.
+ */
+export const endImpact = managerQuery({
+  args: { subcontractorId: v.id("subcontractors") },
+  handler: async (ctx, args) => {
+    const sub = await owned(ctx, args.subcontractorId);
+    const workers = [];
+    for (const cleaner of await currentWorkers(ctx, sub._id)) {
+      const work = await upcomingWork(ctx, ctx.company, cleaner._id);
+      workers.push({ cleanerId: cleaner._id, name: cleaner.name, accepted: work.accepted, offered: work.offered });
+    }
+    workers.sort((a, b) => b.accepted.length - a.accepted.length || a.name.localeCompare(b.name));
+    return { workers, accepted: workers.reduce((sum, row) => sum + row.accepted.length, 0), offered: workers.reduce((sum, row) => sum + row.offered, 0) };
+  },
+});
+
 export const setStatus = ownerMutation({
   args: { subcontractorId: v.id("subcontractors"), status: v.union(v.literal("active"), v.literal("paused"), v.literal("ended")), reason: v.string() },
   handler: async (ctx, args) => {
@@ -131,7 +161,12 @@ export const setStatus = ownerMutation({
     if (sub.status === "ended") throw userError("This relationship has ended. Add the company again to work with it.");
     await ctx.db.patch(sub._id, { status: args.status, ...(args.status === "ended" ? { endedAt: Date.now() } : {}) });
     // Ending the relationship ends the contact's portal access. Their workers keep their own records and links.
-    if (args.status === "ended") for (const link of await subcontractorLinks(ctx, ctx.companyId, sub._id)) if (portalLinkState(link, Date.now()) === "active") await revokePortalLink(ctx, link, "The working relationship ended.", byMember(ctx));
+    if (args.status === "ended") {
+      for (const link of await subcontractorLinks(ctx, ctx.companyId, sub._id)) if (portalLinkState(link, Date.now()) === "active") await revokePortalLink(ctx, link, "The working relationship ended.", byMember(ctx));
+      // No new work goes to their workers through this company (readiness reads the ended relationship). Jobs a
+      // worker already accepted are left as they are and handed to a person, never removed here.
+      for (const cleaner of await currentWorkers(ctx, sub._id)) await handOverJobs(ctx, ctx.company, cleaner, `working through ${sub.name}, whose working relationship with you ended`, byMember(ctx));
+    }
     await recordEvent(ctx, { companyId: ctx.companyId, type: "subcontractor.status_changed", actor: byMember(ctx), subject: { table: "subcontractors", id: sub._id }, data: { from: sub.status, to: args.status, reason } });
     return null;
   },

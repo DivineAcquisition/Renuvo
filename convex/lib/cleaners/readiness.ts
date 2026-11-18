@@ -33,6 +33,11 @@ export type ReadinessFacts = {
   serviceAreas: number;
   /** For agreement requirements: the state of the linked agreement, by document type ("*" for any workforce agreement). */
   agreements: { docType: string; state: "signed" | "sent" | "draft" }[];
+  /**
+   * The subcontractor company they work through, when the company's working relationship has ended. Nothing
+   * covers their work through it any more, so no work is offered until they are moved or engaged directly.
+   */
+  supplierEnded?: string;
 };
 
 export type RequirementView = {
@@ -191,6 +196,9 @@ export function readiness(input: {
   } else if (facts.status === "paused") {
     state = "not_active";
     summary = "Paused. No work is offered until a person makes the engagement active again.";
+  } else if (facts.supplierEnded) {
+    state = "not_active";
+    summary = `Works through ${facts.supplierEnded}, and that working relationship has ended. No work is offered until they are moved to another company or engaged directly.`;
   } else if (facts.status === "onboarding") {
     state = "onboarding";
     if (blockers.length > 0) {

@@ -272,6 +272,182 @@ describe("Cleaners: crews, availability and Dispatch", () => {
     }
   });
 
+  it("shows a job's team as it stands on the job after a drop and a replacement, and ends the dropped cleaner's view of the job", async () => {
+    const s = await setup(["Lena", "Rosa", "Mia", "Noor"]);
+    const jobId = await heldJob(s, { requiredCrew: 2 });
+    const { crewId: teamId } = await s.as.mutation(api.crews.assembleForJob, { companyId: s.companyId, jobId, cleanerIds: [s.cleaners.Lena, s.cleaners.Rosa], leadId: s.cleaners.Lena });
+    for (const row of (await s.job(jobId)).assignments) await s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId: row._id, answer: "accepted" });
+    const tokens = new Map<string, string>();
+    const portal = async (cleanerId: Id<"cleaners">) => {
+      if (!tokens.has(cleanerId)) {
+        const { linkId } = (await s.as.mutation(api.portalAccess.invite, { companyId: s.companyId, cleanerId })) as { linkId: Id<"portalLinks"> };
+        tokens.set(cleanerId, tokenOf((await s.as.mutation(api.portalAccess.reveal, { companyId: s.companyId, linkId })).url));
+      }
+      const view = await s.t.query(api.portal.view, { token: tokens.get(cleanerId)!, asOf: NOW });
+      if (view.state !== "active") throw new Error(view.state);
+      return view;
+    };
+    const street = (await portal(s.cleaners.Rosa)).jobs[0].where!;
+    expect(street).toMatch(/,/);
+
+    // Rosa drops out. Dispatch's own path ends her place; the team is not where that is recorded.
+    const rosa = (await s.job(jobId)).assignments.find((row) => row.cleanerId === s.cleaners.Rosa)!;
+    await s.as.mutation(api.dispatchOps.recordCannotAttend, { companyId: s.companyId, assignmentId: rosa._id, reason: "Car broke down" });
+    await flush(s.t);
+    const team = async () => (await s.as.query(api.crews.list, { companyId: s.companyId, asOf: NOW })).find((row) => row.crewId === teamId)!;
+    let card = await team();
+    expect(card.staffing).toMatchObject({ required: 2, accepted: 1, open: 1 });
+    expect(card.members.map((row) => [row.name, row.onJobWords])).toEqual([["Lena", "Accepted"], ["Rosa", "No longer on this job"]]);
+
+    // The office puts Noor on the job in Dispatch: she shows on the team as added there, and the job is full.
+    const noor = await s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId, cleanerId: s.cleaners.Noor, respondBy: NOW + 4 * HOUR, payCents: 8000 });
+    await s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId: noor, answer: "accepted" });
+    card = await team();
+    expect(card.staffing).toMatchObject({ required: 2, accepted: 2, open: 0 });
+    expect(card.onJobNow).toBe(2);
+    expect(card.members.map((row) => [row.name, row.onJobWords, row.fromTeam])).toEqual([
+      ["Lena", "Accepted", true],
+      ["Noor", "Accepted", false],
+      ["Rosa", "No longer on this job", true],
+    ]);
+    // The team still records who it was assembled with; it does not pretend Rosa is on the job.
+    expect((await s.as.query(api.crews.get, { companyId: s.companyId, crewId: teamId! })).members.map((row) => [row.name, row.onJob])).toEqual([
+      ["Lena", "accepted"],
+      ["Rosa", "off"],
+    ]);
+    const crewsOf = async (cleanerId: Id<"cleaners">) => (await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId, asOf: NOW })).crews.filter((row) => row.kind === "temporary");
+    expect(await crewsOf(s.cleaners.Rosa)).toMatchObject([{ current: false, onJobWords: "No longer on this job" }]);
+    expect(await crewsOf(s.cleaners.Lena)).toMatchObject([{ current: true, onJobWords: "Accepted" }]);
+
+    // Rosa's portal no longer shows the job or its street; Lena's shows Noor with her now.
+    const after = await portal(s.cleaners.Rosa);
+    expect(after.jobs.some((row) => row.startsAt === JOB_START)).toBe(false);
+    expect(JSON.stringify(after)).not.toContain(street.split(",")[0]);
+    expect((await portal(s.cleaners.Lena)).jobs[0].team).toMatchObject({ with: ["Noor"], lead: true, open: 0 });
+  });
+
+  it("keeps a cleaner with overlapping or back-to-back work off a crew, and frees them when that work is released", async () => {
+    const s = await setup(["Lena", "Rosa", "Mia"]);
+    const first = await heldJob(s);
+    const booked = await s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId: first, cleanerId: s.cleaners.Lena, respondBy: NOW + 4 * HOUR, payCents: 8000 });
+    await s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId: booked, answer: "accepted" });
+    await s.as.mutation(api.crews.create, { companyId: s.companyId, name: "North", memberIds: [s.cleaners.Lena, s.cleaners.Rosa, s.cleaners.Mia], leadId: s.cleaners.Lena });
+
+    // An hour later, overlapping Lena's visit: the crew is shown member by member, and Lena is not counted.
+    const overlapping = await heldJob(s, { requiredCrew: 3, startsAt: JOB_START + HOUR, endsAt: JOB_END + HOUR });
+    let view = await s.as.query(api.crews.forJob, { companyId: s.companyId, jobId: overlapping });
+    const north = view.crews.find((row) => row.name === "North")!;
+    expect(north).toMatchObject({ eligible: 2, coversOpen: false });
+    expect(north.members.find((row) => row.name === "Lena")).toMatchObject({ eligible: false, soft: false, reason: "already has an offer or a job that overlaps this one" });
+    // Choosing her anyway: she is refused with the reason, the others are offered, and the open place stays visible.
+    const result = await s.as.mutation(api.crews.assembleForJob, { companyId: s.companyId, jobId: overlapping, cleanerIds: [s.cleaners.Lena, s.cleaners.Rosa, s.cleaners.Mia], leadId: s.cleaners.Lena });
+    expect(result.results.map((row) => [row.name, row.offered])).toEqual([["Lena", false], ["Rosa", true], ["Mia", true]]);
+    expect(result.results[0].words).toContain("overlaps");
+    expect(result.words).toBe("3 places are still without an accepted cleaner; 2 offers are out.");
+
+    // Starting 15 minutes after her visit ends is inside the company's 30 minutes between jobs.
+    const backToBack = await heldJob(s, { startsAt: JOB_END + 15 * 60 * 1000, endsAt: JOB_END + 2 * HOUR });
+    expect((await s.as.query(api.crews.forJob, { companyId: s.companyId, jobId: backToBack })).people.find((row) => row.name === "Lena")).toMatchObject({ eligible: false, code: "too_close" });
+
+    // The first visit is released: she is free for both, read from the same records.
+    await s.as.mutation(api.assignments.release, { companyId: s.companyId, assignmentId: booked, reason: "The customer moved the visit." , keepWithMe: true });
+    view = await s.as.query(api.crews.forJob, { companyId: s.companyId, jobId: overlapping });
+    expect(view.people.find((row) => row.name === "Lena")).toMatchObject({ eligible: true });
+    expect((await s.as.query(api.crews.forJob, { companyId: s.companyId, jobId: backToBack })).people.find((row) => row.name === "Lena")).toMatchObject({ eligible: true });
+  });
+
+  it("keeps a skill a cleaner says they have away from Dispatch until a person confirms it", async () => {
+    const s = await setup(["Lena"]);
+    const jobId = await s.as.mutation(api.jobs.create, { companyId: s.companyId, ...s.place, serviceType: "standard", scope: "Windows inside and out", startsAt: JOB_START, endsAt: JOB_END, priceCents: PRICE, requiredSkills: ["windows"] });
+    await s.as.mutation(api.dispatch.takeOver, { companyId: s.companyId, jobId });
+    await flush(s.t);
+    expect(await excluded(s, jobId)).toEqual([{ name: "Lena", code: "missing_skill" }]);
+
+    // Lena says she does windows, from her portal: a claim, not a skill.
+    const { linkId } = (await s.as.mutation(api.portalAccess.invite, { companyId: s.companyId, cleanerId: s.cleaners.Lena })) as { linkId: Id<"portalLinks"> };
+    const token = tokenOf((await s.as.mutation(api.portalAccess.reveal, { companyId: s.companyId, linkId })).url);
+    await s.t.mutation(api.portal.claimSkill, { token, skill: "Windows", note: "Three years at a window company" });
+    await s.t.mutation(api.portal.claimSkill, { token, skill: "Carpets" });
+    expect(await excluded(s, jobId)).toEqual([{ name: "Lena", code: "missing_skill" }]);
+    const claims = (await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleaners.Lena, asOf: NOW })).skillClaims;
+    const claim = (skill: string) => claims.find((row) => row.skill === skill)!.claimId;
+
+    // Office cannot confirm it. A manager confirms windows and declines carpets.
+    const office = await addMember(s.t, s.as, s.companyId, "office-a", "office");
+    expect(await refusal(office.mutation(api.cleanerProfile.decideSkill, { companyId: s.companyId, claimId: claim("windows"), confirm: true }))).toBe(NOT_ALLOWED);
+    await s.as.mutation(api.cleanerProfile.decideSkill, { companyId: s.companyId, claimId: claim("windows"), confirm: true });
+    await s.as.mutation(api.cleanerProfile.decideSkill, { companyId: s.companyId, claimId: claim("carpets"), confirm: false });
+    expect(await refusal(s.as.mutation(api.cleanerProfile.decideSkill, { companyId: s.companyId, claimId: claim("windows"), confirm: false }))).toContain("already decided");
+    expect(await asked(s, jobId)).toEqual(["Lena"]);
+    const profile = await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: s.cleaners.Lena, asOf: NOW });
+    expect(profile.skills).toContain("windows");
+    expect(profile.skills).not.toContain("carpets");
+  });
+
+  it("previews what ending a subcontractor touches, then offers its workers nothing new and hands their accepted jobs to a person", async () => {
+    const s = await setup(["Lena"]);
+    const subId = await s.as.mutation(api.subcontractors.create, { companyId: s.companyId, name: "Bright Crew LLC", contact: { name: "Ana Ortiz", email: "ana@brightcrew.example" } });
+    const { cleanerId: tomas } = await s.as.mutation(api.workforce.add, { companyId: s.companyId, person: { name: "Tomas Reyes", engagement: "subcontractor", subcontractorId: subId, phone: "+15550109090", serviceAreas: ["78701"] }, windows: [{ weekday: 2, startMinute: 480, endMinute: 1020 }] });
+    // Tomas has done his onboarding and works through Bright Crew.
+    await s.t.run(async (ctx) => {
+      for (const row of await ctx.db.query("workerRequirements").withIndex("by_company_cleaner", (q) => q.eq("companyId", s.companyId).eq("cleanerId", tomas)).collect()) await ctx.db.delete(row._id);
+      await ctx.db.patch(tomas, { status: "ready" });
+    });
+    const morning = await heldJob(s);
+    const kept = await s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId: morning, cleanerId: tomas, respondBy: NOW + 4 * HOUR, payCents: 9000 });
+    await s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId: kept, answer: "accepted" });
+    const afternoon = await heldJob(s, { startsAt: JOB_START + 3 * HOUR, endsAt: JOB_END + 3 * HOUR });
+    const open = await s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId: afternoon, cleanerId: tomas, respondBy: NOW + 4 * HOUR, payCents: 9000 });
+
+    // Before deciding, the Owner sees what it touches. Office cannot read it.
+    const impact = await s.as.query(api.subcontractors.endImpact, { companyId: s.companyId, subcontractorId: subId });
+    expect(impact).toMatchObject({ accepted: 1, offered: 1 });
+    expect(impact.workers).toMatchObject([{ name: "Tomas Reyes", offered: 1, accepted: [{ jobId: morning }] }]);
+    const office = await addMember(s.t, s.as, s.companyId, "office-a", "office");
+    expect(await refusal(office.query(api.subcontractors.endImpact, { companyId: s.companyId, subcontractorId: subId }))).toBe(NOT_ALLOWED);
+
+    // Pausing changes nothing about the workers, as the screen says.
+    await s.as.mutation(api.subcontractors.setStatus, { companyId: s.companyId, subcontractorId: subId, status: "paused", reason: "Checking their insurance." });
+    expect((await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: tomas, asOf: NOW })).readiness.state).toBe("ready");
+
+    await s.as.mutation(api.subcontractors.setStatus, { companyId: s.companyId, subcontractorId: subId, status: "ended", reason: "Contract finished." });
+    const profile = await s.as.query(api.cleanerProfile.profile, { companyId: s.companyId, cleanerId: tomas, asOf: NOW });
+    expect(profile.status).toBe("ready");
+    expect(profile.readiness.state).toBe("not_active");
+    expect(profile.readiness.summary).toContain("Bright Crew LLC");
+    // The job he accepted is still his, and a person is asked to decide it.
+    expect((await s.job(morning)).assignments.find((row) => row._id === kept)!.status).toBe("accepted");
+    const tasks = await s.as.query(api.tasks.list, { companyId: s.companyId, status: "needs_decision", agent: "dispatch" });
+    // The question names why and the job itself, so the person deciding sees what they are deciding.
+    const question = tasks.find((task) => task.title === "Decide Tomas Reyes's upcoming jobs")!.openQuestion!;
+    expect(question).toContain("working through Bright Crew LLC, whose working relationship with you ended");
+    expect(question).toContain("Nothing was changed on this job: ");
+    expect(question).toContain(impact.workers[0].accepted[0].label);
+    // The open offer can no longer be accepted, and nobody can offer him new work.
+    expect(await refusal(s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId: open, answer: "accepted" }))).toContain("works through Bright Crew LLC, whose working relationship with you has ended");
+    const later = await heldJob(s, { startsAt: JOB_START + 7 * DAY, endsAt: JOB_END + 7 * DAY });
+    expect(await excluded(s, later)).toContainEqual({ name: "Tomas Reyes", code: "not_ready" });
+    expect(await refusal(s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId: later, cleanerId: tomas, respondBy: NOW + 4 * HOUR, payCents: 9000 }))).toContain("Bright Crew LLC");
+    // The directory says the same, and he is not counted as ready for assignments.
+    const directory = await s.as.query(api.workforce.directory, { companyId: s.companyId, asOf: NOW });
+    expect(directory.rows.find((row) => row.cleanerId === tomas)!.readiness.state).toBe("not_active");
+    expect(directory.overview.ready.count).toBe(1);
+  });
+
+  it("refuses an acceptance when a requirement for work stopped being met after the offer went out", async () => {
+    const s = await setup(["Lena"]);
+    const jobId = await heldJob(s);
+    const offer = await s.as.mutation(api.assignments.offer, { companyId: s.companyId, jobId, cleanerId: s.cleaners.Lena, respondBy: NOW + 4 * HOUR, payCents: 8000 });
+    // The Owner gives Lena an identity check after the offer was made.
+    await s.as.mutation(api.workforce.applyTemplateTo, { companyId: s.companyId, cleanerIds: [s.cleaners.Lena], keys: ["documents"] });
+    expect(await refusal(s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId: offer, answer: "accepted" }))).toMatch(/has not met what is needed before work: identity documents/i);
+    expect((await s.job(jobId)).assignments[0].status).toBe("offered");
+    // Once a person sets it aside with a reason, she can accept.
+    await s.as.mutation(api.requirements.review, { companyId: s.companyId, cleanerId: s.cleaners.Lena, key: "documents", decision: "waive", note: "Checked in person at the office." });
+    await s.as.mutation(api.assignments.recordAnswer, { companyId: s.companyId, assignmentId: offer, answer: "accepted" });
+    expect((await s.job(jobId)).assignments[0].status).toBe("accepted");
+  });
+
   it("answers another company's crews, jobs and previews exactly like missing ones", async () => {
     const s = await setup(["Lena"]);
     const jobId = await heldJob(s);
