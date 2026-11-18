@@ -201,7 +201,13 @@ export const salesTables = {
     priceCents: v.number(),
     first: v.optional(v.object({ serviceKey: v.string(), versionId: v.id("serviceVersions"), quoteInput: quoteInputValidator, serviceQuoteId: v.id("serviceQuotes"), priceCents: v.number() })),
     slot: v.object({ startsAt: v.number(), endsAt: v.number(), arrivalWindowMinutes: v.number(), crew: v.number(), proposed: v.boolean() }),
+    /** Recurring bookings: the cadence, optional last date and how later visits are billed, as agreed. */
+    recurring: v.optional(v.object({ cadence: cadenceValidator, endDate: v.optional(v.string()), billing: literals(PLAN_BILLING) })),
     requirements: requirementsValidator,
+    /** A price a person changed from the calculated one: always with a reason, approved by the Owner unless the Owner made it. */
+    override: v.optional(v.object({ referenceCents: v.union(v.number(), v.null()), proposedCents: v.number(), reason: v.string(), state: v.union(v.literal("approved"), v.literal("waiting"), v.literal("declined")), approvalId: v.optional(v.id("approvals")) })),
+    /** What is blocking confirmation, in words, when the booking is waiting on staff (for example a lost time). */
+    problem: v.optional(v.string()),
     instructions: v.optional(v.object({ customer: v.optional(v.string()), cleaner: v.optional(v.string()), office: v.optional(v.string()) })),
     preferredCleanerId: v.optional(v.id("cleaners")),
     invoiceId: v.optional(v.id("invoices")),
@@ -255,6 +261,8 @@ export const salesTables = {
     endDate: v.optional(v.string()),
     pause: v.optional(v.object({ from: v.string(), until: v.optional(v.string()), reason: v.string() })),
     billing: literals(PLAN_BILLING),
+    /** Monthly consolidated billing: the last calendar month (YYYY-MM) a draft invoice was made for. */
+    billedThrough: v.optional(v.string()),
     endedReason: v.optional(v.string()),
     createdBy: v.id("members"),
     createdAt: v.number(),
@@ -283,6 +291,8 @@ export const salesTables = {
     preferredCleanerId: v.optional(v.id("cleaners")),
     reason: v.optional(v.string()),
     approvalId: v.optional(v.id("approvals")),
+    /** A version that changes the price waits for the Owner; until approved it is never used. */
+    state: v.optional(v.union(v.literal("pending"), v.literal("active"), v.literal("declined"))),
     createdBy: v.id("members"),
     createdAt: v.number(),
   })

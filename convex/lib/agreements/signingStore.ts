@@ -3,12 +3,14 @@
  * move it along; nothing here believes an email was a signature. Every transition is conditional on the
  * state it starts from, so a report that arrives twice, late or out of order changes nothing it should not.
  */
+import { newLinkId } from "../sales/links";
+import { queueSalesMessage } from "../sales/outbox";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { userError } from "../errors";
 import { recordEvent, type Actor } from "../events";
 import { can, mayRead } from "./access";
-import { signingStatus, type ProviderEvent } from "./signing";
+import { HOSTED, signingStatus, type ProviderEvent } from "./signing";
 import { isEmailAddress } from "./validators";
 import { readiness, type Ctx, typeOf, versionRow } from "./store";
 
@@ -68,7 +70,38 @@ export async function markDispatched(ctx: MutationCtx, requestId: Id<"agreementS
   const request = await ctx.db.get(requestId);
   if (!request || request.status !== "queued") return false;
   await ctx.db.patch(request._id, { status: "sent", providerRequestId, sentAt: Date.now() });
+  if (request.provider === HOSTED) await deliverHostedLinks(ctx, (await ctx.db.get(request._id))!);
   return true;
+}
+
+/**
+ * Selestial-hosted signing: one link per signer, sent to the signer's own address. A signer the company
+ * has no customer record for is still given a link; the message goes through the same sending policy.
+ */
+async function deliverHostedLinks(ctx: MutationCtx, request: Doc<"agreementSignatureRequests">) {
+  const agreement = await ctx.db.get(request.agreementId);
+  const company = await ctx.db.get(request.companyId);
+  if (!agreement || !company) return;
+  const links = await ctx.db.query("agreementLinks").withIndex("by_company_agreement", (q) => q.eq("companyId", request.companyId).eq("agreementId", agreement._id)).take(20);
+  const customerLink = links.find((link) => link.table === "customers");
+  const customer = customerLink ? await ctx.db.get(customerLink.recordId as Id<"customers">) : null;
+  for (const signer of request.signers) {
+    const existing = (await ctx.db.query("agreementSigningLinks").withIndex("by_company_request", (q) => q.eq("companyId", request.companyId).eq("requestId", request._id)).take(20)).find((row) => row.signerEmail === signer.email);
+    const linkId = existing?._id ?? (await ctx.db.insert("agreementSigningLinks", { companyId: request.companyId, requestId: request._id, agreementId: agreement._id, signerEmail: signer.email, signerName: signer.name, publicId: newLinkId(), createdAt: Date.now() }));
+    if (!customer || customer.companyId !== request.companyId) continue;
+    await queueSalesMessage(ctx, {
+      company,
+      customer,
+      purpose: "signature_request",
+      channel: "email",
+      to: signer.email,
+      subject: `Please review and sign: ${agreement.title}`,
+      body: `Hi ${signer.name.split(" ")[0] || "there"},\n\n${company.name} has sent "${agreement.title}" for your review and signature. Read it in full and sign here:\n{sign}\n\nThis link is just for you. It expires ${new Date(request.expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric" })}.`,
+      links: [{ placeholder: "{sign}", kind: "sign", id: linkId }],
+      dedupeKey: `sign:${request._id}:${signer.email}`,
+      actor: { kind: "system" },
+    });
+  }
 }
 
 export async function markDispatchFailed(ctx: MutationCtx, requestId: Id<"agreementSignatureRequests">, problem: string) {

@@ -52,3 +52,11 @@ export const list = companyQuery({
     return out;
   },
 });
+
+/** Carries out the Owner's decision on a proposal version's custom rates. Filled in with proposals. */
+export async function afterProposalDecision(ctx: import("./_generated/server").MutationCtx, approval: import("./_generated/dataModel").Doc<"approvals">, decision: "approved" | "changed" | "skipped") {
+  void ctx;
+  void approval;
+  void decision;
+  return { ok: false, detail: "Proposals are not available yet.", at: Date.now() };
+}

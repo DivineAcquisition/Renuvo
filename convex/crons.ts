@@ -62,4 +62,8 @@ crons.daily("renew gmail push watches", { hourUTC: 9, minuteUTC: 41 }, internal.
 crons.interval("cleaners follow-ups", { minutes: 30 }, internal.cleanerFollowUps.sweep, {});
 crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.requirements.expireDue, {});
 
+// Sales: lapsed holds and Dispatch handoffs that need another try; recurring plans made to their horizon.
+crons.interval("sales bookings sweep", { minutes: 10 }, internal.bookings.sweep, {});
+crons.interval("recurring plans make their visits", { hours: 6 }, internal.plans.sweep, {});
+
 export default crons;

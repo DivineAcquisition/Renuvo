@@ -3,6 +3,7 @@
  * `recompute`, which adds the invoice up again from its rows, so the totals can never drift from the
  * records they summarize.
  */
+import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { totalsFor } from "./money";
@@ -56,6 +57,14 @@ export async function recompute(ctx: MutationCtx, invoiceId: Id<"invoices">): Pr
     paidAt = undefined;
   }
   await ctx.db.patch(invoiceId, { totals, status, paidAt, updatedAt: now });
+  // A booking waiting on this invoice looks again (convex/bookings.ts). Money alone never confirms a time.
+  if (totals.paidCents !== invoice.totals.paidCents || status !== invoice.status) {
+    const booking = await ctx.db
+      .query("bookings")
+      .withIndex("by_company_invoice", (q) => q.eq("companyId", invoice.companyId).eq("invoiceId", invoiceId))
+      .first();
+    if (booking && booking.status !== "confirmed" && booking.status !== "cancelled") await ctx.scheduler.runAfter(0, internal.bookings.invoiceChanged, { invoiceId });
+  }
   return (await ctx.db.get(invoiceId))!;
 }
 

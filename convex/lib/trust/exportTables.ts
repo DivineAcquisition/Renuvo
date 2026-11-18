@@ -114,6 +114,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   // Finance: the company's own money (convex/lib/finance/schema.ts).
   { table: "financeSettings", index: "by_company" },
   { table: "stripeAccounts", index: "by_company", omit: ["onboarding"], why: "A single-use Stripe onboarding link." },
+  { table: "agreementSigningLinks", index: "by_company_request", omit: ["publicId"], why: "Half of a signing link." },
   // Sales (convex/lib/sales/schema.ts).
   { table: "salesOpportunities", index: "by_company_updated" },
   { table: "salesDrafts", index: "by_company_updated" },

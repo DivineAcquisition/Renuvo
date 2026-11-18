@@ -323,8 +323,9 @@ describe("signing", () => {
     const id = await s.ready();
     const result = await s.as.query(api.agreementSigning.blockers, { companyId: s.companyId, agreementId: id });
     expect(result.signing).toMatchObject({ configured: false, provider: null });
-    expect(result.blockers.join(" ")).toMatch(/No e-signature provider is connected/);
-    expect(await refusal(s.as.mutation(api.agreementSigning.send, { companyId: s.companyId, agreementId: id }))).toMatch(/No e-signature provider/);
+    // Selestial hosts signing itself when no provider is connected, but only once signing links can be made.
+    expect(result.blockers.join(" ")).toMatch(/Signing links aren't set up/);
+    expect(await refusal(s.as.mutation(api.agreementSigning.send, { companyId: s.companyId, agreementId: id }))).toMatch(/Signing links aren't set up/);
     expect((await s.get(s.as, id)).workflow).toBe("approved");
     const exported = await s.as.mutation(api.companyAgreements.exportVersion, { companyId: s.companyId, agreementId: id, format: "pdf" });
     expect(exported.markdown).toContain("Standard clean");

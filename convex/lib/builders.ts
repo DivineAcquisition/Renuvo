@@ -20,6 +20,7 @@ import { invoiceForToken } from "./finance/payLinks";
 import { linkForStatementToken } from "./finance/statementLinks";
 import { notePortalAction, portalLinkForToken, portalLinkState, type PortalAction, type PortalLinkState } from "./cleaners/portal";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
+import { publicIdFor, type LinkKind } from "./sales/links";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
 
@@ -593,6 +594,50 @@ export function portalMutation<V extends AnyValidators, R>(def: {
       const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
       await notePortalAction(ctx, access.link, def.action);
       return result;
+    },
+  } as any);
+}
+
+// ── Sales links: a customer opening a proposal or a signing request, or an assessor their findings ──
+
+/**
+ * A read or action through a Sales link (convex/lib/sales/links.ts). `resolve` turns the verified public
+ * id into the record the link names; the token is the only authorization, and everything the handler
+ * shows must hang off what `resolve` returned. A wrong signature, an unknown id and a deployment with no
+ * secret all arrive as null, so the page cannot tell them apart.
+ */
+export function salesLinkQuery<V extends AnyValidators, R, T>(def: {
+  kind: LinkKind;
+  resolve: (ctx: QueryCtx, publicId: string) => Promise<T | null>;
+  args: V;
+  handler: (ctx: QueryCtx & { link: T | null }, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const publicId = await publicIdFor(def.kind, token);
+      const link = publicId ? await def.resolve(ctx, publicId) : null;
+      return def.handler({ ...ctx, link }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/** One action through a Sales link. Refused as "Not found." unless the token names a record. */
+export function salesLinkMutation<V extends AnyValidators, R, T>(def: {
+  kind: LinkKind;
+  resolve: (ctx: MutationCtx, publicId: string) => Promise<T | null>;
+  args: V;
+  handler: (ctx: MutationCtx & { link: T }, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const publicId = await publicIdFor(def.kind, token);
+      const link = publicId ? await def.resolve(ctx, publicId) : null;
+      if (!link) notFound();
+      return def.handler({ ...ctx, link }, rest as ObjectType<V>);
     },
   } as any);
 }

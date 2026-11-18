@@ -274,6 +274,25 @@ export const agreementTables = {
     .index("by_provider_request", ["provider", "providerRequestId"])
     .index("by_status_expires", ["status", "expiresAt"]),
 
+  /**
+   * Selestial-hosted signing: one link per signer of a request. The public id is half of the signer's
+   * link (convex/lib/sales/links.ts); what they signed and how is recorded on the row when they sign.
+   */
+  agreementSigningLinks: defineTable({
+    companyId: v.id("companies"),
+    requestId: v.id("agreementSignatureRequests"),
+    agreementId: v.id("agreements"),
+    signerEmail: v.string(),
+    signerName: v.string(),
+    publicId: v.string(),
+    viewedAt: v.optional(v.number()),
+    signature: v.optional(v.object({ typedName: v.string(), at: v.number(), hash: v.string(), version: v.number(), consent: v.string(), ip: v.optional(v.string()), userAgent: v.optional(v.string()) })),
+    declined: v.optional(v.object({ at: v.number(), reason: v.optional(v.string()) })),
+    createdAt: v.number(),
+  })
+    .index("by_publicId", ["publicId"])
+    .index("by_company_request", ["companyId", "requestId"]),
+
   /** Provider events already handled, so a delivery that arrives twice changes nothing the second time. */
   agreementProviderEvents: defineTable({
     provider: v.string(),

@@ -80,17 +80,54 @@ const mock: SigningProvider = {
   },
 };
 
+// ── Selestial-hosted signing ─────────────────────────────────────────────────────────────────────
+// The Owner's decision of November 18, 2026: when no outside provider is connected, Selestial hosts the
+// signing page itself. Each signer gets their own secure link (convex/lib/sales/links.ts), reviews the
+// exact approved version, types their name and agrees; the signature, its version hash and the time are
+// recorded with the request (convex/sign.ts). Delivery of the links is planned when the request is
+// accepted (markDispatched in signingStore.ts), so this adapter only names the request.
+
+export const HOSTED = "selestial";
+
+const hosted: SigningProvider = {
+  name: HOSTED,
+  async createRequest(request) {
+    return { ok: true, providerRequestId: `${HOSTED}-${request.idempotencyKey}` };
+  },
+  async withdraw() {
+    // The links check the request's status every time they are opened, so ending it here is enough.
+    return { ok: true };
+  },
+  async remind() {
+    return { ok: true };
+  },
+  async fetchSigned() {
+    return { ok: false, problem: "Signed in Selestial: the signed copy is the approved version with each signer's recorded signature, shown on the agreement.", retryable: false };
+  },
+};
+
+function linkSecretSet(): boolean {
+  const value = process.env.ACTION_LINK_SECRET?.trim();
+  return Boolean(value && value.length >= 32);
+}
+
 export type SigningStatus = { configured: boolean; provider: string | null; testMode: boolean; why: string };
 
 export function signingStatus(): SigningStatus {
   const name = process.env.SIGNATURE_PROVIDER?.trim().toLowerCase();
-  if (!name) return { configured: false, provider: null, testMode: false, why: "No e-signature provider is connected. You can draft, approve, export a PDF, and upload a document signed elsewhere." };
+  if (!name || name === HOSTED) {
+    if (!linkSecretSet()) return { configured: false, provider: null, testMode: false, why: "Signing links aren't set up yet (ACTION_LINK_SECRET). You can draft, approve, export a PDF, and upload a document signed elsewhere." };
+    return { configured: true, provider: HOSTED, testMode: false, why: "Signed in Selestial: each signer gets a secure link to review and sign." };
+  }
   if (name === "mock") return { configured: true, provider: mock.name, testMode: true, why: "A test stand-in is selected. No real signature can come from it." };
   return { configured: false, provider: null, testMode: false, why: `SIGNATURE_PROVIDER names "${name}", but no adapter for it is built.` };
 }
 
 export function signingProvider(): SigningProvider | null {
-  return process.env.SIGNATURE_PROVIDER?.trim().toLowerCase() === "mock" ? mock : null;
+  const name = process.env.SIGNATURE_PROVIDER?.trim().toLowerCase();
+  if (name === "mock") return mock;
+  if ((!name || name === HOSTED) && linkSecretSet()) return hosted;
+  return null;
 }
 
 // ── Webhook ──────────────────────────────────────────────────────────────────────────────────────
