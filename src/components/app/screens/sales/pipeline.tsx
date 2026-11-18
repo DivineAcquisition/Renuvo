@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { OpportunityDrawer } from "./drawer";
+import { ImportProspectsButton } from "./import-prospects";
 import { NewInquiryButton } from "./new-inquiry";
 import { AttentionBadge, BOARD, Empty, NextStep, OpportunityCard, STAGE_LOOK, StageBadge, useOpportunityParam, type Card, type Stage } from "./shared";
 
@@ -105,7 +106,13 @@ export function SalesPipelineScreen() {
 
   return (
     <>
-      <PageHeader title="Pipeline" lead="Every request for service, by how far it has come. Each card shows who acts next and when." actions={<NewInquiryButton onCreated={open} />} />
+      <PageHeader title="Pipeline" lead="Every request for service, by how far it has come. Each card shows who acts next and when." actions={
+          <>
+            <ImportProspectsButton />
+            <NewInquiryButton onCreated={open} />
+          </>
+        }
+      />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative min-w-52 flex-1 sm:max-w-xs">

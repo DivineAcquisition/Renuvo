@@ -33,6 +33,9 @@ Driven by clicking and typing:
    time and accepted. The page said the time was held and not yet confirmed.
 6. The Owner confirmed the booking in the opportunity. The page showed the job, with Dispatch.
 7. On a phone, the public form refused a submission with missing answers, marking each, then accepted it.
+8. Two prospects were imported from pasted lines (a third with nobody to reach was skipped). Each was
+   filed waiting on a person. After the Owner recorded how one had agreed to be contacted, Sales sent
+   its first question to that one and to nobody else.
 
 Checked on every Sales page and both customer pages at 1440 wide and on an iPhone 13: no page error,
 no console error, no sideways scrolling. The opportunity's tabs move with the arrow keys and Escape

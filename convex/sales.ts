@@ -29,7 +29,7 @@ import { openFollowUps, planFollowUp, PURPOSE_WORDS } from "./lib/sales/followUp
 import { fileInquiry } from "./lib/sales/intake";
 import { quoteLinksConfigured } from "./lib/sales/links";
 import { salesReaderName } from "./lib/sales/model";
-import { bump, currentQuote, ENTRY_WORDS, entryProblem, isOpen, ownedOpportunity, SALES, setNext, setStage, STAGE_WORDS } from "./lib/sales/opportunities";
+import { bump, currentQuote, ENTRY_WORDS, entryProblem, isOpen, ownedOpportunity, setNext, setStage, STAGE_WORDS } from "./lib/sales/opportunities";
 import { canReach } from "./lib/sales/outbox";
 import { versionOf, versionsOf, versionView } from "./lib/sales/quotes";
 import { activeRun, enqueueRun } from "./lib/sales/runs";
@@ -269,7 +269,7 @@ export const opportunity = companyQuery({
       checklist: checklistOf(row, requirements),
       otherFacts: otherFacts(row, requirements),
       match: { state: row.match.state, candidates },
-      reach: reach ? { ok: reach.ok, words: reach.ok ? null : reach.words, channel: row.channel } : null,
+      reach: reach ? { ok: reach.ok, words: reach.ok ? null : reach.words, code: reach.ok ? null : reach.code, channel: row.channel } : null,
       takeover: row.takeover ? { by: (await ctx.db.get(row.takeover.by))?.name ?? "A team member", at: row.takeover.at } : null,
       quote: quote ? { quoteId: quote._id, number: quote.number, status: quote.status, currentVersion: quote.currentVersion, sentVersion: quote.sentVersion ?? null, approvedVersion: quote.approvedVersion ?? null, validUntil: quote.validUntil ?? null, acceptance: quote.acceptance ?? null, declined: quote.declined ?? null, question: quote.question ?? null, versions: versions.map(versionView) } : null,
       thread: await threadOf(ctx, row, 80),
@@ -572,6 +572,6 @@ export const waiting = companyQuery({
     let needsYou = 0;
     for (const row of open) if (row.takeover || row.nextAction?.by === "owner" || row.match.state === "needs_review" || (await openActions(ctx, row)).length > 0) needsYou += 1;
     const followUps = await Promise.all(open.slice(0, 50).map((row) => openFollowUps(ctx, row)));
-    return { needsYou, open: open.length, followUps: followUps.flat().length, sales: SALES.kind };
+    return { needsYou, open: open.length, followUps: followUps.flat().length };
   },
 });

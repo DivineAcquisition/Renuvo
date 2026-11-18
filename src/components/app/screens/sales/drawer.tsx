@@ -279,6 +279,56 @@ function MoveStage({ detail, now }: { detail: Detail; now: number }) {
   );
 }
 
+/** A person records how the prospect agreed to be contacted. Until then nothing is sent; an imported contact alone never counts. */
+function RecordPermission({ detail }: { detail: Detail }) {
+  const { companyId } = useCompany();
+  const record = useMutation(api.consent.record);
+  const work = useMutation(api.sales.work);
+  const { busy, error, run, setError } = useRun();
+  const [source, setSource] = useState<"verbal" | "paper_form" | "staff">("verbal");
+  const [evidence, setEvidence] = useState("");
+  if (!detail.canManage) return <p className="text-xs text-muted-foreground">An Owner or Manager records how this person agreed to be contacted.</p>;
+  const channel = detail.reach!.channel;
+  return (
+    <div className="grid gap-3 rounded-xl border border-border bg-background p-3.5">
+      <div>
+        <p className="text-sm font-semibold text-strong">Record how they agreed to be contacted</p>
+        <p className="text-xs text-muted-foreground">Only if they did. This is kept as the record of their permission for {channel === "sms" ? "texts" : "emails"} about this request.</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="How they agreed">
+          <SelectInput value={source} onChange={(event) => setSource(event.target.value as typeof source)}>
+            <option value="verbal">They said so, in person or on a call</option>
+            <option value="paper_form">They signed a paper form</option>
+            <option value="staff">They asked a team member to follow up</option>
+          </SelectInput>
+        </Field>
+        <Field label="What they said, or where the proof is">
+          <TextInput value={evidence} onChange={(event) => setEvidence(event.target.value)} placeholder="Asked us to text a price, on the call of Nov 12" />
+        </Field>
+      </div>
+      <FormError message={error} />
+      <div>
+        <Button
+          size="sm"
+          variant="outline"
+          loading={busy}
+          onClick={() =>
+            void run(async () => {
+              if (evidence.trim().length < 3) return setError("Say in a few words how they agreed, for the record.");
+              await record({ companyId, recipient: { kind: "customer", id: detail.customer!.customerId }, channel, category: "operational", status: "granted", source, evidence });
+              // With permission on record, Sales looks at the opportunity again, unless a person is handling it.
+              if (!detail.takeover && detail.card.stage !== "won" && detail.card.stage !== "closed_lost") await work({ companyId, opportunityId: detail.card.opportunityId }).catch(() => undefined);
+            })
+          }
+        >
+          Record permission
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Summary({ detail, now }: { detail: Detail; now: number }) {
   const { companyId, timezone } = useCompany();
   const resolveMatch = useMutation(api.sales.resolveMatch);
@@ -325,6 +375,7 @@ function Summary({ detail, now }: { detail: Detail; now: number }) {
           </span>
         </p>
       ) : null}
+      {detail.reach && !detail.reach.ok && detail.reach.code === "no_permission" && detail.customer ? <RecordPermission detail={detail} /> : null}
 
       <Section title="The inquiry">
         <div className="rounded-xl border border-border bg-background p-3.5">
