@@ -106,7 +106,8 @@ Publish, rollback, unpublish, archive and booking rules are the Owner's; drafts 
    independently. If the money arrived but the time can no longer be held (the hold expired and the
    slot is gone, a cleaner took time off), the session becomes `needs_attention` and a Sales task
    `booking-recovery:<id>` is opened instead of a silent double-booking.
-9. **Handoff** runs once per session: customer matched by email or created, property matched or
+9. **Handoff** runs once per session: customer matched by email or created (a match never changes the
+   existing record from what the visitor typed; a different name or phone is written on the visit instead), property matched or
    created, a job inserted the way `jobs.create` inserts one with a service snapshot priced from the
    saved quote, Dispatch coverage started, the invoice linked, and a confirmation email queued through
    the messaging outbox with a dedupe key. A request creates a Sales task `booking-request:<id>`.
@@ -167,14 +168,15 @@ Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET
 
 ### Implemented and verified
 
-Verified by `convex/booking.test.ts` (25 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
-(893 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
+Verified by `convex/booking.test.ts` (26 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
+(894 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
 Chromium at desktop and phone widths against the real Convex functions (screenshots in
 `docs/screenshots/booking/`).
 
 - Building, saving with revision conflicts, publishing, version pinning during a session, rollback,
   unpublish, archive, duplicate; readiness blockers with links to the setting to fix.
 - Company isolation; Office cannot edit; Owner-only publishing and rules.
+- A booking matched to an existing customer by email leaves that customer's record as it was.
 - Residential instant booking without payment, with a deposit through the fake Stripe including
   duplicate webhooks, and a redirect without a webhook not counting as paid.
 - Simultaneous visitors at one time; confirmed visits and holds both counted (an overbooking bug found

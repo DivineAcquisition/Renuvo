@@ -370,6 +370,23 @@ describe("a residential booking with no payment", () => {
     expect(await s.t.mutation(api.bookingSessions.chooseTime, { token: second, startsAt: slot.startsAt })).toMatchObject({ ok: false });
   });
 
+  it("matches an existing customer by email without changing their record from what a visitor typed", async () => {
+    const s = await setup();
+    await publish(s.as, s.companyId, s.experienceId);
+    const customerId = await s.as.mutation(api.customers.create, { companyId: s.companyId, name: "Dana Whitfield-Lee", kind: "home", email: "dana@example.com" });
+    const token = await begin(s, "same-email");
+    await throughDetails(s, token);
+    expect(await s.t.mutation(api.bookingSessions.confirm, { token })).toMatchObject({ ok: true });
+    const records = await s.t.run(async (ctx) => ({ customers: await ctx.db.query("customers").collect(), jobs: await ctx.db.query("jobs").collect() }));
+    expect(records.customers).toHaveLength(1);
+    expect(records.customers[0]._id).toBe(customerId);
+    // The visitor's phone is not written onto someone else's record; the visit says what they gave.
+    expect(records.customers[0].phone).toBeUndefined();
+    expect(records.customers[0].name).toBe("Dana Whitfield-Lee");
+    expect(records.jobs[0]).toMatchObject({ customerId });
+    expect(records.jobs[0].instructions).toMatch(/Booked as Dana Whitfield, \+15125550199 \(differs from the customer record/);
+  });
+
   it("asks again when a price-affecting answer changes after the price was accepted", async () => {
     const s = await setup();
     await publish(s.as, s.companyId, s.experienceId);

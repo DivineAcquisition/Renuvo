@@ -49,7 +49,8 @@ export async function ensureCustomer(ctx: MutationCtx, session: Doc<"bookingSess
     .take(5);
   const found = matches.find((c) => c.status === "active");
   if (found) {
-    if (!found.phone && contact.phone) await ctx.db.patch(found._id, { phone: contact.phone });
+    // Whoever books only typed this email: nothing they entered changes the company's existing record
+    // (a phone written here would send that customer's texts to a stranger). The visit shows what they gave.
     await ctx.db.patch(session._id, { customerId: found._id });
     return found._id;
   }
@@ -89,8 +90,14 @@ export async function ensureProperty(ctx: MutationCtx, session: Doc<"bookingSess
 }
 
 /** What the crew reads on the visit: the customer's own answers and access notes. */
-function instructions(session: Doc<"bookingSessions">, L: Loaded): string {
+function instructions(session: Doc<"bookingSessions">, L: Loaded, customer: Doc<"customers"> | null): string {
   const lines: string[] = ["Booked online."];
+  // Matched to an existing customer by email: say so when the name or phone given differs from the record.
+  const contact = session.contact;
+  const digits = (value: string | undefined) => (value ?? "").replace(/\D/g, "").slice(-10);
+  if (customer && contact && (customer.name.trim().toLowerCase() !== customerName(session).trim().toLowerCase() || (contact.phone && digits(customer.phone) !== digits(contact.phone)))) {
+    lines.push(`Booked as ${customerName(session)}, ${contact.phone} (differs from the customer record: check before calling).`);
+  }
   for (const q of L.def.behavior.questions) {
     const answer = session.answers[q.id];
     if (answer === undefined || q.purpose === "access") continue;
@@ -178,7 +185,7 @@ export async function commitBooking(ctx: MutationCtx, sessionId: Id<"bookingSess
     status: "scheduled",
     ...(quote.crew > 1 ? { requiredCrew: quote.crew } : {}),
     ...(quote.windowMinutes > 0 ? { arrivalWindowMinutes: quote.windowMinutes } : {}),
-    instructions: instructions(session, L),
+    instructions: instructions(session, L, await ctx.db.get(customerId)),
     createdAt: now,
   });
   const quoteId = await saveQuote(ctx, { companyId: session.companyId, service: row.service, version: row.version, quoteInput: input, result, purpose: "visit", actor: SYSTEM, jobId });
