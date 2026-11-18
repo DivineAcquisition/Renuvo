@@ -14,6 +14,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { endAssignment } from "../dispatch/assignmentState";
 import { coverJob } from "../dispatch/workflow";
+import { refreshClient } from "../clients/directory";
 import { recordEvent, type Actor } from "../events";
 import { recompute, emptyTotals } from "../finance/ledger";
 import { linesTotal } from "../finance/money";
@@ -111,6 +112,7 @@ export async function createPlan(ctx: MutationCtx, company: Doc<"companies">, in
   });
   await recordEvent(ctx, { companyId: company._id, type: "recurring_plan.created", actor: { kind: "system" }, subject: { table: "recurringPlans", id: planId }, data: { ...(input.bookingId ? { bookingId: input.bookingId } : {}), ...(input.setupId ? { setupId: input.setupId } : {}) } });
   await generateVisits(ctx, (await ctx.db.get(planId))!, { kind: "system" }, { firstJobAt });
+  await refreshClient(ctx, input.customerId);
   return planId;
 }
 

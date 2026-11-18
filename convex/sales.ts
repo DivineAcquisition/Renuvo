@@ -14,6 +14,7 @@ import { owned } from "./lib/access";
 import { companyMutation, companyQuery, type MemberAccess } from "./lib/builders";
 import { matchesFor, normalPhone, WHY_WORDS } from "./lib/cleaners/duplicates";
 import { userError } from "./lib/errors";
+import { refreshClient } from "./lib/clients/directory";
 import { byMember, recordEvent } from "./lib/events";
 import { isOwner } from "./lib/roles";
 import { checkCapacity } from "./lib/sales/capacity";
@@ -328,12 +329,14 @@ export const quickCreate = companyMutation({
     const phone = optionalText(args.customer.phone, "Phone", 40);
     if (!email && !phone) throw userError("Add an email or a phone number, so the customer can be reached.");
     const kind = KIND_FOR_SEGMENT[draft.segment];
-    const customerId = await ctx.db.insert("customers", { companyId: ctx.companyId, name: text(args.customer.name, "Name", 160), kind, email, phone, preferences: optionalText(args.customer.preferences, "Preferences"), status: "active", createdAt: Date.now() });
+    const customerId = await ctx.db.insert("customers", { companyId: ctx.companyId, name: text(args.customer.name, "Name", 160), kind, email, phone, preferences: optionalText(args.customer.preferences, "Preferences"), status: "active", relationship: "prospect", source: "sales", createdAt: Date.now() });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "customer.created", actor: byMember(ctx), subject: { table: "customers", id: customerId }, data: { from: "sales_workspace" } });
     let propertyId: Id<"properties"> | undefined;
     if (args.property) propertyId = await insertProperty(ctx, customerId, kind, args.property);
     // The workspace puts the new customer on the draft with its next save, so the draft's revision stays the person's.
     if (draft.opportunityId) await ctx.db.patch(draft.opportunityId, { customerId, updatedAt: Date.now() });
+    // A prospect in Clients & Properties until a visit is booked, on this same record.
+    await refreshClient(ctx, customerId);
     return { created: true as const, customerId, propertyId: propertyId ?? null };
   },
 });
@@ -352,6 +355,7 @@ async function insertProperty(ctx: MutationCtx & MemberAccess, customerId: Id<"c
     createdAt: Date.now(),
   });
   await recordEvent(ctx, { companyId: ctx.companyId, type: "property.created", actor: byMember(ctx), subject: { table: "properties", id: propertyId }, data: { from: "sales_workspace" } });
+  await refreshClient(ctx, customerId);
   return propertyId;
 }
 

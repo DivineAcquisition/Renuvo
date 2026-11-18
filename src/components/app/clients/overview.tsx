@@ -11,13 +11,15 @@ import { useState } from "react";
 import { useCompany } from "@/components/app/company";
 import { Modal } from "@/components/app/modal";
 import { Plus } from "@/components/icons";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clientPath } from "@/lib/app/clients";
 
 import { api } from "../../../../convex/_generated/api";
-import { Card, when } from "./bits";
+import { Card, money, when } from "./bits";
 import { ContactForm } from "./edit";
 import { AgentCard, AttentionCard, ContactList, NextServiceCard, PlanSummary, PropertyCard, Timeline, type ContactRow } from "./parts";
+import { SalesCard, useClientSales } from "./sales";
 import type { Profile } from "./profile";
 
 const CHANNEL_WORDS: Record<string, string> = { sms: "Text", email: "Email", phone: "Phone call" };
@@ -26,6 +28,8 @@ const SOURCE_WORDS: Record<string, string> = { manual: "Added by the team", goog
 export function OverviewTab({ profile, onBook, compact }: { profile: Profile; onBook: () => void; compact?: boolean }) {
   const { companyId, timezone } = useCompany();
   const summary = useQuery(api.clients.summary, { companyId, customerId: profile.id });
+  const sales = useClientSales(profile);
+  const salesPlans = (sales?.plans ?? []).filter((plan) => plan.status !== "ended");
   const [contact, setContact] = useState<ContactRow | "new" | null>(null);
   const properties = profile.properties.filter((p) => p.status === "active");
   const nextAt = (propertyId: string) => summary?.upcoming.find((v) => v.propertyId === propertyId)?.startsAt ?? null;
@@ -65,10 +69,29 @@ export function OverviewTab({ profile, onBook, compact }: { profile: Profile; on
                 </Link>
               }
             >
-              {summary.plans.length ? (
+              {summary.plans.length || salesPlans.length ? (
                 <ul className="grid gap-2">
                   {summary.plans.map((plan) => (
                     <PlanSummary key={plan.id} plan={plan} timezone={timezone} customerId={profile.id} />
+                  ))}
+                  {salesPlans.map((plan) => (
+                    <li key={plan.id} className="rounded-xl border border-border px-3 py-2.5 text-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="min-w-0">
+                          <span className="font-medium text-strong">{plan.service}</span> <span className="text-muted-foreground">· {plan.property}</span>
+                        </p>
+                        <Badge variant={plan.status === "active" ? "success" : plan.status === "paused" ? "warning" : "outline"} size="sm">
+                          {plan.statusWords}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {plan.cadence ?? "No cadence"}
+                        {plan.visitCents !== null ? ` · ${money(plan.visitCents)} a visit` : ""} · from Sales
+                      </p>
+                      <Link href={plan.href} className="text-xs font-medium text-brand-300 underline-offset-4 hover:underline">
+                        Open in Sales
+                      </Link>
+                    </li>
                   ))}
                 </ul>
               ) : (
@@ -103,6 +126,7 @@ export function OverviewTab({ profile, onBook, compact }: { profile: Profile; on
             </div>
           </Card>
         ) : null}
+        <SalesCard profile={profile} />
         <Card
           title="Contacts"
           action={

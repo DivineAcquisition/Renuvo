@@ -13,6 +13,7 @@ import { requestApproval } from "./lib/approvalQueue";
 import { companyMutation, companyQuery, type MemberAccess } from "./lib/builders";
 import { coverageOf } from "./lib/dispatch/crew";
 import { userError } from "./lib/errors";
+import { refreshClient } from "./lib/clients/directory";
 import { byMember, recordEvent } from "./lib/events";
 import { isOwner } from "./lib/roles";
 import { cadenceValidator } from "./lib/sales/schema";
@@ -345,6 +346,7 @@ export const end = companyMutation({
     const ended = args.lastDate <= todayIn(plan.timezone);
     await ctx.db.patch(plan._id, { endDate: args.lastDate, ...(ended ? { status: "ended" as const, endedReason: reason } : {}), updatedAt: Date.now() });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "recurring_plan.ended", actor: byMember(ctx), subject: { table: "recurringPlans", id: plan._id }, data: { lastDate: args.lastDate, cancelled } });
+    await refreshClient(ctx, plan.customerId);
     return { cancelled, effect: "Completed visits, issued invoices, deposits and payments are unchanged. Anything still owed stays on its invoice." };
   },
 });
@@ -370,6 +372,7 @@ export const sweep = internalMutation({
     for (const plan of plans) {
       if (plan.endDate && plan.endDate < todayIn(plan.timezone)) {
         await ctx.db.patch(plan._id, { status: "ended", endedReason: "Reached its last date", updatedAt: Date.now() });
+        await refreshClient(ctx, plan.customerId);
         continue;
       }
       // Each plan in its own step, so one plan's problem never stops the others.

@@ -67,13 +67,33 @@ export async function viewsOf(ctx: QueryCtx, customer: Doc<"customers">): Promis
   if (residential) {
     views.add("residential");
     const plans = await plansOf(ctx, customer.companyId, customer._id);
-    const recurring = plans.some((plan) => plan.kind === "recurring" && plan.state !== "ended" && properties.some((p) => p._id === plan.propertyId && p.kind === "home"));
+    const home = (propertyId: Id<"properties">) => properties.some((p) => p._id === propertyId && p.kind === "home");
+    // Recurring work comes from either kind of plan: a Clients service plan or a Sales recurring plan.
+    const salesPlans = await ctx.db
+      .query("recurringPlans")
+      .withIndex("by_company_customer", (q) => q.eq("companyId", customer.companyId).eq("customerId", customer._id))
+      .take(50);
+    const recurring = plans.some((plan) => plan.kind === "recurring" && plan.state !== "ended" && home(plan.propertyId)) || salesPlans.some((plan) => plan.status !== "ended" && home(plan.propertyId));
     if (recurring) views.add("residential_recurring");
     const recent = await ctx.db
       .query("jobs")
       .withIndex("by_company_customer_start", (q) => q.eq("companyId", customer.companyId).eq("customerId", customer._id).gte("startsAt", Date.now() - YEAR))
       .take(200);
-    const oneTime = recent.some((job) => job.planId === undefined && job.status !== "cancelled");
+    let oneTime = false;
+    for (const job of recent) {
+      if (job.planId !== undefined || job.status === "cancelled") continue;
+      // A visit a Sales plan made is recurring work, not a one-time visit.
+      const fromSalesPlan = salesPlans.length
+        ? await ctx.db
+            .query("planVisits")
+            .withIndex("by_company_job", (q) => q.eq("companyId", customer.companyId).eq("jobId", job._id))
+            .first()
+        : null;
+      if (!fromSalesPlan) {
+        oneTime = true;
+        break;
+      }
+    }
     if (oneTime || !recurring) views.add("residential_one_time");
   }
   if (kinds.has("commercial") || kinds.has("office")) views.add("commercial");

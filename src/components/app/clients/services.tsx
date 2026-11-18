@@ -29,6 +29,7 @@ import type { Spec } from "../../../../convex/lib/services/spec";
 import { Card, day, EmptyState, money, StaffingLine, when } from "./bits";
 import { ActionMenu } from "./menu";
 import { VisitRow } from "./parts";
+import { SalesPlans, SalesWork, useClientSales } from "./sales";
 import type { Profile } from "./profile";
 
 type Plan = NonNullable<ReturnType<typeof useQuery<typeof api.servicePlans.forClient>>>["plans"][number];
@@ -59,8 +60,10 @@ export function ServicesTab({ profile }: { profile: Profile }) {
           className="h-9 rounded-lg border border-border bg-card px-3 text-sm font-medium text-strong hover:bg-muted"
           trigger={<span>Create booking or proposal</span>}
           actions={[
-            { label: "Book a visit", onSelect: () => setBooking(true), disabled: !profile.properties.some((p) => p.status === "active") },
-            { label: "Draft a proposal or agreement", href: `/app/agreements/new?mode=selestial&customer=${profile.id}` },
+            { label: "Book a visit now", onSelect: () => setBooking(true), disabled: !profile.properties.some((p) => p.status === "active") },
+            { label: "Booking in Sales (quote, payment, agreement)", href: `/app/agents/sales/new?mode=booking&customer=${profile.id}` },
+            { label: "Proposal in Sales", href: `/app/agents/sales/new?mode=proposal&customer=${profile.id}` },
+            { label: "Agreement only", href: `/app/agreements/new?mode=selestial&customer=${profile.id}` },
           ]}
         />
       </div>
@@ -126,6 +129,7 @@ const STATE_WORDS: Record<string, { label: string; tone: "success" | "warning" |
 function Plans({ profile }: { profile: Profile }) {
   const { companyId, timezone } = useCompany();
   const data = useQuery(api.servicePlans.forClient, { companyId, customerId: profile.id });
+  const sales = useClientSales(profile);
   const params = useSearchParams();
   const [creating, setCreating] = useState(false);
   const [changing, setChanging] = useState<{ plan: Plan; action: "pause" | "end" | "series" } | null>(null);
@@ -233,9 +237,10 @@ function Plans({ profile }: { profile: Profile }) {
             </p>
           </section>
         ))
-      ) : (
-        <EmptyState title="No plans">Set up a recurring plan to keep visits booked ahead, or a standing arrangement to hold a rental&apos;s turnover terms.</EmptyState>
+      ) : sales?.plans.length ? null : (
+        <EmptyState title="No plans">Set up a recurring plan to keep visits booked ahead, or a standing arrangement to hold a rental&apos;s turnover terms. Plans agreed through a Sales booking or proposal show here too.</EmptyState>
       )}
+      {sales ? <SalesPlans sales={sales} /> : null}
       <Modal open={creating} onClose={() => setCreating(false)} title="Set up a plan" description="Priced by Services & Pricing from the job's facts, with the property's own price if it has one.">
         <PlanForm profile={profile} onDone={() => setCreating(false)} />
       </Modal>
@@ -251,6 +256,7 @@ function PlanForm({ profile, onDone }: { profile: Profile; onDone: () => void })
   const studio = useQuery(api.services.studio, { companyId });
   const docs = useQuery(api.clientDocuments.proposals, { companyId, customerId: profile.id });
   const create = useMutation(api.servicePlans.create);
+  const sales = useClientSales(profile);
   const { busy, error, run } = useRun();
   const properties = profile.properties.filter((p) => p.status === "active");
   const live = (studio?.services ?? []).filter((s) => s.live);
@@ -372,6 +378,15 @@ function PlanForm({ profile, onDone }: { profile: Profile; onDone: () => void })
           </SelectInput>
         </Field>
       </div>
+      {(() => {
+        // Both kinds of plan book visits on their own. Two at one property would book the same work twice.
+        const clash = sales?.plans.filter((p) => p.propertyId === form.propertyId && p.status !== "ended") ?? [];
+        return clash.length ? (
+          <p role="alert" className="rounded-lg bg-warning/[0.08] px-3 py-2 text-sm text-warning-foreground">
+            This property already has a Sales plan ({clash.map((p) => `${p.service}${p.cadence ? `, ${p.cadence.toLowerCase()}` : ""}`).join("; ")}) that books its own visits. A second plan here books more visits on top of it. Change that plan in Sales instead, unless this is extra work.
+          </p>
+        ) : null;
+      })()}
       <label className="flex items-center gap-2 text-sm text-strong">
         <input type="checkbox" checked={form.start} onChange={(event) => setForm((c) => ({ ...c, start: event.target.checked }))} className="size-4 accent-brand-500" />
         Start now{form.kind === "recurring" ? ": book the visits for the next four weeks" : ""}
@@ -496,14 +511,16 @@ const SOURCE_WORDS: Record<string, string> = { quote: "Priced by the engine", pl
 function Proposals({ profile }: { profile: Profile }) {
   const { companyId, timezone } = useCompany();
   const data = useQuery(api.clientDocuments.proposals, { companyId, customerId: profile.id });
-  if (data === undefined) return <Skeleton className="h-48 rounded-2xl" />;
+  const sales = useClientSales(profile);
+  if (data === undefined || sales === undefined) return <Skeleton className="h-48 rounded-2xl" />;
   return (
     <div className="grid gap-4">
+      <SalesWork sales={sales} />
       <Card
-        title="Proposals and agreements"
+        title="Agreements"
         action={
           <Link href={`/app/agreements/new?mode=selestial&customer=${profile.id}`} className="text-sm font-medium text-brand-300 underline-offset-4 hover:underline">
-            Draft a proposal
+            Draft an agreement
           </Link>
         }
       >

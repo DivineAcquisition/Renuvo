@@ -8,6 +8,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { applyTemplate } from "../dispatch/templates";
 import { coverJob } from "../dispatch/workflow";
+import { visitBooked } from "../clients/directory";
 import { recordEvent, type Actor } from "../events";
 import { visitScope } from "../services/operations";
 import { cents, optionalText } from "../text";
@@ -66,5 +67,7 @@ export async function createVisit(ctx: MutationCtx, input: VisitInput): Promise<
   const template = await applyTemplate(ctx, (await ctx.db.get(jobId))!);
   await recordEvent(ctx, { companyId: input.company._id, type: "job.created", actor: input.actor, subject: { table: "jobs", id: jobId }, data: { from: input.from, ...(template ? { checklistVersion: template.version } : {}) } });
   await coverJob(ctx, jobId);
+  // Booking makes a prospect a client, and the client's directory views follow the work.
+  await visitBooked(ctx, input.customerId, input.actor);
   return jobId;
 }
