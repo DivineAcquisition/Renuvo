@@ -190,4 +190,36 @@ describe("Messaging funds", () => {
     expect(left(s)).toBe(50_000);
     expect(await refusal(s.as.mutation(api.messagingFunds.supportCredit, { companyId: s.companyId, cents: 500, reason: "Owner tries", key: "k2" }))).toBe("Not found.");
   });
+  it("shows the Owner the balance, this month by kind and agent, held work, charges and a statement, with no internal ids", async () => {
+    const s = await billed(250_000);
+    const sent = await s.t.run(async (ctx) => queueMessage(ctx, { companyId: s.companyId, purpose: "reminder", cleaner: (await ctx.db.get(s.cleaners.Lena))!, body: "Reminder: 9am tomorrow at Elm St.", dedupeKey: "ov1", actor: DISPATCH }));
+    await flush(s.t);
+    await s.as.mutation(api.messagingFunds.setControls, { companyId: s.companyId, monthlyLimitCents: 1_000, batchLimitCents: null, lowBalanceCents: 500, agentLimitsCents: { dispatch: 0 } });
+    const waiting = await s.t.run(async (ctx) => queueMessage(ctx, { companyId: s.companyId, purpose: "reminder", cleaner: (await ctx.db.get(s.cleaners.Lena))!, body: "Second reminder.", dedupeKey: "ov2", actor: DISPATCH }));
+    await flush(s.t);
+    expect((await s.t.run(async (ctx) => ctx.db.get(waiting._id)))!.status).toBe("held");
+
+    const view = await s.as.query(api.messagingUsage.overview, { companyId: s.companyId });
+    if (!view.connected) throw new Error("expected billing connected");
+    expect(view.balance).toMatchObject({ available: 250_000 - 250, reserved: 0 });
+    expect(view.month).toMatchObject({ outbound: 250, inbound: 0, total: 250, limit: 100_000 });
+    expect(view.month.byKind.find((row) => row.kind === "sms_out")).toMatchObject({ count: 1, amount: 250 });
+    expect(view.month.byAgent).toEqual([expect.objectContaining({ key: "dispatch", label: "Dispatch", amount: 250 })]);
+    expect(view.controls.agentLimits.find((row) => row.agent === "dispatch")).toMatchObject({ limit: 0, spent: 250 });
+    expect(view.held).toEqual([expect.objectContaining({ label: "Dispatch", reason: "messaging_limit", count: 1, estimate: 250 })]);
+    expect(view.recent[0]).toMatchObject({ what: "Job reminder to a cleaner", detail: "1 segment", who: "Dispatch", status: "Charged", amount: 250, final: true });
+    expect(view.rateCard.rows.find((row) => row.kind === "sms_out")).toMatchObject({ price: 250, per: "segment" });
+    const sentRow = (await s.t.run(async (ctx) => ctx.db.get(sent._id)))!;
+    const text = JSON.stringify(view);
+    for (const secret of [sentRow.providerMessageId!, sent._id, "lockId", "m-"]) expect(text).not.toContain(secret);
+
+    const month = new Date(MORNING).toISOString().slice(0, 7);
+    const statement = (await s.as.query(api.messagingUsage.statement, { companyId: s.companyId, month }))!;
+    expect(statement.lines).toEqual([expect.objectContaining({ description: "Job reminder to a cleaner", quantity: "1 segment", rateVersion: "msg-2026-11", amount: 250 })]);
+    expect(statement.totals.charged).toBe(250);
+    expect(await s.as.query(api.messagingUsage.statement, { companyId: s.companyId, month: "2026-13" })).toBeNull();
+
+    const office = await addMember(s.t, s.as, s.companyId, "office-b", "office");
+    expect(await refusal(office.query(api.messagingUsage.overview, { companyId: s.companyId }))).toBe(NOT_ALLOWED);
+  });
 });

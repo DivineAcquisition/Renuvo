@@ -23,7 +23,8 @@ import { ownerMutation, staffMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { controlsOf, refundCharge } from "./lib/messagingBilling/ledger";
-import { centsToUnits, formatUnits, UNITS_PER_CENT } from "./lib/messagingBilling/money";
+import { centsToUnits, UNITS_PER_CENT } from "./lib/messagingBilling/money";
+import { autoTopUpWording } from "./lib/messagingBilling/wording";
 
 /** The amounts offered first, in cents. */
 export const TOP_UP_PRESETS = [2_500, 5_000, 10_000] as const;
@@ -49,11 +50,7 @@ export const startTopUp = ownerMutation({
   },
 });
 
-/** The exact words the Owner authorizes for automatic top-ups. Stored with the authorization. */
-export function autoTopUpWording(input: { threshold: number; amount: number; monthlyMax: number }): string {
-  const times = Math.floor(input.monthlyMax / input.amount);
-  return `I authorize Selestial to charge my saved payment method ${formatUnits(input.amount)} (plus any applicable tax) whenever my messaging balance falls below ${formatUnits(input.threshold)}, up to ${times} time${times === 1 ? "" : "s"} (${formatUnits(times * input.amount)}) per calendar month, until I turn automatic top-up off. Each top-up appears on its own receipt.`;
-}
+export { autoTopUpWording };
 
 export const setAutoTopUp = ownerMutation({
   args: { enabled: v.boolean(), thresholdCents: v.number(), amountCents: v.number(), monthlyMaxCents: v.number(), wording: v.optional(v.string()) },

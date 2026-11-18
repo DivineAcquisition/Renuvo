@@ -275,6 +275,7 @@ import type * as lib_messagingBilling_money from "../lib/messagingBilling/money.
 import type * as lib_messagingBilling_rates from "../lib/messagingBilling/rates.js";
 import type * as lib_messagingBilling_routes from "../lib/messagingBilling/routes.js";
 import type * as lib_messagingBilling_segments from "../lib/messagingBilling/segments.js";
+import type * as lib_messagingBilling_wording from "../lib/messagingBilling/wording.js";
 import type * as lib_permissionCatalog from "../lib/permissionCatalog.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_recruiter_applications from "../lib/recruiter/applications.js";
@@ -371,6 +372,7 @@ import type * as members from "../members.js";
 import type * as messaging from "../messaging.js";
 import type * as messagingBilling from "../messagingBilling.js";
 import type * as messagingFunds from "../messagingFunds.js";
+import type * as messagingUsage from "../messagingUsage.js";
 import type * as onboarding from "../onboarding.js";
 import type * as overview from "../overview.js";
 import type * as pay from "../pay.js";
@@ -689,6 +691,7 @@ declare const fullApi: ApiFromModules<{
   "lib/messagingBilling/rates": typeof lib_messagingBilling_rates;
   "lib/messagingBilling/routes": typeof lib_messagingBilling_routes;
   "lib/messagingBilling/segments": typeof lib_messagingBilling_segments;
+  "lib/messagingBilling/wording": typeof lib_messagingBilling_wording;
   "lib/permissionCatalog": typeof lib_permissionCatalog;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/recruiter/applications": typeof lib_recruiter_applications;
@@ -785,6 +788,7 @@ declare const fullApi: ApiFromModules<{
   messaging: typeof messaging;
   messagingBilling: typeof messagingBilling;
   messagingFunds: typeof messagingFunds;
+  messagingUsage: typeof messagingUsage;
   onboarding: typeof onboarding;
   overview: typeof overview;
   pay: typeof pay;

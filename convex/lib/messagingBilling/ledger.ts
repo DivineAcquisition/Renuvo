@@ -223,7 +223,10 @@ export async function reserveAnswered(ctx: Ctx, chargeId: Id<"messagingCharges">
   } else {
     await ctx.db.patch(chargeId, { state: "released", settlement: "released", updatedAt: now, history: [...charge.history, { at: now, kind: outcome === "denied" ? "not_enough" : "billing_unavailable", amount: 0 }].slice(-30) });
   }
+  // The balance Selestial shows always has holds taken out, as Autumn's does: Autumn's own figure when it
+  // sent one (it already counts this hold), otherwise the hold is taken out here.
   if (remaining !== undefined) await setRemaining(ctx, charge.companyId, charge.env, remaining);
+  else if (outcome === "reserved") await spendLocally(ctx, charge.companyId, charge.env, charge.reserved);
 }
 
 async function setRemaining(ctx: Ctx, companyId: Id<"companies">, env: AutumnEnv, remaining: number) {
@@ -264,7 +267,8 @@ export async function captureCharge(ctx: Ctx, chargeId: Id<"messagingCharges">, 
     updatedAt: now,
     history: [...charge.history, { at: now, kind: "captured", amount, note: count !== charge.estimatedCount ? `The provider counted ${count}; ${charge.estimatedCount} were estimated.` : undefined }].slice(-30),
   });
-  await spendLocally(ctx, charge.companyId, charge.env, amount);
+  // The hold is already out of the balance: only the difference between what was held and what is charged moves it.
+  await spendLocally(ctx, charge.companyId, charge.env, amount - charge.reserved);
   await ctx.scheduler.runAfter(0, internal.messagingBilling.settle, { chargeId });
 }
 
@@ -282,7 +286,10 @@ export async function releaseCharge(ctx: Ctx, chargeId: Id<"messagingCharges">, 
     updatedAt: now,
     history: [...charge.history, { at: now, kind: "released", amount: 0, note }].slice(-30),
   });
-  if (held) await ctx.scheduler.runAfter(0, internal.messagingBilling.settle, { chargeId });
+  if (held) {
+    await spendLocally(ctx, charge.companyId, charge.env, -charge.reserved);
+    await ctx.scheduler.runAfter(0, internal.messagingBilling.settle, { chargeId });
+  }
 }
 
 /** The provider's outcome is not known (a send that never answered). The hold stays until it is reconciled. */

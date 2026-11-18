@@ -237,6 +237,128 @@ describe("the Usage tab", () => {
   });
 });
 
+describe("the Messaging tab", () => {
+  const plan = {
+    connected: true,
+    env: "sandbox",
+    problem: null,
+    rateCard: null,
+    plan: "operate",
+    catalog: { plans: [{ id: "operate", name: "Operate", monthlyCents: 29900, positioning: "", summary: "" }], bothInclude: [], agents: [], features: [] },
+    account: { plan: "operate", subscription: { pastDue: false, startedAt: 1, periodEnd: 2, endsAt: null, scheduledPlan: null, scheduledAt: null }, credits: { granted: 5000, remaining: 4000, used: 1000, nextResetAt: null, included: { granted: 5000 } }, reserved: 0, controls: { alertPercents: [80], autoTopUp: { enabled: false } }, notices: [], invoices: [], syncedAt: 1, syncProblem: null },
+    usage: [],
+    recent: [],
+    topUps: { packs: [], validity: "", consumption: "" },
+    pendingIntent: null,
+  };
+  const rateCard = {
+    version: "msg-2026-11",
+    effectiveFrom: Date.UTC(2026, 10, 18),
+    rows: [
+      { kind: "sms_out", label: "Outbound text", per: "segment", price: 250 },
+      { kind: "sms_in", label: "Inbound text", per: "segment", price: 150 },
+      { kind: "mms_out", label: "Outbound picture message", per: "message", price: 500 },
+      { kind: "mms_in", label: "Inbound picture message", per: "message", price: 400 },
+      { kind: "email_out", label: "Business email (Selestial delivery)", per: "recipient", price: 20 },
+    ],
+    numberMonthly: 30000,
+    included: ["Approval alerts and daily digests", "Email sent through your connected Gmail (Google delivers it)"],
+    unavailable: ["International numbers, including Canada"],
+  };
+  const overview = (over: Record<string, unknown> = {}) => ({
+    connected: true,
+    metering: true,
+    env: "sandbox",
+    hasPlan: true,
+    balance: { available: 182_500, reserved: 500, purchased: 182_500, promotional: { remaining: 0, expiresAt: null }, negative: false, overdraftFloor: -100_000, at: 1 },
+    month: { from: Date.UTC(2026, 10, 1), outbound: 67_500, inbound: 1_500, fees: 0, credits: 0, total: 69_000, byKind: [{ kind: "sms_out", label: "Outbound text", count: 270, amount: 67_500 }, { kind: "sms_in", label: "Inbound text", count: 10, amount: 1_500 }, { kind: "email_out", label: "Business email (Selestial delivery)", count: 0, amount: 0 }], byAgent: [{ key: "sales", label: "Sales", amount: 50_000, count: 200 }, { key: "inbound", label: "Replies and incoming texts", amount: 1_500, count: 10 }], limit: 100_000 },
+    controls: { monthlyLimit: 100_000, batchLimit: null, lowBalance: 50_000, agentLimits: [{ agent: "sales", label: "Sales", limit: 50_000, spent: 50_000 }], autoTopUp: { enabled: false, threshold: 50_000, amount: 250_000, monthlyMax: 1_000_000, authorizedAt: null, authorizedBy: null, usedThisMonth: 0 } },
+    held: [{ key: "sales", label: "Sales", reason: "messaging_balance", count: 18, stale: 0, estimate: 4_500, words: "Add messaging funds to send them." }],
+    recent: [{ at: Date.UTC(2026, 10, 18, 15), what: "Message to a client", kind: "Outbound text", detail: "2 segments", who: "Sales", status: "Charged", amount: 500, final: true }],
+    payments: [{ at: Date.UTC(2026, 10, 2), source: "Added by you", cents: 2_500, amount: 250_000, status: "Paid", problem: null, receipt: "https://pay.example/r1", returned: 0 }],
+    rateCard,
+    options: { presets: [2_500, 5_000, 10_000], minCents: 1_000, maxCents: 100_000 },
+    ...over,
+  });
+  const render = () =>
+    renderToStaticMarkup(
+      <CompanyProvider company={{ companyId, name: "Elm", timezone: "UTC", role: "owner" }}>
+        <PlanBilling />
+      </CompanyProvider>,
+    );
+
+  it("shows the balance, what is set aside, held work, funds, auto top-up, spend, controls, charges, payments, prices and the statement", () => {
+    search = "tab=messaging";
+    data["billing:planAndUsage"] = plan;
+    data["messagingUsage:overview"] = overview();
+    data["messagingUsage:statement"] = { company: "Elm", month: "2026-11", timezone: "UTC", lines: [], funds: [], totals: { charged: 0, added: 0 } };
+    const html = render();
+    for (const text of [
+      "Messaging balance",
+      "$18.25",
+      "Set aside for sending",
+      "$0.05",
+      "$6.75 of $10.00",
+      "Sales prepared 18 messages. Add messaging funds to send them.",
+      "About $0.45 to send now",
+      "Add funds",
+      "Whole dollars from $10 to $1,000",
+      "Automatic top-up",
+      "Off unless you turn it on",
+      "I authorize Selestial to charge my saved payment method $25.00",
+      "Turn on automatic top-up",
+      "This month",
+      "Replies and incoming texts",
+      "Taxes, if any, are on your receipts",
+      "Spending controls",
+      "never give anyone permission to send",
+      "Monthly limit for each agent",
+      "Recent charges",
+      "2 segments",
+      "Funds added",
+      "Receipt",
+      "Messaging prices",
+      "$0.025",
+      "per segment",
+      "$0.002",
+      "per recipient",
+      "$3.00",
+      "At cost, shown before you agree",
+      "This message uses 2 SMS segments. Estimated cost: $0.05.",
+      "Included, never charged",
+      "International numbers",
+      "Download statement (CSV)",
+    ])
+      expect(html, text).toContain(text);
+    // The authorization box starts unticked, so turning automatic top-up on is a deliberate act.
+    expect(html).not.toMatch(/type="checkbox"[^>]*checked/);
+    // No developer references in what the Owner reads.
+    expect(html.replace(/<[^>]+>/g, " ")).not.toMatch(/msg-2026|lock|provider|_id/i);
+    search = "";
+  });
+
+  it("at a negative balance says outgoing is paused, replies still arrive, and the number is kept", () => {
+    search = "tab=messaging";
+    data["billing:planAndUsage"] = plan;
+    data["messagingUsage:overview"] = overview({ balance: { available: -1_500, reserved: 0, purchased: 0, promotional: { remaining: 0, expiresAt: null }, negative: true, overdraftFloor: -100_000, at: 1 } });
+    const html = render();
+    expect(html).toContain("-$0.15");
+    expect(html).toContain("Outgoing texts and business email are paused and kept as drafts");
+    expect(html).toContain("opt-outs always work");
+    expect(html).toContain("never released for a low balance");
+    search = "";
+  });
+
+  it("shows the plan, AI credits and messaging balance as three separate things on the Plan tab", () => {
+    search = "tab=plan";
+    data["billing:planAndUsage"] = plan;
+    data["messagingUsage:overview"] = overview();
+    const html = render();
+    for (const text of ["What you pay for", "AI credits", "4,000 left", "Sending a ready message never uses credits", "Messaging balance", "$18.25", "Never expires"]) expect(html, text).toContain(text);
+    search = "";
+  });
+});
+
 function pagePatterns(dir: string, segments: string[] = []): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {

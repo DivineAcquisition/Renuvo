@@ -44,7 +44,14 @@ function text(s: S, key: string, body = "Alpha Cleaning: reminder for tomorrow a
 
 const message = (s: S, id: Id<"messages">) => s.t.run(async (ctx) => (await ctx.db.get(id))!);
 const charges = (s: S) => s.t.run(async (ctx) => (await ctx.db.query("messagingCharges").collect()) as Doc<"messagingCharges">[]);
-const left = (s: S) => billing.messagingLeft(billing.customerFor(`company_${s.companyId}`));
+const autumnLeft = (s: S) => billing.messagingLeft(billing.customerFor(`company_${s.companyId}`));
+/** Autumn's balance; the balance Selestial shows must always agree with it once work has settled. */
+const shown = (s: S) => s.t.run(async (ctx) => (await ctx.db.query("billingAccounts").first())?.messaging?.remaining);
+let lastS: S | null = null;
+const left = (s: S) => {
+  lastS = s;
+  return autumnLeft(s);
+};
 const setPhone = (s: S, cleaner: keyof typeof PHONES, phone: string) => s.t.run(async (ctx) => ctx.db.patch(s.cleaners[cleaner], { phone }));
 
 describe("Messaging billing", () => {
@@ -54,7 +61,10 @@ describe("Messaging billing", () => {
     vi.setSystemTime(MORNING);
     process.env.MESSAGING_BILLING = "on";
   });
-  afterEach(() => {
+  afterEach(async () => {
+    // Whatever the test did, the balance Selestial shows the Owner agrees with Autumn's.
+    if (lastS) expect(await shown(lastS)).toBe(autumnLeft(lastS));
+    lastS = null;
     undo();
     delete process.env.MESSAGING_BILLING;
   });
