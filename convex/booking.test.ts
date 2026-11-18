@@ -132,8 +132,8 @@ async function view(t: T, token: string) {
 const TUESDAY = "2027-03-02";
 
 /** Location → size → service and time → details: everything before payment or confirmation. */
-async function throughDetails(s: Setup, token: string, options: { addOns?: { id: string; quantity: number }[] } = {}) {
-  await contact(s.t, token);
+async function throughDetails(s: Setup, token: string, options: { addOns?: { id: string; quantity: number }[]; email?: string } = {}) {
+  await contact(s.t, token, options.email);
   await s.t.mutation(api.bookingSessions.setHome, { token, bedrooms: 2, bathrooms: 1, halfBaths: 0 });
   await s.t.mutation(api.bookingSessions.selectService, { token, serviceKey: s.serviceKey, addOns: options.addOns ?? [], answers: {} });
   const slots = await s.t.query(api.bookingSessions.slots, { token, date: TUESDAY });
@@ -420,6 +420,77 @@ describe("a residential booking with no payment", () => {
     const got = await s.as.query(api.bookingExperiences.get, { companyId: s.companyId, experienceId: s.experienceId });
     expect(got.experience.status).toBe("archived");
     expect(await s.t.query(api.bookingPublic.page, { handle: "alpha-clean", slug: got.experience.slug })).toBeNull();
+  });
+
+  it("emails the confirmation to a new customer under the words the page showed, and asks nothing of an existing one", async () => {
+    process.env.EMAIL_PROVIDER = "mock";
+    try {
+      const s = await setup({ cleaners: 2 });
+      await publish(s.as, s.companyId, s.experienceId);
+      await s.as.mutation(api.compliance.updateMessaging, { companyId: s.companyId, emailFromAddress: "hello@alpha.example", quietHours: null });
+      const token = await begin(s, "new-customer");
+      await throughDetails(s, token);
+      expect(await s.t.mutation(api.bookingSessions.confirm, { token })).toMatchObject({ ok: true });
+      const records = await s.t.run(async (ctx) => ({ customers: await ctx.db.query("customers").collect(), messages: await ctx.db.query("messages").collect(), permissions: await ctx.db.query("contactPermissions").collect() }));
+      expect(records.permissions.filter((p) => p.recipient.kind === "customer")).toEqual([expect.objectContaining({ recipient: { kind: "customer", id: records.customers[0]._id }, channel: "email", category: "operational", status: "granted", source: "web_form", disclosureText: "Alpha Cleaning will email your booking details, confirmation and updates to this address.", recordedBy: { kind: "recipient" } })]);
+      expect(records.messages).toEqual([expect.objectContaining({ purpose: "booking_confirmation", status: "queued", to: "dana@example.com" })]);
+      await settle(s.t);
+      const sent = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect())[0]);
+      expect(sent.body).toContain("{link}");
+      expect(sent.status).not.toBe("not_sent");
+
+      // An existing customer matched by email: nothing is recorded on their behalf, so without their own
+      // permission the confirmation waits for the office instead of going out.
+      const existing = await s.as.mutation(api.customers.create, { companyId: s.companyId, name: "Lee Park", kind: "home", email: "lee@example.com" });
+      const second = await begin(s, "existing-customer");
+      await throughDetails(s, second, { email: "lee@example.com" });
+      expect(await s.t.mutation(api.bookingSessions.confirm, { token: second })).toMatchObject({ ok: true });
+      const after = await s.t.run(async (ctx) => ({ messages: await ctx.db.query("messages").collect(), permissions: await ctx.db.query("contactPermissions").collect() }));
+      expect(after.permissions.filter((p) => p.recipient.id === existing)).toHaveLength(0);
+      expect(after.messages.find((m) => m.customerId === existing)).toMatchObject({ status: "not_sent" });
+    } finally {
+      delete process.env.EMAIL_PROVIDER;
+    }
+  });
+
+  it("sends a finish-your-booking reminder only with recorded permission for marketing email", async () => {
+    process.env.EMAIL_PROVIDER = "mock";
+    try {
+      const s = await setup();
+      await publish(s.as, s.companyId, s.experienceId);
+      await s.as.mutation(api.compliance.updateMessaging, { companyId: s.companyId, emailFromAddress: "hello@alpha.example", quietHours: null });
+      const sessionOf = async (email: string) => s.t.run(async (ctx) => (await ctx.db.query("bookingSessions").collect()).find((x) => x.contact?.email === email)!._id);
+
+      // A visitor with no customer record can't have given permission: nothing is sent and no record is made.
+      const stranger = await begin(s, "walked-away");
+      await contact(s.t, stranger, "new@example.com");
+      const refused = await s.as.mutation(api.bookingExperiences.sendRecovery, { companyId: s.companyId, sessionId: await sessionOf("new@example.com") });
+      expect(refused).toMatchObject({ status: "not_sent", problem: expect.stringContaining("marketing") });
+      expect(await s.t.run(async (ctx) => (await ctx.db.query("customers").collect()).length)).toBe(0);
+
+      // An existing customer without marketing permission: refused by the sending policy.
+      const customerId = await s.as.mutation(api.customers.create, { companyId: s.companyId, name: "Dana Whitfield", kind: "home", email: "dana@example.com" });
+      const known = await begin(s, "known");
+      await contact(s.t, known, "dana@example.com");
+      const blocked = await s.as.mutation(api.bookingExperiences.sendRecovery, { companyId: s.companyId, sessionId: await sessionOf("dana@example.com") });
+      expect(blocked.status).toBe("not_sent");
+
+      // With recorded permission it goes, once, and says how to stop.
+      const third = await begin(s, "allowed");
+      await contact(s.t, third, "lee@example.com");
+      const leeId = await s.as.mutation(api.customers.create, { companyId: s.companyId, name: "Lee Park", kind: "home", email: "lee@example.com" });
+      await s.t.run(async (ctx) => {
+        await ctx.db.insert("contactPermissions", { companyId: s.companyId, recipient: { kind: "customer", id: leeId }, channel: "email", category: "marketing", status: "granted", source: "web_form", recordedBy: { kind: "system" }, at: Date.now() });
+      });
+      const sent = await s.as.mutation(api.bookingExperiences.sendRecovery, { companyId: s.companyId, sessionId: await sessionOf("lee@example.com") });
+      expect(sent).toMatchObject({ status: "queued" });
+      const messages = await s.t.run(async (ctx) => ctx.db.query("messages").collect());
+      expect(messages.filter((m) => m.purpose === "booking_recovery" && m.status !== "not_sent")).toHaveLength(1);
+      expect(messages.find((m) => m.customerId === leeId)!.body).toMatch(/reply "unsubscribe"/);
+      void customerId;
+    } finally {
+      delete process.env.EMAIL_PROVIDER;
+    }
   });
 
   it("asks again when a price-affecting answer changes after the price was accepted", async () => {

@@ -255,3 +255,11 @@ export function confirmationGate(f: ConfirmationFacts): Gate {
   else if (!f.request && f.paymentRequired && !f.paymentSucceeded) blockers.push("The payment hasn't been received.");
   return { ready: blockers.length === 0, blockers };
 }
+
+/**
+ * What the booking page says under the email field. When a booking creates a customer, these exact
+ * words are recorded as the customer's permission for email about their booking (never marketing).
+ */
+export function bookingEmailDisclosure(company: string): string {
+  return `${company} will email your booking details, confirmation and updates to this address.`;
+}

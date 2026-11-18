@@ -171,8 +171,8 @@ Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET
 
 ### Implemented and verified
 
-Verified by `convex/booking.test.ts` (28 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
-(896 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
+Verified by `convex/booking.test.ts` (30 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
+(898 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
 Chromium at desktop and phone widths against the real Convex functions (screenshots in
 `docs/screenshots/booking/`).
 
@@ -180,6 +180,12 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
   unpublish, archive (an archived experience can't be republished, by rollback either), duplicate; readiness blockers with links to the setting to fix.
 - Company isolation; Office cannot edit; Owner-only publishing and rules.
 - A booking matched to an existing customer by email leaves that customer's record as it was.
+- Email permission: a new customer's operational email permission is recorded from the booking page, with
+  the exact words shown under the email field ("<Company> will email your booking details, confirmation
+  and updates to this address.") and the booking reference; the confirmation goes out under it. Nothing
+  is recorded for an existing customer matched by email. The "finish your booking" reminder is marketing:
+  it needs separately recorded marketing permission, counts toward the weekly marketing limit, says how to
+  stop, and never creates a customer record for an abandoned booking.
 - Logos and hero images: PNG, JPEG or WebP only (no SVG), registered to the company that uploaded them
   (`bookingImages`); another company's file, or an old unregistered one, is refused.
 - Residential instant booking without payment, with a deposit through the fake Stripe including
@@ -203,8 +209,12 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
 
 - Taking money: the company connects Stripe in Finance; the deployment sets the Stripe keys and webhook
   secret. Without them a page can still book with "no payment online" or send requests.
-- Sending the confirmation and recovery emails: an email provider for the messaging outbox. Until then
-  messages are queued and visible but not delivered.
+- Sending the confirmation and recovery emails: an email provider for the messaging outbox, and the
+  company's sending address in Settings › Messaging. Until then messages are recorded as not sent, with
+  the reason, on the booking.
+- Marketing email opt-out: the reminder tells people to reply "unsubscribe", which a person has to act on
+  (there is no automatic email unsubscribe in Messaging yet), and it carries no postal address. Both are
+  usually required for commercial email; add them before sending reminders at volume.
 - `PUBLIC_FORM_SECRET` on both Next and Convex (starts are refused without it), `ACTION_LINK_SECRET` and
   `LINK_ORIGIN` for links.
 - The company's own agreement templates approved in Agreements, if an agreement rule is turned on.

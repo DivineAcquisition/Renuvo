@@ -24,8 +24,13 @@ import { newToken, tokenHash } from "./tokens";
 
 type Purpose = "booking_confirmation" | "booking_request_received" | "booking_recovery";
 
-export function bookingIntent(customerId: Id<"customers">): SendIntent {
-  return { category: "operational", origin: "manual", recipient: { kind: "customer", id: customerId } };
+/**
+ * A confirmation or a "request received" note is about the customer's own booking: operational. A
+ * reminder to finish an abandoned booking is marketing, so it needs the customer's recorded permission
+ * for marketing email and counts toward the company's weekly marketing limit.
+ */
+export function bookingIntent(customerId: Id<"customers">, purpose: Purpose): SendIntent {
+  return { category: purpose === "booking_recovery" ? "marketing" : "operational", origin: "manual", recipient: { kind: "customer", id: customerId } };
 }
 
 async function ownMailbox(ctx: MutationCtx, companyId: Id<"companies">) {
@@ -51,7 +56,7 @@ function compose(purpose: Purpose, session: Doc<"bookingSessions">, company: str
   if (purpose === "booking_request_received") {
     return { subject: `${company} received your request`, body: [`Hi ${first},`, "", `${company} received your request and will reply soon with next steps.`, "", "You can see what you sent here:", "{link}"].join("\n") };
   }
-  return { subject: `Finish your booking with ${company}`, body: [`Hi ${first},`, "", `You started a booking with ${company}. Your answers are saved, and you can pick up where you left off here:`, "{link}", "", "If you no longer need it, you can ignore this message."].join("\n") };
+  return { subject: `Finish your booking with ${company}`, body: [`Hi ${first},`, "", `You started a booking with ${company}. Your answers are saved, and you can pick up where you left off here:`, "{link}", "", "If you no longer need it, you can ignore this message.", `To stop emails like this, reply "unsubscribe" and ${company} will take you off the list.`].join("\n") };
 }
 
 /** Plans one booking message and hands it to the sender. Asked twice with the same key, it answers with the first. */
@@ -67,7 +72,7 @@ export async function queueBookingMessage(ctx: MutationCtx, input: { sessionId: 
   const { subject, body } = compose(input.purpose, session, name, company.timezone);
   const to = normalAddress("email", customer.email);
   const provider = (await ownMailbox(ctx, company._id)) ? { name: "gmail" } : emailProvider();
-  const intent = bookingIntent(customer._id);
+  const intent = bookingIntent(customer._id, input.purpose);
   const now = Date.now();
   let problem: string | null = null;
   let code: PolicyCode | null = null;

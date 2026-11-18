@@ -21,7 +21,6 @@ import { DOC_TYPE_BY_KEY } from "./lib/agreements/catalog";
 import { approvedKit, bookingTerms } from "./lib/booking/agreement";
 import { defaultDefinition, definitionValidator, experienceKindValidator, KIND_LABELS, normalizeDefinition, type Definition, type ExperienceKind } from "./lib/booking/definition";
 import { funnel } from "./lib/booking/funnel";
-import { ensureCustomer } from "./lib/booking/handoff";
 import { VARIABLE_BY_KEY } from "./lib/agreements/variables";
 import { allow } from "./lib/rateLimit";
 import { queueBookingMessage } from "./lib/booking/messages";
@@ -698,9 +697,17 @@ export const sendRecovery = managerMutation({
     if (session.recoveryOfferedAt) throw userError("A reminder was already sent for this booking.");
     const experience = await ctx.db.get(session.experienceId);
     if (!experience || experience.draft.behavior.offerRecovery === false) throw userError("Reminders are turned off for this experience.");
-    // A reminder needs a customer record to address; making one for an unfinished booking is the office's choice here.
+    // A reminder is marketing: it needs recorded permission, which only an existing customer can have. A
+    // visitor with no customer record is told no here, and no record is made for an unfinished booking.
     if (!session.customerId) {
-      await ensureCustomer(ctx, session, experience.kind === "commercial" ? "commercial" : experience.kind === "short_term_rental" ? "short_term_rental" : "home");
+      const existing = (
+        await ctx.db
+          .query("customers")
+          .withIndex("by_company_email", (q) => q.eq("companyId", ctx.companyId).eq("email", session.contact!.email.trim().toLowerCase()))
+          .take(5)
+      ).find((c) => c.status === "active");
+      if (!existing) return { status: "not_sent" as const, problem: "Reminders to finish a booking count as marketing email, and this person hasn't given permission for it, so nothing was sent." };
+      await ctx.db.patch(session._id, { customerId: existing._id });
     }
     const message = await queueBookingMessage(ctx, { sessionId: session._id, purpose: "booking_recovery", dedupeKey: `booking:${session._id}:recovery`, actor: byMember(ctx) });
     await ctx.db.patch(session._id, { recoveryOfferedAt: Date.now() });

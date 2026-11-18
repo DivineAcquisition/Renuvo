@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { BATHROOM_CHOICES, BEDROOM_CHOICES, bathroomFacts } from "../../../convex/lib/booking/logic";
+import { BATHROOM_CHOICES, BEDROOM_CHOICES, bathroomFacts, bookingEmailDisclosure } from "../../../convex/lib/booking/logic";
 import { copyOf, sectionOn, useBooking } from "./context";
 import { BottomBar, Editable, Field, HomeSizePlan, Notice, Pill, SelectedMark, StepHeading } from "./parts";
 
@@ -141,7 +141,8 @@ export function LocationStep() {
                   </Field>
                 </div>
                 <Field id="bk-email" label="Email" required>
-                  <input id="bk-email" type="email" className="bk-input" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input id="bk-email" type="email" className="bk-input" autoComplete="email" aria-describedby="bk-email-note" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <p id="bk-email-note" className="mt-1.5 text-xs text-[color:var(--bk-muted-text)]">{bookingEmailDisclosure(company.name)}</p>
                 </Field>
                 <Field id="bk-phone" label="Phone number" required error={error}>
                   <input id="bk-phone" type="tel" className="bk-input" autoComplete="tel" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />

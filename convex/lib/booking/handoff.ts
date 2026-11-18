@@ -13,6 +13,8 @@
  */
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
+import { sha256 } from "../agreements/hash";
+import { setPermission } from "../compliance/permissions";
 import { applyTemplate } from "../dispatch/templates";
 import { coverJob } from "../dispatch/workflow";
 import { recordEvent, type Actor } from "../events";
@@ -22,8 +24,10 @@ import { normalizePostalCode } from "../settings/business";
 import { liveTaskByKey, openTask } from "../taskState";
 import { acquireHold, holdLive } from "./capacity";
 import { funnel } from "./funnel";
+import { bookingEmailDisclosure } from "./logic";
 import { queueBookingMessage } from "./messages";
 import { addressLine, customerName, load, recalc, type Loaded } from "./session";
+import { bookingSettingsOf } from "./settings";
 import { MANAGE_LIFE_AFTER_VISIT } from "./tokens";
 
 const SYSTEM: Actor = { kind: "system" };
@@ -56,6 +60,27 @@ export async function ensureCustomer(ctx: MutationCtx, session: Doc<"bookingSess
   }
   const customerId = await ctx.db.insert("customers", { companyId: session.companyId, name: customerName(session).slice(0, 120), kind, email, phone: contact.phone, status: "active", createdAt: Date.now() });
   await recordEvent(ctx, { companyId: session.companyId, type: "customer.created", actor: SYSTEM, subject: { table: "customers", id: customerId }, data: { source: "booking" } });
+  // The customer gave this address on the booking page under words saying it would get their booking's
+  // emails: that is their permission for operational email, recorded with those words. Not marketing.
+  // (A match to an existing customer records nothing: whoever typed the address may not be its owner.)
+  if (!session.test) {
+    const company = (await ctx.db.get(session.companyId))!;
+    const settings = await bookingSettingsOf(ctx, company);
+    const now = Date.now();
+    await setPermission(ctx, {
+      companyId: session.companyId,
+      recipient: { kind: "customer", id: customerId },
+      channel: "email",
+      category: "operational",
+      status: "granted",
+      source: "web_form",
+      disclosureText: bookingEmailDisclosure(settings.profile.displayName || company.name),
+      evidence: `Online booking ${sha256(`booking-reference:${session._id}`).slice(0, 8).toUpperCase()}`,
+      recordedBy: { kind: "recipient" },
+      at: now,
+      actor: SYSTEM,
+    });
+  }
   await ctx.db.patch(session._id, { customerId });
   return customerId;
 }
