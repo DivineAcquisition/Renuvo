@@ -412,6 +412,16 @@ describe("a residential booking with no payment", () => {
     expect(await refusal(s.as.mutation(api.bookingExperiences.checkUpload, { companyId: s.companyId, storageId: stale }))).toContain("wasn't found");
   });
 
+  it("keeps an archived experience off the public site until it is restored, including through rollback", async () => {
+    const s = await setup();
+    await publish(s.as, s.companyId, s.experienceId);
+    await s.as.mutation(api.bookingExperiences.archive, { companyId: s.companyId, experienceId: s.experienceId, archived: true });
+    expect(await refusal(s.as.mutation(api.bookingExperiences.rollback, { companyId: s.companyId, experienceId: s.experienceId, version: 1 }))).toContain("Restore this experience");
+    const got = await s.as.query(api.bookingExperiences.get, { companyId: s.companyId, experienceId: s.experienceId });
+    expect(got.experience.status).toBe("archived");
+    expect(await s.t.query(api.bookingPublic.page, { handle: "alpha-clean", slug: got.experience.slug })).toBeNull();
+  });
+
   it("asks again when a price-affecting answer changes after the price was accepted", async () => {
     const s = await setup();
     await publish(s.as, s.companyId, s.experienceId);

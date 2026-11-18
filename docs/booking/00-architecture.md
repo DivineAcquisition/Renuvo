@@ -171,13 +171,13 @@ Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET
 
 ### Implemented and verified
 
-Verified by `convex/booking.test.ts` (27 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
-(895 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
+Verified by `convex/booking.test.ts` (28 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
+(896 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
 Chromium at desktop and phone widths against the real Convex functions (screenshots in
 `docs/screenshots/booking/`).
 
 - Building, saving with revision conflicts, publishing, version pinning during a session, rollback,
-  unpublish, archive, duplicate; readiness blockers with links to the setting to fix.
+  unpublish, archive (an archived experience can't be republished, by rollback either), duplicate; readiness blockers with links to the setting to fix.
 - Company isolation; Office cannot edit; Owner-only publishing and rules.
 - A booking matched to an existing customer by email leaves that customer's record as it was.
 - Logos and hero images: PNG, JPEG or WebP only (no SVG), registered to the company that uploaded them

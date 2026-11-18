@@ -515,6 +515,7 @@ export const rollback = ownerMutation({
   args: { experienceId: v.id("bookingExperiences"), version: v.number() },
   handler: async (ctx, args) => {
     const experience = await owned(ctx, args.experienceId);
+    if (experience.status === "archived") throw userError("Restore this experience before publishing it.");
     const row = await versionRow(ctx, experience, args.version);
     if (!row) throw userError("That version doesn't exist.");
     return publishDefinition(ctx, experience, row.definition, `Restored version ${args.version}.`, args.version);
