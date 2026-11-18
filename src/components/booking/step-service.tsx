@@ -481,7 +481,7 @@ export function SchedulePicker({ onContinue, continueLabel, busy }: { onContinue
                     {rows.map((slot) => {
                       const isSelected = selectedTime === slot.startsAt;
                       return (
-                        <button key={slot.startsAt} type="button" disabled={!slot.available || choosing !== null} aria-pressed={isSelected} aria-label={`${slot.windowLabel}${slot.available ? "" : ", taken"}`} title={slot.windowLabel} onClick={() => void pick(slot.startsAt)} className={cn("rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors", isSelected ? "border-[var(--bk-brand)] bg-[var(--bk-brand)] text-[color:var(--bk-on-brand)] shadow-md" : "border-[color:var(--bk-hairline)] hover:border-[rgb(var(--bk-brand-rgb)/0.5)] hover:bg-[var(--bk-muted)]", !slot.available && "cursor-not-allowed bg-[var(--bk-muted)] opacity-40")}>
+                        <button key={slot.startsAt} type="button" disabled={(!slot.available && !isSelected) || choosing !== null} aria-pressed={isSelected} aria-label={`${slot.windowLabel}${slot.available ? "" : ", taken"}`} title={slot.windowLabel} onClick={() => void pick(slot.startsAt)} className={cn("rounded-lg border px-2 py-2.5 text-sm font-medium transition-colors", isSelected ? "border-[var(--bk-brand)] bg-[var(--bk-brand)] text-[color:var(--bk-on-brand)] shadow-md" : slot.available ? "border-[color:var(--bk-hairline)] hover:border-[rgb(var(--bk-brand-rgb)/0.5)] hover:bg-[var(--bk-muted)]" : "cursor-not-allowed border-[color:var(--bk-hairline)] bg-[var(--bk-muted)] opacity-40")}>
                           {choosing === slot.startsAt ? "…" : slot.label}
                         </button>
                       );
@@ -568,7 +568,7 @@ export function ServiceStep() {
         </Editable>
       ) : null}
       {sectionOn(def, "service", "comparison") && def.services.comparison.rows.length > 0 && offers.length > 1 ? (
-        <Editable id="section:comparison" label="the comparison" className="-mb-2 flex justify-center">
+        <Editable id="section:comparison" label="the comparison" className="flex justify-center">
           <button type="button" onClick={() => setCompare(true)} className="inline-flex items-center gap-1.5 rounded-full border border-[rgb(var(--bk-brand-rgb)/0.3)] bg-[rgb(var(--bk-brand-rgb)/0.04)] px-3 py-1.5 text-xs font-medium text-[color:var(--bk-brand-text)] hover:bg-[rgb(var(--bk-brand-rgb)/0.1)] @3xl:text-sm">
             <Info className="h-4 w-4" aria-hidden /> {def.services.comparison.title}
           </button>

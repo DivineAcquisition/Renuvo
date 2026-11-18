@@ -304,6 +304,49 @@ describe("a residential booking with no payment", () => {
     expect(results.find((r) => "ok" in r && !r.ok)).toMatchObject({ why: expect.stringContaining("just taken") });
   });
 
+  it("counts every holder of a time: with three cleaners the fourth customer is refused, and a holder still sees their own time", async () => {
+    const s = await setup({ cleaners: 3 });
+    await publish(s.as, s.companyId, s.experienceId);
+    const tokens: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const token = await begin(s, `v${i}`);
+      await contact(s.t, token, `c${i}@example.com`);
+      await s.t.mutation(api.bookingSessions.setHome, { token, bedrooms: 2, bathrooms: 1, halfBaths: 0 });
+      await s.t.mutation(api.bookingSessions.selectService, { token, serviceKey: s.serviceKey, addOns: [], answers: {} });
+      tokens.push(token);
+    }
+    const slot = (await s.t.query(api.bookingSessions.slots, { token: tokens[0], date: TUESDAY }))!.find((x) => x.available)!;
+    const results = [];
+    for (const token of tokens) results.push(await s.t.mutation(api.bookingSessions.chooseTime, { token, startsAt: slot.startsAt }));
+    expect(results.map((r) => ("ok" in r ? r.ok : false))).toEqual([true, true, true, false]);
+    const own = (await s.t.query(api.bookingSessions.slots, { token: tokens[0], date: TUESDAY }))!.find((x) => x.startsAt === slot.startsAt)!;
+    expect(own.available).toBe(true);
+    const outsider = (await s.t.query(api.bookingSessions.slots, { token: tokens[3], date: TUESDAY }))!.find((x) => x.startsAt === slot.startsAt)!;
+    expect(outsider.available).toBe(false);
+  });
+
+  it("counts confirmed visits as well as holds", async () => {
+    const s = await setup({ cleaners: 3 });
+    await publish(s.as, s.companyId, s.experienceId);
+    const pick = async (i: number, startsAt?: number) => {
+      const token = await begin(s, `w${i}`);
+      await contact(s.t, token, `w${i}@example.com`);
+      await s.t.mutation(api.bookingSessions.setHome, { token, bedrooms: 2, bathrooms: 1, halfBaths: 0 });
+      await s.t.mutation(api.bookingSessions.selectService, { token, serviceKey: s.serviceKey, addOns: [], answers: {} });
+      const at = startsAt ?? (await s.t.query(api.bookingSessions.slots, { token, date: TUESDAY }))!.find((x) => x.available)!.startsAt;
+      return { token, at, result: await s.t.mutation(api.bookingSessions.chooseTime, { token, startsAt: at }) };
+    };
+    const first = await pick(0);
+    const v = await view(s.t, first.token);
+    await s.t.mutation(api.bookingSessions.acceptQuote, { token: first.token, inputHash: v.quote!.inputHash, grandTotalCents: v.quote!.grandTotalCents! });
+    await s.t.mutation(api.bookingSessions.setDetails, { token: first.token, address: { line1: "1 A St", city: "Austin", region: "TX", postalCode: "78701" }, answers: { pets: "No pets" } });
+    expect(await s.t.mutation(api.bookingSessions.confirm, { token: first.token })).toMatchObject({ ok: true });
+    await settle(s.t);
+    const results = [];
+    for (let i = 1; i < 4; i += 1) results.push((await pick(i, first.at)).result);
+    expect(results.map((r) => ("ok" in r ? r.ok : false))).toEqual([true, true, false]);
+  });
+
   it("asks again when a price-affecting answer changes after the price was accepted", async () => {
     const s = await setup();
     await publish(s.as, s.companyId, s.experienceId);

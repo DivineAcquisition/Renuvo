@@ -124,7 +124,9 @@ export function quoteInputFor(spec: Spec, facts: { home: HomeFacts; selection: S
   const sel = facts.selection && facts.selection.serviceKey ? facts.selection : null;
   if (spec.pricing.method === "per_unit" && sel?.units !== undefined) input.units = sel.units;
   if (sel) {
-    if (sel.condition && spec.modifiers.condition.enabled) input.condition = sel.condition;
+    // An unstated condition would make the engine call the price an estimate. The first level is shown as
+    // chosen on the card, and the customer can change it, so it is a stated answer rather than an assumption.
+    if (spec.modifiers.condition.enabled && spec.modifiers.condition.levels.length) input.condition = sel.condition ?? spec.modifiers.condition.levels[0].id;
     if (sel.schedule && spec.modifiers.recurring.enabled && spec.modifiers.recurring.options.some((o) => o.schedule === sel.schedule)) input.schedule = sel.schedule as Schedule;
     const addOns = sel.addOns.filter((a) => a.quantity > 0 && spec.addOns.some((x) => x.id === a.id));
     if (addOns.length) input.addOns = addOns.map((a) => ({ id: a.id, quantity: Math.min(a.quantity, spec.addOns.find((x) => x.id === a.id)!.maxQuantity) }));

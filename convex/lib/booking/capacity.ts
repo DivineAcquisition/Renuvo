@@ -125,7 +125,8 @@ export function spareCrew(supply: Supply, span: Span, need: Need, except?: Id<"b
     if (c.busy.some((busy) => overlaps(busy, padded))) continue;
     free += 1;
   }
-  const taken = supply.demand.filter((d) => d.holdId !== except && overlaps(d.span, span)).reduce((sum, d) => sum + d.crew, 0);
+  // A visit has no hold id; only this session's own hold is left out (comparing undefined to undefined would drop every visit).
+  const taken = supply.demand.filter((d) => (d.holdId === undefined || d.holdId !== except) && overlaps(d.span, span)).reduce((sum, d) => sum + d.crew, 0);
   return free - taken;
 }
 

@@ -18,6 +18,7 @@ import { canonical, inputHash, publishedByKey } from "../services/store";
 import { scheduleLabel } from "../services/words";
 import type { Spec } from "../services/spec";
 import { localParts } from "../availability";
+import { sha256 } from "../agreements/hash";
 import { prepareAgreement, type BookingFacts, type Prepared } from "./agreement";
 import { holdLive } from "./capacity";
 import { upgradeDefinition, type BookingMode, type Definition, type OfferedService, type StepId } from "./definition";
@@ -472,7 +473,7 @@ export async function view(ctx: Ctx, session: Doc<"bookingSessions">, company: D
     confirmation: {
       confirmedAt: session.confirmedAt ?? null,
       requestedAt: session.requestedAt ?? null,
-      reference: session._id.slice(-6).toUpperCase(),
+      reference: sha256(`booking-reference:${session._id}`).slice(0, 8).toUpperCase(),
       // Whether a cleaner has accepted is Dispatch's and is never claimed here.
       visitScheduled: Boolean(job && job.status === "scheduled"),
     },
