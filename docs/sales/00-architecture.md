@@ -46,8 +46,24 @@ exists) → crew confirmed (Dispatch's, when a cleaner accepts). The screens nam
 - **Booking forms can be framed.** `/c/form/*` is the one path without `X-Frame-Options: DENY`, so a
   company can embed its own form.
 
+## Email replies
+
+Every email Sales sends carries a reply address of its own on the receiving domain
+(`SALES_REPLY_DOMAIN`, for example `reply.selestial.io`): `r-<random key>@…`, with the key kept on the
+opportunity. Resend receives mail for that domain and posts `email.received` to `/webhooks/resend`;
+the notice has no body, so `convex/salesInbound.ts` fetches the message and files it.
+
+- The address says which conversation. Who sent it is checked separately: only mail from the
+  customer's own address that did not fail SPF/DKIM/DMARC is read as the customer. Anything else is
+  kept as a note for a person, and Sales does not act on it.
+- The quoted earlier message and the signature are cut off before reading.
+- Automatic replies are dropped. A message delivered twice is one message.
+
+Settings: `SALES_REPLY_DOMAIN`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` on Convex, and
+`email.received` ticked on the Resend webhook that points at `/webhooks/resend`.
+
 ## Not built
 
-- Reading a customer's email replies. `internal.salesIntake.email` is the door; no mailbox is connected
-  to it. Email is outbound only, and replies reach Sales by text and through the quote page.
+- A first email sent to a company's own address (not a reply to Sales). `internal.salesIntake.email`
+  is the door for a reader of a company mailbox; none is connected.
 - Voice, cold outbound, and sending an agreement or collecting a payment from Sales.

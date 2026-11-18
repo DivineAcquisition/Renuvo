@@ -45,6 +45,7 @@ Screenshots: `docs/screenshots/sales/`.
 
 ## Not verified
 
+- Email replies against live Resend. The reader is tested from the fetched message onward; the webhook notice and the fetch follow Resend's documented shapes and were not exercised against the service.
 - Live Telnyx, Resend, Stripe and Anthropic. The AI reader's request shape is untested against the live API.
 - Dragging a card with a mouse (the same server call was exercised from the opportunity and in tests).
 - A screen reader, and measured contrast.

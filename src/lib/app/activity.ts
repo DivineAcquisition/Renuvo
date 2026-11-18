@@ -136,6 +136,7 @@ const TITLES: Record<string, [string, ActivityArea]> = {
   "opportunity.details_changed": ["Opportunity details corrected", "sales"],
   "opportunity.match_resolved": ["Prospect matched to a customer record", "sales"],
   "opportunity.booked": ["Booking confirmed from an inquiry", "sales"],
+  "opportunity.unverified_email": ["Email from an unrecognised address on a sales conversation", "sales"],
   "opportunity.run_failed": ["Sales could not finish a step", "sales"],
   "quote.version_saved": ["Quote prepared", "sales"],
   "quote.approved": ["Quote approved", "sales"],

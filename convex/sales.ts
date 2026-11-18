@@ -28,6 +28,7 @@ import { FACT_LABELS, withFact } from "./lib/sales/facts";
 import { openFollowUps, planFollowUp, PURPOSE_WORDS } from "./lib/sales/followUps";
 import { fileInquiry } from "./lib/sales/intake";
 import { quoteLinksConfigured } from "./lib/sales/links";
+import { emailRepliesConfigured } from "./lib/sales/replyAddress";
 import { salesReaderName } from "./lib/sales/model";
 import { bump, currentQuote, ENTRY_WORDS, entryProblem, isOpen, ownedOpportunity, setNext, setStage, STAGE_WORDS } from "./lib/sales/opportunities";
 import { canReach } from "./lib/sales/outbox";
@@ -81,6 +82,7 @@ export const readiness = companyQuery({
       { key: "services", label: "Published services", ok: catalog.length > 0, detail: catalog.length > 0 ? `${catalog.length} published. Sales quotes only from these.` : "No service is published, so Sales has nothing to quote from.", href: "/app/services", action: "Open Services & Pricing" },
       { key: "texting", label: "Text messages", ok: textingConnected && smsGaps.length === 0, detail: !textingConnected ? "Texting isn't connected for Selestial yet." : smsGaps.length > 0 ? smsGaps.map((gap) => gap.words).join(" ") : `Sends from ${profile.messaging.smsNumber}.`, href: "/app/settings/compliance", action: "Open texting setup" },
       { key: "email", label: "Email", ok: emailConnected && emailGaps.length === 0, detail: !emailConnected ? "Email isn't connected for Selestial yet." : emailGaps.length > 0 ? emailGaps.map((gap) => gap.words).join(" ") : `Sends as ${profile.messaging.senderName ?? ctx.company.name}.`, href: "/app/settings/compliance", action: "Open email setup" },
+      { key: "replies", label: "Email replies", ok: emailRepliesConfigured(), detail: emailRepliesConfigured() ? "A customer's reply to a Sales email comes back to its conversation." : "Replies to Sales's emails are not routed back to Selestial on this deployment, so they go to your own address and Sales does not see them.", href: null, action: null },
       { key: "links", label: "Secure quote pages", ok: quoteLinksConfigured(), detail: quoteLinksConfigured() ? "Customers open their quote from a private link." : "Customer links aren't set up on this deployment, so a quote cannot be sent as a page yet.", href: null, action: null },
       { key: "forms", label: "Intake form", ok: forms.length > 0, detail: forms.length > 0 ? `${forms.length} published.` : "No form is published. Inquiries can still be added by hand or arrive by text.", href: "/app/agents/sales/booking-forms", action: "Open Booking Forms" },
       { key: "capacity", label: "Bookable capacity", ok: cleaners.length > 0, detail: cleaners.length > 0 ? "Ready cleaners with availability are on record, so Sales can check whether a time is open." : "No cleaner is marked ready for work, so no time can be verified and no booking confirmed.", href: "/app/cleaners", action: "Open Cleaners" },

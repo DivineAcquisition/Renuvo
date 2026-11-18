@@ -2,9 +2,9 @@
  * Inquiries and replies that arrive by email. Whatever reads the company's mailbox calls `email` once
  * per message; the provider's own message id makes a message that is delivered twice one message.
  *
- * No customer mailbox reader is connected in this build (the Gmail reader is the hiring inbox's, and
- * reads hiring mail only), so this is the door a reader will use, exercised today by tests and by
- * sending the quote and replies out. See docs/sales/00-architecture.md.
+ * Replies to Sales's own emails do not come through here: they arrive at the receiving domain and are
+ * filed by convex/salesInbound.ts. This door is for a reader of a company's own mailbox, which is not
+ * connected (the Gmail reader is the hiring inbox's, and reads hiring mail only).
  */
 import { v } from "convex/values";
 

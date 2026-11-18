@@ -272,6 +272,8 @@ export const salesTables = {
     humanTouches: v.number(),
     /** Names this one inquiry, so an intake that runs twice files it once. */
     dedupeKey: v.string(),
+    /** Names this conversation in its email reply address. Random, given when Sales first emails, and never shown to a person. */
+    replyKey: v.optional(v.string()),
     /** Counts material changes. Work prepared against an older revision is checked again before it goes. */
     revision: v.number(),
     createdAt: v.number(),
@@ -281,7 +283,8 @@ export const salesTables = {
     .index("by_company_customer", ["companyId", "customerId"])
     .index("by_company_dedupe", ["companyId", "dedupeKey"])
     .index("by_company_created", ["companyId", "createdAt"])
-    .index("by_stage_updated", ["stage", "updatedAt"]),
+    .index("by_stage_updated", ["stage", "updatedAt"])
+    .index("by_replyKey", ["replyKey"]),
 
   /**
    * The conversation, both ways, oldest first. An inbound message keeps the person's words (they are the

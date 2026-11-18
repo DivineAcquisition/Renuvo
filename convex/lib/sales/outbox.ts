@@ -12,6 +12,7 @@
  * person who took over, or a quote that was revised since it was planned stops it. The quote link is
  * "{link}" until then, so no token is ever at rest.
  */
+import { replyAddressFor } from "./replyAddress";
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
@@ -104,7 +105,8 @@ export async function queueSalesMessage(ctx: MutationCtx, planned: PlannedSalesM
     purpose: planned.purpose,
     channel,
     subject: email ? planned.subject : undefined,
-    replyTo: email ? (profile.identity.supportEmail ?? undefined) : undefined,
+    // Replies come back to this conversation when the receiving domain is set up; otherwise to the company's own address.
+    replyTo: email ? ((await replyAddressFor(ctx, opportunity)) ?? profile.identity.supportEmail ?? undefined) : undefined,
     customerId: customer._id,
     opportunityId: opportunity._id,
     salesQuoteId: planned.quoteId,

@@ -73,7 +73,7 @@ export function SalesConversationsScreen() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <Empty title="No conversation yet" body="A conversation starts when someone texts your business number, submits a booking form, or is added by hand. Emails customers send to you directly are not read by Sales yet; replies to a quote reach you through the quote page and by text." />
+        <Empty title="No conversation yet" body="A conversation starts when someone texts your business number, submits a booking form, or is added by hand. A reply to one of Sales’s emails comes back here. An email a customer sends to your own address does not." />
       ) : shown.length === 0 ? (
         <p className="rounded-2xl border border-border bg-card px-5 py-8 text-center text-sm text-muted-foreground">Nothing matches.</p>
       ) : (
