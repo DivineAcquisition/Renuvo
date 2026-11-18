@@ -296,6 +296,7 @@ export const bookingTables = {
     updatedAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
+    .index("by_company_status_start", ["companyId", "status", "startsAt"])
     .index("by_company_session", ["companyId", "sessionId"])
     .index("by_status_expires", ["status", "expiresAt"]),
 

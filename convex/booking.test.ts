@@ -349,6 +349,27 @@ describe("a residential booking with no payment", () => {
     expect(results.map((r) => ("ok" in r ? r.ok : false))).toEqual([true, true, false]);
   });
 
+  it("still sees a live hold when many released holds sit around the same day", async () => {
+    const s = await setup({ cleaners: 1 });
+    await publish(s.as, s.companyId, s.experienceId);
+    const first = await begin(s, "holder");
+    await contact(s.t, first, "holder@example.com");
+    await s.t.mutation(api.bookingSessions.setHome, { token: first, bedrooms: 2, bathrooms: 1, halfBaths: 0 });
+    await s.t.mutation(api.bookingSessions.selectService, { token: first, serviceKey: s.serviceKey, addOns: [], answers: {} });
+    const slot = (await s.t.query(api.bookingSessions.slots, { token: first, date: TUESDAY }))!.find((x) => x.available)!;
+    // Customers changing their minds earlier that day leave released holds behind, more than one read takes.
+    await s.t.run(async (ctx) => {
+      const session = (await ctx.db.query("bookingSessions").first())!;
+      for (let i = 0; i < 600; i += 1) await ctx.db.insert("bookingHolds", { companyId: s.companyId, sessionId: session._id, startsAt: slot.startsAt - 6 * HOUR + i, endsAt: slot.startsAt - 5 * HOUR, crew: 1, status: "released", expiresAt: NOW, createdAt: NOW, updatedAt: NOW });
+    });
+    expect(await s.t.mutation(api.bookingSessions.chooseTime, { token: first, startsAt: slot.startsAt })).toMatchObject({ ok: true });
+    const second = await begin(s, "second");
+    await contact(s.t, second, "second@example.com");
+    await s.t.mutation(api.bookingSessions.setHome, { token: second, bedrooms: 2, bathrooms: 1, halfBaths: 0 });
+    await s.t.mutation(api.bookingSessions.selectService, { token: second, serviceKey: s.serviceKey, addOns: [], answers: {} });
+    expect(await s.t.mutation(api.bookingSessions.chooseTime, { token: second, startsAt: slot.startsAt })).toMatchObject({ ok: false });
+  });
+
   it("asks again when a price-affecting answer changes after the price was accepted", async () => {
     const s = await setup();
     await publish(s.as, s.companyId, s.experienceId);

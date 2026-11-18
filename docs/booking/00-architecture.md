@@ -167,8 +167,8 @@ Deployment settings: `PUBLIC_FORM_SECRET` (Next and Convex), `ACTION_LINK_SECRET
 
 ### Implemented and verified
 
-Verified by `convex/booking.test.ts` (24 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
-(892 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
+Verified by `convex/booking.test.ts` (25 tests), `convex/bookingChat.test.ts` (3 tests), the whole suite
+(893 tests), typecheck, lint and a production build, and by driving the public pages and the builder in
 Chromium at desktop and phone widths against the real Convex functions (screenshots in
 `docs/screenshots/booking/`).
 
@@ -178,7 +178,8 @@ Chromium at desktop and phone widths against the real Convex functions (screensh
 - Residential instant booking without payment, with a deposit through the fake Stripe including
   duplicate webhooks, and a redirect without a webhook not counting as paid.
 - Simultaneous visitors at one time; confirmed visits and holds both counted (an overbooking bug found
-  in the browser run is fixed and covered); hold expiry; payment after the time was lost becoming a
+  in the browser run is fixed and covered); live holds read by their own index, so released holds piling up
+  on a busy day can't hide one; hold expiry; payment after the time was lost becoming a
   recovery task.
 - Price changed after acceptance requiring a new acceptance.
 - Once a payment is processing or received, the ZIP, size, service, time and acceptance are locked (the

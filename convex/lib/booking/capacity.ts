@@ -58,10 +58,12 @@ export async function loadSupply(ctx: QueryCtx, company: Doc<"companies">, from:
     const open = Math.max(0, (job.requiredCrew ?? 1) - active.length);
     if (open > 0) demand.push({ span, crew: open });
   }
+  // Only holds still holding: released and expired rows pile up as customers change their minds, and must
+  // never crowd a live one out of the read.
   const holds = await ctx.db
     .query("bookingHolds")
-    .withIndex("by_company_start", (q) => q.eq("companyId", company._id).gte("startsAt", from - 24 * 60 * MINUTE).lt("startsAt", to))
-    .take(500);
+    .withIndex("by_company_status_start", (q) => q.eq("companyId", company._id).eq("status", "held").gte("startsAt", from - 24 * 60 * MINUTE).lt("startsAt", to))
+    .take(1000);
   const now = Date.now();
   for (const hold of holds) {
     if (hold.status === "held" && hold.expiresAt > now) demand.push({ span: { startsAt: hold.startsAt, endsAt: hold.endsAt }, crew: hold.crew, holdId: hold._id });
