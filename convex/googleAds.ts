@@ -20,6 +20,7 @@ import { enqueue } from "./lib/google/jobs";
 import { endpoints } from "./lib/google/platform";
 import { hashToken, randomToken } from "./lib/recruiter/secrets";
 import { allow } from "./lib/rateLimit";
+import { refreshClient } from "./lib/clients/directory";
 import { openTask } from "./lib/taskState";
 import { text } from "./lib/text";
 
@@ -79,7 +80,8 @@ export async function takeLead(ctx: MutationCtx, input: { companyId: Id<"compani
   let customer = await matchCustomer(ctx, input.companyId, fields);
   const matched = Boolean(customer);
   if (!customer) {
-    const id = await ctx.db.insert("customers", { companyId: input.companyId, name: fields.name ?? fields.email ?? fields.phone ?? "Google lead", kind: "home", email: fields.email, phone: fields.phone, status: "active", createdAt: Date.now() });
+    // A lead is a prospect until it books: the same record becomes the client, so nothing is duplicated.
+    const id = await ctx.db.insert("customers", { companyId: input.companyId, name: fields.name ?? fields.email ?? fields.phone ?? "Google lead", kind: "home", email: fields.email, phone: fields.phone, status: "active", relationship: "prospect", relationshipAt: Date.now(), source: "google_lead", revision: 1, createdAt: Date.now(), updatedAt: Date.now() });
     customer = (await ctx.db.get(id))!;
   }
   const from = input.source === "local_services" ? "Local Services Ads" : "a Google Ads lead form";
@@ -95,6 +97,7 @@ export async function takeLead(ctx: MutationCtx, input: { companyId: Id<"compani
     actor: { kind: "system" },
   });
   await ctx.db.patch(leadId, { customerId: customer._id, taskId });
+  await refreshClient(ctx, customer._id);
   await recordEvent(ctx, { companyId: input.companyId, type: "google.lead_received", actor: { kind: "system" }, subject: { table: "customers", id: customer._id }, data: { source: input.source, matched } });
   return { created: true, leadId, customerId: customer._id, taskId };
 }

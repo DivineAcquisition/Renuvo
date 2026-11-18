@@ -21,7 +21,8 @@ import { BASIS_LABELS } from "../services/research";
 import { startBrief } from "../services/researchStart";
 import { templateById, TEMPLATES } from "../services/templates";
 import { createDraft, submitDraft, writeDraft } from "../services/workflow";
-import { formatCents } from "../services/words";
+import { dayOf, engineInput, priceInForce, propertyName, proposePropertyPrice, reviewProposal, untilWords, type Proposal } from "../services/propertyPrices";
+import { formatCents, lowerFirst } from "../services/words";
 import { type Field, stableHash } from "./fields";
 import type { ChatTool, Outcome, ToolCtx } from "./tools";
 
@@ -34,6 +35,19 @@ const CHAT = (ctx: ToolCtx) => ({ kind: "member" as const, memberId: ctx.member.
 const asMember = (ctx: ToolCtx) => ({ ...ctx, companyId: ctx.company._id }) as unknown as MutationCtx & MemberAccess;
 
 const SERVICE: Field = { type: "string", max: 120, description: "The service: its id from list_services, its key, or its exact name." };
+
+/** A property price proposal from Chat's arguments, or why it cannot be one. */
+async function proposalOf(ctx: ToolCtx, args: Record<string, unknown>): Promise<Proposal | { why: string }> {
+  const service = await findService(ctx, args.service);
+  if (!service) return { why: "No service by that name or id. Use list_services." };
+  const propertyId = ctx.db.normalizeId("properties", String(args.propertyId ?? ""));
+  if (!propertyId) return { why: "No property with that id. read_record on the customer lists their properties." };
+  if (args.reviewOn && args.endsAfter) return { why: "Give a review date or an end date, not both." };
+  const until = args.endsAfter ? { kind: "end" as const, date: String(args.endsAfter) } : args.reviewOn ? { kind: "review" as const, date: String(args.reviewOn) } : null;
+  const extras = ((args.extras as { id: string; included: boolean; priceCents?: number }[] | undefined) ?? []).map((e) => ({ id: String(e.id), included: e.included === true, priceCents: e.included === true || e.priceCents === undefined ? null : Number(e.priceCents) }));
+  const addedTasks = ((args.addedTasks as string[] | undefined) ?? []).map(String);
+  return { serviceId: service._id, propertyId, baseCents: Number(args.baseCents), laborMinutes: args.laborMinutes === undefined || args.laborMinutes === null ? null : Number(args.laborMinutes), until, reason: String(args.reason ?? ""), addedTasks, extras };
+}
 
 async function findService(ctx: ToolCtx, ref: unknown): Promise<Doc<"services"> | null> {
   const text = String(ref ?? "").trim();
@@ -127,6 +141,8 @@ function toQuoteInput(raw: Record<string, unknown> | undefined): QuoteInput {
   const input = { ...(raw ?? {}) } as Record<string, unknown>;
   const answers = input.answers as { questionId: string; value: string }[] | undefined;
   delete input.answers;
+  // A property's own price comes from its approved record, never from the model.
+  delete input.propertyPrice;
   const out = input as QuoteInput;
   if (answers?.length) out.answers = Object.fromEntries(answers.map((a) => [a.questionId, /^-?\d+(\.\d+)?$/.test(a.value) ? Number(a.value) : a.value]));
   return out;
@@ -343,7 +359,7 @@ export const SERVICE_TOOLS: ChatTool[] = [
     description: "Price one job from a service's live version (or its draft, for Owners and Managers), with Selestial's pricing engine. Returns every line with its reason, the outcome (firm, estimate, walkthrough needed, or what is missing), time and crew. Never state a price this did not return. It changes nothing.",
     kind: "read",
     minimumRole: "office",
-    input: { type: "object", properties: { service: SERVICE, from: { type: "string", optional: true, enum: ["live", "draft"] }, input: quoteInputField } },
+    input: { type: "object", properties: { service: SERVICE, from: { type: "string", optional: true, enum: ["live", "draft"] }, propertyId: { type: "string", optional: true, max: 64, description: "When the job is at a known property: its id. Its own approved base price is used if it has one for this service." }, input: quoteInputField } },
     run: async (ctx, args) => {
       const service = await findService(ctx, args.service);
       if (!service) return refused("No service by that name or id. Use list_services.");
@@ -351,9 +367,21 @@ export const SERVICE_TOOLS: ChatTool[] = [
       if (fromDraft && !isManager(ctx.role)) return refused("Only Owners and Managers can price a draft.");
       const spec = fromDraft ? (await draftOf(ctx, ctx.company._id, service._id))?.spec : (await publishedSpec(ctx, service))?.spec;
       if (!spec) return refused(fromDraft ? `${service.name} has no draft.` : `${service.name} has no live version yet.`);
-      const result = quote(spec, toQuoteInput(args.input as Record<string, unknown>));
+      const input = toQuoteInput(args.input as Record<string, unknown>);
+      let propertyPrice: string | null = null;
+      if (args.propertyId) {
+        const propertyId = ctx.db.normalizeId("properties", String(args.propertyId));
+        const property = propertyId ? await ctx.db.get(propertyId) : null;
+        if (!property || property.companyId !== ctx.company._id) return refused("No property with that id. read_record on the customer lists their properties.");
+        const own = fromDraft ? null : await priceInForce(ctx, ctx.company._id, property._id, service._id, input.date ?? dayOf(Date.now(), ctx.company.timezone));
+        if (own) {
+          input.propertyPrice = engineInput(own);
+          propertyPrice = `${propertyName(property)} has its own base price of ${formatCents(own.baseCents)}, approved by the Owner${own.until ? ` (${lowerFirst(untilWords(own.until)!)})` : ""}.${own.addedTasks?.length ? ` The crew also does there: ${own.addedTasks.join("; ")}.` : ""}`;
+        }
+      }
+      const result = quote(spec, input);
       const words = result.outcome === "incomplete" ? `Needs: ${result.missing.join(", ")}` : result.outcome === "walkthrough" ? `Walkthrough needed${result.totalCents !== null ? `; advertised from ${formatCents(result.totalCents)}` : ""}` : `${formatCents(result.totalCents!)} per ${result.per}${result.outcome === "estimate" ? " (estimate)" : ""}`;
-      return { status: "done", summary: `${service.name}: ${words}`, data: { ...result, fromDraft, liveCatalogChanged: false }, link: link(service._id) };
+      return { status: "done", summary: `${service.name}: ${words}`, data: { ...result, fromDraft, liveCatalogChanged: false, propertyPrice }, link: link(service._id) };
     },
   },
   {
@@ -524,6 +552,62 @@ export const SERVICE_TOOLS: ChatTool[] = [
         return { status: "done", summary: `Submitted version ${version} of ${service.name} for review`, data: { changeId, version, next: "The Owner reviews and publishes it in Services & Pricing › Changes." }, link: { href: `/app/services/changes/${changeId}`, label: "Open the review" } };
       } catch (error) {
         return refused(say(error, "It could not be submitted."));
+      }
+    },
+  },
+  {
+    name: "propose_property_price",
+    label: "Proposing a property's own price",
+    description:
+      "Propose one property's own base price for a live service, for example after a walkthrough or for a rental listing, optionally with tasks the crew also does there and extras included or priced differently there. Owners and Managers, after the person approves in chat. It waits for the Owner in Services & Pricing › Changes, and visits use it only once the Owner approves it. Rush, discounts, the minimum and rounding still come from the service, and it keeps its price when the service's price changes. Amounts and tasks must be ones the person gave. read_record on the customer lists their property ids.",
+    kind: "write",
+    minimumRole: "manager",
+    confirm: true,
+    input: {
+      type: "object",
+      properties: {
+        service: SERVICE,
+        propertyId: { type: "string", max: 64, description: "The property's id." },
+        baseCents: { type: "number", integer: true, min: 100, max: 100_000_00, description: "The property's own base price, in whole cents, as the person gave it." },
+        laborMinutes: { type: "number", integer: true, min: 15, max: 10_080, optional: true, description: "Cleaner time at this property in labor-minutes, only if the person gave it." },
+        reviewOn: { type: "string", optional: true, max: 10, description: "YYYY-MM-DD. The Owner is reminded two weeks before to review it; it does not end. Not with endsAfter." },
+        endsAfter: { type: "string", optional: true, max: 10, description: "YYYY-MM-DD, the last day it applies. After it the property pays the service's price again." },
+        reason: { type: "string", max: 1000, description: "Why the property has its own price, in the person's words." },
+        addedTasks: { type: "array", optional: true, maxItems: 20, items: { type: "string", max: 120 }, description: "Tasks the crew also does at this property, only as the person gave them. They are added to each visit's scope and checklist." },
+        extras: {
+          type: "array",
+          optional: true,
+          maxItems: 30,
+          description: "Extras that work differently at this property, only as the person gave them: included at no charge, or at the property's own price. Ids from read_service.",
+          items: { type: "object", properties: { id: { type: "string", max: 40 }, included: { type: "boolean" }, priceCents: { type: "number", integer: true, min: 0, max: 100_000_00, optional: true, description: "The price here in whole cents, when not included." } } },
+        },
+      },
+    },
+    preview: async (ctx, args) => {
+      const proposal = await proposalOf(ctx, args);
+      if ("why" in proposal) return refused(proposal.why);
+      try {
+        const checked = await reviewProposal(asMember(ctx), proposal);
+        return {
+          status: "needs_approval",
+          preview: {
+            summary: `Propose ${formatCents(proposal.baseCents)} as ${checked.name}'s own base price for ${checked.service.name}`,
+            lines: [...checked.impact, `Reason: ${checked.reason}`, "It waits for the Owner's approval in Services & Pricing › Changes."],
+            bindsTo: stableHash({ service: checked.service._id, propertyId: proposal.propertyId, baseCents: proposal.baseCents, laborMinutes: proposal.laborMinutes, until: proposal.until, reason: proposal.reason, addedTasks: checked.addedTasks, extras: checked.extras, replaces: checked.current?._id ?? null }),
+          },
+        };
+      } catch (error) {
+        return refused(say(error, "That price cannot be proposed."));
+      }
+    },
+    run: async (ctx, args) => {
+      const proposal = await proposalOf(ctx, args);
+      if ("why" in proposal) return refused(proposal.why);
+      try {
+        const { changeId, title } = await proposePropertyPrice(asMember(ctx), { ...proposal, actor: CHAT(ctx), via: "chat" });
+        return { status: "done", summary: `Proposed: ${title}. Waiting for the Owner's approval.`, data: { changeId, state: "in_review", next: "The Owner approves it in Services & Pricing › Changes. Until then visits there use the service's price." }, link: { href: `/app/services/changes/${changeId}`, label: "Open the review" } };
+      } catch (error) {
+        return refused(say(error, "It could not be proposed."));
       }
     },
   },

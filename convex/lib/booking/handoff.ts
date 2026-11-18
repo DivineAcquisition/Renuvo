@@ -14,6 +14,7 @@
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { sha256 } from "../agreements/hash";
+import { refreshClient, visitBooked } from "../clients/directory";
 import { setPermission } from "../compliance/permissions";
 import { applyTemplate } from "../dispatch/templates";
 import { coverJob } from "../dispatch/workflow";
@@ -58,7 +59,7 @@ export async function ensureCustomer(ctx: MutationCtx, session: Doc<"bookingSess
     await ctx.db.patch(session._id, { customerId: found._id });
     return found._id;
   }
-  const customerId = await ctx.db.insert("customers", { companyId: session.companyId, name: customerName(session).slice(0, 120), kind, email, phone: contact.phone, status: "active", createdAt: Date.now() });
+  const customerId = await ctx.db.insert("customers", { companyId: session.companyId, name: customerName(session).slice(0, 120), kind, email, phone: contact.phone, status: "active", source: "booking", createdAt: Date.now() });
   await recordEvent(ctx, { companyId: session.companyId, type: "customer.created", actor: SYSTEM, subject: { table: "customers", id: customerId }, data: { source: "booking" } });
   // The customer gave this address on the booking page under words saying it would get their booking's
   // emails: that is their permission for operational email, recorded with those words. Not marketing.
@@ -82,6 +83,8 @@ export async function ensureCustomer(ctx: MutationCtx, session: Doc<"bookingSess
     });
   }
   await ctx.db.patch(session._id, { customerId });
+  // Into Clients & Properties' directory, like a client added by a person.
+  await refreshClient(ctx, customerId);
   return customerId;
 }
 
@@ -109,7 +112,10 @@ export async function ensureProperty(ctx: MutationCtx, session: Doc<"bookingSess
       status: "active",
       createdAt: Date.now(),
     }));
-  if (!found) await recordEvent(ctx, { companyId: session.companyId, type: "property.created", actor: SYSTEM, subject: { table: "properties", id: propertyId }, data: { source: "booking" } });
+  if (!found) {
+    await recordEvent(ctx, { companyId: session.companyId, type: "property.created", actor: SYSTEM, subject: { table: "properties", id: propertyId }, data: { source: "booking" } });
+    await refreshClient(ctx, customerId);
+  }
   await ctx.db.patch(session._id, { propertyId });
   return propertyId;
 }
@@ -218,6 +224,7 @@ export async function commitBooking(ctx: MutationCtx, sessionId: Id<"bookingSess
   await ctx.db.patch(jobId, { serviceSnapshot: { ...job.serviceSnapshot!, quoteId } });
   const template = await applyTemplate(ctx, (await ctx.db.get(jobId))!);
   await recordEvent(ctx, { companyId: session.companyId, type: "job.created", actor: SYSTEM, subject: { table: "jobs", id: jobId }, data: { source: "booking", ...(template ? { checklistVersion: template.version } : {}) } });
+  await visitBooked(ctx, customerId, SYSTEM);
 
   const liveHold = session.schedule?.holdId ? await ctx.db.get(session.schedule.holdId) : null;
   if (liveHold) await ctx.db.patch(liveHold._id, { status: "committed", jobId, updatedAt: now });

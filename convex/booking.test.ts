@@ -279,6 +279,10 @@ describe("a residential booking with no payment", () => {
     expect(records.jobs[0].instructions).toContain("Key under the mat");
     expect(records.jobs[0].serviceSnapshot).toMatchObject({ priceSource: "quote" });
     expect(records.customers).toHaveLength(1);
+    // The booked customer is a client in Clients & Properties, on the same record.
+    expect(records.customers[0].source).toBe("booking");
+    const directory = await s.as.query(api.clients.directory, { companyId: s.companyId, view: "all", paginationOpts: { numItems: 10, cursor: null } });
+    expect(directory.page.map((row) => row.customerId)).toEqual([records.customers[0]._id]);
     expect(records.holds[0]).toMatchObject({ status: "committed", jobId: records.jobs[0]._id });
     expect(records.quotes).toHaveLength(1);
     // Paid is not confirmed, and confirmed is not "a cleaner accepted": that is only ever Dispatch's record.

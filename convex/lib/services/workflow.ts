@@ -127,10 +127,17 @@ export async function submitDraft(
   });
   await ctx.db.patch(service._id, { latestVersion: version, updatedAt: now });
   const upcoming = await upcomingVisits(ctx, ctx.companyId, live?.spec.name ?? draft.spec.name);
+  const ownPrices = (
+    await ctx.db
+      .query("propertyPrices")
+      .withIndex("by_company_service_state", (q) => q.eq("companyId", ctx.companyId).eq("serviceId", service._id).eq("state", "active"))
+      .take(200)
+  ).length;
   const impact = [
     `From ${effectiveAt ? "the start date" : "publishing"}, new quotes and new visits for "${draft.spec.name}" use version ${version}.`,
     upcoming ? `${upcoming} visit${upcoming === 1 ? "" : "s"} already booked keep${upcoming === 1 ? "s" : ""} the scope and price ${upcoming === 1 ? "it was" : "they were"} booked with.` : "No booked visit is affected: visits keep the scope and price they were booked with.",
     "Recurring customers are not repriced by this. Changing what an existing customer pays is a separate step with that customer.",
+    ...(ownPrices ? [`${ownPrices} propert${ownPrices === 1 ? "y has its" : "ies have their"} own price for this service and keep${ownPrices === 1 ? "s" : ""} it. Extras, discounts and the minimum there follow this version.`] : []),
     "Signed agreements keep their terms until they are amended.",
     ...(args.customerNotice.required ? [`Customers should be told: ${args.customerNotice.note || "(no note)"}`] : []),
     ...(args.contractReview.required ? [`Agreements to review: ${args.contractReview.note || "(no note)"}`] : []),

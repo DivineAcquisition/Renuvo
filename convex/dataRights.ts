@@ -19,6 +19,7 @@ import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { allow } from "./lib/rateLimit";
 import { optionalText } from "./lib/text";
+import { refreshClient } from "./lib/clients/directory";
 import { eraseCleanerRecords, eraseCustomerRecords, openVisitsOf, openWorkOf, type EraseStep } from "./lib/trust/erase";
 import { COMPANY_OMIT, EXPORT_TABLES, without } from "./lib/trust/exportTables";
 import { saveRequest } from "./lib/trust/requests";
@@ -267,6 +268,7 @@ export const eraseCustomer = ownerMutation({
     const steps = await eraseCustomerRecords(ctx, customer);
     const recordId = await record(ctx, { kind: "customer", id: customer._id }, steps);
     await recordEvent(ctx, { companyId: ctx.companyId, type: "customer.erased", actor: byMember(ctx), subject: { table: "customers", id: customer._id }, data: { deletionRecordId: recordId } });
+    await refreshClient(ctx, customer._id);
     return { deletionRecordId: recordId, steps };
   },
 });

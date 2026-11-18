@@ -57,7 +57,7 @@ function BuildWithSelestial({ catalog }: { catalog: Catalog }) {
   const [text, setText] = useState("");
   const [type, setType] = useState("");
   const customers = useQuery(api.customers.list, { companyId });
-  const [customerId, setCustomerId] = useState("");
+  const [customerId, setCustomerId] = useState(useSearchParams().get("customer") ?? "");
   const label = catalog.types.find((t) => t.key === type)?.label;
   const start = () =>
     run(async () => {
@@ -127,7 +127,7 @@ function FromTemplate({ catalog }: { catalog: Catalog }) {
   const { busy, error, run } = useRun();
   const [category, setCategory] = useState("customer");
   const customers = useQuery(api.customers.list, { companyId });
-  const [customerId, setCustomerId] = useState("");
+  const [customerId, setCustomerId] = useState(useSearchParams().get("customer") ?? "");
   const types = catalog.types.filter((t) => t.category === category && t.canDraft);
   const grouped = useMemo(() => [...types.reduce((acc, t) => acc.set(t.family, [...(acc.get(t.family) ?? []), t]), new Map<string, typeof types>())], [types]);
   const start = (docType: string, templateId?: string) =>
@@ -213,7 +213,8 @@ function UploadAgreement({ catalog }: { catalog: Catalog }) {
   const [fileId, setFileId] = useState<Id<"agreementFiles"> | null>(null);
   const status = useQuery(api.agreementFiles.status, fileId ? { companyId, fileId } : "skip");
   const input = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState({ classification: "agreement", docType: "", supportingKind: "other_record", expiresOn: "", customerId: "", workerId: "", signedElsewhere: false, signedOn: "", signers: "", how: "" });
+  const prefill = useSearchParams().get("customer") ?? "";
+  const [form, setForm] = useState({ classification: "agreement", docType: "", supportingKind: "other_record", expiresOn: "", customerId: prefill, workerId: "", signedElsewhere: false, signedOn: "", signers: "", how: "" });
   const customers = useQuery(api.customers.list, { companyId });
   const cleaners = useQuery(api.cleaners.list, { companyId });
   const suggestion = status?.suggestion;

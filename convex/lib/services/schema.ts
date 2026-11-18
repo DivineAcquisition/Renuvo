@@ -33,8 +33,36 @@ export const CHANGE_STATES = ["in_review", "approved", "scheduled", "published",
 export type ChangeState = (typeof CHANGE_STATES)[number];
 export const OPEN_CHANGE_STATES: readonly ChangeState[] = ["in_review", "approved", "scheduled"];
 
-export const CHANGE_KINDS = ["publish", "archive", "restore"] as const;
+/**
+ * publish, archive and restore change the service itself. property_price gives one property its own base
+ * price for the service: it is reviewed and approved like any other change, but it does not touch the
+ * catalog, and a catalog change does not touch it (the owner's decision of November 17, 2026).
+ */
+export const CHANGE_KINDS = ["publish", "archive", "restore", "property_price"] as const;
 export type ChangeKind = (typeof CHANGE_KINDS)[number];
+
+/** A property price's optional date: a review date only reminds; an end date stops it after that day. */
+export const untilValidator = v.union(v.null(), v.object({ kind: v.union(v.literal("review"), v.literal("end")), date: v.string() }));
+
+/** An extra that works differently at one property: included at no charge, or at the property's own price. */
+export const propertyExtraValidator = v.object({ id: v.string(), included: v.boolean(), priceCents: v.union(v.number(), v.null()) });
+
+/** What a property price change proposes. Lives on the change; approving it writes a propertyPrices row. */
+export const proposedPropertyPriceValidator = v.object({
+  propertyId: v.id("properties"),
+  baseCents: v.number(),
+  /** Usual labor-minutes at this property, when it differs from the service's. Changes time, not price. */
+  laborMinutes: v.union(v.number(), v.null()),
+  until: untilValidator,
+  /** Tasks the crew also does at this property, added to each visit's scope and checklist. */
+  addedTasks: v.optional(v.array(v.string())),
+  /** Extras that are included, or priced their own way, at this property. */
+  extras: v.optional(v.array(propertyExtraValidator)),
+  /** The property's price in force when this was proposed, if any. Approval is refused if it changed since. */
+  replaces: v.union(v.id("propertyPrices"), v.null()),
+});
+
+export const PROPERTY_PRICE_STATES = ["active", "ended", "replaced"] as const;
 
 export const evidenceValidator = v.object({
   kind: v.union(v.literal("research"), v.literal("note"), v.literal("scenario"), v.literal("agent"), v.literal("import")),
@@ -199,6 +227,8 @@ export const servicesTables = {
     effectiveAt: v.optional(v.number()),
     /** The scheduled publish, so returning or withdrawing the change can cancel it. */
     scheduledFunctionId: v.optional(v.id("_scheduled_functions")),
+    /** Set on a property_price change: the price it proposes for one property. */
+    propertyPrice: v.optional(proposedPropertyPriceValidator),
     submittedBy: actorValidator,
     submittedAt: v.number(),
     approval: v.optional(v.object({ by: v.id("members"), at: v.number(), hash: v.string(), note: v.optional(v.string()) })),
@@ -211,6 +241,42 @@ export const servicesTables = {
     .index("by_company_updated", ["companyId", "updatedAt"])
     .index("by_company_service", ["companyId", "serviceId", "submittedAt"])
     .index("by_company_state", ["companyId", "state", "updatedAt"]),
+
+  /**
+   * A property's own base price for one service, after the Owner approved it. Extras, rush, discounts,
+   * the minimum and rounding still apply from the service's live version. It keeps its price when the
+   * catalog changes, until a person changes it or its end date passes. Only "active" rows price visits.
+   */
+  propertyPrices: defineTable({
+    companyId: v.id("companies"),
+    serviceId: v.id("services"),
+    propertyId: v.id("properties"),
+    customerId: v.id("customers"),
+    baseCents: v.number(),
+    laborMinutes: v.union(v.number(), v.null()),
+    until: untilValidator,
+    /** Tasks the crew also does at this property. Absent on rows written before property scope existed. */
+    addedTasks: v.optional(v.array(v.string())),
+    /** Extras included, or priced their own way, at this property. */
+    extras: v.optional(v.array(propertyExtraValidator)),
+    /** Why the property has its own price, from the change that set it. */
+    reason: v.string(),
+    state: literals(PROPERTY_PRICE_STATES),
+    /** The approved change that set it. */
+    changeId: v.id("serviceChanges"),
+    /** The service's live version when it was approved, so a later catalog change can be pointed out. */
+    catalogVersion: v.union(v.number(), v.null()),
+    approvedBy: v.id("members"),
+    approvedAt: v.number(),
+    /** Set when the Owner was reminded of its review or end date. */
+    remindedFor: v.optional(v.string()),
+    endedAt: v.optional(v.number()),
+    endedReason: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_company_property_service", ["companyId", "propertyId", "serviceId", "state"])
+    .index("by_company_service_state", ["companyId", "serviceId", "state"])
+    .index("by_company_state", ["companyId", "state"]),
 
   /** The company's own pricing setup: what setup learned, its costs and its strategy. One row per company. */
   pricingProfiles: defineTable({

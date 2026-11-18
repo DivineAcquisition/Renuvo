@@ -2,12 +2,12 @@
 
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
 import { useNow } from "@/components/app/use-now";
 import { Field, FormError, TextArea, useRun } from "@/components/app/form";
-import { ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, CheckCircle2 } from "@/components/icons";
+import { ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, CheckCircle2, Home } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { quote as runQuote } from "../../../../convex/lib/services/engine";
+import { lowerFirst, minutesWords } from "../../../../convex/lib/services/words";
+import { defaultInput } from "./preview";
 import { ChangeBadge, day, Empty, formatCents, Notice, SectionTitle, when } from "./shared";
 
 /** Every change: waiting first, then the history. */
@@ -50,7 +53,7 @@ function List({ rows }: { rows: NonNullable<ReturnType<typeof useQuery<typeof ap
             <span className="min-w-0">
               <span className="block font-medium text-strong">{c.title}</span>
               <span className="block text-xs text-muted-foreground">
-                {c.kind === "publish" ? `Version ${c.version}` : c.kind === "archive" ? "Archive" : "Restore"} · submitted {when(c.submittedAt)} by {c.by}
+                {c.kind === "publish" ? `Version ${c.version}` : c.kind === "archive" ? "Archive" : c.kind === "restore" ? "Restore" : `Property price · ${c.serviceName}`} · submitted {when(c.submittedAt)} by {c.by}
                 {c.effectiveAt ? ` · from ${day(c.effectiveAt)}` : ""}
                 {c.publishedAt ? ` · live ${when(c.publishedAt)}` : ""}
               </span>
@@ -88,7 +91,8 @@ export function ChangeReview({ changeId }: { changeId: string }) {
   const now = useNow();
   if (!change) return <Skeleton className="h-96 rounded-2xl" />;
   const open = change.state === "in_review" || change.state === "approved" || change.state === "scheduled";
-  const blocked = change.liveMoved || change.draftMoved;
+  const ownPrice = change.propertyPrice;
+  const blocked = change.liveMoved || change.draftMoved || Boolean(ownPrice?.moved);
   const scheduled = change.effectiveAt !== null && change.effectiveAt > now;
   return (
     <div className="grid grid-cols-1 gap-5">
@@ -108,12 +112,14 @@ export function ChangeReview({ changeId }: { changeId: string }) {
         <ChangeBadge state={change.state} />
       </div>
 
-      {change.closedReason ? <Notice tone={change.state === "returned" ? "warning" : "info"} title={change.state === "returned" ? "Returned to draft" : "Closed"}>{change.closedReason}</Notice> : null}
+      {change.closedReason ? <Notice tone={change.state === "returned" ? "warning" : "info"} title={change.state === "returned" ? (ownPrice ? "Sent back" : "Returned to draft") : "Closed"}>{change.closedReason}</Notice> : null}
       {open && change.draftMoved ? <Notice tone="warning" title="The draft changed after this was submitted">This review no longer describes the draft. It can&apos;t be approved; submit the draft again.</Notice> : null}
       {open && change.liveMoved ? <Notice tone="warning" title="The live version changed">Another change went live after this one was submitted. Review the newer version first.</Notice> : null}
+      {open && ownPrice?.moved ? <Notice tone="warning" title="This property's price changed">{ownPrice.moved} It can&apos;t be approved; send it back and propose again from the current price.</Notice> : null}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
         <div className="grid grid-cols-1 gap-5">
+          {ownPrice ? <ProposedPrice price={ownPrice} /> : null}
           <Panel title="Why">
             <p className="whitespace-pre-line text-sm text-strong">{change.reason}</p>
           </Panel>
@@ -149,26 +155,47 @@ export function ChangeReview({ changeId }: { changeId: string }) {
             </Panel>
           ) : null}
           {change.prices.length ? <PriceDiff rows={change.prices} /> : null}
+          {change.ownPrices.length ? (
+            <Panel title="Properties that keep their own price">
+              <ul className="grid grid-cols-1 gap-1 text-sm">
+                {change.ownPrices.map((row) => (
+                  <li key={row.id} className="flex flex-wrap justify-between gap-x-3 rounded-lg border border-border px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-strong">{row.property}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {row.customer}
+                        {row.untilWords ? ` · ${lowerFirst(row.untilWords)}` : ""}
+                      </span>
+                    </span>
+                    <span className="tabular-nums text-strong">{formatCents(row.baseCents)} base</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-muted-foreground">Their base price stays. Extras, discounts and the minimum there follow the version you publish.</p>
+            </Panel>
+          ) : null}
           <Panel title="What it affects">
             <ul className="grid grid-cols-1 gap-1 text-sm text-strong">
               {change.impact.map((line) => (
                 <li key={line}>• {line}</li>
               ))}
             </ul>
-            <dl className="mt-3 grid gap-1 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-muted-foreground">Customers to be told</dt>
-                <dd className="text-strong">{change.customerNotice.required ? change.customerNotice.note || "Yes" : "No"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Agreements to review</dt>
-                <dd className="text-strong">{change.contractReview.required ? change.contractReview.note || "Yes" : "No"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Takes effect</dt>
-                <dd className="text-strong">{change.effectiveAt ? day(change.effectiveAt) : "When published"}</dd>
-              </div>
-            </dl>
+            {ownPrice ? null : (
+              <dl className="mt-3 grid gap-1 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Customers to be told</dt>
+                  <dd className="text-strong">{change.customerNotice.required ? change.customerNotice.note || "Yes" : "No"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Agreements to review</dt>
+                  <dd className="text-strong">{change.contractReview.required ? change.contractReview.note || "Yes" : "No"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Takes effect</dt>
+                  <dd className="text-strong">{change.effectiveAt ? day(change.effectiveAt) : "When published"}</dd>
+                </div>
+              </dl>
+            )}
           </Panel>
           {change.evidence.length ? (
             <Panel title="Evidence">
@@ -238,14 +265,24 @@ export function ChangeReview({ changeId }: { changeId: string }) {
             {open && change.canPublish ? (
               <div className="mt-2 grid gap-3">
                 <ul aria-label="What approving does" className="grid grid-cols-1 gap-1.5 text-sm">
-                  <Assurance>Approves exactly this {change.kind === "publish" ? `version ${change.version}` : change.kind}, nothing else</Assurance>
-                  {change.kind === "publish" ? (
+                  {ownPrice ? (
                     <>
-                      <Assurance>New quotes and visits use it {scheduled ? `from ${day(change.effectiveAt!)}` : "once published"}</Assurance>
-                      <Assurance>Booked visits and signed agreements keep their price</Assurance>
+                      <Assurance>Approves exactly this price for {ownPrice.property?.name ?? "this property"}, nothing else</Assurance>
+                      <Assurance>New visits there use it once approved; booked visits keep their price</Assurance>
+                      <Assurance>The service&apos;s price and other properties stay as they are</Assurance>
                     </>
-                  ) : null}
-                  <Assurance>Editing the draft later cancels this approval</Assurance>
+                  ) : (
+                    <>
+                      <Assurance>Approves exactly this {change.kind === "publish" ? `version ${change.version}` : change.kind}, nothing else</Assurance>
+                      {change.kind === "publish" ? (
+                        <>
+                          <Assurance>New quotes and visits use it {scheduled ? `from ${day(change.effectiveAt!)}` : "once published"}</Assurance>
+                          <Assurance>Booked visits and signed agreements keep their price</Assurance>
+                        </>
+                      ) : null}
+                      <Assurance>Editing the draft later cancels this approval</Assurance>
+                    </>
+                  )}
                 </ul>
                 {change.state === "in_review" ? (
                   <>
@@ -254,11 +291,13 @@ export function ChangeReview({ changeId }: { changeId: string }) {
                     </Field>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="primary" loading={busy} disabled={blocked} onClick={() => void run(async () => approve({ companyId, changeId: change.id, hash: change.hash, note: note || undefined, publish: true }))}>
-                        {scheduled ? `Approve and schedule for ${day(change.effectiveAt!)}` : "Approve and publish"}
+                        {ownPrice ? "Approve this price" : scheduled ? `Approve and schedule for ${day(change.effectiveAt!)}` : "Approve and publish"}
                       </Button>
-                      <Button variant="secondary" disabled={busy || blocked} onClick={() => void run(async () => approve({ companyId, changeId: change.id, hash: change.hash, note: note || undefined, publish: false }))}>
-                        Approve only
-                      </Button>
+                      {ownPrice ? null : (
+                        <Button variant="secondary" disabled={busy || blocked} onClick={() => void run(async () => approve({ companyId, changeId: change.id, hash: change.hash, note: note || undefined, publish: false }))}>
+                          Approve only
+                        </Button>
+                      )}
                     </div>
                   </>
                 ) : change.state === "approved" ? (
@@ -280,7 +319,7 @@ export function ChangeReview({ changeId }: { changeId: string }) {
               <p className="mt-1 text-sm text-muted-foreground">Waiting for the Owner. Only the Owner approves and publishes price changes.</p>
             ) : null}
             {open && change.canWithdraw ? (
-              <Button variant="ghost" size="sm" className="mt-2" disabled={busy} onClick={() => window.confirm("Withdraw this change? The draft stays.") && void run(async () => withdraw({ companyId, changeId: change.id }))}>
+              <Button variant="ghost" size="sm" className="mt-2" disabled={busy} onClick={() => window.confirm(ownPrice ? "Withdraw this proposal? The property keeps the price it has now." : "Withdraw this change? The draft stays.") && void run(async () => withdraw({ companyId, changeId: change.id }))}>
                 Withdraw
               </Button>
             ) : null}
@@ -382,6 +421,116 @@ function PriceDiff({ rows }: { rows: PriceRow[] }) {
         </details>
       ) : null}
       <p className="mt-2 text-xs text-muted-foreground">Worked out by the pricing engine from each version. They describe the price, not how customers will respond.</p>
+    </Panel>
+  );
+}
+
+type OwnPrice = NonNullable<NonNullable<ReturnType<typeof useQuery<typeof api.services.change>>>["propertyPrice"]>;
+
+/**
+ * A property's own price as its reviewer needs it: which property, the price proposed against the price
+ * it has now, and the service's example job priced both ways by the engine visits use.
+ */
+function ProposedPrice({ price }: { price: OwnPrice }) {
+  const spec = price.catalog?.spec ?? null;
+  const per = spec ? (spec.pricing.method === "recurring_package" ? "month" : spec.visitWord) : "visit";
+  const example = useMemo(() => {
+    if (!spec) return null;
+    const sample = defaultInput(spec);
+    const usual = runQuote(spec, sample);
+    const here = runQuote(spec, { ...sample, propertyPrice: { baseCents: price.baseCents, laborMinutes: price.laborMinutes, extras: price.extras.map((e) => ({ id: e.id, included: e.included, priceCents: e.priceCents })) } });
+    return { usual: usual.outcome === "firm" || usual.outcome === "estimate" ? usual.totalCents : null, here: here.totalCents };
+  }, [spec, price.baseCents, price.laborMinutes, price.extras]);
+  return (
+    <Panel title="The price">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span aria-hidden className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-brand-500/10 text-brand-300">
+            <Home className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-medium text-strong">{price.property?.name ?? "A property that was removed"}</p>
+            <p className="text-xs text-muted-foreground">
+              {price.customer?.name ?? "Unknown customer"}
+              {price.property ? ` · ${price.property.address}` : ""}
+            </p>
+          </div>
+        </div>
+        <p className="text-right">
+          {price.current ? (
+            <span className="mr-2 text-sm text-muted-foreground line-through decoration-muted-foreground/60 tabular-nums">
+              <span className="sr-only">now </span>
+              {formatCents(price.current.baseCents)}
+            </span>
+          ) : null}
+          <span className="font-heading text-2xl tabular-nums text-strong">
+            <span className="sr-only">{price.current ? "proposed " : ""}</span>
+            {formatCents(price.baseCents)}
+          </span>
+          <span className="block text-[11px] text-muted-foreground">base per {per}</span>
+        </p>
+      </div>
+      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-xs text-muted-foreground">Service&apos;s price</dt>
+          <dd className="text-strong">{price.catalog ? `${price.catalog.summary} (version ${price.catalog.version})` : "No live version"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Review or end</dt>
+          <dd className="text-strong">{price.untilWords ?? "No date"}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Cleaner time here</dt>
+          <dd className="text-strong">{price.laborMinutes ? minutesWords(price.laborMinutes) : "The service's"}</dd>
+        </div>
+      </dl>
+      {price.extras.length || price.addedTasks.length ? (
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+          {price.extras.length ? (
+            <div>
+              <p className="text-xs text-muted-foreground">Extras here</p>
+              <ul className="mt-1 grid gap-1">
+                {price.extras.map((extra) => (
+                  <li key={extra.id} className="flex flex-wrap justify-between gap-x-2 text-strong">
+                    <span>{extra.label}</span>
+                    <span className="tabular-nums">
+                      {extra.serviceCents !== null ? (
+                        <span className="mr-1.5 text-muted-foreground line-through decoration-muted-foreground/60">
+                          <span className="sr-only">service price </span>
+                          {formatCents(extra.serviceCents)}
+                        </span>
+                      ) : null}
+                      {extra.included ? "Included" : `${formatCents(extra.priceCents ?? 0)} ${extra.unit}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {price.addedTasks.length ? (
+            <div>
+              <p className="text-xs text-muted-foreground">Also done here, on every visit</p>
+              <ul className="mt-1 grid gap-1 text-strong">
+                {price.addedTasks.map((task) => (
+                  <li key={task}>• {task}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {example && example.here !== null ? (
+        <p className="mt-3 rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          The service&apos;s example job: <span className="font-medium tabular-nums text-strong">{formatCents(example.here)}</span> here
+          {example.usual !== null ? (
+            <>
+              {" "}
+              and <span className="tabular-nums text-strong">{formatCents(example.usual)}</span> elsewhere
+            </>
+          ) : null}
+          .
+        </p>
+      ) : null}
     </Panel>
   );
 }

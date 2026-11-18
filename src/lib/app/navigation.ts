@@ -152,13 +152,14 @@ export const SHARED_ITEMS: readonly NavItem[] = [
   },
   {
     id: "customers",
-    label: "Customers & Properties",
+    label: "Clients & Properties",
     section: "shared",
-    purpose: "Customers and the properties they have service at.",
-    path: `${APP_ROOT}/customers`,
+    purpose: "The company's clients, their properties, the services they have, and everything about each relationship.",
+    path: `${APP_ROOT}/clients`,
+    alsoAt: [`${APP_ROOT}/customers`],
     availability: LIVE,
     minimumRole: "office",
-    accessNote: "A list and an add form so far. A page for each customer, with their properties and service history, is still to build.",
+    accessNote: "Everyone reads and adds clients. Access instructions and private notes are for Owners and Managers. Archiving is the Owner's or a Manager's. Billing is the Owner's, as in Finance.",
   },
   {
     id: "cleaners",
@@ -262,6 +263,11 @@ export const CLEANER_PAGES: readonly { path: string; label: string; purpose: str
   { path: `${APP_ROOT}/cleaners/onboarding`, label: "Onboarding checklist", purpose: "What each kind of worker needs, what an unmet item holds up, who reviews it and how long it stays valid." },
   { path: `${APP_ROOT}/cleaners/crews`, label: "Crews", purpose: "Permanent crews with a lead, the team for each upcoming job, and a crew builder that checks each person for one job." },
   { path: `${APP_ROOT}/cleaners/subcontractors`, label: "Subcontractor companies", purpose: "Companies that supply their own cleaners: their contact, their workers, and the contact's access to their own workers." },
+];
+
+/** Pages inside Clients & Properties. The directory links to them. */
+export const CLIENT_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/clients/[id]/[[...section]]`, label: "Client", purpose: "One client: Overview, Properties (and each property at its own address), Services, Conversations, Documents and Billing." },
 ];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */
@@ -459,7 +465,8 @@ export const AGENTS: readonly AgentNav[] = [
  */
 export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes: string }[] = [
   { pattern: `${APP_ROOT}/decisions`, today: "Redirects to Approvals.", becomes: "Removed once old links have had time to move." },
-  { pattern: `${APP_ROOT}/records`, today: "Redirects to Customers & Properties.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/records`, today: "Redirects to Clients & Properties.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/customers`, today: "Redirects to Clients & Properties (renamed November 18, 2026), keeping its search.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/team`, today: "Redirects to Settings, where agent permissions and pause now live.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/schedule`, today: "Redirects to Dispatch › Schedule.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/settings/services`, today: "Redirects to Services & Pricing (moved out of Settings on November 16, 2026).", becomes: "Removed once old links have had time to move." },

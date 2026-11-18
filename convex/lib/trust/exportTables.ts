@@ -101,11 +101,17 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "googleAdsSnapshots", index: "by_company_account" },
   { table: "googleDriveTexts", index: "by_company_resource" },
   { table: "googleSettings", index: "by_company" },
-  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, costs, quotes, imports and research.
+  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, property prices, costs, quotes, imports and research.
   { table: "services", index: "by_company_status" },
   { table: "serviceVersions", index: "by_company_service_version" },
   { table: "serviceDrafts", index: "by_company_service" },
   { table: "serviceChanges", index: "by_company_updated", omit: ["scheduledFunctionId"], why: "An internal reference to the scheduler." },
+  { table: "propertyPrices", index: "by_company_state" },
+  // Clients & Properties (convex/lib/clients/schema.ts): contacts, plans, internal notes and texts clients sent.
+  { table: "clientContacts", index: "by_company_customer" },
+  { table: "servicePlans", index: "by_company_customer" },
+  { table: "clientNotes", index: "by_company_customer" },
+  { table: "inboundMessages", index: "by_company_customer" },
   { table: "pricingProfiles", index: "by_company" },
   { table: "serviceQuotes", index: "by_company_created" },
   { table: "serviceImports", index: "by_company_created" },
@@ -155,6 +161,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
 
 /** Company tables kept out of the export, and why. */
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
+  clientViews: "The client directory's search rows, rebuilt from clients, contacts and properties, which are exported.",
   numberSearches: "Lists of numbers that were for sale at the moment of a search; the number the company asked for is in its texting request.",
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
