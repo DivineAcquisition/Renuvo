@@ -151,6 +151,7 @@ import type * as lib_cleaners_readiness from "../lib/cleaners/readiness.js";
 import type * as lib_cleaners_records from "../lib/cleaners/records.js";
 import type * as lib_cleaners_schedule from "../lib/cleaners/schedule.js";
 import type * as lib_cleaners_settings from "../lib/cleaners/settings.js";
+import type * as lib_cleaners_teams from "../lib/cleaners/teams.js";
 import type * as lib_cleaners_words from "../lib/cleaners/words.js";
 import type * as lib_compliance_agreements from "../lib/compliance/agreements.js";
 import type * as lib_compliance_ledger from "../lib/compliance/ledger.js";
@@ -477,6 +478,7 @@ declare const fullApi: ApiFromModules<{
   "lib/cleaners/records": typeof lib_cleaners_records;
   "lib/cleaners/schedule": typeof lib_cleaners_schedule;
   "lib/cleaners/settings": typeof lib_cleaners_settings;
+  "lib/cleaners/teams": typeof lib_cleaners_teams;
   "lib/cleaners/words": typeof lib_cleaners_words;
   "lib/compliance/agreements": typeof lib_compliance_agreements;
   "lib/compliance/ledger": typeof lib_compliance_ledger;

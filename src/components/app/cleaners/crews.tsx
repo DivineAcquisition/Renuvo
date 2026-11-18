@@ -121,7 +121,7 @@ export function CrewsScreen() {
               <h2 id="teams-heading" className="font-display text-lg font-semibold text-strong">
                 Teams for jobs
               </h2>
-              <p className="text-sm text-muted-foreground">Each keeps the people it was put together with, whatever happens to a permanent crew later.</p>
+              <p className="text-sm text-muted-foreground">Each keeps the people it was put together with, whatever happens to a permanent crew later, and shows who is on the job now.</p>
             </div>
             <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {teams.map((crew) => (
@@ -137,18 +137,30 @@ export function CrewsScreen() {
   );
 }
 
+/** Where a person on a team stands on its job, as a badge. Someone no longer on it is not shown as a problem. */
+const STANDING_BADGE: Record<NonNullable<Crew["members"][number]["onJob"]>, "success" | "info" | "outline"> = { accepted: "success", offered: "info", declined: "outline", expired: "outline", off: "outline" };
+
 function CrewCard({ crew, onEdit }: { crew: Crew; onEdit?: () => void }) {
-  const { timezone } = useCompany();
   const openJob = useDetail();
+  const team = crew.staffing;
+  const cancelled = crew.job?.status === "cancelled";
   return (
     <article className="flex h-full flex-col rounded-2xl border border-border bg-card p-4">
       <header className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate font-semibold text-strong">{crew.name}</h3>
-          <p className="text-xs text-muted-foreground">
-            {crew.members.length} {crew.members.length === 1 ? "person" : "people"} · {crew.ready} ready for assignments
-            {crew.subcontractor ? ` · from ${crew.subcontractor.name}` : ""}
-          </p>
+          {team ? (
+            cancelled ? (
+              <p className="text-xs text-muted-foreground">The job was cancelled.</p>
+            ) : (
+              <StaffingDots required={team.required} accepted={team.accepted} offered={team.offersOut} />
+            )
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {crew.members.length} {crew.members.length === 1 ? "person" : "people"} · {crew.ready} ready for assignments
+              {crew.subcontractor ? ` · from ${crew.subcontractor.name}` : ""}
+            </p>
+          )}
         </div>
         {onEdit ? (
           <Button variant="ghost" size="xs" onClick={onEdit}>
@@ -164,21 +176,33 @@ function CrewCard({ crew, onEdit }: { crew: Crew; onEdit?: () => void }) {
         </button>
       ) : null}
       <ul className="mt-3 grid gap-1.5">
-        {crew.members.map((member) => (
-          <li key={member.cleanerId} className="flex items-center gap-2 text-sm">
-            <Avatar name={member.name} initials={member.initials} size="sm" />
-            <Link href={profilePath(member.cleanerId)} className="min-w-0 flex-1 truncate font-medium text-strong underline-offset-4 hover:underline">
-              {member.name}
-            </Link>
-            {member.role === "lead" ? (
-              <Badge variant="secondary" size="sm">
-                <Crown aria-hidden />
-                Lead
-              </Badge>
-            ) : null}
-            <span className={cn("size-2 shrink-0 rounded-full", member.readiness === "ready" ? "bg-success" : member.readiness === "blocked" ? "bg-destructive" : "bg-muted-foreground/40")} title={member.readiness === "ready" ? "Ready for assignments" : "Not ready for assignments"} />
-          </li>
-        ))}
+        {crew.members.map((member) => {
+          const gone = member.onJob !== null && member.onJob !== "accepted" && member.onJob !== "offered";
+          return (
+            <li key={member.cleanerId} className={cn("flex items-center gap-2 text-sm", gone && "opacity-70")}>
+              <Avatar name={member.name} initials={member.initials} size="sm" />
+              <span className="min-w-0 flex-1">
+                <Link href={profilePath(member.cleanerId)} className="block truncate font-medium text-strong underline-offset-4 hover:underline">
+                  {member.name}
+                </Link>
+                {!member.fromTeam ? <span className="block text-xs text-muted-foreground">Added to the job in Dispatch</span> : null}
+              </span>
+              {member.role === "lead" ? (
+                <Badge variant="secondary" size="sm">
+                  <Crown aria-hidden />
+                  Lead
+                </Badge>
+              ) : null}
+              {member.onJob ? (
+                <Badge variant={STANDING_BADGE[member.onJob]} size="sm">
+                  {member.onJobWords}
+                </Badge>
+              ) : (
+                <span className={cn("size-2 shrink-0 rounded-full", member.readiness === "ready" ? "bg-success" : member.readiness === "blocked" ? "bg-destructive" : "bg-muted-foreground/40")} title={member.readiness === "ready" ? "Ready for assignments" : "Not ready for assignments"} />
+              )}
+            </li>
+          );
+        })}
       </ul>
       {crew.equipment.length ? <p className="mt-3 text-xs text-muted-foreground">Brings: {crew.equipment.join(", ")}</p> : null}
     </article>
