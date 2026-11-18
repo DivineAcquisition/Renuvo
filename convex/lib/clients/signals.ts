@@ -162,7 +162,11 @@ export async function companyAttention(ctx: QueryCtx, companyId: Id<"companies">
     if (customerOf.has(about.id)) return customerOf.get(about.id)!;
     let id: Id<"customers"> | null = null;
     if (about.table === "customers") id = about.id;
-    else if (about.table === "properties" || about.table === "jobs") {
+    else if (about.table === "salesOpportunities") {
+      // A Sales opportunity is about the person who asked: its task is that client's follow-up.
+      const row = await ctx.db.get(about.id);
+      id = row && row.companyId === companyId ? (row.customerId ?? null) : null;
+    } else if (about.table === "properties" || about.table === "jobs") {
       const row = await ctx.db.get(about.id);
       id = row && row.companyId === companyId ? row.customerId : null;
     }
@@ -178,7 +182,7 @@ export async function companyAttention(ctx: QueryCtx, companyId: Id<"companies">
       if (isIssue(task)) {
         const id = await resolve(task.about);
         if (id) out.issues.add(id);
-      } else if ((task.agent === "sales" || task.agent === "retention") && (task.about?.table === "customers" || task.about?.table === "properties")) {
+      } else if ((task.agent === "sales" || task.agent === "retention") && (task.about?.table === "customers" || task.about?.table === "properties" || task.about?.table === "salesOpportunities")) {
         const id = await resolve(task.about);
         if (id) out.followup.add(id);
       }

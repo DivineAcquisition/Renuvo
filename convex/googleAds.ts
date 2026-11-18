@@ -21,7 +21,9 @@ import { endpoints } from "./lib/google/platform";
 import { hashToken, randomToken } from "./lib/recruiter/secrets";
 import { allow } from "./lib/rateLimit";
 import { refreshClient } from "./lib/clients/directory";
-import { openTask } from "./lib/taskState";
+import { AGENT_PROFILES } from "./lib/departments";
+import { fileInquiry } from "./lib/sales/intake";
+import { enqueueRun } from "./lib/sales/runs";
 import { text } from "./lib/text";
 
 const DAY = 86_400_000;
@@ -68,7 +70,7 @@ async function matchCustomer(ctx: MutationCtx, companyId: Id<"companies">, lead:
 
 /**
  * One lead, once. The source's own id dedupes it; a person already on file is matched by email or phone
- * instead of being added twice. Sales gets one task per lead.
+ * instead of being added twice. Each lead becomes one opportunity in the Sales pipeline.
  */
 export async function takeLead(ctx: MutationCtx, input: { companyId: Id<"companies">; source: "lead_form" | "local_services"; externalId: string; name?: string; email?: string; phone?: string; postalCode?: string; gclid?: string; campaign?: string; test?: boolean }) {
   const seen = await ctx.db.query("googleLeads").withIndex("by_company_external", (q) => q.eq("companyId", input.companyId).eq("source", input.source).eq("externalId", input.externalId)).unique();
@@ -85,21 +87,27 @@ export async function takeLead(ctx: MutationCtx, input: { companyId: Id<"compani
     customer = (await ctx.db.get(id))!;
   }
   const from = input.source === "local_services" ? "Local Services Ads" : "a Google Ads lead form";
-  const taskId = await openTask(ctx, {
-    companyId: input.companyId,
-    agent: "sales",
-    title: `New lead from ${from}: ${customer.name.slice(0, 80)}`,
-    nextAction: `Reply to ${customer.name.slice(0, 80)} quickly${fields.postalCode ? ` (ZIP ${fields.postalCode})` : ""}. Contact goes through the usual messaging rules: consent, quiet hours and limits.`,
-    dueAt: Date.now() + 15 * 60_000,
-    completionCondition: "The lead was answered, booked, or closed with a reason.",
-    about: { table: "customers", id: customer._id },
-    key: `google-lead:${leadId}`,
+  // The lead becomes an opportunity in the Sales pipeline, with its own task. Nothing about it says the person
+  // agreed to be texted or emailed, so no permission is recorded and contact still goes through the usual rules.
+  const company = (await ctx.db.get(input.companyId))!;
+  const { opportunity } = await fileInquiry(ctx, company, {
+    contact: { name: customer.name, email: fields.email, phone: fields.phone },
+    customerId: customer._id,
+    kind: "residential",
+    source: { kind: "google_lead", externalId: input.externalId.slice(0, 200), campaign: fields.campaign },
+    inquiry: `New lead from ${from}${fields.postalCode ? ` (ZIP ${fields.postalCode})` : ""}.`,
+    receivedAt: Date.now(),
+    channel: fields.phone ? "sms" : "email",
+    facts: fields.postalCode ? [{ key: "postalCode", value: fields.postalCode.toUpperCase(), source: { kind: "record", ref: "google_lead" }, status: "stated", at: Date.now() }] : [],
+    dedupeKey: `google-lead:${leadId}`,
     actor: { kind: "system" },
   });
-  await ctx.db.patch(leadId, { customerId: customer._id, taskId });
+  if (AGENT_PROFILES.sales.built) await enqueueRun(ctx, opportunity, { trigger: "inquiry", key: `inquiry:${opportunity._id}` });
+  const taskId = (await ctx.db.get(opportunity._id))?.taskId;
+  await ctx.db.patch(leadId, { customerId: customer._id, ...(taskId ? { taskId } : {}) });
   await refreshClient(ctx, customer._id);
   await recordEvent(ctx, { companyId: input.companyId, type: "google.lead_received", actor: { kind: "system" }, subject: { table: "customers", id: customer._id }, data: { source: input.source, matched } });
-  return { created: true, leadId, customerId: customer._id, taskId };
+  return { created: true, leadId, customerId: customer._id, taskId, opportunityId: opportunity._id };
 }
 
 export const ingestLead = internalMutation({
