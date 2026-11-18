@@ -23,6 +23,7 @@ import { ACTIVE_ASSIGNMENT } from "../statuses";
 import { openTask } from "../taskState";
 import { addDays, cadenceDates, dayNumber, localInstant, weekdayOf, type Cadence } from "./cadence";
 import { createVisit } from "./visits";
+import { quote as runQuote, type QuoteInput } from "../services/engine";
 
 export const HORIZON_DAYS = 56;
 const MAX_PER_RUN = 40;
@@ -46,56 +47,107 @@ export function versionFor(versions: Doc<"recurringPlanVersions">[], date: strin
   return found;
 }
 
-/** Creates the plan, its first version and the visits inside the horizon, from a confirmed recurring booking. */
-export async function createPlanFromBooking(ctx: MutationCtx, company: Doc<"companies">, booking: Doc<"bookings">): Promise<Id<"recurringPlans">> {
-  if (!booking.recurring) throw new Error("The booking has no cadence.");
-  const startDate = todayIn(company.timezone, booking.slot.startsAt);
-  const arrivalMinute = Math.round((booking.slot.startsAt - localInstant(startDate, 0, company.timezone)) / 60_000);
-  const durationMinutes = Math.round((booking.slot.endsAt - booking.slot.startsAt) / 60_000);
-  const firstVersion = booking.first ? await ctx.db.get(booking.first.versionId) : null;
+export type NewPlan = {
+  customerId: Id<"customers">;
+  propertyId: Id<"properties">;
+  bookingId?: Id<"bookings">;
+  setupId?: Id<"serviceSetups">;
+  startDate: string;
+  endDate?: string;
+  arrivalMinute: number;
+  arrivalWindowMinutes: number;
+  durationMinutes: number;
+  crew: number;
+  cadence: Cadence;
+  serviceKey: string;
+  versionId: Id<"serviceVersions">;
+  quoteInput: Doc<"recurringPlanVersions">["quoteInput"];
+  visitPriceCents: number;
+  first?: NonNullable<Doc<"recurringPlanVersions">["first"]>;
+  preferredCleanerId?: Id<"cleaners">;
+  billing: Doc<"recurringPlans">["billing"];
+  createdBy: Id<"members">;
+};
+
+/** Creates a plan, its first version and the visits inside the horizon. */
+export async function createPlan(ctx: MutationCtx, company: Doc<"companies">, input: NewPlan, firstJobAt?: { startsAt: number; endsAt: number }): Promise<Id<"recurringPlans">> {
   const now = Date.now();
   const planId = await ctx.db.insert("recurringPlans", {
     companyId: company._id,
-    customerId: booking.customerId,
-    propertyId: booking.propertyId,
-    bookingId: booking._id,
+    customerId: input.customerId,
+    propertyId: input.propertyId,
+    ...(input.bookingId ? { bookingId: input.bookingId } : {}),
+    ...(input.setupId ? { setupId: input.setupId } : {}),
     status: "active",
     currentVersion: 1,
     timezone: company.timezone,
     horizonDays: HORIZON_DAYS,
-    startDate,
-    ...(booking.recurring.endDate ? { endDate: booking.recurring.endDate } : {}),
-    billing: booking.recurring.billing,
-    createdBy: booking.createdBy,
+    startDate: input.startDate,
+    ...(input.endDate ? { endDate: input.endDate } : {}),
+    billing: input.billing,
+    createdBy: input.createdBy,
     createdAt: now,
     updatedAt: now,
   });
-  const ongoing = await ctx.db.get(booking.versionId);
   await ctx.db.insert("recurringPlanVersions", {
     companyId: company._id,
     planId,
     version: 1,
-    effectiveFrom: startDate,
-    cadence: booking.recurring.cadence,
-    arrivalMinute,
-    arrivalWindowMinutes: booking.slot.arrivalWindowMinutes,
-    // The ongoing visit's own length and crew, from its service; the first visit has its own.
-    durationMinutes: ongoing ? Math.max(15, durationMinutes) : durationMinutes,
-    crew: booking.slot.crew,
-    serviceKey: booking.serviceKey,
-    versionId: booking.versionId,
-    quoteInput: booking.quoteInput,
-    visitPriceCents: booking.priceCents,
-    ...(booking.first ? { first: { serviceKey: booking.first.serviceKey, versionId: booking.first.versionId, quoteInput: booking.first.quoteInput, priceCents: booking.first.priceCents, durationMinutes, crew: booking.slot.crew } } : {}),
-    ...(booking.preferredCleanerId ? { preferredCleanerId: booking.preferredCleanerId } : {}),
+    effectiveFrom: input.startDate,
+    cadence: input.cadence,
+    arrivalMinute: input.arrivalMinute,
+    arrivalWindowMinutes: input.arrivalWindowMinutes,
+    durationMinutes: input.durationMinutes,
+    crew: input.crew,
+    serviceKey: input.serviceKey,
+    versionId: input.versionId,
+    quoteInput: input.quoteInput,
+    visitPriceCents: input.visitPriceCents,
+    ...(input.first ? { first: input.first } : {}),
+    ...(input.preferredCleanerId ? { preferredCleanerId: input.preferredCleanerId } : {}),
     state: "active",
-    createdBy: booking.createdBy,
+    createdBy: input.createdBy,
     createdAt: now,
   });
-  void firstVersion;
-  await recordEvent(ctx, { companyId: company._id, type: "recurring_plan.created", actor: { kind: "system" }, subject: { table: "recurringPlans", id: planId }, data: { bookingId: booking._id } });
-  await generateVisits(ctx, (await ctx.db.get(planId))!, { kind: "system" }, { firstJobAt: booking.slot });
+  await recordEvent(ctx, { companyId: company._id, type: "recurring_plan.created", actor: { kind: "system" }, subject: { table: "recurringPlans", id: planId }, data: { ...(input.bookingId ? { bookingId: input.bookingId } : {}), ...(input.setupId ? { setupId: input.setupId } : {}) } });
+  await generateVisits(ctx, (await ctx.db.get(planId))!, { kind: "system" }, { firstJobAt });
   return planId;
+}
+
+/** Creates the plan from a confirmed recurring booking. */
+export async function createPlanFromBooking(ctx: MutationCtx, company: Doc<"companies">, booking: Doc<"bookings">): Promise<Id<"recurringPlans">> {
+  if (!booking.recurring) throw new Error("The booking has no cadence.");
+  const startDate = todayIn(company.timezone, booking.slot.startsAt);
+  const arrivalMinute = Math.round((booking.slot.startsAt - localInstant(startDate, 0, company.timezone)) / 60_000);
+  const firstMinutes = Math.round((booking.slot.endsAt - booking.slot.startsAt) / 60_000);
+  // The ongoing visit's own length, from its saved quote; the first visit keeps the booked length.
+  const ongoingVersion = await ctx.db.get(booking.versionId);
+  const ongoingMinutes = ongoingVersion ? Math.max(15, runQuote(ongoingVersion.spec, booking.quoteInput as QuoteInput).time.elapsedMinutes) : firstMinutes;
+  return createPlan(
+    ctx,
+    company,
+    {
+      customerId: booking.customerId,
+      propertyId: booking.propertyId,
+      bookingId: booking._id,
+      startDate,
+      ...(booking.recurring.endDate ? { endDate: booking.recurring.endDate } : {}),
+      arrivalMinute,
+      arrivalWindowMinutes: booking.slot.arrivalWindowMinutes,
+      durationMinutes: booking.first ? ongoingMinutes : firstMinutes,
+      crew: booking.slot.crew,
+      cadence: booking.recurring.cadence,
+      serviceKey: booking.serviceKey,
+      versionId: booking.versionId,
+      quoteInput: booking.quoteInput,
+      visitPriceCents: booking.priceCents,
+      ...(booking.first ? { first: { serviceKey: booking.first.serviceKey, versionId: booking.first.versionId, quoteInput: booking.first.quoteInput, priceCents: booking.first.priceCents, durationMinutes: firstMinutes, crew: booking.slot.crew } } : {}),
+      ...(booking.preferredCleanerId ? { preferredCleanerId: booking.preferredCleanerId } : {}),
+      billing: booking.recurring.billing,
+      createdBy: booking.createdBy,
+    },
+    booking.slot,
+  );
 }
 
 /**

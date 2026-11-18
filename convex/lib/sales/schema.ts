@@ -381,6 +381,9 @@ export const salesTables = {
     companyId: v.id("companies"),
     proposalId: v.optional(v.id("proposals")),
     draftId: v.optional(v.id("salesDrafts")),
+    /** The proposal site the findings are for. */
+    siteKey: v.optional(v.string()),
+    serviceKey: v.optional(v.string()),
     customerId: v.id("customers"),
     propertyId: v.id("properties"),
     status: literals(ASSESSMENT_STATUS),
@@ -402,6 +405,7 @@ export const salesTables = {
   })
     .index("by_company_status", ["companyId", "status", "updatedAt"])
     .index("by_company_proposal", ["companyId", "proposalId"])
+    .index("by_company_draft", ["companyId", "draftId"])
     .index("by_publicId", ["publicId"]),
 
   serviceSetups: defineTable({
