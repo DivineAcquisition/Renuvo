@@ -129,6 +129,7 @@ export function PipelineScreen() {
                     <div className="flex flex-wrap gap-1">
                       <Chip>{SEGMENTS[row.segment]}</Chip>
                       {row.milestoneWords ? <Chip tone={row.milestone === "declined" || row.milestone === "expired" ? "danger" : row.milestone === "service_activated" ? "success" : "brand"}>{row.milestoneWords}</Chip> : null}
+                      {row.agent ? <Chip tone="brand">Sales agent</Chip> : null}
                       {row.followUps === "paused" ? <Chip tone="warning">Taken over</Chip> : null}
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -142,6 +143,11 @@ export function PipelineScreen() {
                     ) : null}
                     {stage.id !== "won" && stage.id !== "lost" ? (
                       <div className="flex flex-wrap gap-1.5">
+                        {row.agent ? (
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/app/agents/sales?opp=${row._id}`}>Open conversation</Link>
+                          </Button>
+                        ) : null}
                         {row.draftId ? (
                           <Button size="sm" variant="outline" asChild>
                             <Link href={`/app/agents/sales/book/${row.draftId}`}>Open workspace</Link>
@@ -159,7 +165,7 @@ export function PipelineScreen() {
                           </>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => run(() => takeOver({ companyId, opportunityId: row._id as Id<"salesOpportunities">, resume: row.followUps === "paused" }))}>
-                          {row.followUps === "paused" ? "Resume reminders" : "Take over"}
+                          {row.followUps === "paused" ? (row.agent ? "Hand back to the agent" : "Resume reminders") : "Take over"}
                         </Button>
                         <label className="sr-only" htmlFor={`stage-of-${row._id}`}>
                           Move to stage

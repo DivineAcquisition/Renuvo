@@ -67,3 +67,14 @@ export function webhookOutcome(body: string): WebhookOutcome {
   if (event.type === "email.failed") return { providerMessageId: id, outcome: "failed" };
   return null;
 }
+
+/** The id of an email that arrived at the receiving domain, from the service's notice, or null for any other event. The notice carries no body. */
+export function receivedEmailId(body: string): string | null {
+  try {
+    const event = JSON.parse(body) as { type?: unknown; data?: { email_id?: unknown } };
+    const id = event.data?.email_id;
+    return event.type === "email.received" && typeof id === "string" && /^[A-Za-z0-9-]{8,64}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}

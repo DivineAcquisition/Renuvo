@@ -21,6 +21,7 @@ import { v } from "convex/values";
 
 import { quoteInputValidator } from "../services/schema";
 import { literals } from "../statuses";
+import { agentOpportunityFields, agentTables } from "./agentSchema";
 
 export const SEGMENTS = ["residential", "commercial", "office", "str"] as const;
 export type Segment = (typeof SEGMENTS)[number];
@@ -46,6 +47,8 @@ export const MILESTONES = [
   "service_activated",
   "declined",
   "expired",
+  /** Parked until a date the customer asked for (the Sales agent's). */
+  "deferred",
 ] as const;
 export type Milestone = (typeof MILESTONES)[number];
 
@@ -55,7 +58,8 @@ export const BOOKING_KINDS = ["one_time", "recurring"] as const;
 export type BookingKind = (typeof BOOKING_KINDS)[number];
 export const DRAFT_STATUS = ["open", "quoted", "requested", "confirmed", "proposal_created", "archived"] as const;
 
-export const QUOTE_STATUS = ["saved", "sent", "accepted", "expired", "superseded", "withdrawn"] as const;
+/** awaiting_approval and declined are the agent's: a quote waiting for a person before it goes, and a customer's no on the quote page. */
+export const QUOTE_STATUS = ["saved", "awaiting_approval", "sent", "accepted", "declined", "expired", "superseded", "withdrawn"] as const;
 
 /** Payment arrangements a booking may use. "external" is collected outside Selestial and recorded separately. */
 export const PAYMENT_POLICIES = ["none", "deposit", "full", "invoice_terms", "after_service", "external"] as const;
@@ -124,14 +128,20 @@ export const salesTables = {
     closedReason: v.optional(v.string()),
     /** Follow-ups stop while a person has taken the deal over. */
     followUps: v.union(v.literal("on"), v.literal("paused"), v.literal("stopped")),
-    createdBy: v.id("members"),
+    /** The member who started the deal. Absent when the Sales agent filed it from an inquiry. */
+    createdBy: v.optional(v.id("members")),
     createdAt: v.number(),
     updatedAt: v.number(),
+    // The Sales agent's fields (convex/lib/sales/agentSchema.ts). A deal a person started has none of them.
+    ...agentOpportunityFields,
   })
     .index("by_company_updated", ["companyId", "updatedAt"])
     .index("by_company_stage", ["companyId", "stage", "updatedAt"])
     .index("by_company_customer", ["companyId", "customerId"])
-    .index("by_followup_due", ["followUps", "nextActionAt"]),
+    .index("by_followup_due", ["followUps", "nextActionAt"])
+    .index("by_company_dedupe", ["companyId", "dedupeKey"])
+    .index("by_stage_updated", ["stage", "updatedAt"])
+    .index("by_replyKey", ["replyKey"]),
 
   salesDrafts: defineTable({
     companyId: v.id("companies"),
@@ -150,8 +160,9 @@ export const salesTables = {
     quoteId: v.optional(v.id("salesQuotes")),
     bookingId: v.optional(v.id("bookings")),
     proposalId: v.optional(v.id("proposals")),
-    createdBy: v.id("members"),
-    updatedBy: v.id("members"),
+    /** Absent when the Sales agent made the draft from an inquiry. */
+    createdBy: v.optional(v.id("members")),
+    updatedBy: v.optional(v.id("members")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -164,7 +175,8 @@ export const salesTables = {
     draftId: v.id("salesDrafts"),
     opportunityId: v.optional(v.id("salesOpportunities")),
     customerId: v.id("customers"),
-    propertyId: v.id("properties"),
+    /** The service address. The Sales agent may quote from a postal code before the address is known. */
+    propertyId: v.optional(v.id("properties")),
     kind: literals(BOOKING_KINDS),
     /** The priced visit. For recurring service, the ongoing visit. */
     visit: v.object({ serviceKey: v.string(), versionId: v.id("serviceVersions"), serviceQuoteId: v.id("serviceQuotes"), totalCents: v.number(), outcome: v.string() }),
@@ -176,12 +188,30 @@ export const salesTables = {
     status: literals(QUOTE_STATUS),
     expiresAt: v.number(),
     sentAt: v.optional(v.number()),
-    createdBy: v.id("members"),
+    /** Absent when the Sales agent saved it. */
+    createdBy: v.optional(v.id("members")),
     createdAt: v.number(),
+    // ── The customer's quote page (convex/quotePage.ts) ──
+    /** 128 random bits, given when the quote is first sent by link. With the deployment's secret it makes the customer's link. */
+    publicId: v.optional(v.string()),
+    /** A fingerprint of what the customer is shown. They accept this, so a different quote cannot be accepted by mistake. */
+    hash: v.optional(v.string()),
+    /** The deposit the Playbook asks for, and the terms offered, frozen with the quote. */
+    depositCents: v.optional(v.number()),
+    terms: v.optional(v.object({ payment: v.string(), cancellation: v.string() })),
+    agreementRequired: v.optional(v.boolean()),
+    acceptance: v.optional(v.object({ name: v.string(), at: v.number() })),
+    declined: v.optional(v.object({ reason: v.optional(v.string()), at: v.number() })),
+    /** The customer's last question from the quote page, kept until it is answered. */
+    question: v.optional(v.object({ text: v.string(), at: v.number() })),
+    /** A quote the Playbook says a person reviews before it goes. */
+    approval: v.optional(v.object({ state: v.union(v.literal("waiting"), v.literal("approved"), v.literal("declined")), approvalId: v.optional(v.id("approvals")), by: v.optional(v.union(v.id("members"), v.literal("rules"))) })),
   })
     .index("by_company_created", ["companyId", "createdAt"])
     .index("by_company_customer", ["companyId", "customerId"])
-    .index("by_company_draft", ["companyId", "draftId"]),
+    .index("by_company_draft", ["companyId", "draftId"])
+    .index("by_publicId", ["publicId"])
+    .index("by_status_expires", ["status", "expiresAt"]),
 
   bookings: defineTable({
     companyId: v.id("companies"),
@@ -216,7 +246,7 @@ export const salesTables = {
     /** Handing the confirmed work to Dispatch. Retried by the sweep until it is done. */
     handoff: v.object({ state: v.union(v.literal("not_started"), v.literal("pending"), v.literal("done"), v.literal("failed")), attempts: v.number(), problem: v.optional(v.string()) }),
     cancelledReason: v.optional(v.string()),
-    createdBy: v.id("members"),
+    createdBy: v.optional(v.id("members")),
     confirmedBy: v.optional(v.union(v.id("members"), v.literal("system"))),
     confirmedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -264,7 +294,7 @@ export const salesTables = {
     /** Monthly consolidated billing: the last calendar month (YYYY-MM) a draft invoice was made for. */
     billedThrough: v.optional(v.string()),
     endedReason: v.optional(v.string()),
-    createdBy: v.id("members"),
+    createdBy: v.optional(v.id("members")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -293,7 +323,7 @@ export const salesTables = {
     approvalId: v.optional(v.id("approvals")),
     /** A version that changes the price waits for the Owner; until approved it is never used. */
     state: v.optional(v.union(v.literal("pending"), v.literal("active"), v.literal("declined"))),
-    createdBy: v.id("members"),
+    createdBy: v.optional(v.id("members")),
     createdAt: v.number(),
   })
     .index("by_plan_version", ["planId", "version"])
@@ -437,4 +467,7 @@ export const salesTables = {
   })
     .index("by_company_status", ["companyId", "status"])
     .index("by_company_proposal", ["companyId", "proposalId"]),
+
+  // ── The Sales agent: conversations, prepared work, runs, reminders and the first review (agentSchema.ts) ──
+  ...agentTables,
 };

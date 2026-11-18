@@ -12,6 +12,7 @@ import { managerMutation, managerQuery } from "./lib/builders";
 import { afterDecision, afterExpiry, type CarriedOut } from "./lib/dispatch/workflow";
 import { isOwner } from "./lib/roles";
 import { afterSalesDecision, afterSalesExpiry } from "./bookings";
+import { afterAgentDecision, afterAgentExpiry, isAgentProposal } from "./lib/sales/agentApprovals";
 import { afterPlanDecision } from "./plans";
 import { afterProposalDecision } from "./proposals";
 import { afterRecruiterDecision, afterRecruiterExpiry, isRecruiterProposal } from "./lib/recruiter/approvals";
@@ -86,6 +87,7 @@ export const decide = managerMutation({
       return { carriedOut };
     }
     if (isRecruiterProposal(approval)) return { carriedOut: await afterRecruiterDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
+    if (isAgentProposal(approval)) return { carriedOut: await afterAgentDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
     if (kind === "sales_payment_link" || kind === "sales_price_override" || kind === "plan_change" || kind === "proposal_rates") {
       const carriedOut = kind === "plan_change" ? await afterPlanDecision(ctx, decidedApproval, args.decision) : kind === "proposal_rates" ? await afterProposalDecision(ctx, decidedApproval, args.decision) : await afterSalesDecision(ctx, decidedApproval, args.decision);
       await ctx.db.patch(approval._id, { carriedOut });
@@ -109,6 +111,7 @@ export const expireDue = internalMutation({
       if (approval.proposal?.kind === "send_cleaner_follow_up") await afterFollowUpExpiry(ctx, { ...approval, status: "expired" });
       else if (isRecruiterProposal(approval)) await afterRecruiterExpiry(ctx, { ...approval, status: "expired" });
       else if (approval.proposal?.kind === "sales_payment_link") await afterSalesExpiry(ctx, approval);
+      else if (isAgentProposal(approval)) await afterAgentExpiry(ctx, { ...approval, status: "expired" });
       else await afterExpiry(ctx, { ...approval, status: "expired" });
     }
     return due.length;

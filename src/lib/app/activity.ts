@@ -5,7 +5,7 @@
  * title, and an unknown area to a neutral one: nothing is invented and nothing internal is shown.
  */
 
-export type ActivityArea = "business" | "team" | "agents" | "dispatch" | "jobs" | "hiring" | "customers" | "messages" | "apps" | "billing" | "privacy" | "agreements" | "other";
+export type ActivityArea = "business" | "team" | "agents" | "dispatch" | "jobs" | "hiring" | "customers" | "messages" | "apps" | "billing" | "privacy" | "agreements" | "sales" | "other";
 
 export const AREA_LABEL: Record<ActivityArea, string> = {
   business: "Business",
@@ -20,6 +20,7 @@ export const AREA_LABEL: Record<ActivityArea, string> = {
   billing: "Billing",
   privacy: "Privacy",
   agreements: "Agreements",
+  sales: "Sales",
   other: "Other",
 };
 
@@ -126,6 +127,31 @@ const TITLES: Record<string, [string, ActivityArea]> = {
   "agreement.completed": ["Agreement signed", "agreements"],
   "agreement.accepted": ["Selestial terms accepted", "agreements"],
   "agreement.archived": ["Agreement archived", "agreements"],
+
+  "opportunity.created": ["Inquiry received", "sales"],
+  "opportunity.stage_changed": ["Opportunity moved to a new stage", "sales"],
+  "opportunity.reply_received": ["Prospect replied", "sales"],
+  "opportunity.taken_over": ["A person took over a sales conversation", "sales"],
+  "opportunity.handed_back": ["Sales conversation handed back to the agent", "sales"],
+  "opportunity.details_changed": ["Opportunity details corrected", "sales"],
+  "opportunity.match_resolved": ["Prospect matched to a customer record", "sales"],
+  "opportunity.booked": ["Booking confirmed from an inquiry", "sales"],
+  "opportunity.unverified_email": ["Email from an unrecognised address on a sales conversation", "sales"],
+  "opportunity.run_failed": ["The Sales agent could not finish a step", "sales"],
+  "sales_quote.saved": ["Quote prepared", "sales"],
+  "sales_quote.sent": ["Quote sent", "sales"],
+  "sales_quote.accepted": ["Quote accepted by the customer", "sales"],
+  "sales_quote.declined": ["Quote declined by the customer", "sales"],
+  "sales_quote.expired": ["Quote expired", "sales"],
+  "follow_up.scheduled": ["Follow-up planned", "sales"],
+  "follow_up.sent": ["Follow-up sent", "sales"],
+  "follow_up.stopped": ["Follow-up stopped", "sales"],
+  "follow_up.cancelled": ["Follow-up cancelled", "sales"],
+  "sales_action.prepared": ["The Sales agent prepared a message", "sales"],
+  "sales_action.sent": ["The Sales agent sent a message", "sales"],
+  "sales.reported": ["The Sales agent acted and reported it", "sales"],
+  "sales.first_batch_decided": ["The Sales agent's first messages reviewed", "sales"],
+  "sales.playbook_changed": ["Sales Playbook changed", "sales"],
 };
 
 /** General titles by the first part of an event's name, used when the exact event isn't listed. */

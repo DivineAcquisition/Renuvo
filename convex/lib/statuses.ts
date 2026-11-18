@@ -35,6 +35,7 @@ export const RECORD_STATUSES =["active", "archived"] as const;
 export const recordStatusValidator = literals(RECORD_STATUSES);
 
 export const WORK_KINDS = ["home", "short_term_rental", "property_manager", "commercial"] as const;
+export type WorkKind = (typeof WORK_KINDS)[number];
 export const workKindValidator = literals(WORK_KINDS);
 
 /**

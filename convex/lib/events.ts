@@ -112,6 +112,10 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("salesOpportunities"), id: v.id("salesOpportunities") }),
   v.object({ table: v.literal("salesDrafts"), id: v.id("salesDrafts") }),
   v.object({ table: v.literal("salesQuotes"), id: v.id("salesQuotes") }),
+  // The Sales agent (convex/lib/sales/agentSchema.ts).
+  v.object({ table: v.literal("salesActions"), id: v.id("salesActions") }),
+  v.object({ table: v.literal("salesFollowUps"), id: v.id("salesFollowUps") }),
+  v.object({ table: v.literal("salesBatches"), id: v.id("salesBatches") }),
   v.object({ table: v.literal("bookings"), id: v.id("bookings") }),
   v.object({ table: v.literal("recurringPlans"), id: v.id("recurringPlans") }),
   v.object({ table: v.literal("proposals"), id: v.id("proposals") }),

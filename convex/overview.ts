@@ -3,6 +3,7 @@
  * record, each statement points at the record behind it, and anything that is not connected yet says
  * "not set up" instead of showing a number.
  */
+import { agentStage } from "./lib/sales/agentOpportunity";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -271,6 +272,15 @@ async function aboutContext(ctx: Ctx, about: Doc<"tasks">["about"], asOf: number
   if (!doc || doc.companyId !== ctx.companyId) return [];
   if (about.table === "customers") return [{ label: "Customer", value: (doc as Doc<"customers">).name, ref: null }];
   if (about.table === "cleaners") return [{ label: "Cleaner", value: (doc as Doc<"cleaners">).name, ref: null }];
+  if (about.table === "salesOpportunities") {
+    const opportunity = doc as Doc<"salesOpportunities">;
+    const customer = opportunity.customerId ? await ctx.db.get(opportunity.customerId) : null;
+    return [
+      { label: "Prospect", value: customer?.name ?? opportunity.title, ref: null },
+      { label: "Stage", value: agentStage(opportunity).replace(/_/g, " "), ref: null },
+    ];
+  }
+  if (about.table !== "properties") return [];
   const property = doc as Doc<"properties">;
   return [{ label: "Property", value: property.label ?? property.address.line1, ref: null }];
 }
@@ -375,6 +385,11 @@ export const sidebar = companyQuery({
     const ahead = await visitsBetween(ctx, args.asOf, args.asOf + dispatchSettings(ctx.company).lookAheadDays * DAY);
     const unfilled = ahead.filter((visit) => visit.state === "needs_coverage" || visit.state === "partly_staffed");
     const work = await agentWork(ctx, "dispatch");
+    const salesWork = await agentWork(ctx, "sales");
+    const salesRunning = await ctx.db
+      .query("salesRuns")
+      .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "running"))
+      .take(20);
     return {
       /** Approvals and handed-over tasks waiting on this person. */
       decisions: approvals.length + tasks.length,
@@ -389,6 +404,15 @@ export const sidebar = companyQuery({
         unfilledWithinDay: unfilled.filter((visit) => visit.startsAt < args.asOf + DAY).length,
         /** Visits with an offer out and no answer yet. */
         awaitingAnswer: ahead.filter((visit) => visit.state === "awaiting_acceptance").length,
+      },
+      sales: {
+        paused: ctx.company.pausedAgents.includes("sales"),
+        /** Opportunities whose next step is a person's. */
+        withYou: salesWork.counts.needsDecision,
+        /** Opportunities the agent is working on at this moment: a run is in progress. */
+        running: salesRunning.length,
+        /** Opportunities waiting on a customer's reply. */
+        waiting: salesWork.counts.waiting,
       },
     };
   },
@@ -494,6 +518,14 @@ export const week = companyQuery({
     const tomorrowStart = addLocalDays(startOfLocalDay(args.asOf, tz), 1, tz);
     const thisFrom = addLocalDays(tomorrowStart, -7, tz);
     const lastFrom = addLocalDays(tomorrowStart, -14, tz);
+    // Inquiries the Sales agent filed in a period (deals a person entered by hand are not inquiries).
+    const inquiriesBetween = async (from: number, to: number) =>
+      (
+        await ctx.db
+          .query("salesOpportunities")
+          .withIndex("by_company_updated", (q) => q.eq("companyId", ctx.companyId).gte("updatedAt", from))
+          .take(2000)
+      ).filter((row) => row.intake !== undefined && row.createdAt >= from && row.createdAt < to);
     const completedBetween = async (from: number, to: number) =>
       ctx.db
         .query("jobs")
@@ -519,7 +551,16 @@ export const week = companyQuery({
         limitation: unpriced > 0 ? `${plural(unpriced, "completed visit")} ${unpriced === 1 ? "has" : "have"} no price, so ${unpriced === 1 ? "it is" : "they are"} left out.` : null,
       },
       { key: "coverage_gaps", label: "Coverage gaps", why: "Visits in the next seven days short of an accepted cleaner.", state: "measured", kind: "count", value: gaps, previous: null, limitation: null },
-      notSetUp("conversion", "Inquiry-to-booking conversion", "Whether sales opportunities become confirmed work.", "Arrives with the Sales agent."),
+      {
+        key: "conversion",
+        label: "Inquiries booked",
+        why: "Inquiries received in the period that became a confirmed booking. A booking is a confirmed visit, not a quote sent or accepted.",
+        state: "measured",
+        kind: "count",
+        value: (await inquiriesBetween(thisFrom, tomorrowStart)).filter((row) => row.stage === "won").length,
+        previous: (await inquiriesBetween(lastFrom, thisFrom)).filter((row) => row.stage === "won").length,
+        limitation: `Out of ${plural((await inquiriesBetween(thisFrom, tomorrowStart)).length, "inquiry", "inquiries")} received. An inquiry still open may yet book.`,
+      },
       notSetUp("cash", "Cash collected", "Money actually received.", "Payments are not connected.", "cents"),
       notSetUp("recurring", "Recurring customers", "Size and direction of the repeat customer base.", "Recurring plans arrive with Retention."),
       notSetUp("issues", "Customer issues unresolved", "Service problems that could damage retention.", "Service issues arrive with Retention."),

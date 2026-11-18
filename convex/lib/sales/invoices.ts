@@ -58,7 +58,7 @@ export async function issueBookingInvoice(ctx: MutationCtx, booking: Doc<"bookin
     issuedBy: by,
     dueAt,
     revision: 1,
-    createdBy: booking.createdBy,
+    createdBy: booking.createdBy ?? by,
     createdAt: now,
     updatedAt: now,
   });

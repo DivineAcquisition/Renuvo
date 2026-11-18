@@ -1,5 +1,5 @@
 /**
- * Customer links for Sales: a proposal, a signing request and an assessor's findings page.
+ * Customer links for Sales: a proposal, a signing request, an assessor's findings page and a quote.
  *
  * The same pattern as pay links (convex/lib/finance/payLinks.ts): the token is `<public id>.<signature>`,
  * the public id 128 random bits stored on the row, the signature an HMAC of it with ACTION_LINK_SECRET
@@ -8,7 +8,7 @@
  */
 import { siteOrigin } from "../dispatch/links";
 
-export type LinkKind = "proposal" | "sign" | "assess";
+export type LinkKind = "proposal" | "sign" | "assess" | "quote";
 
 const encoder = new TextEncoder();
 
@@ -60,7 +60,7 @@ export async function publicIdFor(kind: LinkKind, token: string): Promise<string
   return same(token.slice(dot + 1), await sign(kind, publicId, key)) ? publicId : null;
 }
 
-const PATHS: Record<LinkKind, string> = { proposal: "/c/proposal/", sign: "/c/sign/", assess: "/c/assess/" };
+const PATHS: Record<LinkKind, string> = { proposal: "/c/proposal/", sign: "/c/sign/", assess: "/c/assess/", quote: "/c/quote/" };
 
 export function linkUrl(kind: LinkKind, token: string): string {
   return `${siteOrigin()}${PATHS[kind]}${token}`;

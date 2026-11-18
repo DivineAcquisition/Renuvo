@@ -66,7 +66,7 @@ export type NewPlan = {
   first?: NonNullable<Doc<"recurringPlanVersions">["first"]>;
   preferredCleanerId?: Id<"cleaners">;
   billing: Doc<"recurringPlans">["billing"];
-  createdBy: Id<"members">;
+  createdBy?: Id<"members">;
 };
 
 /** Creates a plan, its first version and the visits inside the horizon. */
