@@ -59,7 +59,18 @@ export type CompanyFacts = {
   requirements: Map<string, Doc<"workerRequirements">[]>;
   windows: Map<string, Doc<"availabilityWindows">[]>;
   agreements: Map<string, ReadinessFacts["agreements"]>;
+  /** Subcontractor companies whose working relationship has ended, by id, with their names. */
+  endedSuppliers: Map<string, string>;
 };
+
+/** The names of the company's subcontractors whose working relationship has ended. */
+async function endedSuppliersOf(ctx: Ctx, companyId: Id<"companies">): Promise<Map<string, string>> {
+  const rows = await ctx.db
+    .query("subcontractors")
+    .withIndex("by_company_status", (q) => q.eq("companyId", companyId).eq("status", "ended"))
+    .take(500);
+  return new Map(rows.map((row) => [row._id as string, row.name]));
+}
 
 /** The requirement rows, weekly windows and linked agreements of every cleaner in the company. */
 export async function companyFacts(ctx: Ctx, company: Doc<"companies">): Promise<CompanyFacts> {
@@ -87,7 +98,7 @@ export async function companyFacts(ctx: Ctx, company: Doc<"companies">): Promise
     list.push({ docType: agreement.docType, state });
     agreements.set(link.recordId, list);
   }
-  return { definitions, requirements: await grouped(requirementRows), windows: await grouped(windowRows), agreements };
+  return { definitions, requirements: await grouped(requirementRows), windows: await grouped(windowRows), agreements, endedSuppliers: await endedSuppliersOf(ctx, company._id) };
 }
 
 /** The facts readiness needs about one cleaner. */
@@ -100,6 +111,7 @@ export function readinessFacts(cleaner: Doc<"cleaners">, facts: CompanyFacts): R
     serviceAreas: cleaner.serviceAreas.length,
     // A requirement with no document type is met by any working agreement.
     agreements: own.flatMap((row) => (WORKING_AGREEMENT_TYPES.includes(row.docType) ? [row, { ...row, docType: "*" }] : [row])),
+    supplierEnded: cleaner.subcontractorId ? facts.endedSuppliers.get(cleaner.subcontractorId) : undefined,
   };
 }
 
@@ -147,7 +159,10 @@ export async function cleanerReadiness(ctx: Ctx, company: Doc<"companies">, clea
     requirements: new Map([[cleaner._id, rows]]),
     windows: new Map([[cleaner._id, windows]]),
     agreements: new Map([[cleaner._id, agreements]]),
+    endedSuppliers: new Map(),
   };
+  const supplier = cleaner.subcontractorId ? await ctx.db.get(cleaner.subcontractorId) : null;
+  if (supplier && supplier.companyId === company._id && supplier.status === "ended") facts.endedSuppliers.set(supplier._id, supplier.name);
   return { readiness: readinessOf(cleaner, facts, company, now, service), rows, windows, definitions };
 }
 

@@ -77,7 +77,9 @@ index that starts with it.
 Six things are kept apart and each has its own words on screen:
 
 1. **Relationship type**: employee, independent contractor, subcontractor worker.
-2. **Engagement status**: onboarding, active, paused, suspended, ended. Set by a person.
+2. **Engagement status**: onboarding, active, paused, suspended, ended. Set by a person. A subcontractor
+   worker whose company's working relationship has ended takes no work, whatever their own status, until they
+   are moved to another company or engaged directly.
 3. **Onboarding progress**: each requirement's state.
 4. **Job eligibility** ("Ready for assignments"): active, and every requirement that blocks assignments is
    accepted and current. Equipment and skill requirements tied to a service only block that service.

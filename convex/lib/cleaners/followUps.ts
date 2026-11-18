@@ -240,7 +240,7 @@ async function handToPerson(ctx: MutationCtx, company: Doc<"companies">, cleaner
       actor: { kind: "agent", agent: followUp.agent },
     });
     await ctx.db.patch(taskId, { handoffTo: "team_coordinator" });
-    await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: "Reminders did not get a reply. Will you contact them yourself?", dueAt: due, withPersonSince: Date.now() }, { kind: "agent", agent: followUp.agent });
+    await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: `${followUp.attempt} reminders did not get a reply. ${followUp.summary ?? ""} Will you contact them yourself? Not answering is not a decision on their part.`.replace(/\s+/g, " "), dueAt: due, withPersonSince: Date.now() }, { kind: "agent", agent: followUp.agent });
     await ctx.db.patch(followUp._id, { taskId });
   }
   await finish(ctx, followUp, "stopped", `${followUp.attempt} reminders without a reply. A person was asked to reach out.`);

@@ -96,14 +96,31 @@ export async function jobHistory(ctx: Db, job: Doc<"jobs">, assignments: Doc<"as
   return { prior, ended, crewPay: { rule: company ? crewPayOf(company) : CREW_PAY_DEFAULT, role: nextRole(assignments) } };
 }
 
-/** Readiness for this job: its service and skills, judged at the job's start, so a document that lapses before then counts as lapsed. */
-async function jobBlockers(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"cleaners">, known?: { company: Doc<"companies">; facts: CompanyFacts }): Promise<string[]> {
+/**
+ * Readiness for this job: its service and skills, judged at the job's start, so a document that lapses before
+ * then counts as lapsed. `notTakingWork` is set when their own engagement is active but they take no work, such
+ * as a worker whose subcontractor company's working relationship has ended.
+ */
+export async function jobReadiness(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"cleaners">, known?: { company: Doc<"companies">; facts: CompanyFacts }): Promise<{ blockers: string[]; notTakingWork: string | null }> {
   const company = known?.company ?? (await ctx.db.get(job.companyId));
-  if (!company) return [];
+  if (!company) return { blockers: [], notTakingWork: null };
   const service = { name: job.serviceType, skills: job.requiredSkills };
   const at = Math.max(job.startsAt, Date.now());
   const readiness = known ? readinessOf(cleaner, known.facts, company, at, service) : (await cleanerReadiness(ctx, company, cleaner, at, service)).readiness;
-  return readiness.blockers.map((view) => view.label);
+  const supplier = cleaner.status === "ready" && readiness.state === "not_active" && cleaner.subcontractorId ? await ctx.db.get(cleaner.subcontractorId) : null;
+  return {
+    blockers: readiness.blockers.map((view) => view.label),
+    notTakingWork: supplier ? `works through ${supplier.name}, whose working relationship with you has ended` : null,
+  };
+}
+
+/** Why this cleaner cannot take this job now, by their standing and requirements, or null. Read again when an offer is accepted. */
+export async function standingProblem(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"cleaners">): Promise<string | null> {
+  if (cleaner.status !== "ready") return "is not marked ready for work";
+  const { blockers, notTakingWork } = await jobReadiness(ctx, job, cleaner);
+  if (notTakingWork) return notTakingWork;
+  if (blockers.length > 0) return `has not met what is needed before work: ${blockers.map((label) => label.toLowerCase()).join(", ")}`;
+  return null;
 }
 
 async function exceptionsAround(ctx: Db, job: Doc<"jobs">, cleanerId: Id<"cleaners">, timezone: string): Promise<{ off: Span[]; extra: Span[] }> {
@@ -133,7 +150,7 @@ export async function cleanerFacts(ctx: Db, job: Doc<"jobs">, cleaner: Doc<"clea
     windows: windows.map((row) => ({ weekday: row.weekday, startMinute: row.startMinute, endMinute: row.endMinute })),
     timeOff: timeOff.map((row) => ({ startsAt: row.startsAt, endsAt: row.endsAt })),
     held: await heldSpans(ctx, job.companyId, cleaner._id, job._id),
-    blockers: await jobBlockers(ctx, job, cleaner, known),
+    ...(await jobReadiness(ctx, job, cleaner, known)),
     ...(await (async () => {
       const timezone = known?.company.timezone ?? (await ctx.db.get(job.companyId))?.timezone ?? "UTC";
       const around = await exceptionsAround(ctx, job, cleaner._id, timezone);
