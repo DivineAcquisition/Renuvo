@@ -6,7 +6,7 @@
 import { internal } from "../../_generated/api";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
-import type { Trigger } from "./schema";
+import type { Trigger } from "./agentSchema";
 
 export async function runByKey(ctx: QueryCtx | MutationCtx, companyId: Id<"companies">, key: string): Promise<Doc<"salesRuns"> | null> {
   return ctx.db

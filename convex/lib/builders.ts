@@ -17,10 +17,12 @@ import { notAllowed, notFound, userError } from "./errors";
 import { applicantLinkForToken, applicantLinkState, noteApplicantAction, type ApplicantAction, type ApplicantLinkPurpose } from "./recruiter/links";
 import { invitationForToken } from "./invitations";
 import { invoiceForToken } from "./finance/payLinks";
+import { sessionForToken } from "./booking/tokens";
+import { allow } from "./rateLimit";
 import { linkForStatementToken } from "./finance/statementLinks";
-import { quoteForToken } from "./sales/links";
 import { notePortalAction, portalLinkForToken, portalLinkState, type PortalAction, type PortalLinkState } from "./cleaners/portal";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
+import { publicIdFor, type LinkKind } from "./sales/links";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
 
@@ -389,58 +391,6 @@ export function payMutation<V extends AnyValidators, R>(def: {
   } as any);
 }
 
-// ── Quote links: a customer reading one quote, and answering it, without signing in ─────────────
-
-export type QuoteAccess = {
-  /** The quote the token names and its company, or null when the token names nothing. */
-  quote: { quote: Doc<"salesQuotes">; company: Doc<"companies"> } | null;
-};
-
-async function quoteAccess(ctx: QueryCtx | MutationCtx, token: string): Promise<QuoteAccess> {
-  const quote = await quoteForToken(ctx, token);
-  const company = quote ? await ctx.db.get(quote.companyId) : null;
-  return { quote: quote && company ? { quote, company } : null };
-}
-
-/**
- * A read through a quote link. The token is the only authorization and everything shown must hang off
- * `ctx.quote`. A wrong signature, an unknown id, a quote never sent and a deployment with no secret all
- * arrive as null, so the page cannot tell them apart. Opening the link changes nothing: it is not
- * recorded as "viewed", because a phone or a mail scanner previewing it is not the customer reading it.
- */
-export function quoteQuery<V extends AnyValidators, R>(def: {
-  args: V;
-  handler: (ctx: QueryCtx & QuoteAccess, args: ObjectType<V>) => R;
-}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
-  return query({
-    args: { token: v.string(), ...def.args },
-    handler: async (ctx: QueryCtx, args: { token: string }) => {
-      const { token, ...rest } = args;
-      return def.handler({ ...ctx, ...(await quoteAccess(ctx, token)) }, rest as ObjectType<V>);
-    },
-  } as any);
-}
-
-/**
- * One action through a quote link: accept, decline or ask. Refused unless the token names a quote. The
- * handler must still check the quote itself: the link says who may ask, the record says whether the
- * quote is still open and which version is the one on offer.
- */
-export function quoteMutation<V extends AnyValidators, R>(def: {
-  args: V;
-  handler: (ctx: MutationCtx & { quote: Doc<"salesQuotes">; company: Doc<"companies">; companyId: Id<"companies"> }, args: ObjectType<V>) => R;
-}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
-  return mutation({
-    args: { token: v.string(), ...def.args },
-    handler: async (ctx: MutationCtx, args: { token: string }) => {
-      const { token, ...rest } = args;
-      const access = await quoteAccess(ctx, token);
-      if (!access.quote) notFound();
-      return def.handler({ ...ctx, quote: access.quote.quote, company: access.quote.company, companyId: access.quote.company._id }, rest as ObjectType<V>);
-    },
-  } as any);
-}
-
 // ── Statement links: a cleaner reading their own earnings without signing in ────────────────────
 
 export type StatementAccess = {
@@ -646,6 +596,107 @@ export function portalMutation<V extends AnyValidators, R>(def: {
       const result = await def.handler({ ...ctx, ...access }, rest as ObjectType<V>);
       await notePortalAction(ctx, access.link, def.action);
       return result;
+    },
+  } as any);
+}
+
+// ── Booking links: a customer working on their own booking without an account ────────────────────
+
+export type BookingAccess = {
+  /** The session the token names and its company, or null when the token names nothing open. */
+  booking: { session: Doc<"bookingSessions">; company: Doc<"companies">; open: boolean } | null;
+};
+
+/**
+ * A read through a customer's booking link. The token is the only authorization: no id in the arguments
+ * is trusted, and everything the handler shows must hang off `ctx.booking`. A malformed, unknown, revoked
+ * or expired token all arrive as null or as `open: false`, so the page can say the link has ended without
+ * saying why. Reading changes nothing.
+ */
+export function bookingQuery<V extends AnyValidators, R>(def: {
+  args: V;
+  handler: (ctx: QueryCtx & BookingAccess, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const found = await sessionForToken(ctx, token);
+      const company = found ? await ctx.db.get(found.session.companyId) : null;
+      return def.handler({ ...ctx, booking: found && company ? { session: found.session, company, open: found.open } : null }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+export type BookingWrite = { session: Doc<"bookingSessions">; company: Doc<"companies">; companyId: Id<"companies"> };
+
+/**
+ * One change through a customer's booking link. Refused unless the token names an open session. Each
+ * session may make a limited number of changes in ten minutes; past it the call answers with a refusal
+ * instead of throwing, so the count is kept.
+ */
+export function bookingMutation<V extends AnyValidators, R>(def: {
+  args: V;
+  /** Changes a confirmed or cancelled booking may still make (managing it). Default: none. */
+  afterConfirmation?: boolean;
+  handler: (ctx: MutationCtx & BookingWrite, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R | { refused: string }> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const found = await sessionForToken(ctx, token);
+      const company = found ? await ctx.db.get(found.session.companyId) : null;
+      if (!found || !company) notFound();
+      if (!found.open) throw userError("This booking link has ended. Start a new booking, or contact the company.", "not_allowed");
+      const closed = found.session.status === "confirmed" || found.session.status === "requested" || found.session.status === "cancelled" || found.session.status === "needs_attention";
+      if (closed && !def.afterConfirmation) throw userError("This booking is already sent, so it can't be changed here.", "not_allowed");
+      if (!(await allow(ctx, `booking:${found.session._id}`, 240, 10 * 60_000))) return { refused: "Too many changes in a short time. Wait a minute and try again." };
+      return def.handler({ ...ctx, session: found.session, company, companyId: company._id }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+// ── Sales links: a customer opening a proposal or a signing request, or an assessor their findings ──
+
+/**
+ * A read or action through a Sales link (convex/lib/sales/links.ts). `resolve` turns the verified public
+ * id into the record the link names; the token is the only authorization, and everything the handler
+ * shows must hang off what `resolve` returned. A wrong signature, an unknown id and a deployment with no
+ * secret all arrive as null, so the page cannot tell them apart.
+ */
+export function salesLinkQuery<V extends AnyValidators, R, T>(def: {
+  kind: LinkKind;
+  resolve: (ctx: QueryCtx, publicId: string) => Promise<T | null>;
+  args: V;
+  handler: (ctx: QueryCtx & { link: T | null }, args: ObjectType<V>) => R;
+}): RegisteredQuery<"public", ObjectType<V> & { token: string }, R> {
+  return query({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: QueryCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const publicId = await publicIdFor(def.kind, token);
+      const link = publicId ? await def.resolve(ctx, publicId) : null;
+      return def.handler({ ...ctx, link }, rest as ObjectType<V>);
+    },
+  } as any);
+}
+
+/** One action through a Sales link. Refused as "Not found." unless the token names a record. */
+export function salesLinkMutation<V extends AnyValidators, R, T>(def: {
+  kind: LinkKind;
+  resolve: (ctx: MutationCtx, publicId: string) => Promise<T | null>;
+  args: V;
+  handler: (ctx: MutationCtx & { link: T }, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V> & { token: string }, R> {
+  return mutation({
+    args: { token: v.string(), ...def.args },
+    handler: async (ctx: MutationCtx, args: { token: string }) => {
+      const { token, ...rest } = args;
+      const publicId = await publicIdFor(def.kind, token);
+      const link = publicId ? await def.resolve(ctx, publicId) : null;
+      if (!link) notFound();
+      return def.handler({ ...ctx, link }, rest as ObjectType<V>);
     },
   } as any);
 }

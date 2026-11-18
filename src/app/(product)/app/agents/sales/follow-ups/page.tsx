@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { SalesFollowUpsScreen } from "@/components/app/screens/sales/follow-ups";
+import { SalesFollowUpsScreen } from "@/components/app/screens/sales-agent/follow-ups";
 
 export const metadata: Metadata = { title: "Follow-ups" };
 

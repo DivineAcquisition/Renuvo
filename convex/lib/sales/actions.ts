@@ -1,16 +1,17 @@
 /**
- * Everything Sales prepares goes through here before a customer sees it.
+ * Everything the Sales agent prepares goes through here before a customer sees it.
  *
  *   prepare   writes the action: what, why, on what evidence, under which permission.
  *   route     reads the Owner's permission at that moment and does what it says: hold it for the first
  *             review batch, put it in the approvals queue, or send it. Paused or switched off, nothing
  *             goes and the action stays prepared, with words saying why.
  *   send      checks the action against the conversation as it is now, then plans the message in the
- *             one outbox. A reply, a person stepping in or a revised quote since it was written makes
- *             it stale, and a stale action is never sent.
+ *             one outbox (or, for a booking, requests it through the booking engine). A reply, a person
+ *             stepping in or a revised quote since it was written makes it stale, and a stale action is
+ *             never sent.
  *
- * An approval is for one exact action. Approving it, or deciding the first batch, changes no
- * permission: what Sales may do without asking is only ever changed in Settings.
+ * An approval is for one exact action. Approving it, or deciding the first batch, changes no permission:
+ * what the agent may do without asking is only ever changed in Settings.
  */
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
@@ -19,14 +20,14 @@ import { authorityFor } from "../authority";
 import type { Channel } from "../compliance/schema";
 import { recordEvent, type Actor } from "../events";
 import { liveTaskByKey, openTask, setTaskState } from "../taskState";
-import { confirmBooking, whenWords } from "./booking";
-import { planFollowUp, stopFollowUps } from "./followUps";
-import { currentQuote, isOpen, SALES, setNext, setStage } from "./opportunities";
-import { queueSalesMessage, type SalesPurpose } from "./outbox";
-import { markSent, sendProblem, versionOf } from "./quotes";
-import type { ActionKind } from "./schema";
+import { requestFromAgent } from "../../bookings";
+import { planFollowUp, stopFollowUps } from "./agentFollowUps";
+import { isOpen, load, SALES, setNext, setStage, type Opp } from "./agentOpportunity";
+import { draftFor, ensurePublicId, markSent, priceOpportunity, sendProblem } from "./agentQuotes";
+import type { ActionKind } from "./agentSchema";
+import { queueSalesMessage, type SalesLink, type SalesPurpose } from "./outbox";
 import { salesSettings } from "./settings";
-import { bookingConfirmedMessage, type Voice } from "./words";
+import type { Voice } from "./words";
 
 type Ctx = QueryCtx | MutationCtx;
 const HOUR = 60 * 60_000;
@@ -42,16 +43,16 @@ export const ACTION_WORDS: Record<ActionKind, string> = {
   send_quote: "Send quote",
   follow_up: "Follow up",
   booking_steps: "Explain booking steps",
-  booking_confirmation: "Confirm booking",
+  booking_request: "Book",
   escalation: "Needs a person",
 };
 
-const PURPOSE: Record<Exclude<ActionKind, "escalation">, SalesPurpose> = { reply: "sales_reply", question: "sales_reply", send_quote: "sales_quote", follow_up: "sales_follow_up", booking_steps: "sales_booking", booking_confirmation: "sales_booking" };
+const PURPOSE: Record<Exclude<ActionKind, "escalation">, SalesPurpose> = { reply: "sales_reply", question: "sales_reply", send_quote: "sales_quote", follow_up: "sales_follow_up", booking_steps: "sales_booking", booking_request: "sales_booking" };
 const OPEN_STATUSES: readonly Doc<"salesActions">["status"][] = ["prepared", "awaiting_approval"];
 
 export const BATCH_KEY = "sales.first-batch";
 
-export async function openActions(ctx: Ctx, opportunity: Pick<Doc<"salesOpportunities">, "_id" | "companyId">): Promise<Doc<"salesActions">[]> {
+export async function openActions(ctx: Ctx, opportunity: Pick<Opp, "_id" | "companyId">): Promise<Doc<"salesActions">[]> {
   const rows = await ctx.db
     .query("salesActions")
     .withIndex("by_company_opportunity", (q) => q.eq("companyId", opportunity.companyId).eq("opportunityId", opportunity._id))
@@ -75,8 +76,8 @@ export async function retire(ctx: MutationCtx, action: Doc<"salesActions">, why:
   await closeApproval(ctx, action.approvalId, why);
 }
 
-/** When the conversation moves on (a reply, a takeover, a close), what Sales had waiting is set aside. */
-export async function retireOpenActions(ctx: MutationCtx, opportunity: Pick<Doc<"salesOpportunities">, "_id" | "companyId">, why: string, keep: (action: Doc<"salesActions">) => boolean = () => false): Promise<number> {
+/** When the conversation moves on (a reply, a takeover, a close), what the agent had waiting is set aside. */
+export async function retireOpenActions(ctx: MutationCtx, opportunity: Pick<Opp, "_id" | "companyId">, why: string, keep: (action: Doc<"salesActions">) => boolean = () => false): Promise<number> {
   let count = 0;
   for (const action of await openActions(ctx, opportunity)) {
     if (keep(action)) continue;
@@ -91,7 +92,7 @@ export type NewAction = {
   channel?: Channel;
   subject?: string;
   body?: string;
-  quote?: { quoteId: Id<"salesQuotes">; version: number };
+  quoteId?: Id<"salesQuotes">;
   followUpId?: Id<"salesFollowUps">;
   summary: string;
   reason: string;
@@ -102,8 +103,8 @@ export type NewAction = {
   writtenBy?: string;
 };
 
-/** Writes one action. An older open action of the same kind for the same opportunity is replaced, not duplicated. */
-export async function prepareAction(ctx: MutationCtx, company: Doc<"companies">, opportunity: Doc<"salesOpportunities">, input: NewAction): Promise<Doc<"salesActions">> {
+/** Writes one action. An older open action for the same opportunity is replaced, not duplicated. */
+export async function prepareAction(ctx: MutationCtx, company: Doc<"companies">, opportunity: Opp, input: NewAction): Promise<Doc<"salesActions">> {
   for (const older of await openActions(ctx, opportunity)) if (older.kind === input.kind || older.kind !== "escalation") await retire(ctx, older, "Replaced by newer work on this opportunity.");
   const authority = await authorityFor(ctx, company._id, input.permission);
   const now = Date.now();
@@ -116,8 +117,7 @@ export async function prepareAction(ctx: MutationCtx, company: Doc<"companies">,
     channel: input.channel,
     subject: input.subject?.slice(0, 200),
     body: input.body?.slice(0, 2400),
-    quoteId: input.quote?.quoteId,
-    quoteVersion: input.quote?.version,
+    quoteId: input.quoteId,
     followUpId: input.followUpId,
     summary: input.summary.slice(0, 300),
     reason: input.reason.slice(0, 600),
@@ -125,7 +125,7 @@ export async function prepareAction(ctx: MutationCtx, company: Doc<"companies">,
     nextStep: input.nextStep?.slice(0, 300),
     permission: input.permission,
     level: authority.kind === "level" ? authority.level : authority.kind,
-    basis: { revision: opportunity.revision, lastInboundAt: opportunity.lastInboundAt, quoteVersion: input.quote?.version },
+    basis: { revision: opportunity.agent.revision, lastInboundAt: opportunity.lastInboundAt, ...(input.quoteId ? { quoteId: input.quoteId } : {}) },
     runId: input.runId,
     writtenBy: input.writtenBy ?? "rules",
     createdAt: now,
@@ -136,38 +136,38 @@ export async function prepareAction(ctx: MutationCtx, company: Doc<"companies">,
 }
 
 /** Why an action written earlier must not go now, or null. The same checks run whether a person approved it a minute or a day later. */
-export async function staleReason(ctx: Ctx, opportunity: Doc<"salesOpportunities">, action: Doc<"salesActions">, by: "sales" | "person"): Promise<string | null> {
+export async function staleReason(ctx: Ctx, opportunity: Opp, action: Doc<"salesActions">, by: "sales" | "person"): Promise<string | null> {
   if (!OPEN_STATUSES.includes(action.status)) return `It was already ${action.status.replace(/_/g, " ")}.`;
-  if (by === "sales" && opportunity.takeover) return "A person took over this conversation, so Sales sends nothing.";
-  if (!isOpen(opportunity.stage) && !(action.kind === "follow_up" && opportunity.stage === "deferred")) return "The opportunity is no longer open.";
-  if ((opportunity.lastInboundAt ?? 0) > (action.basis.lastInboundAt ?? 0)) return "The customer replied after this was written. Sales reads the reply first.";
+  if (by === "sales" && opportunity.agent.takeover) return "A person took over this conversation, so the agent sends nothing.";
+  if (!isOpen(opportunity.agent.stage) && !(action.kind === "follow_up" && opportunity.agent.stage === "deferred")) return "The opportunity is no longer open.";
+  if ((opportunity.lastInboundAt ?? 0) > (action.basis.lastInboundAt ?? 0)) return "The customer replied after this was written. The agent reads the reply first.";
   if (action.quoteId) {
     const quote = await ctx.db.get(action.quoteId);
     if (!quote) return "The quote no longer exists.";
     if (action.kind === "send_quote") {
-      const problem = sendProblem(quote, await versionOf(ctx, quote, action.quoteVersion ?? quote.currentVersion));
+      const problem = sendProblem(quote);
       if (problem) return problem;
-      if (quote.currentVersion !== action.quoteVersion) return "The quote was revised after this was written.";
-    } else if (quote.status === "revoked" || quote.status === "expired") return `The quote was ${quote.status} after this was written.`;
-    else if (action.quoteVersion !== undefined && quote.sentVersion !== undefined && quote.sentVersion !== action.quoteVersion) return "The quote was revised after this was written.";
+      if (opportunity.quoteId !== quote._id) return "The quote was revised after this was written.";
+    } else if (action.kind !== "booking_request" && (quote.status === "withdrawn" || quote.status === "expired" || quote.status === "superseded")) return `The quote was ${quote.status} after this was written.`;
   }
   return null;
 }
 
-async function voiceOf(ctx: Ctx, company: Doc<"companies">, opportunity: Doc<"salesOpportunities">): Promise<Voice> {
+export async function voiceOf(ctx: Ctx, company: Doc<"companies">, opportunity: Opp): Promise<Voice> {
   const settings = salesSettings(company);
-  return { company: company.name, tone: settings.voice.tone, signature: settings.voice.signature, firstContact: opportunity.firstResponseAt === undefined, channel: opportunity.channel };
+  return { company: company.name, tone: settings.voice.tone, signature: settings.voice.signature, firstContact: opportunity.firstResponseAt === undefined, channel: opportunity.agent.channel };
 }
-export { voiceOf };
 
 export type Sent = { ok: boolean; detail: string };
 
+const firstNameOf = (name: string) => (/^[+\d\s().-]+$/.test(name.trim()) || name.includes("@") ? "the customer" : name.split(/\s+/)[0] || "the customer");
+
 /**
- * Sends one action, if it is still right to. `actor` is who is sending: Sales (its own permission, or a
- * person's approval of Sales's exact words) or a member sending by hand. What follows the send, the
+ * Sends one action, if it is still right to. `actor` is who is sending: the agent (its own permission, or
+ * a person's approval of the agent's exact words) or a member sending by hand. What follows the send, the
  * stage, the next step and the next reminder, is written here in the same step.
  */
-export async function sendAction(ctx: MutationCtx, company: Doc<"companies">, opportunity: Doc<"salesOpportunities">, action: Doc<"salesActions">, actor: Actor): Promise<Sent> {
+export async function sendAction(ctx: MutationCtx, company: Doc<"companies">, opportunity: Opp, action: Doc<"salesActions">, actor: Actor): Promise<Sent> {
   const now = Date.now();
   const stale = await staleReason(ctx, opportunity, action, actor.kind === "member" ? "person" : "sales");
   if (stale) {
@@ -177,64 +177,71 @@ export async function sendAction(ctx: MutationCtx, company: Doc<"companies">, op
   if (action.kind === "escalation") return { ok: false, detail: "This is a question for a person, not a message." };
   const customer = await ctx.db.get(opportunity.customerId);
   if (!customer) return { ok: false, detail: "Not sent. The customer record no longer exists." };
+  const first = firstNameOf(customer.name);
 
-  let body = action.body ?? "";
-  let fresh = opportunity;
-  // Confirming a booking makes the job first. If any requirement or capacity fails now, nothing is sent.
-  if (action.kind === "booking_confirmation") {
-    const booked = await confirmBooking(ctx, company, opportunity, actor);
+  // Booking: the booking engine requests it, holds the time and confirms it when nothing is outstanding.
+  if (action.kind === "booking_request") {
+    // The draft is priced again with the time the customer chose, so the booking is made for that time.
+    // A price that changed since they accepted is caught by the booking itself, and nothing is booked.
+    const priced = await priceOpportunity(ctx, company, opportunity);
+    if (priced.kind === "priced") await draftFor(ctx, opportunity, priced.body, priced.bookingKind);
+    const booked = await requestFromAgent(ctx, company, await load(ctx, opportunity._id));
     if (!booked.ok) {
-      await ctx.db.patch(action._id, { status: "failed", result: `Not booked. ${booked.blockers.join(" ")}`.slice(0, 400), updatedAt: now });
+      await ctx.db.patch(action._id, { status: "failed", result: `Not booked. ${booked.problem}`.slice(0, 400), updatedAt: now });
       await closeApproval(ctx, action.approvalId, "The booking could not be made.");
-      await setNext(ctx, (await ctx.db.get(opportunity._id))!, { what: `The booking could not be confirmed: ${booked.blockers[0]}`, by: "owner", dueAt: now + 4 * HOUR });
-      return { ok: false, detail: `Not booked. ${booked.blockers.join(" ")}` };
+      await setNext(ctx, await load(ctx, opportunity._id), { what: `The booking for ${first} could not be requested: ${booked.problem}`, by: "owner", dueAt: now + 4 * HOUR });
+      return { ok: false, detail: `Not booked. ${booked.problem}` };
     }
-    fresh = (await ctx.db.get(opportunity._id))!;
-    const job = await ctx.db.get(booked.jobId);
-    const property = job ? await ctx.db.get(job.propertyId) : null;
-    if (job) body = bookingConfirmedMessage(customer.name, await voiceOf(ctx, company, opportunity), { service: job.serviceType, when: whenWords({ startsAt: job.startsAt, endsAt: job.endsAt }, company.timezone), where: property ? property.address.line1 : null });
+    await ctx.db.patch(action._id, { status: "sent", bookingId: booked.bookingId, decidedAt: now, result: booked.confirmed ? "Booked, confirmed and handed to Dispatch." : `Booking requested. Waiting for: ${booked.blockers.join(" ") || "the last steps."}`.slice(0, 400), updatedAt: now });
+    await recordEvent(ctx, { companyId: company._id, type: "sales_action.sent", actor, subject: { table: "salesActions", id: action._id }, data: { kind: action.kind, opportunityId: opportunity._id } });
+    const fresh = await load(ctx, opportunity._id);
+    if (booked.confirmed) return { ok: true, detail: "Booked and handed to Dispatch. The customer gets the confirmation." };
+    // Not confirmed yet: the customer is told the time is held and what comes next, in the agent's own words.
+    if (action.body?.trim() && action.channel) await queueSalesMessage(ctx, { company, customer, opportunity: fresh, purpose: "sales_booking", channel: action.channel, subject: action.subject, body: action.body, links: [], actionId: action._id, dedupeKey: `sales-action:${action._id}`, actor });
+    const outstanding = booked.blockers[0] ?? "the last booking steps";
+    await setNext(ctx, await load(ctx, opportunity._id), { what: `The booking for ${first} is requested and waits for: ${outstanding}`, by: /Owner or Manager|Prepare it/.test(outstanding) ? "owner" : "customer", dueAt: now + DAY });
+    return { ok: true, detail: "The booking was requested. It confirms once its last steps are done." };
   }
-  if (!body.trim() || !action.channel) return { ok: false, detail: "Not sent. There is no message to send." };
+  if (!action.body?.trim() || !action.channel) return { ok: false, detail: "Not sent. There is no message to send." };
 
-  const quote = action.quoteId ? await ctx.db.get(action.quoteId) : null;
-  const message = await queueSalesMessage(ctx, { company, opportunity: fresh, customer, purpose: PURPOSE[action.kind], channel: action.channel, subject: action.subject, body, quoteId: quote?._id, actionId: action._id, dedupeKey: `sales-action:${action._id}`, actor });
+  let quote = action.quoteId ? await ctx.db.get(action.quoteId) : null;
+  const links: SalesLink[] = [];
+  if (quote && action.body.includes("{link}")) {
+    quote = await ensurePublicId(ctx, quote);
+    links.push({ placeholder: "{link}", kind: "quote", id: quote._id });
+  }
+  const message = await queueSalesMessage(ctx, { company, customer, opportunity, purpose: PURPOSE[action.kind], channel: action.channel, subject: action.subject, body: action.body, links, actionId: action._id, dedupeKey: `sales-action:${action._id}`, actor });
   if (message.status === "not_sent") {
     const why = message.problem ?? "The message could not be sent.";
-    await ctx.db.patch(action._id, { status: "failed", messageId: message._id, body, result: `Not sent. ${why}`, decidedAt: now, updatedAt: now });
+    await ctx.db.patch(action._id, { status: "failed", messageId: message._id, result: `Not sent. ${why}`, decidedAt: now, updatedAt: now });
     await closeApproval(ctx, action.approvalId, "It could not be sent.");
-    await setNext(ctx, (await ctx.db.get(opportunity._id))!, { what: `A message to ${customer.name} could not be sent: ${why}`, by: "owner", dueAt: now + 4 * HOUR });
+    await setNext(ctx, await load(ctx, opportunity._id), { what: `A message to ${customer.name} could not be sent: ${why}`, by: "owner", dueAt: now + 4 * HOUR });
     return { ok: false, detail: `Not sent. ${why}` };
   }
-  await ctx.db.patch(action._id, { status: "sent", messageId: message._id, body, result: message.status === "held" ? `Held: ${message.problem ?? "it goes when quiet hours end."}` : "Handed to the message service. Delivery is shown on the message.", decidedAt: now, updatedAt: now });
+  await ctx.db.patch(action._id, { status: "sent", messageId: message._id, result: message.status === "held" ? `Held: ${message.problem ?? "it goes when quiet hours end."}` : "Handed to the message service. Delivery is shown on the message.", decidedAt: now, updatedAt: now });
   await recordEvent(ctx, { companyId: company._id, type: "sales_action.sent", actor, subject: { table: "salesActions", id: action._id }, data: { kind: action.kind, opportunityId: opportunity._id, channel: action.channel } });
 
   // What the send changes.
-  fresh = (await ctx.db.get(opportunity._id))!;
-  const first = /^[+\d\s().-]+$/.test(customer.name.trim()) || customer.name.includes("@") ? "the customer" : customer.name.split(/\s+/)[0] || "the customer";
+  let fresh = await load(ctx, opportunity._id);
   if (action.kind === "question") {
-    if (fresh.stage === "new") fresh = await setStage(ctx, fresh, "qualifying", actor);
-    const next = await planFollowUp(ctx, company, fresh, { purpose: "missing_info", attempt: 1, reason: `No answer yet to the details Sales asked ${first} for.`, preview: body, actor: SALES });
+    if (fresh.agent.stage === "new") fresh = await setStage(ctx, fresh, "qualifying", actor);
+    const next = await planFollowUp(ctx, company, fresh, { purpose: "missing_info", attempt: 1, reason: `No answer yet to the details the agent asked ${first} for.`, preview: action.body, actor: SALES });
     await setNext(ctx, fresh, { what: `Waiting for ${first} to answer${next ? "; a reminder is planned" : ""}`, by: "customer", dueAt: next?.dueAt ?? now + 3 * DAY });
   } else if (action.kind === "send_quote" && quote) {
-    const version = await versionOf(ctx, quote, action.quoteVersion ?? quote.currentVersion);
-    if (version) {
-      await markSent(ctx, quote, version, actor);
-      fresh = (await ctx.db.get(opportunity._id))!;
-      if (fresh.stage !== "quote_sent") fresh = await setStage(ctx, fresh, "quote_sent", actor);
-      const next = await planFollowUp(ctx, company, fresh, { purpose: "quote", attempt: 1, reason: `${first} has the quote and has not answered.`, preview: body, quoteVersion: version.version, actor: SALES });
-      await setNext(ctx, fresh, { what: `Waiting for ${first} to accept, decline or ask about the quote`, by: "customer", dueAt: next?.dueAt ?? now + version.validDays * DAY });
-    }
+    await markSent(ctx, quote, company, actor);
+    fresh = await load(ctx, opportunity._id);
+    if (fresh.agent.stage !== "quote_sent") fresh = await setStage(ctx, fresh, "quote_sent", actor);
+    const next = await planFollowUp(ctx, company, fresh, { purpose: "quote", attempt: 1, reason: `${first} has the quote and has not answered.`, preview: action.body, quoteId: quote._id, actor: SALES });
+    await setNext(ctx, fresh, { what: `Waiting for ${first} to accept, decline or ask about the quote`, by: "customer", dueAt: next?.dueAt ?? now + salesSettings(company).quotes.validDays * DAY });
   } else if (action.kind === "follow_up") {
     const followUp = action.followUpId ? await ctx.db.get(action.followUpId) : null;
     if (followUp) {
       await ctx.db.patch(followUp._id, { status: "sent", actionId: action._id, doneAt: now });
-      const next = await planFollowUp(ctx, company, fresh, { purpose: followUp.purpose, attempt: followUp.attempt + 1, reason: followUp.reason, preview: body, quoteVersion: followUp.basis.quoteVersion, actor: SALES });
+      const next = await planFollowUp(ctx, company, fresh, { purpose: followUp.purpose, attempt: followUp.attempt + 1, reason: followUp.reason, preview: action.body, quoteId: followUp.basis.quoteId, actor: SALES });
       // The last reminder in a sequence is the last one. After it, a person decides what happens next.
       if (next) await setNext(ctx, fresh, { what: `Waiting for ${first} to answer; reminder ${followUp.attempt} of ${followUp.maxAttempts} sent`, by: "customer", dueAt: next.dueAt });
-      else await setNext(ctx, fresh, { what: `${first} has not answered after ${followUp.maxAttempts} ${followUp.maxAttempts === 1 ? "reminder" : "reminders"}. Close it, defer it, or reach out yourself. Sales will not send more.`, by: "owner", dueAt: now + 3 * DAY });
+      else await setNext(ctx, fresh, { what: `${first} has not answered after ${followUp.maxAttempts} ${followUp.maxAttempts === 1 ? "reminder" : "reminders"}. Close it, defer it, or reach out yourself. The agent will not send more.`, by: "owner", dueAt: now + 3 * DAY });
     }
-  } else if (action.kind === "booking_confirmation") {
-    // Won: the task is closed with the outcome. Nothing is left to follow up.
   } else {
     await setNext(ctx, fresh, { what: `Waiting for ${first} to reply`, by: "customer", dueAt: now + 3 * DAY });
   }
@@ -268,9 +275,9 @@ export async function syncBatchTask(ctx: MutationCtx, company: Doc<"companies">,
     if (task) await setTaskState(ctx, task, "done", { outcome: batch.status === "decided" ? "The first review batch was decided." : "Nothing was left to review.", closedAt: now, withPersonSince: null }, SALES);
     return;
   }
-  const question = `Sales prepared its first ${waiting === 1 ? "message" : `${waiting} messages`} to customers. Nothing has been sent. Review each one on the Sales page: who it goes to, what it says and which quote it carries. Approving them does not change what Sales may do afterwards.`;
+  const question = `The Sales agent prepared its first ${waiting === 1 ? "message" : `${waiting} messages`} to customers. Nothing has been sent. Review each one on the Sales page: who it goes to, what it says and which quote it carries. Approving them does not change what the agent may do afterwards.`;
   if (!task) {
-    const taskId = await openTask(ctx, { companyId: company._id, agent: "sales", title: "Review Sales's first messages", nextAction: "Review the first batch", dueAt: now + DAY, completionCondition: "Every item in the first batch was sent or skipped by a person.", key: BATCH_KEY, actor: SALES });
+    const taskId = await openTask(ctx, { companyId: company._id, agent: "sales", title: "Review the Sales agent's first messages", nextAction: "Review the first batch", dueAt: now + DAY, completionCondition: "Every item in the first batch was sent or skipped by a person.", key: BATCH_KEY, actor: SALES });
     await ctx.db.patch(batch._id, { taskId });
     task = (await ctx.db.get(taskId))!;
   }
@@ -283,7 +290,7 @@ export type Routed = "sent" | "awaiting_approval" | "batched" | "held" | "not_al
  * Does what the Owner's permission says for this action, read now. The order matters: a paused or
  * switched-off action never reaches the batch or the queue as if it were waiting to go.
  */
-export async function routeAction(ctx: MutationCtx, company: Doc<"companies">, opportunity: Doc<"salesOpportunities">, action: Doc<"salesActions">): Promise<Routed> {
+export async function routeAction(ctx: MutationCtx, company: Doc<"companies">, opportunity: Opp, action: Doc<"salesActions">): Promise<Routed> {
   const now = Date.now();
   const customer = await ctx.db.get(opportunity.customerId);
   const name = customer?.name ?? "the customer";
@@ -300,10 +307,10 @@ export async function routeAction(ctx: MutationCtx, company: Doc<"companies">, o
   }
   if (authority.kind !== "level" || authority.level === "off") {
     await ctx.db.patch(action._id, { result: "This is switched off for Sales, so it was prepared and not sent. You can send it yourself, or change the permission in Settings.", updatedAt: now });
-    await setNext(ctx, opportunity, { what: `Sales prepared a ${ACTION_WORDS[action.kind].toLowerCase()} for ${name} but is not allowed to send it.`, by: "owner", dueAt: now + 4 * HOUR });
+    await setNext(ctx, opportunity, { what: `The agent prepared a ${ACTION_WORDS[action.kind].toLowerCase()} for ${name} but is not allowed to send it.`, by: "owner", dueAt: now + 4 * HOUR });
     return "not_allowed";
   }
-  // Before the Owner has seen any of Sales's work, everything waits in one batch, whatever the level says.
+  // Before the Owner has seen any of the agent's work, everything waits in one batch, whatever the level says.
   if (salesSettings(company).firstBatchDecidedAt === null) {
     const batch = await openBatch(ctx, company);
     await ctx.db.patch(action._id, { batchId: batch._id, updatedAt: now });
@@ -318,12 +325,15 @@ export async function routeAction(ctx: MutationCtx, company: Doc<"companies">, o
       action: action.permission,
       summary: `${action.summary}`.slice(0, 1000),
       reason: `${action.reason} ${action.evidence.map((row) => `${row.label}: ${row.detail}.`).join(" ")}`.trim().slice(0, 2000),
-      authorizes: action.kind === "booking_confirmation" ? `Sales will check every booking requirement and capacity again, create the job, hand it to Dispatch, and ${action.channel === "email" ? "email" : "text"} ${name} the confirmation. If anything fails the check, nothing is booked or sent.` : `Sales will ${action.channel === "email" ? "email" : "text"} ${name} at ${to}: "${(action.body ?? "").replace("{link}", "[their quote link]")}"`.slice(0, 2000),
+      authorizes:
+        action.kind === "booking_request"
+          ? `The agent will request the booking: check the time against capacity again, hold it, and ${action.channel === "email" ? "email" : "text"} ${name} what happens next. A payment link still needs an Owner or Manager. If the time is gone, nothing is booked.`
+          : `The agent will ${action.channel === "email" ? "email" : "text"} ${name} at ${to}: "${(action.body ?? "").replace("{link}", "[their quote link]")}"`.slice(0, 2000),
       ifWaiting: "Nothing is sent. The customer keeps waiting, and the opportunity stays where it is.",
       proposal: { kind: "sales_action", actionId: action._id },
       decideBy: now + DAY,
       about: { table: "salesOpportunities", id: opportunity._id },
-      taskId: opportunity.taskId,
+      ...(opportunity.taskId ? { taskId: opportunity.taskId } : {}),
     });
     await ctx.db.patch(action._id, { status: "awaiting_approval", approvalId, updatedAt: now });
     await setNext(ctx, opportunity, { what: `${action.summary} Waiting for your approval.`, by: "owner", dueAt: now + DAY });
@@ -338,33 +348,29 @@ export async function routeAction(ctx: MutationCtx, company: Doc<"companies">, o
 
 /** A person decided one waiting action: send it as written, send their own edit of it, or set it aside. */
 export async function decideAction(ctx: MutationCtx, company: Doc<"companies">, action: Doc<"salesActions">, member: Doc<"members">, decision: { kind: "send"; body?: string; subject?: string } | { kind: "skip"; note?: string }): Promise<Sent> {
-  const opportunity = await ctx.db.get(action.opportunityId);
+  const opportunity = await load(ctx, action.opportunityId).catch(() => null);
   if (!opportunity) return { ok: false, detail: "The opportunity no longer exists." };
   const now = Date.now();
   if (!OPEN_STATUSES.includes(action.status)) return { ok: false, detail: `This was already ${action.status.replace(/_/g, " ")}.` };
-  await ctx.db.patch(opportunity._id, { humanTouches: opportunity.humanTouches + 1 });
+  await ctx.db.patch(opportunity._id, { humanTouches: opportunity.agent.humanTouches + 1 });
   if (decision.kind === "skip") {
     await ctx.db.patch(action._id, { status: "discarded", decidedBy: member._id, decidedAt: now, result: decision.note?.trim() ? `Set aside: ${decision.note.trim().slice(0, 300)}` : "Set aside by a person.", updatedAt: now });
     await closeApproval(ctx, action.approvalId, "A person set it aside on the Sales page.");
     if (action.followUpId) await ctx.db.patch(action.followUpId, { status: "skipped", stopReason: "A person set the reminder aside.", doneAt: now });
-    await setNext(ctx, (await ctx.db.get(opportunity._id))!, { what: "You set Sales's draft aside. Decide the next step, or hand it back to Sales.", by: "owner", dueAt: now + DAY }, { kind: "member", memberId: member._id });
+    await setNext(ctx, await load(ctx, opportunity._id), { what: "You set the agent's draft aside. Decide the next step, or hand it back to the agent.", by: "owner", dueAt: now + DAY }, { kind: "member", memberId: member._id });
     return { ok: true, detail: "Set aside. Nothing was sent." };
   }
   const edited = decision.body !== undefined && decision.body.trim() !== (action.body ?? "").trim();
   if (edited || decision.subject !== undefined) await ctx.db.patch(action._id, { body: decision.body?.trim().slice(0, 2400) ?? action.body, subject: decision.subject?.trim().slice(0, 200) ?? action.subject, ...(edited ? { editedBy: member._id } : {}) });
   await ctx.db.patch(action._id, { decidedBy: member._id });
   await closeApproval(ctx, action.approvalId, "It was decided on the Sales page.");
-  // A person's own edit goes out as theirs. Unchanged, it is Sales's message with a person's approval.
+  // A person's own edit goes out as theirs. Unchanged, it is the agent's message with a person's approval.
   const actor: Actor = edited ? { kind: "member", memberId: member._id } : SALES;
-  return sendAction(ctx, company, (await ctx.db.get(opportunity._id))!, (await ctx.db.get(action._id))!, actor);
+  return sendAction(ctx, company, await load(ctx, opportunity._id), (await ctx.db.get(action._id))!, actor);
 }
 
 /** Ends reminders and waiting drafts when a stop condition is met, in one place. */
-export async function quiet(ctx: MutationCtx, opportunity: Pick<Doc<"salesOpportunities">, "_id" | "companyId">, why: string, actor: Actor): Promise<void> {
+export async function quiet(ctx: MutationCtx, opportunity: Pick<Opp, "_id" | "companyId">, why: string, actor: Actor): Promise<void> {
   await stopFollowUps(ctx, opportunity, why, actor);
   await retireOpenActions(ctx, opportunity, why);
-}
-
-export async function quoteOf(ctx: Ctx, opportunity: Doc<"salesOpportunities">) {
-  return currentQuote(ctx, opportunity);
 }

@@ -15,9 +15,11 @@ const first = (name: string) => (/^[+\d\s().-]+$/.test(name.trim()) || name.incl
 export type Voice = { company: string; tone: "warm" | "direct" | "formal"; signature: string | null; firstContact: boolean; channel: "sms" | "email" };
 
 function opener(name: string, voice: Voice): string {
-  const hello = voice.tone === "formal" ? `Hello ${first(name)},` : `Hi ${first(name)},`;
+  const who = first(name);
   // The first message says who is writing. A text also says how to stop them, once.
-  return voice.firstContact ? `${hello} this is ${voice.company}'s assistant.` : hello;
+  if (voice.firstContact) return `${voice.tone === "formal" ? "Hello" : "Hi"} ${who}, this is ${voice.company}'s assistant.`;
+  // Later messages greet and start a new sentence, so the sentence after the greeting reads as written.
+  return voice.tone === "formal" ? `Hello ${who}.` : `Hi ${who}!`;
 }
 
 function closer(voice: Voice): string {
@@ -39,8 +41,11 @@ export function serviceQuestion(name: string, voice: Voice, services: string[]):
   return `${opener(name, voice)}${voice.firstContact ? " Thanks for reaching out." : ""} Which service are you looking for?${list}${closer(voice)}`;
 }
 
-export function quoteMessage(name: string, voice: Voice, input: { service: string; totalCents: number; per: string; estimate: boolean; validUntil: string; depositCents?: number }): string {
-  const price = `${input.estimate ? "an estimate of " : ""}${formatCents(input.totalCents)} per ${input.per}`;
+export function quoteMessage(name: string, voice: Voice, input: { service: string; totalCents: number; per: string; estimate: boolean; validUntil: string; depositCents?: number; ongoing?: { cents: number; cadence: string } | null }): string {
+  // Recurring service: the first visit's price, then each visit after it, so neither is mistaken for the other.
+  const price = input.ongoing
+    ? `${input.estimate ? "an estimate of " : ""}${formatCents(input.totalCents)} for the first visit, then ${formatCents(input.ongoing.cents)} per visit, ${input.ongoing.cadence.toLowerCase()}`
+    : `${input.estimate ? "an estimate of " : ""}${formatCents(input.totalCents)} per ${input.per}`;
   const deposit = input.depositCents ? ` A deposit of ${formatCents(input.depositCents)} holds your booking.` : "";
   return `${opener(name, voice)} Your quote for ${input.service} is ready: ${price}.${deposit} You can review what's included and accept it here: {link} It stays open until ${input.validUntil}. Any questions, just reply.${closer(voice)}`;
 }
@@ -70,7 +75,16 @@ export function requestedDateMessage(name: string, voice: Voice, input: { servic
 /** What still stands between an accepted quote and a confirmed booking, in the customer's terms. */
 export function bookingStepsMessage(name: string, voice: Voice, steps: string[]): string {
   const list = steps.length === 1 ? steps[0] : steps.map((step, index) => `${index + 1}) ${step}`).join(" ");
-  return `${opener(name, voice)} Thanks for accepting your quote. Before we can confirm your booking: ${list} Your time is not confirmed until then.${closer(voice)}`;
+  return `${opener(name, voice)} Thanks for accepting your quote. Before we can confirm your booking: ${list} You can do this on your quote page: {link} Your time is not confirmed until then.${closer(voice)}`;
+}
+
+/** The quote is accepted and a time is held; what still comes before the booking is confirmed. */
+export function bookingHeldMessage(name: string, voice: Voice, input: { when: string; depositCents: number | null; agreement: boolean }): string {
+  const steps: string[] = [];
+  if (input.depositCents) steps.push(`a secure link to pay the ${formatCents(input.depositCents)} deposit`);
+  if (input.agreement) steps.push("the service agreement to sign");
+  const next = steps.length ? ` Next you'll get ${steps.join(" and ")}. Your booking is confirmed once that's done.` : " We'll confirm it shortly.";
+  return `${opener(name, voice)} Thanks for accepting your quote. We're holding ${input.when} for you.${next}${closer(voice)}`;
 }
 
 /** The booking is confirmed: a job exists. It never says a cleaner is confirmed, because that is Dispatch's to say. */

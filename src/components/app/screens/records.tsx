@@ -1,21 +1,25 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { AgreementsForRecord } from "@/components/app/agreements/record";
 import { canManage, useCompany } from "@/components/app/company";
 import { FormError, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
+
 import { NewCleanerForm, NewCustomerForm } from "@/components/app/screens/forms";
 import { PageHeader, Panel } from "@/components/app/shell";
-import { Plus } from "@/components/icons";
+import { Home, Plus } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { servicePath } from "@/lib/app/services";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
+import { formatCents } from "../../../../convex/lib/services/words";
 
 const KIND: Record<string, string> = { home: "Home", short_term_rental: "Short-term rental", property_manager: "Property manager", commercial: "Commercial" };
 
@@ -26,6 +30,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 export function CustomersPanel() {
   const { companyId } = useCompany();
   const customers = useQuery(api.customers.list, { companyId });
+  const ownPrices = useQuery(api.propertyPrices.forCompany, { companyId });
   const [adding, setAdding] = useState(false);
   return (
     <>
@@ -53,9 +58,15 @@ export function CustomersPanel() {
                   <span className="font-medium text-strong">{customer.name}</span>
                   <span className="block text-xs text-muted-foreground">{[customer.email, customer.phone].filter(Boolean).join(" · ") || "No contact details"}</span>
                 </span>
-                <Badge variant="outline" size="sm">
-                  {KIND[customer.kind]}
-                </Badge>
+                <span className="flex items-center gap-2">
+                  <Badge variant="outline" size="sm">
+                    {KIND[customer.kind]}
+                  </Badge>
+                  <Link href={`/app/agents/sales/new?mode=booking&customer=${customer._id}&from=customer`} className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
+                    Book service
+                  </Link>
+                </span>
+                {ownPrices?.[customer._id]?.length ? <OwnPrices rows={ownPrices[customer._id]} /> : null}
                 <div className="basis-full">
                   <AgreementsForRecord table="customers" id={customer._id} />
                 </div>
@@ -68,6 +79,47 @@ export function CustomersPanel() {
         <NewCustomerForm onDone={() => setAdding(false)} />
       </Modal>
     </>
+  );
+}
+
+type OwnPrice = NonNullable<ReturnType<typeof useQuery<typeof api.propertyPrices.forCompany>>>[string][number];
+
+/** The customer's properties that have their own price for a service, each linked to the service where it is changed. */
+function OwnPrices({ rows }: { rows: OwnPrice[] }) {
+  return (
+    <ul aria-label="Property prices" className="grid basis-full grid-cols-1 gap-1">
+      {rows.map((row) => (
+        <li key={row.id}>
+          <Link href={servicePath(row.serviceId)} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:border-brand-500/40">
+            <span className="flex min-w-0 items-center gap-2">
+              <Home aria-hidden className="size-4 shrink-0 text-brand-300" />
+              <span className="min-w-0">
+                <span className="text-strong">{row.property}</span>
+                <span className="text-muted-foreground"> · {row.service}</span>
+              </span>
+            </span>
+            <span className="flex flex-wrap items-center gap-1.5">
+              {row.tasks ? (
+                <Badge variant="outline" size="sm">
+                  +{row.tasks} task{row.tasks === 1 ? "" : "s"}
+                </Badge>
+              ) : null}
+              {row.extras ? (
+                <Badge variant="outline" size="sm">
+                  {row.extras} extra{row.extras === 1 ? "" : "s"} differ
+                </Badge>
+              ) : null}
+              {row.untilWords ? (
+                <Badge variant={row.dueSoon ? "warning" : "outline"} size="sm">
+                  {row.untilWords}
+                </Badge>
+              ) : null}
+              <span className="font-medium tabular-nums text-strong">{formatCents(row.baseCents)} base</span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 

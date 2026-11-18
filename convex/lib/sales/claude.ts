@@ -18,7 +18,7 @@ import { REGISTRY } from "../ai/registry";
 
 import { readByRule, type ReadInput } from "./interpret";
 import type { SalesModel, WordingInput } from "./model";
-import type { Reading } from "./schema";
+import type { Reading } from "./agentSchema";
 
 // Routine extraction: the inexpensive route from the registry. Wording uses the same route: it is a short rewrite, not reasoning.
 const MODEL = REGISTRY.classify.primary.model;

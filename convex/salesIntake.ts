@@ -13,8 +13,8 @@ import { normalAddress, recipientsAt } from "./lib/compliance/recipients";
 import { AGENT_PROFILES } from "./lib/departments";
 import { allow } from "./lib/rateLimit";
 import type { Id } from "./_generated/dataModel";
+import { load, SYSTEM } from "./lib/sales/agentOpportunity";
 import { fileInquiry, hasServiceHistory, openOpportunityFor, recordInbound } from "./lib/sales/intake";
-import { SYSTEM } from "./lib/sales/opportunities";
 import { enqueueRun } from "./lib/sales/runs";
 
 const HOUR = 60 * 60_000;
@@ -33,8 +33,8 @@ export const email = internalMutation({
     if (open) {
       const { message, created } = await recordInbound(ctx, open, { channel: "email", body, subject: args.subject, providerId: args.providerId, at: args.receivedAt });
       if (!created) return { taken: true as const, why: "duplicate" };
-      const fresh = (await ctx.db.get(open._id))!;
-      if (!fresh.takeover) await enqueueRun(ctx, fresh, { trigger: "reply", key: `reply:${message._id}`, messageId: message._id });
+      const fresh = await load(ctx, open._id);
+      if (!fresh.agent.takeover) await enqueueRun(ctx, fresh, { trigger: "reply", key: `reply:${message._id}`, messageId: message._id });
       return { taken: true as const, why: "reply", opportunityId: open._id };
     }
     // Someone the company has already served, writing with no open request: that is Retention's conversation.
@@ -53,7 +53,7 @@ export const email = internalMutation({
       providerId: args.providerId,
       actor: SYSTEM,
     });
-    if (created && opportunity.match.state !== "needs_review") {
+    if (created && opportunity.agent.match !== "needs_review") {
       const first = await ctx.db
         .query("salesMessages")
         .withIndex("by_company_opportunity", (q) => q.eq("companyId", company._id).eq("opportunityId", opportunity._id))

@@ -164,12 +164,7 @@ export const receipt = internalMutation({
   args: { provider: v.string(), event: eventSchema },
   handler: async (ctx, args) => {
     const result = await applyEvent(ctx, args.provider, args.event as never);
-    if (result.completed && result.requestId) {
-      await ctx.scheduler.runAfter(0, internal.agreementSigning.fetchSigned, { requestId: result.requestId });
-      // A booking Sales is holding for this customer may have been waiting on exactly this signature.
-      const request = await ctx.db.get(result.requestId);
-      if (request) await ctx.scheduler.runAfter(0, internal.salesBookings.agreementSigned, { agreementId: request.agreementId });
-    }
+    if (result.completed && result.requestId) await ctx.scheduler.runAfter(0, internal.agreementSigning.fetchSigned, { requestId: result.requestId });
     return result.outcome;
   },
 });

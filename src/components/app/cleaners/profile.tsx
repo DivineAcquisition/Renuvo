@@ -242,6 +242,53 @@ const REQUEST_KINDS: Record<string, { label: string; help: string }> = {
   remove_record: { label: "Remove personal details", help: "Only after the engagement has ended. Job history is kept without their name and contact details." },
 };
 
+/** Requests about what happened can rest on job records; pay and record removal do not. */
+const EVIDENCED = ["disciplinary", "suspend", "end_engagement", "rehire_restriction"];
+
+/**
+ * The records a request can rest on: their own records of concern from the performance view, each with what
+ * it shows. A record corrected after a dispute cannot be chosen; one still in dispute can, and blocks approval.
+ */
+function EvidencePicker({ cleanerId, selected, onChange }: { cleanerId: Id<"cleaners">; selected: string[]; onChange: (next: string[]) => void }) {
+  const { companyId, timezone } = useCompany();
+  const now = useNow();
+  const data = useStableQuery(api.cleanerPerformance.forCleaner, now ? { companyId, cleanerId, asOf: now } : "skip");
+  if (!data) return <Skeleton className="h-16 rounded-xl" />;
+  const seen = new Set<string>();
+  const rows = data.measures
+    .flatMap((measure) => measure.records)
+    .filter((row) => row.tone === "concern" && !seen.has(row.assignmentId) && seen.add(row.assignmentId))
+    .sort((a, b) => b.at - a.at);
+  if (rows.length === 0) return <p className="text-xs text-muted-foreground">No records of concern in the last {data.periodDays} days to attach.</p>;
+  return (
+    <fieldset className="grid gap-1.5">
+      <legend className="mb-1 text-sm font-medium text-strong">Records this rests on (optional)</legend>
+      {rows.map((row) => {
+        const corrected = row.dispute?.status === "corrected";
+        const checked = selected.includes(row.assignmentId);
+        return (
+          <label key={row.assignmentId} className={cn("flex items-start gap-2 rounded-lg border border-border px-2.5 py-2 text-sm", corrected && "opacity-60")}>
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 shrink-0 accent-[#6838ef]"
+              disabled={corrected}
+              checked={checked}
+              onChange={() => onChange(checked ? selected.filter((id) => id !== row.assignmentId) : [...selected, row.assignmentId])}
+            />
+            <span className="min-w-0">
+              <span className="block text-strong">{row.label}</span>
+              <span className="block text-xs text-muted-foreground">
+                {longDay(row.at, timezone)} · {row.outcome}
+                {row.dispute?.status === "open" ? " · Disputed: it must be decided before this can be approved" : corrected ? " · Corrected after a dispute" : ""}
+              </span>
+            </span>
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
+
 function PersonnelDialog({ profile, onClose }: { profile: Profile; onClose: () => void }) {
   const { companyId } = useCompany();
   const request = useMutation(api.personnel.request);
@@ -256,6 +303,7 @@ function PersonnelDialog({ profile, onClose }: { profile: Profile; onClose: () =
   const [kind, setKind] = useState(kinds[0]);
   const [reason, setReason] = useState("");
   const [summary, setSummary] = useState("");
+  const [evidence, setEvidence] = useState<string[]>([]);
   const [done, setDone] = useState(false);
   const impact = useQuery(api.personnel.impact, kind === "suspend" || kind === "end_engagement" ? { companyId, cleanerId: profile.cleanerId } : "skip");
   return (
@@ -277,7 +325,7 @@ function PersonnelDialog({ profile, onClose }: { profile: Profile; onClose: () =
           onSubmit={(event) => {
             event.preventDefault();
             void run(async () => {
-              await request({ companyId, cleanerId: profile.cleanerId, kind: kind as "suspend", reason, summary: summary || undefined });
+              await request({ companyId, cleanerId: profile.cleanerId, kind: kind as "suspend", reason, summary: summary || undefined, evidence: EVIDENCED.includes(kind) && evidence.length ? (evidence as Id<"assignments">[]) : undefined });
               setDone(true);
             });
           }}
@@ -308,6 +356,7 @@ function PersonnelDialog({ profile, onClose }: { profile: Profile; onClose: () =
               <TextArea value={summary} onChange={(event) => setSummary(event.target.value)} required />
             </Field>
           ) : null}
+          {EVIDENCED.includes(kind) ? <EvidencePicker cleanerId={profile.cleanerId} selected={evidence} onChange={setEvidence} /> : null}
           <Field label="Why" hint="The person deciding reads this.">
             <TextArea value={reason} onChange={(event) => setReason(event.target.value)} required />
           </Field>
@@ -354,12 +403,27 @@ export function PendingRequests({ cleanerId }: { cleanerId: Id<"cleaners"> }) {
             </p>
             {row.summary ? <p className="text-sm text-strong">{row.summary}</p> : null}
             <p className="text-xs text-muted-foreground">Why: {row.reason}</p>
+            {row.evidence.length > 0 ? (
+              <ul className="grid gap-0.5 text-xs text-muted-foreground" aria-label="Records it rests on">
+                {row.evidence.map((item) => (
+                  <li key={item.assignmentId}>
+                    Rests on: <span className="text-strong">{item.label}</span>
+                    {item.dispute === "open" ? <Badge variant="warning" className="ml-1.5">Disputed, not decided</Badge> : item.dispute === "corrected" ? <Badge variant="outline" className="ml-1.5">Corrected after a dispute</Badge> : item.dispute === "upheld" ? " · dispute decided: the record stands" : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {row.evidence.some((item) => item.dispute === "open" || item.dispute === "corrected") ? (
+              <p className="rounded-lg bg-warning/8 px-2.5 py-1.5 text-xs text-strong">
+                {row.evidence.some((item) => item.dispute === "open") ? "A record this rests on is disputed. Decide the dispute in Performance & Coaching before approving." : "A record this rests on was corrected. It can be declined, or asked for again without that record."}
+              </p>
+            ) : null}
             {row.youMayDecide ? (
               <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
                 <Field label="Note (needed to decline)">
                   <TextInput value={note} onChange={(event) => setNote(event.target.value)} />
                 </Field>
-                <Button variant="primary" size="sm" loading={busy} onClick={() => void run(async () => setResult((await decide({ companyId, requestId: row.requestId, decision: "approved", note: note || undefined })).carriedOut?.detail ?? null))}>
+                <Button variant="primary" size="sm" loading={busy} disabled={row.evidence.some((item) => item.dispute === "open" || item.dispute === "corrected")} onClick={() => void run(async () => setResult((await decide({ companyId, requestId: row.requestId, decision: "approved", note: note || undefined })).carriedOut?.detail ?? null))}>
                   Approve
                 </Button>
                 <Button variant="outline" size="sm" loading={busy} onClick={() => void run(async () => { await decide({ companyId, requestId: row.requestId, decision: "declined", note }); setResult("Declined."); })}>
@@ -399,7 +463,7 @@ export function PendingRequests({ cleanerId }: { cleanerId: Id<"cleaners"> }) {
 
 function Card({ title, action, children, className }: { title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
-    <section className={cn("rounded-2xl border border-border bg-card", className)}>
+    <section className={cn("min-w-0 rounded-2xl border border-border bg-card", className)}>
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 sm:px-5">
         <h2 className="font-heading text-base tracking-tight text-strong">{title}</h2>
         {action}
@@ -528,7 +592,10 @@ export function OverviewSection({ profile, onSection }: { profile: Profile; onSe
         </Card>
         {profile.subcontractor ? (
           <Card title="Subcontractor company">
-            <p className="text-sm font-medium text-strong">{profile.subcontractor.name}</p>
+            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-strong">
+              {profile.subcontractor.name}
+              {profile.subcontractor.status !== "active" ? <Badge variant={profile.subcontractor.status === "ended" ? "outline" : "warning"}>{profile.subcontractor.status === "ended" ? "Relationship ended" : "Paused"}</Badge> : null}
+            </p>
             <p className="text-xs text-muted-foreground">
               Authorized contact: {profile.subcontractor.contact.name}
               {"email" in profile.subcontractor.contact && profile.subcontractor.contact.email ? ` · ${profile.subcontractor.contact.email}` : ""}
@@ -848,7 +915,10 @@ export function SkillsSection({ profile }: { profile: Profile }) {
                   <span className="font-medium text-strong">{crew.name}</span>
                   <span className="text-xs text-muted-foreground"> · {crew.kind === "temporary" ? "team for one job" : "permanent crew"}{crew.role === "lead" ? " · lead" : ""}</span>
                 </span>
-                <span className="text-xs text-muted-foreground">{crew.current ? "Current" : "Past"}</span>
+                <span className="text-xs text-muted-foreground">
+                  {crew.kind === "temporary" && crew.onJobWords ? `${crew.onJobWords} · ` : ""}
+                  {crew.current ? "Current" : "Past"}
+                </span>
               </li>
             ))}
           </ul>
@@ -911,11 +981,49 @@ export function PaySection({ profile }: { profile: Profile }) {
         </dl>
         <p className="mt-3 text-sm text-muted-foreground">{pay.finance.words}</p>
         <p className="mt-2 text-sm text-strong">
-          {plural(pay.stated.completedJobs, "completed job")} in the last 90 days, stated at {money(pay.stated.completedCents)} in total.
+          {plural(pay.stated.completedJobs, "completed job")} in the last 90 days, stated at {money(pay.stated.completedCents)} in total; {money(pay.finance.approvedCents)} approved in Team Pay.
         </p>
+        {pay.adjustmentsPending.length > 0 ? (
+          <div className="mt-3 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5">
+            <p className="text-sm font-medium text-strong">Adjustments waiting for your approval</p>
+            <ul className="mt-1 grid gap-1 text-xs text-muted-foreground">
+              {pay.adjustmentsPending.map((row) => (
+                <li key={row.earningId}>
+                  <span className="font-medium tabular-nums text-strong">
+                    {row.cents < 0 ? "−" : "+"}
+                    {money(Math.abs(row.cents))}
+                  </span>{" "}
+                  on {row.label}: {row.reasons.join("; ")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <Link href={`/app/finance?tab=team-pay&cleaner=${profile.cleanerId}`} className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-info-foreground underline-offset-4 hover:underline">
           Open in Team Pay
         </Link>
+      </Card>
+      <Card title="Payments" className="@3xl:col-span-2">
+        {pay.payments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No payments recorded in Team Pay in the last 90 days.</p>
+        ) : (
+          <ul className="divide-y divide-border text-sm">
+            {pay.payments.map((row) => (
+              <li key={row.paymentId} className="flex items-center justify-between gap-2 py-2">
+                <span className="min-w-0">
+                  <span className="block truncate text-strong">
+                    {dayName(row.on, timezone)} · {row.method}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {row.status} · {plural(row.jobs, "job")}
+                    {row.reference ? ` · reference ${row.reference}` : ""}
+                  </span>
+                </span>
+                <span className={cn("font-medium tabular-nums", row.status === "Canceled" ? "text-muted-foreground line-through" : "text-strong")}>{money(row.amountCents)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
       <Card title="Pay stated on each job" className="@3xl:col-span-2">
         {pay.jobs.length === 0 ? (
@@ -926,7 +1034,10 @@ export function PaySection({ profile }: { profile: Profile }) {
               <li key={row.jobId} className="flex items-center justify-between gap-2 py-2">
                 <span className="min-w-0">
                   <span className="block truncate text-strong">{row.label}</span>
-                  <span className="text-xs text-muted-foreground">{row.jobStatus === "completed" ? (row.reviewed === "closed" ? "Completed and reviewed" : row.reviewed ? "Completed, closed without review" : "Completed, not reviewed") : row.jobStatus === "cancelled" ? "Cancelled" : "Not completed"}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {row.jobStatus === "completed" ? (row.reviewed === "closed" ? "Completed and reviewed" : row.reviewed ? "Completed, closed without review" : "Completed, not reviewed") : row.jobStatus === "cancelled" ? "Cancelled" : "Not completed"}
+                    {row.teamPay ? ` · Team Pay: ${row.teamPay.state}${row.teamPay.totalCents !== null && row.teamPay.totalCents !== row.payCents ? `, ${money(row.teamPay.totalCents)}` : ""}` : ""}
+                  </span>
                 </span>
                 <span className="font-medium tabular-nums text-strong">{money(row.payCents)}</span>
               </li>

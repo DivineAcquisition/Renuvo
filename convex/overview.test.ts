@@ -166,7 +166,7 @@ describe("the Overview", () => {
     expect(measure("completed_visits")).toMatchObject({ state: "measured", value: 1, previous: 0 });
     expect(measure("completed_revenue")).toMatchObject({ state: "measured", kind: "cents", value: 16000, limitation: null });
     expect(measure("coverage_gaps")).toMatchObject({ value: 0 });
-    // Sales counts bookings from its own record: none here, out of no inquiries. It is a count, never a guess.
+    // The Sales agent counts bookings from its own record: none here, out of no inquiries. It is a count, never a guess.
     expect(measure("conversion")).toMatchObject({ state: "measured", value: 0, previous: 0 });
     for (const key of ["cash", "recurring", "issues"]) expect(measure(key)).toMatchObject({ state: "not_set_up", value: null });
   });

@@ -9,9 +9,11 @@ import { cleanersSettingsValidator, cleanersTables, engagementValidator } from "
 import { googleTables } from "./lib/google/schema";
 import { aiTables } from "./lib/ai/schema";
 import { billingTables } from "./lib/billing/schema";
+import { bookingTables } from "./lib/booking/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
 import { financeTables } from "./lib/finance/schema";
+import { clientsTables, communicationValidator, propertyDetailsValidator, propertyKindValidator, relationshipValidator } from "./lib/clients/schema";
 import { trustTables } from "./lib/trust/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
@@ -21,7 +23,8 @@ import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
-import { salesSettingsValidator, salesTables } from "./lib/sales/schema";
+import { salesSettingsValidator } from "./lib/sales/agentSchema";
+import { salesTables } from "./lib/sales/schema";
 import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
@@ -81,6 +84,7 @@ export const aboutValidator = v.union(
   v.object({ table: v.literal("hiringNeeds"), id: v.id("hiringNeeds") }),
   v.object({ table: v.literal("applications"), id: v.id("applications") }),
   v.object({ table: v.literal("mailboxConnections"), id: v.id("mailboxConnections") }),
+  v.object({ table: v.literal("bookingSessions"), id: v.id("bookingSessions") }),
   v.object({ table: v.literal("salesOpportunities"), id: v.id("salesOpportunities") }),
 );
 
@@ -111,11 +115,20 @@ export const proposalValidator = v.union(
   // Cleaners workspace (convex/lib/cleaners/followUps.ts carries it out).
   /** Send one routine follow-up to a cleaner. It is checked again, in full, when approved. */
   v.object({ kind: v.literal("send_cleaner_follow_up"), followUpId: v.id("followUps") }),
-  // Sales (convex/lib/sales/approvals.ts carries these out).
-  /** Send one message Sales prepared, as written, if the conversation has not moved on since. */
+  // Sales (convex/bookings.ts and convex/plans.ts carry these out).
+  /** Issue a booking's invoice and send its payment link (asked for by an Office member). */
+  v.object({ kind: v.literal("sales_payment_link"), bookingId: v.id("bookings") }),
+  /** A booking's first visit at a price a person changed. Decided by the Owner. */
+  v.object({ kind: v.literal("sales_price_override"), bookingId: v.id("bookings") }),
+  /** A recurring plan's new price from a date. Decided by the Owner. */
+  v.object({ kind: v.literal("plan_change"), planId: v.id("recurringPlans"), version: v.number() }),
+  /** A proposal version with custom rates, approved as exactly that content. Decided by the Owner. */
+  v.object({ kind: v.literal("proposal_rates"), proposalId: v.id("proposals"), version: v.number(), hash: v.string() }),
+  // The Sales agent (convex/lib/sales/agentApprovals.ts carries these out).
+  /** Send one message the agent prepared, as written, if the conversation has not moved on since. */
   v.object({ kind: v.literal("sales_action"), actionId: v.id("salesActions") }),
-  /** Let a quote go to the customer: this exact version at this exact total. */
-  v.object({ kind: v.literal("sales_quote"), quoteId: v.id("salesQuotes"), version: v.number(), totalCents: v.number() }),
+  /** Let a quote the agent prepared go to the customer: this exact quote at this exact total. */
+  v.object({ kind: v.literal("sales_quote"), quoteId: v.id("salesQuotes"), totalCents: v.number() }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -222,10 +235,10 @@ export default defineSchema({
     dispatch: v.optional(dispatchSettingsValidator),
     dispatchPolicy: v.optional(dispatchPolicyValidator),
     recruiter: v.optional(recruiterSettingsValidator),
-    /** The Sales Playbook: voice, what it handles, approved answers, follow-up timing, discount band, booking steps (convex/lib/sales/settings.ts). */
-    sales: v.optional(salesSettingsValidator),
     /** How the Cleaners workspace works for this company: follow-up rules and who decides personnel requests. */
     cleaners: v.optional(cleanersSettingsValidator),
+    /** The Sales Playbook: voice, what the agent handles, approved answers, follow-up timing, deposits and quote terms (convex/lib/sales/settings.ts). */
+    sales: v.optional(salesSettingsValidator),
     /** Where the company works, when appointments may be, and its services (convex/lib/settings/business.ts). */
     businessSettings: v.optional(businessSettingsValidator),
     /** Counts saves of the business settings, so a stale browser tab cannot overwrite a newer save. Absent means zero. */
@@ -309,17 +322,56 @@ export default defineSchema({
     preferences: v.optional(v.string()),
     status: recordStatusValidator,
     createdAt: v.number(),
-  }).index("by_company_status", ["companyId", "status"]),
+    // ── Clients & Properties (convex/lib/clients). Absent on clients made before it: read with clientFields(). ──
+    /** A person or a business. A business's contacts are its people. */
+    type: v.optional(v.union(v.literal("person"), v.literal("business"))),
+    /** Absent: "active" for an active record, "former" for an archived one. */
+    relationship: v.optional(relationshipValidator),
+    relationshipNote: v.optional(v.string()),
+    relationshipAt: v.optional(v.number()),
+    /** The team member responsible for the relationship. */
+    accountOwnerId: v.optional(v.id("members")),
+    communication: v.optional(communicationValidator),
+    /** Owner and Manager only. Never in search, previews or agent summaries. */
+    privateNotes: v.optional(v.string()),
+    /** Where the client came from: added by a person, a Google lead, an import or a booking. */
+    source: v.optional(v.string()),
+    archivedAt: v.optional(v.number()),
+    archivedReason: v.optional(v.string()),
+    /** Counts saves. A save names the revision it started from; a different one is refused, never overwritten. */
+    revision: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+    /** A person who is handling this client's conversation themselves. Agent follow-ups to the client wait. */
+    conversationHeld: v.optional(v.object({ by: v.id("members"), since: v.number() })),
+  })
+    .index("by_company_status", ["companyId", "status"])
+    .index("by_company_email", ["companyId", "email"]),
 
   properties: defineTable({
     companyId: v.id("companies"),
     customerId: v.id("customers"),
     label: v.optional(v.string()),
     address: addressValidator,
-    kind: workKindValidator,
+    kind: propertyKindValidator,
+    /** Gate codes, lockboxes, alarms. Owner and Manager only; a cleaner sees them on an accepted visit. Never in search, previews or agent summaries. */
     accessInstructions: v.optional(v.string()),
     status: recordStatusValidator,
     createdAt: v.number(),
+    // ── Clients & Properties (convex/lib/clients). ──
+    timezone: v.optional(v.string()),
+    details: v.optional(propertyDetailsValidator),
+    /** For the crew: parking and where to go. Not sensitive. */
+    parking: v.optional(v.string()),
+    /** For the crew: how this property is cleaned. */
+    crewNotes: v.optional(v.string()),
+    /** What the client asked for or was told, in their words. */
+    clientNotes: v.optional(v.string()),
+    /** Owner and Manager only. */
+    officeNotes: v.optional(v.string()),
+    siteContactId: v.optional(v.id("clientContacts")),
+    archivedAt: v.optional(v.number()),
+    revision: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_company_customer", ["companyId", "customerId"])
     .index("by_company_postal", ["companyId", "address.postalCode"]),
@@ -423,13 +475,19 @@ export default defineSchema({
     completionReturns: v.optional(v.number()),
     /** The checklist template version this visit's checklist was copied from, if any. */
     checklistTemplate: v.optional(v.object({ templateId: v.id("checklistTemplates"), version: v.number() })),
-    /** Set when Sales made this job from an accepted quote: the opportunity, the quote and the exact version the customer accepted. */
-    sales: v.optional(v.object({ opportunityId: v.id("salesOpportunities"), quoteId: v.id("salesQuotes"), quoteVersion: v.number() })),
+    /** The service plan that booked this visit, and the day of the series it is. */
+    planId: v.optional(v.id("servicePlans")),
+    planDate: v.optional(v.string()),
+    /** Cancelled because a person skipped it (a plan's visit), kept apart from a cancellation. */
+    skipped: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
     .index("by_company_status_start", ["companyId", "status", "startsAt"])
     .index("by_company_customer", ["companyId", "customerId"])
+    .index("by_company_customer_start", ["companyId", "customerId", "startsAt"])
+    .index("by_company_property_start", ["companyId", "propertyId", "startsAt"])
+    .index("by_company_plan", ["companyId", "planId", "startsAt"])
     .index("by_status_start", ["status", "startsAt"]),
 
   assignments: defineTable({
@@ -507,7 +565,8 @@ export default defineSchema({
   })
     .index("by_company_status_due", ["companyId", "status", "dueAt"])
     .index("by_company_agent_status", ["companyId", "agent", "status"])
-    .index("by_company_key", ["companyId", "key"]),
+    .index("by_company_key", ["companyId", "key"])
+    .index("by_company_about", ["companyId", "about.id"]),
 
   // ── Authority (brief, section 7) ───────────────────────────────────────────────────────────────
   /** One row per action the owner has changed. An action with no row is at its starting level. */
@@ -590,7 +649,19 @@ export default defineSchema({
       v.literal("availability_check"),
       v.literal("idle_check_in"),
       v.literal("verification_code"),
-      // Sales, to a person who asked about service (convex/lib/sales/outbox.ts).
+      // Clients & Properties, to a client: a message a person wrote, now or scheduled (convex/clientConversations.ts).
+      v.literal("customer_message"),
+      // Booking Experiences, to customers (convex/lib/booking/messages.ts).
+      v.literal("booking_confirmation"),
+      v.literal("booking_request_received"),
+      v.literal("booking_recovery"),
+      // Sales, to customers: booking requests and confirmations, proposals, signing and assessments (convex/lib/sales/outbox.ts).
+      v.literal("booking_request"),
+      v.literal("booking_confirmed"),
+      v.literal("proposal_sent"),
+      v.literal("signature_request"),
+      v.literal("assessment_link"),
+      // The Sales agent, to a person who asked about service (convex/lib/sales/outbox.ts).
       v.literal("sales_reply"),
       v.literal("sales_quote"),
       v.literal("sales_follow_up"),
@@ -606,18 +677,32 @@ export default defineSchema({
     /** The provider reported that the address rejected the message. */
     bouncedAt: v.optional(v.number()),
     cleanerId: v.optional(v.id("cleaners")),
+    /**
+     * Sales messages: the links the body carries as placeholders, made at the moment of sending from the
+     * record each names, so no token is ever at rest and a closed record sends nothing.
+     */
+    salesLinks: v.optional(v.array(v.object({ placeholder: v.string(), kind: v.union(v.literal("pay"), v.literal("proposal"), v.literal("sign"), v.literal("assess"), v.literal("quote")), id: v.string() }))),
+    /** A message in a Sales conversation: the opportunity it belongs to. */
+    opportunityId: v.optional(v.id("salesOpportunities")),
     /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
     customerId: v.optional(v.id("customers")),
     invoiceId: v.optional(v.id("invoices")),
-    /** Sales messages: the opportunity, and the quote whose link the message carries as "{link}". */
-    opportunityId: v.optional(v.id("salesOpportunities")),
-    salesQuoteId: v.optional(v.id("salesQuotes")),
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
     linkId: v.optional(v.id("actionLinks")),
     /** A Cleaners portal or task link the message carries. */
     portalLinkId: v.optional(v.id("portalLinks")),
     followUpId: v.optional(v.id("followUps")),
+    /** Client messages: the contact it went to (absent: the client's own phone or email), who wrote it, and what it is about. */
+    contactId: v.optional(v.id("clientContacts")),
+    authorId: v.optional(v.id("members")),
+    /** "agent": an agent drafted it and a person approved it. Agent follow-ups stop when the client replies or a person takes over. */
+    draftedBy: v.optional(v.union(v.literal("person"), v.literal("agent"))),
+    about: v.optional(v.object({ table: v.string(), id: v.string(), label: v.string() })),
+    /** A follow-up planned for later: held until then, and asked the sending policy again when it is due. */
+    scheduledFor: v.optional(v.number()),
+    /** Booking messages: the session whose private link the message carries as "{link}". */
+    bookingSessionId: v.optional(v.id("bookingSessions")),
     /** Where on the cleaner pages the link opens, for example "/delay". */
     linkPath: v.optional(v.string()),
     to: v.optional(v.string()),
@@ -644,8 +729,9 @@ export default defineSchema({
     .index("by_company_queued", ["companyId", "queuedAt"])
     .index("by_company_application", ["companyId", "applicationId"])
     .index("by_company_invoice", ["companyId", "invoiceId"])
-    .index("by_company_opportunity", ["companyId", "opportunityId", "queuedAt"])
     .index("by_company_cleaner", ["companyId", "cleanerId", "queuedAt"])
+    .index("by_company_customer", ["companyId", "customerId", "queuedAt"])
+    .index("by_company_opportunity", ["companyId", "opportunityId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
 
@@ -817,17 +903,21 @@ export default defineSchema({
   ...googleTables,
   // ── Cleaners: subcontractors, requirements, crews, portal, follow-ups, coaching, personnel ──────
   ...cleanersTables,
+  ...clientsTables,
 
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,
   ...billingTables,
   // Services & Pricing (convex/lib/services/schema.ts).
   ...servicesTables,
-  // ── Sales: opportunities, conversations, quotes, follow-ups, forms and holds (convex/lib/sales/schema.ts) ─
-  ...salesTables,
 
   // ── Finance: the cleaning company's own money, never Selestial's subscription (convex/lib/finance) ─
   ...financeTables,
+  // ── Booking Experiences (convex/lib/booking/schema.ts) ───────────────────────────────────────────
+  ...bookingTables,
+
+  // ── Sales: the booking and proposal workspace and what it commits the company to (convex/lib/sales) ─
+  ...salesTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

@@ -10,7 +10,7 @@
 import type { QuoteInput } from "../services/engine";
 import { SCHEDULES, type Schedule, type Spec } from "../services/spec";
 import { areaWord, scheduleLabel } from "../services/words";
-import type { Fact, ServiceKind } from "./schema";
+import type { Fact, ServiceKind } from "./agentSchema";
 
 export type Requirement = {
   key: string;

@@ -6,7 +6,7 @@
 import type { Doc } from "../../_generated/dataModel";
 import { userError } from "../errors";
 import { optionalText, text } from "../text";
-import { SERVICE_KINDS, TONES, type DepositRule, type SalesSettingsInput, type ServiceKind } from "./schema";
+import { SERVICE_KINDS, TONES, type DepositRule, type SalesSettingsInput, type ServiceKind } from "./agentSchema";
 
 export type SalesSettings = {
   voice: { tone: (typeof TONES)[number]; signature: string | null };

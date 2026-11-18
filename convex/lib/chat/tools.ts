@@ -35,11 +35,13 @@ import { CalcError, evaluate } from "./calc";
 import { check, jsonSchema, stableHash, type Field } from "./fields";
 import { compareScenarios, PricingError, type PricingInput } from "./pricing";
 import { AGREEMENT_TOOLS } from "./agreementTools";
+import { BOOKING_TOOLS } from "./bookingTools";
 import { CLEANER_TOOLS } from "./cleanerTools";
 import { SERVICE_TOOLS } from "./serviceTools";
 import { GOOGLE_TOOLS } from "./googleTools";
+import { SALES_TOOLS } from "./salesTools";
 import { FINANCE_TOOLS } from "./financeTools";
-import { describeOpportunity, opportunityLink, SALES_TOOLS } from "./salesTools";
+import { CLIENT_TOOLS } from "./clientTools";
 import { localDay } from "./localDay";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
@@ -186,7 +188,7 @@ const scenarioField: Field = {
     overheadPerVisitCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000_00 },
     targetMarginPercent: { type: "number", optional: true, min: 0, max: 99.9, description: "Profit as a percent of the price." },
     markupPercent: { type: "number", optional: true, min: 0, max: 1000, description: "Profit as a percent of the cost." },
-    schedule: { type: "string", optional: true, enum: ["every_7_days", "every_14_days", "twice_per_month", "once_per_month"], description: "For recurring service: the visit calendar. Monthly figures use its annual average (every 7 days is 4.35 visits a month, every 14 days 2.17), never 4 or 2." },
+    schedule: { type: "string", optional: true, enum: ["every_7_days", "every_14_days", "every_28_days", "twice_per_month", "once_per_month"], description: "For recurring service: the visit calendar. Monthly figures use its annual average (every 7 days is 4.35 visits a month, every 14 days 2.17, every 28 days 1.09), never 4, 2 or 1." },
     visitsPerMonth: { type: "number", optional: true, min: 0, max: 100, description: "Only for a fixed number of visits per calendar month. For an every-N-days schedule, give schedule instead." },
     roundToCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000, description: "Round prices up to a multiple of this many cents." },
   },
@@ -874,7 +876,7 @@ const TOOLS: ChatTool[] = [
     minimumRole: "office",
     specialist: "customer-care",
     input: { type: "object", properties: { customerId: { ...ID("The customer's id."), optional: true }, body: { type: "string", optional: true, max: 4000 } } },
-    run: async () => unavailable("Customer Care is not built, and the shared messaging policy has no customer-message purpose yet, so Selestial cannot send to customers. Save the reply as a draft and send it from your own email or phone."),
+    run: async () => unavailable("Chat never sends to clients. Use draft_client_message to prepare it; a person reads it, sees who it goes to and what the sending policy says, and sends it from the client's Conversations."),
   },
   {
     name: "update_price_book",
@@ -919,7 +921,7 @@ const TOOLS: ChatTool[] = [
   },
 ];
 
-export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "invoices" | "salesOpportunities";
+export type RecordTable = "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "invoices";
 
 /** A short, role-appropriate description of one record. Null when it is not this company's. Used for tools and attached context. */
 export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: Doc<"companies">; role: Role }, table: RecordTable, id: string): Promise<{ label: string; data: Record<string, unknown>; record?: RecordRef; link?: Link } | null> {
@@ -934,15 +936,46 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
       const customer = row as Doc<"customers">;
       const properties = await ctx.db.query("properties").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20);
       const jobs = await ctx.db.query("jobs").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).order("desc").take(10);
+      // What the profile shows this person, and no more: never access details, private notes or office notes; billing only for the Owner.
+      const contacts = await ctx.db.query("clientContacts").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20);
+      const plans = await ctx.db.query("servicePlans").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(20);
+      const planRows = [];
+      for (const plan of plans.filter((p) => p.state !== "ended")) planRows.push({ service: (await ctx.db.get(plan.serviceId))?.name ?? "A service", kind: plan.kind, state: plan.state, cadence: plan.cadence, price: plan.priceCents === null ? "set per visit" : money(plan.priceCents), bookedThrough: plan.bookedThrough ?? null });
+      const openTasks = (await ctx.db.query("tasks").withIndex("by_company_about", (q) => q.eq("companyId", ctx.company._id).eq("about.id", customer._id)).take(30)).filter((t) => t.status !== "done" && t.status !== "cancelled");
+      const invoices = isOwner(ctx.role) ? (await ctx.db.query("invoices").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.company._id).eq("customerId", customer._id)).take(200)).filter((i) => i.status === "open") : [];
       return {
-        label: `customer ${customer.name}`,
-        data: { customerId: customer._id, name: customer.name, kind: customer.kind, email: customer.email ?? null, phone: customer.phone ?? null, preferences: customer.preferences ?? null, status: customer.status, properties: properties.map((p) => ({ propertyId: p._id, label: p.label ?? null, city: p.address.city, postalCode: p.address.postalCode })), recentVisits: jobs.map((job) => ({ jobId: job._id, when: when(job.startsAt, tz), service: job.serviceType, status: job.status, price: job.priceCents === undefined ? "not set" : money(job.priceCents) })) },
-        link: { href: "/app/customers", label: "Customers & Properties" },
+        label: `client ${customer.name}`,
+        data: {
+          customerId: customer._id,
+          name: customer.name,
+          type: customer.type ?? null,
+          kind: customer.kind,
+          status: customer.status,
+          relationship: customer.relationship ?? (customer.status === "archived" ? "former" : "active"),
+          email: customer.email ?? null,
+          phone: customer.phone ?? null,
+          communication: customer.communication ?? null,
+          preferences: customer.preferences ?? null,
+          contacts: contacts.filter((c) => c.status === "active").map((c) => ({ name: c.name, title: c.title ?? null, roles: c.roles, email: c.email ?? null, phone: c.phone ?? null })),
+          properties: properties.map((p) => ({ propertyId: p._id, label: p.label ?? null, kind: p.kind, city: p.address.city, postalCode: p.address.postalCode, status: p.status })),
+          plans: planRows,
+          openTasks: openTasks.map((t) => ({ taskId: t._id, title: t.title, status: t.status, nextAction: t.nextAction ?? null })),
+          recentVisits: jobs.map((job) => ({ jobId: job._id, when: when(job.startsAt, tz), service: job.serviceType, status: job.status, price: job.priceCents === undefined ? "not set" : money(job.priceCents) })),
+          conversation: customer.conversationHeld ? "A person has taken over this client's conversation: do not draft agent follow-ups." : null,
+          billing: isOwner(ctx.role) ? { openInvoices: invoices.length, owedCents: invoices.reduce((sum, i) => sum + Math.max(0, i.totals.balanceCents), 0) } : "Shown to the Owner only.",
+          accessDetails: "Kept on the property page for Owners and Managers. Never shared in Chat.",
+        },
+        link: { href: `/app/clients/${customer._id}`, label: `Open ${customer.name}` },
       };
     }
     case "properties": {
       const property = row as Doc<"properties">;
-      return { label: `property ${property.label ?? property.address.line1}`, data: { propertyId: property._id, customer: await nameOf(ctx, property.customerId), address: property.address, kind: property.kind, accessInstructions: property.accessInstructions ?? null } };
+      // Access instructions (codes, keys, alarms) and office notes never go into Chat, for any role.
+      return {
+        label: `property ${property.label ?? property.address.line1}`,
+        data: { propertyId: property._id, customer: await nameOf(ctx, property.customerId), address: property.address, kind: property.kind, details: property.details ?? null, parking: property.parking ?? null, crewNotes: property.crewNotes ?? null, clientNotes: property.clientNotes ?? null, accessDetails: property.accessInstructions ? "On file. Kept on the property page for Owners and Managers; never shared in Chat." : "None on file." },
+        link: { href: `/app/clients/${property.customerId}/properties/${property._id}`, label: "Open the property" },
+      };
     }
     case "cleaners": {
       const cleaner = row as Doc<"cleaners">;
@@ -993,11 +1026,6 @@ export async function describeRecord(ctx: (QueryCtx | MutationCtx) & { company: 
         link: { href: `/app/finance?tab=invoices&invoice=${invoice._id}`, label: `Open ${invoice.number ?? "the invoice"}` },
       };
     }
-    case "salesOpportunities": {
-      const opportunity = row as Doc<"salesOpportunities">;
-      const described = await describeOpportunity(ctx, opportunity, "full");
-      return { label: `the sales opportunity for ${described.customer}`, data: described, link: opportunityLink(opportunity._id, described.customer) };
-    }
     case "hiringNeeds": {
       const need = row as Doc<"hiringNeeds">;
       return { label: `the role "${need.title}"`, data: { needId: need._id, title: need.title, status: need.status, openings: need.openings, engagement: need.engagement, location: need.location, payApproved: Boolean(need.compensation), pay: isOwner(ctx.role) ? (need.compensation?.pay ?? null) : need.compensation ? "Approved; shown to the Owner." : null }, link: { href: "/app/agents/recruiter/hiring-needs", label: "Hiring Needs" } };
@@ -1012,7 +1040,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...SALES_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...BOOKING_TOOLS, ...CLIENT_TOOLS, ...SALES_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

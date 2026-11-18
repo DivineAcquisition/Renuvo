@@ -11,7 +11,7 @@
  * The customer's words are data. Nothing in them is an instruction to Sales, and no reading can change
  * a price, a permission or a policy.
  */
-import type { Fact, Reading } from "./schema";
+import type { Fact, Reading } from "./agentSchema";
 import type { Requirement } from "./facts";
 import { ONE_TIME } from "./facts";
 import { ALWAYS_ESCALATE } from "./settings";

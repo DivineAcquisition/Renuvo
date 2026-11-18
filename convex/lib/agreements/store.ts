@@ -16,7 +16,7 @@ import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { notFound, userError } from "../errors";
 import { recordEvent, type Actor } from "../events";
 import { readProfile } from "../compliance/profile";
-import type { Role } from "../roles";
+import { isManager, type Role } from "../roles";
 import { can, mayDraft, mayRead } from "./access";
 import { docType, DOC_TYPE_BY_KEY, type DocType } from "./catalog";
 import { affectedClauses, contentHash, defOf, isIsoDate, kitFor, missingRequired, render, unresolvedOf, validate, type Kit } from "./compose";
@@ -77,7 +77,11 @@ async function reindex(ctx: Ctx, agreement: Doc<"agreements">) {
 export type LinkInput = { table: "customers" | "properties" | "cleaners" | "jobs" | "applications"; id: string };
 
 /** Facts the company already has, with where each came from. Only records this company owns are read. */
-export async function prefill(ctx: Ctx | ReadCtx, links: LinkInput[]): Promise<{ terms: Terms; sources: Record<string, string>; parties: Party[]; labels: { table: LinkInput["table"]; id: string; label: string }[]; state?: string }> {
+/**
+ * What the linked records already say. A property's access instructions (codes, keys, alarms) are copied
+ * only for an Owner or Manager working outside Chat: Office never sees them, and Chat never reads them.
+ */
+export async function prefill(ctx: Ctx | ReadCtx, links: LinkInput[], withAccess = isManager(ctx.role)): Promise<{ terms: Terms; sources: Record<string, string>; parties: Party[]; labels: { table: LinkInput["table"]; id: string; label: string }[]; state?: string }> {
   const terms: Terms = {};
   const sources: Record<string, string> = {};
   const parties: Party[] = [];
@@ -116,7 +120,7 @@ export async function prefill(ctx: Ctx | ReadCtx, links: LinkInput[]): Promise<{
       const a = row.address;
       terms.serviceAddress = `${a.line1}${a.line2 ? `, ${a.line2}` : ""}, ${a.city}, ${a.region} ${a.postalCode}`;
       sources.serviceAddress = `Property record: ${row.label ?? a.line1}`;
-      if (row.accessInstructions) {
+      if (row.accessInstructions && withAccess) {
         terms.accessMethod = row.accessInstructions;
         sources.accessMethod = "Property record: access instructions";
       }
@@ -179,7 +183,7 @@ export async function createAgreement(ctx: Ctx, input: NewAgreement): Promise<Id
   const type = docType(input.docType);
   if (!mayDraft(ctx.role, type.access)) throw userError(type.access === "restricted" ? "Only the Owner can draft this kind of document." : "Your role cannot draft this kind of document.", "not_allowed");
   const links = input.links ?? [];
-  const known = await prefill(ctx, links);
+  const known = await prefill(ctx, links, isManager(ctx.role) && input.origin !== "chat");
   const terms: Terms = { ...known.terms, ...(input.terms ?? {}) };
   const kit = input.kit ?? kitFor(type);
   const rendered = render(type, terms, { kit, titleOverride: input.title });

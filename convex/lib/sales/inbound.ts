@@ -1,24 +1,25 @@
 /**
- * A text that reached the company's number and is not a keyword (STOP, HELP, START): is it Sales's?
+ * A text that reached the company's number and is not a keyword (STOP, HELP, START): is it the Sales agent's?
  *
  *  - From a prospect with an open opportunity: yes. It joins that conversation and Sales reads it.
  *  - From a number nobody on record has: it is a new inquiry, if the Playbook says Sales takes inquiries
  *    by text. Texting the company first is the permission to answer by text, and is recorded as that.
- *  - From a customer the company has already served, with no open opportunity: no. That relationship is
- *    Retention's, and the text goes where it went before Sales existed (a task for a person).
+ *  - From a customer already on record, with no open opportunity: no. The text goes to their client
+ *    conversation (Clients & Properties) and a task for a person, as before.
  *  - From a cleaner or an applicant: no.
+ *  - From a client whose conversation a person is holding (Clients & Properties): no. The person answers.
  *
  * Unlike the compliance handler, which keeps only an excerpt, Sales keeps the message: it is the
  * customer's request, and the conversation cannot be read without it.
  */
-import type { Doc, Id } from "../../_generated/dataModel";
+import type { Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import type { RecipientRecord } from "../compliance/recipients";
 import { AGENT_PROFILES } from "../departments";
 import { allow } from "../rateLimit";
 import { quiet } from "./actions";
-import { fileInquiry, hasServiceHistory, openOpportunityFor, recordInbound } from "./intake";
-import { setStage, SYSTEM } from "./opportunities";
+import { agentStage, load, setStage, SYSTEM, type Opp } from "./agentOpportunity";
+import { fileInquiry, openOpportunityFor, recordInbound } from "./intake";
 import { enqueueRun } from "./runs";
 import { salesSettings } from "./settings";
 
@@ -33,22 +34,24 @@ export async function salesInboundSms(ctx: MutationCtx, input: { companyId: Id<"
   const customers = input.known.filter((person) => person.kind === "customer");
   if (customers.length > 1) return false;
 
-  let opportunity: Doc<"salesOpportunities"> | null = null;
+  let opportunity: Opp | null = null;
   if (customers.length === 1) {
     const customerId = customers[0].id as Id<"customers">;
+    // A person is holding this client's conversation: they answer it, not the agent.
+    const record = await ctx.db.get(customerId);
+    if (record?.conversationHeld) return false;
     opportunity = await openOpportunityFor(ctx, company._id, customerId);
-    if (!opportunity) {
-      // No open request, and the company has cleaned for them: this is an existing customer's message.
-      if (await hasServiceHistory(ctx, company._id, customerId)) return false;
-    }
+    // Someone already on record with no open inquiry: their text belongs to their client conversation
+    // (Clients & Properties), not to a new sales inquiry. Only an unknown number starts one.
+    if (!opportunity) return false;
   }
   if (opportunity) {
     if (!(await allow(ctx, `sales-inbound:${company._id}:${input.from}`, 30, HOUR))) return true;
     const { message, created } = await recordInbound(ctx, opportunity, { channel: "sms", body: input.body, providerId: input.providerId, at: input.receivedAt });
     if (!created) return true;
-    const fresh = (await ctx.db.get(opportunity._id))!;
-    // While a person holds the conversation the message is kept and shown, and Sales does not answer it.
-    if (!fresh.takeover) await enqueueRun(ctx, fresh, { trigger: "reply", key: `reply:${message._id}`, messageId: message._id });
+    const fresh = await load(ctx, opportunity._id);
+    // While a person holds the conversation the message is kept and shown, and the agent does not answer it.
+    if (!fresh.agent.takeover) await enqueueRun(ctx, fresh, { trigger: "reply", key: `reply:${message._id}`, messageId: message._id });
     return true;
   }
   if (!salesSettings(company).eligibility.textInquiries) return false;
@@ -86,10 +89,11 @@ export async function salesOptedOut(ctx: MutationCtx, companyId: Id<"companies">
       .withIndex("by_company_customer", (q) => q.eq("companyId", companyId).eq("customerId", person.id as Id<"customers">))
       .take(50);
     for (const row of rows) {
-      if (row.stage === "won" || row.stage === "closed_lost" || row.channel !== "sms") continue;
+      const stage = agentStage(row);
+      if (!row.intake || stage === "won" || stage === "closed_lost" || (row.channel ?? "sms") !== "sms") continue;
       await quiet(ctx, row, "The customer asked not to be texted.", SYSTEM);
       // A booking already in progress is a person's to sort out; anything earlier is closed.
-      if (row.stage !== "booking_pending") await setStage(ctx, (await ctx.db.get(row._id))!, "closed_lost", SYSTEM, { reason: "opted_out", note: "Replied STOP." });
+      if (stage !== "booking_pending") await setStage(ctx, await load(ctx, row._id), "closed_lost", SYSTEM, { reason: "opted_out", note: "Replied STOP." });
     }
   }
 }

@@ -22,6 +22,7 @@ import { CATEGORY_LABELS, type Spec } from "../../../../convex/lib/services/spec
 import { canonical, describeChanges, keptTemplateAmounts, type KeptAmount } from "../../../../convex/lib/services/store";
 import { TEMPLATES } from "../../../../convex/lib/services/templates";
 import { ServicePreview } from "./preview";
+import { PropertyPrices } from "./property-prices";
 import { ChangeBadge, day, Empty, Notice, SectionTitle, Toggle, when } from "./shared";
 import { BasicsStep, ExtrasStep, PricingStep, ScopeStep, TeamStep, type StepProps } from "./steps";
 
@@ -33,8 +34,15 @@ export function ServiceBuilder({ serviceId }: { serviceId: string }) {
   const view = useQuery(api.services.service, { companyId, serviceId: serviceId as Id<"services"> });
   const profile = useQuery(api.services.profile, { companyId });
   if (view === undefined) return <Skeleton className="h-[32rem] rounded-2xl" />;
-  if (view.draft && view.canDraft) return <DraftEditor key={`${view.service.id}`} view={view} costs={profile?.costs ?? null} canSeeCosts={view.canPublish} />;
-  return <LiveService view={view} costs={profile?.costs ?? null} />;
+  const main = view.draft && view.canDraft ? <DraftEditor key={`${view.service.id}`} view={view} costs={profile?.costs ?? null} canSeeCosts={view.canPublish} /> : <LiveService view={view} costs={profile?.costs ?? null} />;
+  // A property's own price follows the live version, whether or not a draft is open.
+  if (!view.live) return main;
+  return (
+    <div className="grid grid-cols-1 gap-5">
+      {main}
+      <PropertyPrices serviceId={view.service.id} spec={view.live.spec} />
+    </div>
+  );
 }
 
 // ── The draft editor ────────────────────────────────────────────────────────────────────────────────

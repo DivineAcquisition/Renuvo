@@ -151,36 +151,29 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
         }[what] ?? null;
     } else if (subject.table === "salesOpportunities") {
       const opportunity = (await get(subject.id, () => ctx.db.get(subject.id))) as Doc<"salesOpportunities"> | null;
-      const name = opportunity && opportunity.companyId === company._id ? ((await doc(opportunity.customerId))?.name ?? "a prospect") : "a prospect";
+      const name = opportunity && opportunity.companyId === company._id ? ((opportunity.customerId ? (await doc(opportunity.customerId))?.name : null) ?? opportunity.title) : "a prospect";
       const stage = (value: unknown) => String(value ?? "").replace(/_/g, " ");
       text =
         {
           created: `received an inquiry from ${name}${data.source ? ` (${stage(data.source)})` : ""}`,
+          updated: `updated ${name}'s deal`,
           stage_changed: data.to === "closed_lost" ? `closed ${name}'s opportunity${data.reason ? `: ${stage(data.reason)}` : ""}` : `moved ${name}'s opportunity from ${stage(data.from)} to ${stage(data.to)}`,
           reply_received: `received a reply from ${name}`,
-          booked: `booked ${name} and handed the job to Dispatch${data.capacityVerified === false ? ", without verified capacity" : ""}`,
-          taken_over: `took over the conversation with ${name} from Sales`,
-          handed_back: `handed the conversation with ${name} back to Sales`,
+          booked: `booked ${name} and handed the visit to Dispatch`,
+          taken_over: `took over the conversation with ${name} from the Sales agent`,
+          handed_back: `handed the conversation with ${name} back to the Sales agent`,
           details_changed: `updated what is known about ${name}'s request`,
           match_resolved: data.same ? `confirmed ${name} is a customer already on record` : `confirmed ${name} is a new customer`,
           send_failed: `could not deliver a message to ${name}`,
           send_unknown: `could not confirm whether a message to ${name} went, and did not send it again`,
           run_failed: `could not finish working on ${name}'s opportunity`,
+          unverified_email: `received an email on ${name}'s conversation from an address that is not theirs`,
         }[what] ?? null;
     } else if (subject.table === "salesQuotes") {
       const quote = (await get(subject.id, () => ctx.db.get(subject.id))) as Doc<"salesQuotes"> | null;
       const name = quote && quote.companyId === company._id ? ((await doc(quote.customerId))?.name ?? "a prospect") : "a prospect";
       const amount = typeof data.totalCents === "number" ? ` at $${(data.totalCents / 100).toFixed(2)}` : "";
-      text =
-        {
-          version_saved: `saved version ${String(data.version ?? "")} of ${name}'s quote${amount}`,
-          approved: `approved ${name}'s quote to send${data.by === "rules" ? " (a firm price from the published rules)" : ""}`,
-          sent: `sent ${name} their quote${amount}`,
-          accepted: `${name} accepted version ${String(data.version ?? "")} of their quote${amount}`,
-          declined: `${name} declined their quote`,
-          expired: `${name}'s quote expired`,
-          revoked: `withdrew ${name}'s quote`,
-        }[what] ?? null;
+      text = { saved: `saved ${name}'s quote${amount}`, sent: `sent ${name} their quote${amount}`, accepted: `${name} accepted their quote`, declined: `${name} declined their quote`, expired: `${name}'s quote expired` }[what] ?? null;
       // The customer's own actions on the quote page read as theirs, not the system's.
       if (what === "accepted" || what === "declined") actor = { kind: "system", label: "By quote link", agent: null };
     } else if (subject.table === "salesActions") {
@@ -189,10 +182,8 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
     } else if (subject.table === "salesFollowUps") {
       const purpose = String(data.purpose ?? "follow-up").replace(/_/g, " ");
       text = { scheduled: `planned a ${purpose} reminder`, stopped: `stopped a ${purpose} reminder`, cancelled: `cancelled a ${purpose} reminder` }[what] ?? null;
-    } else if (subject.table === "salesForms") {
-      text = { created: "created a booking form", published: "published a booking form", unpublished: "took a booking form offline", archived: "archived a booking form" }[what] ?? null;
     } else if (subject.table === "salesBatches") {
-      text = { first_batch_decided: `decided Sales's first review batch: ${String(data.sent ?? 0)} sent, ${String(data.skipped ?? 0)} set aside` }[what] ?? null;
+      text = { first_batch_decided: `decided the Sales agent's first review batch: ${String(data.sent ?? 0)} sent, ${String(data.skipped ?? 0)} set aside` }[what] ?? null;
     } else if (subject.table === "permissions") {
       const def = typeof data.action === "string" ? actionDef(data.action) : undefined;
       text = def ? `set "${def.label}" to ${LEVEL_WORDS[String(data.to)] ?? String(data.to)}` : "changed a permission";

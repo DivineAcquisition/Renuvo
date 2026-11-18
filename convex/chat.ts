@@ -8,6 +8,7 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { owned } from "./lib/access";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { companyMutation, companyQuery, ownerMutation, type MemberAccess } from "./lib/builders";
 import { mayRead } from "./lib/agreements/access";
@@ -48,7 +49,7 @@ const shelfValidator = v.union(v.literal("active"), v.literal("archived"));
 
 // ── Context ──────────────────────────────────────────────────────────────────────────────────────
 
-const CONTEXT_TABLES: readonly ContextRef["table"][] = ["customers", "properties", "cleaners", "jobs", "tasks", "applications", "hiringNeeds", "chatArtifacts", "invoices", "salesOpportunities"];
+const CONTEXT_TABLES: readonly ContextRef["table"][] = ["customers", "properties", "cleaners", "jobs", "tasks", "applications", "hiringNeeds", "chatArtifacts", "invoices"];
 
 /** Records a person attached, checked against the company and their role. Labels come from the record, never the browser. */
 async function checkedContext(ctx: Ctx, refs: { table: string; id: string }[]): Promise<ContextRef[]> {
@@ -189,7 +190,8 @@ export const send = companyMutation({
     /** A key from lib/ai/chatModels.ts. Unset: keep this chat's model. */
     model: v.optional(v.string()),
     /** Where a new conversation started (Research & Insights). Kept for every reply; ignored for an existing one. */
-    origin: v.optional(v.object({ kind: v.literal("research") })),
+    /** Where the chat was opened: Research & Insights, or a booking or proposal draft in the Sales workspace. */
+    origin: v.optional(v.union(v.object({ kind: v.literal("research") }), v.object({ kind: v.literal("sales_draft"), draftId: v.id("salesDrafts") }))),
   },
   handler: async (ctx, args) => {
     const words = requiredText(args.text, "Your message", MESSAGE_MAX);
@@ -222,7 +224,9 @@ export const send = companyMutation({
     const now = Date.now();
     if (!conversation) {
       const title = titleFrom(words);
-      const origin = args.origin?.kind === "research" ? { kind: "research" as const, question: words.slice(0, 500) } : undefined;
+      let origin: Doc<"conversations">["origin"] = undefined;
+      if (args.origin?.kind === "research") origin = { kind: "research", question: words.slice(0, 500) };
+      if (args.origin?.kind === "sales_draft") origin = { kind: "sales_draft", draftId: (await owned(ctx, args.origin.draftId))._id };
       const id = await ctx.db.insert("conversations", { companyId: ctx.companyId, createdBy: ctx.member._id, title, titleSource: "generated", visibility: "private", state: "idle", searchText: searchTextFor(title, [words]), shelf: "active", messageCount: 0, modelKey, ...(origin ? { origin } : {}), createdAt: now, updatedAt: now });
       conversation = (await ctx.db.get(id))!;
     } else {

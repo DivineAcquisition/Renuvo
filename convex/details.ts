@@ -192,10 +192,11 @@ async function jobDetail(ctx: Ctx, jobId: Id<"jobs">, asOf: number): Promise<Det
     { label: "Must finish by", value: job.hardDeadlineAt ? when(job.hardDeadlineAt, asOf, tz) : "No deadline set", ref: null, missing: !job.hardDeadlineAt },
     ...(job.requiredSkills.length > 0 ? [{ label: "Skills needed", value: job.requiredSkills.join(", "), ref: null }] : []),
     { label: "Crew instructions", value: job.instructions ?? "None recorded", ref: null, missing: !job.instructions },
-    { label: "Access instructions", value: property?.accessInstructions ?? "None recorded", ref: null, missing: !property?.accessInstructions },
+    // Codes, keys and alarms are for Owners and Managers (and the assigned crew, on their own job page).
+    { label: "Access instructions", value: !property?.accessInstructions ? "None recorded" : isManager(ctx.role) ? property.accessInstructions : "On file. Owners and Managers can see it.", ref: null, missing: !property?.accessInstructions },
     { label: "Price", value: price ?? "No price set", ref: null, missing: !price },
     { label: "Payment", value: "Payments are not connected yet", ref: null, missing: true },
-    { label: "Conversation", value: "Conversations are not built yet", ref: null, missing: true },
+    { label: "Conversation", value: "On the client's Conversations tab", ref: null },
   ];
 
   const items = await jobChecklist(ctx, job);
@@ -280,25 +281,6 @@ async function approvalDetail(ctx: Ctx, approvalId: Id<"approvals">, asOf: numbe
     context.push({ label: "Cleaner", value: cleaner?.name ?? "Unknown", ref: null });
     context.push({ label: "Cleaner's pay for this visit", value: `$${(approval.proposal.payCents / 100).toFixed(2)}`, ref: null });
     context.push({ label: "Time to answer", value: `${approval.proposal.respondWithinMinutes} minutes`, ref: null });
-  }
-  // A Sales proposal shows exactly what would go out and to whom, so the decision is made on the words themselves.
-  if (approval.proposal?.kind === "sales_action") {
-    const action = await ctx.db.get(approval.proposal.actionId);
-    if (action && action.companyId === ctx.companyId) {
-      const customer = await ctx.db.get(action.customerId);
-      context.push({ label: "To", value: `${customer?.name ?? "A prospect"}${action.channel ? ` by ${action.channel === "sms" ? "text" : "email"}` : ""}`, ref: null });
-      if (action.body) context.push({ label: "Message", value: action.body.replaceAll("{link}", "[quote link]").slice(0, 1200), ref: null });
-      for (const row of action.evidence.slice(0, 4)) context.push({ label: row.label, value: row.detail, ref: null });
-    }
-  }
-  if (approval.proposal?.kind === "sales_quote") {
-    const quote = await ctx.db.get(approval.proposal.quoteId);
-    if (quote && quote.companyId === ctx.companyId) {
-      const customer = await ctx.db.get(quote.customerId);
-      context.push({ label: "Quote", value: `Q-${quote.number}, version ${approval.proposal.version} for ${customer?.name ?? "a prospect"}`, ref: null });
-      context.push({ label: "Total", value: `$${(approval.proposal.totalCents / 100).toFixed(2)}`, ref: null });
-      if (quote.currentVersion !== approval.proposal.version) context.push({ label: "Changed since", value: `The quote is now at version ${quote.currentVersion}. Approving this does not send a different version.`, ref: null });
-    }
   }
   if (approval.taskId) context.push({ label: "Task", value: (await ctx.db.get(approval.taskId))?.title ?? "Task", ref: { kind: "task", id: approval.taskId } });
   const decider = approval.decidedBy ? await ctx.db.get(approval.decidedBy) : null;

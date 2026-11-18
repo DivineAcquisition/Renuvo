@@ -41,6 +41,7 @@ import { costsValidator } from "./lib/services/profit";
 import { businessSettingsOf } from "./lib/settings/business";
 import { actorLabel, changeHash, closeChange, createDraft, STALE_DRAFT, submitDraft, writeDraft } from "./lib/services/workflow";
 import { assumptionsFor, emptyContext } from "./lib/services/setup";
+import { applyPropertyPrice, dayWords, extrasView, ownPricesFor, propertyName, propertyPriceProblem, untilWords } from "./lib/services/propertyPrices";
 import { startSetupResearch } from "./lib/services/researchStart";
 
 type Ctx = QueryCtx & MemberAccess;
@@ -195,8 +196,12 @@ export const change = companyQuery({
       before: before?.spec ?? null,
       changesInWords: after ? describeChanges(before?.spec ?? null, after.spec) : [],
       prices: after ? priceComparison(before?.spec ?? null, after.spec) : [],
-      /** The live version moved since this was submitted, so publishing it would overwrite someone else's change. */
-      liveMoved: open && service.publishedVersion !== row.fromVersion,
+      /** The live version moved since this was submitted, so publishing it would overwrite someone else's change. A property's own price does not follow the catalog. */
+      liveMoved: open && row.kind !== "property_price" && service.publishedVersion !== row.fromVersion,
+      /** A property's own price: what it proposes, against the property's current price and the service's. */
+      propertyPrice: row.kind === "property_price" ? await proposedPriceView(ctx, row, service, open) : null,
+      /** A catalog change: the properties that have their own price for this service, which keep it. */
+      ownPrices: row.kind === "publish" ? await ownPricesFor(ctx, ctx.companyId, service._id) : [],
       /** The draft was edited after this was submitted. */
       draftMoved: open && row.kind === "publish" && row.draftRevision !== undefined && draft !== null && draft.revision !== row.draftRevision,
       canPublish: isOwner(ctx.role),
@@ -416,7 +421,7 @@ export const requestArchive = managerMutation({
     if (restore && !service.publishedVersionId) throw userError("This service was never live.");
     const reason = args.reason.trim().slice(0, 1000);
     if (!reason) throw userError("Say why.");
-    for (const change of await openChanges(ctx, ctx.companyId, service._id)) if (change.kind !== "publish") await closeChange(ctx, change, "superseded", "A newer request replaced it.");
+    for (const change of await openChanges(ctx, ctx.companyId, service._id)) if (change.kind === "archive" || change.kind === "restore") await closeChange(ctx, change, "superseded", "A newer request replaced it.");
     const now = Date.now();
     const kind = restore ? "restore" : "archive";
     const changeId = await ctx.db.insert("serviceChanges", {
@@ -486,6 +491,12 @@ async function publishOrSchedule(ctx: WriteCtx, change: Doc<"serviceChanges">): 
 
 async function refuseIfMoved(ctx: WriteCtx, change: Doc<"serviceChanges">) {
   const service = await ownedService(ctx, ctx.companyId, change.serviceId);
+  // A property's own price keeps its price when the catalog moves (the owner's decision), so only the property's own price is checked.
+  if (change.kind === "property_price") {
+    const problem = await propertyPriceProblem(ctx, change);
+    if (problem) throw userError(`${problem} Return this proposal and propose the price again from the property's current one.`);
+    return;
+  }
   if (service.publishedVersion !== change.fromVersion) {
     await closeChange(ctx, change, "returned", "The live version changed after this was submitted. Review the newer live version first.");
     throw userError("The live version changed after this was submitted, so this change was returned. Submit it again from the draft.");
@@ -503,6 +514,15 @@ async function refuseIfMoved(ctx: WriteCtx, change: Doc<"serviceChanges">) {
 async function applyChange(ctx: MutationCtx, change: Doc<"serviceChanges">, actor: Actor, memberForChecklist: Id<"members">) {
   const service = (await ctx.db.get(change.serviceId))!;
   const now = Date.now();
+  if (change.kind === "property_price") {
+    const priceId = await applyPropertyPrice(ctx, change, memberForChecklist);
+    await ctx.db.patch(change._id, { state: "published", publishedAt: now, publishedBy: actor, updatedAt: now, scheduledFunctionId: undefined });
+    for (const other of await openChanges(ctx, change.companyId, service._id)) {
+      if (other._id !== change._id && other.kind === "property_price" && other.propertyPrice?.propertyId === change.propertyPrice?.propertyId) await closeChange(ctx, other, "superseded", "Another price for this property was approved first.");
+    }
+    await recordEvent(ctx, { companyId: change.companyId, type: "service.property_price_approved", actor, subject: { table: "propertyPrices", id: priceId }, data: { service: service.name, changeId: change._id } });
+    return;
+  }
   if (change.kind === "publish") {
     const version = (await ctx.db.get(change.versionId!))!;
     await ctx.db.patch(service._id, { publishedVersion: version.version, publishedVersionId: version._id, publishedAt: now, status: "active", name: version.spec.name, category: version.spec.category, updatedAt: now });
@@ -514,6 +534,7 @@ async function applyChange(ctx: MutationCtx, change: Doc<"serviceChanges">, acto
   }
   await ctx.db.patch(change._id, { state: "published", publishedAt: now, publishedBy: actor, updatedAt: now, scheduledFunctionId: undefined });
   for (const other of await openChanges(ctx, change.companyId, service._id)) {
+    // Only the same kind is replaced, so a catalog change never replaces a property's own price.
     if (other._id !== change._id && other.kind === change.kind) await closeChange(ctx, other, "superseded", "Another change to this service went live first.");
   }
   await recordEvent(ctx, { companyId: change.companyId, type: change.kind === "publish" ? "service.published" : `service.${change.kind}d`, actor, subject: { table: "serviceChanges", id: change._id }, data: { version: change.version ?? null, service: service.name } });
@@ -541,7 +562,7 @@ export const publishScheduled = internalMutation({
     if (!change || change.state !== "scheduled" || change.hash !== args.hash || change.approval?.hash !== change.hash) return { published: false };
     const service = await ctx.db.get(change.serviceId);
     const draft = service ? await draftOf(ctx, change.companyId, service._id) : null;
-    const problem = !service ? "The service no longer exists." : service.publishedVersion !== change.fromVersion ? "The live version changed after this was approved." : change.kind === "publish" && draft && change.draftRevision !== undefined && draft.revision !== change.draftRevision ? "The draft was edited after this was approved." : null;
+    const problem = !service ? "The service no longer exists." : change.kind === "property_price" ? await propertyPriceProblem(ctx, change) : service.publishedVersion !== change.fromVersion ? "The live version changed after this was approved." : change.kind === "publish" && draft && change.draftRevision !== undefined && draft.revision !== change.draftRevision ? "The draft was edited after this was approved." : null;
     if (problem) {
       await ctx.db.patch(change._id, { state: "returned", closedReason: `Not published at the start date: ${problem}`, updatedAt: Date.now(), scheduledFunctionId: undefined });
       await recordEvent(ctx, { companyId: change.companyId, type: "service.schedule_failed", actor: { kind: "system" }, subject: { table: "serviceChanges", id: change._id }, data: { reason: problem } });
@@ -579,6 +600,30 @@ export const withdraw = managerMutation({
     return null;
   },
 });
+
+/** A property price change as its review shows it: the property, its customer, the price now and the price proposed. */
+async function proposedPriceView(ctx: Ctx, row: Doc<"serviceChanges">, service: Doc<"services">, open: boolean) {
+  const proposed = row.propertyPrice!;
+  const property = await ctx.db.get(proposed.propertyId);
+  const customer = property ? await ctx.db.get(property.customerId) : null;
+  const replaces = proposed.replaces ? await ctx.db.get(proposed.replaces) : null;
+  const live = await publishedSpec(ctx, service);
+  return {
+    property: property ? { id: property._id, name: propertyName(property), address: `${property.address.line1}${property.address.line2 ? `, ${property.address.line2}` : ""}, ${property.address.city} ${property.address.postalCode}` } : null,
+    customer: customer ? { id: customer._id, name: customer.name } : null,
+    baseCents: proposed.baseCents,
+    laborMinutes: proposed.laborMinutes,
+    until: proposed.until,
+    untilWords: untilWords(proposed.until),
+    untilDay: proposed.until ? dayWords(proposed.until.date) : null,
+    addedTasks: proposed.addedTasks ?? [],
+    extras: live ? extrasView(proposed.extras ?? [], live.spec) : [],
+    current: replaces ? { baseCents: replaces.baseCents, approvedAt: replaces.approvedAt, untilWords: untilWords(replaces.until), addedTasks: replaces.addedTasks ?? [], extras: live ? extrasView(replaces.extras ?? [], live.spec) : [] } : null,
+    catalog: live ? { version: live.version, summary: priceSummary(live.spec), spec: live.spec } : null,
+    /** The property's price changed since this was proposed, so approving it would overwrite that. */
+    moved: open ? (await propertyPriceProblem(ctx, row)) : null,
+  };
+}
 
 async function ownedChange(ctx: Ctx, changeId: Id<"serviceChanges">): Promise<Doc<"serviceChanges">> {
   const change = await ctx.db.get(changeId);

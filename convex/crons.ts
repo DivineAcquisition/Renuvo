@@ -39,12 +39,14 @@ crons.interval("recruiter removes applicant details past retention", { hours: 24
 
 // Company Chat: a response whose worker stopped reporting is closed honestly instead of spinning forever.
 crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.chatRuns.sweep, {});
-// Sales: runs that never finished, overdue next steps, expired quotes and holds, and reminders whose timer was lost.
-crons.interval("sales picks up what a missed trigger left", { minutes: 5 }, internal.salesAgent.sweep, {});
 
 // Agreements: signing requests past their expiry are closed, renewal dates open a task for a person (never a renewal), and abandoned uploads are removed.
 crons.interval("expire agreement signing requests", { minutes: 30 }, internal.agreementSigning.sweep, {});
 crons.daily("remind about agreement renewals and expiries", { hourUTC: 13, minuteUTC: 11 }, internal.agreementRenewals.sweep, {});
+// Service plans keep their visits booked about four weeks ahead.
+crons.daily("service plans book their visits ahead", { hourUTC: 10, minuteUTC: 47 }, internal.servicePlans.bookAll, {});
+// Property prices: two weeks before a review or end date the Owner gets a task; past an end date it is marked ended.
+crons.daily("remind about property price review and end dates", { hourUTC: 12, minuteUTC: 23 }, internal.propertyPrices.sweep, {});
 crons.daily("remove abandoned agreement uploads", { hourUTC: 8, minuteUTC: 29 }, internal.agreementFiles.cleanup, {});
 // Creative Studio: a generation whose worker went quiet is followed again (video) or reported (image), never resent.
 crons.interval("creative studio follows up quiet generations", { minutes: 5 }, internal.media.sweep, {});
@@ -63,5 +65,15 @@ crons.daily("renew gmail push watches", { hourUTC: 9, minuteUTC: 41 }, internal.
 // Cleaners: routine follow-ups (each re-checked before it goes) and requirements that pass their validity.
 crons.interval("cleaners follow-ups", { minutes: 30 }, internal.cleanerFollowUps.sweep, {});
 crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.requirements.expireDue, {});
+// Booking Experiences: holds that ended, and sessions customers walked away from.
+crons.interval("bookings let go of ended holds", { minutes: 5 }, internal.bookingOps.sweep, {});
+
+// Sales: lapsed holds and Dispatch handoffs that need another try; recurring plans made to their horizon.
+crons.interval("sales bookings sweep", { minutes: 10 }, internal.bookings.sweep, {});
+crons.interval("recurring plans make their visits", { hours: 6 }, internal.plans.sweep, {});
+crons.interval("proposals past their expiry", { hours: 1 }, internal.proposals.sweep, {});
+crons.interval("sales follow-up reminders", { minutes: 30 }, internal.pipeline.sweep, {});
+// The Sales agent: runs that never finished, overdue next steps, expired quotes, and reminders whose timer was lost.
+crons.interval("sales agent picks up what a missed trigger left", { minutes: 5 }, internal.salesAgent.sweep, {});
 
 export default crons;

@@ -9,6 +9,7 @@
  * A plain-words request to stop ("stop texting me") stops texts too, and a person checks it.
  * Anything else from someone on record becomes a task for a person to read. Nothing acts on its words.
  */
+import { salesInboundSms, salesOptedOut } from "./lib/sales/inbound";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -19,8 +20,8 @@ import { activeSuppressions, addSuppression, currentPermission, excerpt, liftSup
 import { normalAddress, recipientsAt, type RecipientRecord } from "./lib/compliance/recipients";
 import { CATEGORIES, categoryValidator, type Recipient } from "./lib/compliance/schema";
 import type { Actor } from "./lib/events";
+import { clientsAtPhone, fileClientText } from "./lib/clients/conversations";
 import { queueReply } from "./lib/messaging/outbox";
-import { salesInboundSms, salesOptedOut } from "./lib/sales/inbound";
 import { allow } from "./lib/rateLimit";
 import type { Agent } from "./lib/statuses";
 import { liveTaskByKey, openTask, setTaskState } from "./lib/taskState";
@@ -99,12 +100,25 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
     const kind = classify(args.body);
     // Not a keyword. Someone on record who texts the company's number is answered by a person, and a
     // cleaner's text is also read against their own visits (dispatchReplies.ts).
+    // Kept in the client's conversation when the number is a client's or one of its contacts'.
+    const file = async (kind: Doc<"inboundMessages">["kind"], taskId?: Id<"tasks">) => fileClientText(ctx, { companyId, from, excerpt: excerpt(args.body) ?? "", kind, at: args.receivedAt, taskId });
     const ordinary = async (): Promise<InboundResult> => {
       const known = await recipientsAt(ctx, companyId, "sms", from);
-      // A prospect's reply, or a first text asking about service, is Sales's conversation (convex/lib/sales/inbound.ts).
-      // Everything else goes where it always went: a task for a person.
-      if (await salesInboundSms(ctx, { companyId, from, body: args.body, receivedAt: args.receivedAt, known, providerId: args.providerId })) return { kind: "ignored", replied: false };
-      if (known.length > 0) await replyTask(ctx, companyId, from, known, args.body, args.receivedAt);
+      const clients = await clientsAtPhone(ctx, companyId, from);
+      // A prospect's reply, or a first text asking about service, is the Sales agent's conversation
+      // (convex/lib/sales/inbound.ts). It is still kept on the client's record. Everything else goes where it
+      // always went: a task for a person.
+      // A number that is only a client's contact (on no record of its own) is the client's conversation, never a new inquiry.
+      const contactOnly = known.length === 0 && clients.length > 0;
+      if (!contactOnly && (await salesInboundSms(ctx, { companyId, from, body: args.body, receivedAt: args.receivedAt, known, providerId: args.providerId }))) {
+        if (clients.length > 0) await fileClientText(ctx, { companyId, from, excerpt: excerpt(args.body) ?? "", kind: "message", at: args.receivedAt }, clients);
+        return { kind: "ignored", replied: false };
+      }
+      // A client's contact is on no record the sending policy reads, so their text is filed under the client.
+      const people: RecipientRecord[] = known.length > 0 ? known : await contactSenders(ctx, clients, from);
+      if (people.length > 0) await replyTask(ctx, companyId, from, people, args.body, args.receivedAt);
+      const task = await liveTaskByKey(ctx, companyId, `inbound.reply:${from}`);
+      await fileClientText(ctx, { companyId, from, excerpt: excerpt(args.body) ?? "", kind: "message", at: args.receivedAt, taskId: task?._id }, clients);
       return { kind: "ignored", replied: false };
     };
     if (kind === "ignored") return ordinary();
@@ -120,8 +134,9 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
       for (const person of people) {
         await withdrawChannel(ctx, { companyId, recipient: asRecipient(person), channel: "sms", source: "text_reply", recordedBy: byRecipient, stopKeyword: true, evidence: "Replied STOP.", actor: SYSTEM, at });
       }
-      // One confirmation per STOP that started a suppression. A second STOP while it stands gets no new answer.
+      await file("opt_out");
       await salesOptedOut(ctx, companyId, people);
+      // One confirmation per STOP that started a suppression. A second STOP while it stands gets no new answer.
       let replied = false;
       if (created) {
         const message = await reply(ctx, companyId, from, `You will no longer receive texts from ${sender}. Reply START to resubscribe.`, "stop", `reply:stop:${suppression._id}`);
@@ -133,6 +148,7 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
     if (kind === "help") {
       const reach = [profile.identity.supportPhone ? `call ${profile.identity.supportPhone}` : null, profile.identity.supportEmail ? `email ${profile.identity.supportEmail}` : null].filter(Boolean).join(" or ");
       const body = `${sender}: ${reach ? `for help, ${reach}.` : "for help, contact the business directly."} Reply STOP to stop texts.`;
+      await file("help");
       const message = await reply(ctx, companyId, from, body, "help", `reply:help:${from}:${at}`);
       return { kind, replied: message !== null && message.status !== "not_sent" };
     }
@@ -150,6 +166,7 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
           await setPermission(ctx, { companyId, recipient: asRecipient(person), channel: "sms", category, status: "granted", source: "text_reply", evidence: "Replied START.", recordedBy: byRecipient, at, actor: SYSTEM });
         }
       }
+      await file("opt_in");
       const message = await reply(ctx, companyId, from, `You will receive texts from ${sender} again. Reply STOP to stop.`, "start", `reply:start:${stops[0]._id}`);
       return { kind, replied: message !== null && message.status !== "not_sent" };
     }
@@ -159,10 +176,22 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
     for (const person of people) {
       await withdrawChannel(ctx, { companyId, recipient: asRecipient(person), channel: "sms", source: "text_reply", recordedBy: byRecipient, evidence: "Asked in their own words to stop texts.", actor: SYSTEM, at });
     }
-    await salesOptedOut(ctx, companyId, people);
     await reviewTask(ctx, companyId, from, people, suppression);
+    await salesOptedOut(ctx, companyId, people);
+    await file("opt_out", (await liveTaskByKey(ctx, companyId, `consent.review:${from}`))?._id);
     return { kind, replied: false };
   }
+}
+
+/** The people behind a contact's number, as the client they are a contact for. */
+async function contactSenders(ctx: MutationCtx, clients: Awaited<ReturnType<typeof clientsAtPhone>>, from: string): Promise<RecipientRecord[]> {
+  const out: RecipientRecord[] = [];
+  for (const client of clients) {
+    if (!client.contact) continue;
+    const customer = await ctx.db.get(client.customerId);
+    if (customer) out.push({ kind: "customer", id: customer._id, name: `${client.contact.name} at ${customer.name}`, phone: from, email: null });
+  }
+  return out;
 }
 
 /**

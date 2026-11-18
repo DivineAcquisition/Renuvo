@@ -20,6 +20,7 @@ export function areaWord(unit: AreaUnit, count = 2): string {
 export const SCHEDULE_LABELS: Record<Schedule, string> = {
   every_7_days: "Every 7 days",
   every_14_days: "Every 14 days",
+  every_28_days: "Every 28 days",
   twice_per_month: "Twice per calendar month",
   once_per_month: "Once per calendar month",
 };
@@ -40,3 +41,6 @@ export function minutesWords(minutes: number): string {
   const m = rounded - h * 60;
   return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
+
+/** A phrase such as "Ends after June 30, 2027" inside a sentence: only the first letter changes. */
+export const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);

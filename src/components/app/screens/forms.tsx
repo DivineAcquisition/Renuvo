@@ -14,9 +14,10 @@ import { defaultInput, JobInputs, QuoteLines } from "@/components/app/services/p
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { quote as runQuote, type QuoteInput } from "../../../../convex/lib/services/engine";
+import { quote as runQuote, type PropertyExtra, type QuoteInput } from "../../../../convex/lib/services/engine";
 import type { Spec } from "../../../../convex/lib/services/spec";
 import { visitScope } from "../../../../convex/lib/services/operations";
+import { lowerFirst } from "../../../../convex/lib/services/words";
 
 const KINDS = [
   { id: "home", label: "Home" },
@@ -289,17 +290,24 @@ function ServiceField({ value, onChoose, onLegacy }: { value: string; onChoose: 
 }
 
 /** A visit for a customer at one of their properties, on the company's clock. */
-export function NewVisitForm({ onDone }: { onDone: () => void }) {
+export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?: { customerId?: string; propertyId?: string } }) {
   const { companyId, timezone } = useCompany();
   const customers = useQuery(api.customers.list, { companyId });
   const create = useMutation(api.jobs.create);
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "", crew: "1", arrival: "0", deadlineDate: "", deadlineTime: "", instructions: "" });
+  const [form, setForm] = useState({ customerId: initial?.customerId ?? "", propertyId: initial?.propertyId ?? "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "", crew: "1", arrival: "0", deadlineDate: "", deadlineTime: "", instructions: "" });
   /** A service from Services & Pricing, the job's facts for its price, and whether the person typed their own price. */
   const [service, setService] = useState<Live | null>(null);
   const [facts, setFacts] = useState<QuoteInput>({});
   const [typedPrice, setTypedPrice] = useState(false);
-  const priced = useMemo(() => (service ? runQuote(service.spec, { ...facts, ...(form.date ? { date: form.date } : {}) }) : null), [service, facts, form.date]);
+  // The property's own price, when the Owner approved one for this service. The server looks it up again when the visit is made.
+  const own = useQuery(api.propertyPrices.forVisit, service && form.propertyId ? { companyId, serviceKey: service.key, propertyId: form.propertyId as Id<"properties">, ...(form.date ? { day: form.date } : {}) } : "skip");
+  const ownPrice = own?.price ?? null;
+  const [ownId, ownBase, ownMinutes, ownExtras] = [ownPrice?.id, ownPrice?.baseCents, ownPrice?.laborMinutes, JSON.stringify(ownPrice?.extras ?? [])];
+  const propertyPrice = useMemo(() => (ownId !== undefined && ownBase !== undefined ? { id: ownId, baseCents: ownBase, laborMinutes: ownMinutes ?? null, extras: JSON.parse(ownExtras) as PropertyExtra[] } : undefined), [ownId, ownBase, ownMinutes, ownExtras]);
+  const priced = useMemo(() => (service ? runQuote(service.spec, { ...facts, ...(form.date ? { date: form.date } : {}), ...(propertyPrice ? { propertyPrice } : {}) }) : null), [service, facts, form.date, propertyPrice]);
+  // How long the visit runs: the engine's time for this job (a property's own cleaner time included), else what was chosen.
+  const visitMinutes = service && priced && priced.time.elapsedMinutes > 0 ? priced.time.elapsedMinutes : form.duration;
   const engineTotal = priced && (priced.outcome === "firm" || priced.outcome === "estimate") ? priced.totalCents : null;
   const pick = (next: Live | null) => {
     setService(next);
@@ -314,7 +322,7 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const setJobFacts = (input: QuoteInput) => {
     setFacts(input);
     if (!service) return;
-    const next = runQuote(service.spec, input);
+    const next = runQuote(service.spec, { ...input, ...(propertyPrice ? { propertyPrice } : {}) });
     setForm((current) => ({ ...current, duration: next.time.elapsedMinutes || current.duration, crew: String(next.time.crewSize) }));
   };
   /** Fills the fields from the template. Everything stays editable; the visit keeps a copy of the template as it is now. */
@@ -328,8 +336,8 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
   const startAt = (from: string) =>
     setForm((current) => {
       const [hours, minutes] = from.split(":").map(Number);
-      if (!current.duration || Number.isNaN(hours) || Number.isNaN(minutes)) return { ...current, from };
-      const end = hours * 60 + minutes + current.duration;
+      if (!visitMinutes || Number.isNaN(hours) || Number.isNaN(minutes)) return { ...current, from };
+      const end = hours * 60 + minutes + visitMinutes;
       return end < 24 * 60 ? { ...current, from, to: `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}` } : { ...current, from };
     });
   const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -415,6 +423,15 @@ export function NewVisitForm({ onDone }: { onDone: () => void }) {
       {service && priced ? (
         <div className="grid gap-3 rounded-xl border border-border bg-muted/20 p-3">
           <p className="text-sm font-medium text-strong">The job, for its price</p>
+          {ownPrice ? (
+            <p className="rounded-lg border border-brand-500/25 bg-brand-500/[0.06] px-3 py-2 text-sm text-strong">
+              This property has its own base price: <span className="font-medium tabular-nums">${(ownPrice.baseCents / 100).toFixed(2)}</span>
+              {ownPrice.untilWords ? ` (${lowerFirst(ownPrice.untilWords)})` : ""}. {ownPrice.extras?.length ? "Some extras are priced their own way here; discounts" : "Extras, discounts"} and the minimum still follow the service.
+              {ownPrice.addedTasks.length ? <span className="mt-1 block text-muted-foreground">Also done here, added to the scope and checklist when the visit is made: {ownPrice.addedTasks.join("; ")}.</span> : null}
+            </p>
+          ) : own?.endsBefore ? (
+            <p className="text-sm text-muted-foreground">This property&apos;s own price ends after {own.endsBefore}, so this visit uses the service&apos;s price.</p>
+          ) : null}
           <JobInputs spec={service.spec} input={facts} onInput={setJobFacts} compact />
           {!typedPrice ? <QuoteLines result={priced} /> : null}
         </div>

@@ -152,13 +152,14 @@ export const SHARED_ITEMS: readonly NavItem[] = [
   },
   {
     id: "customers",
-    label: "Customers & Properties",
+    label: "Clients & Properties",
     section: "shared",
-    purpose: "Customers and the properties they have service at.",
-    path: `${APP_ROOT}/customers`,
+    purpose: "The company's clients, their properties, the services they have, and everything about each relationship.",
+    path: `${APP_ROOT}/clients`,
+    alsoAt: [`${APP_ROOT}/customers`],
     availability: LIVE,
     minimumRole: "office",
-    accessNote: "A list and an add form so far. A page for each customer, with their properties and service history, is still to build.",
+    accessNote: "Everyone reads and adds clients. Access instructions and private notes are for Owners and Managers. Archiving is the Owner's or a Manager's. Billing is the Owner's, as in Finance.",
   },
   {
     id: "cleaners",
@@ -233,6 +234,14 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 ];
 
 /** Pages inside Services & Pricing. The first four are its tabs; the rest are reached from them. They have no sidebar entry of their own. */
+/** Pages inside Sales that are not tabs: the booking and proposal workspace and its entry point. */
+export const SALES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/agents/sales/new`, label: "New booking or proposal", purpose: "Starts a workspace draft from Sales, a customer or Dispatch, with what they know filled in." },
+  { path: `${APP_ROOT}/agents/sales/book/[draftId]`, label: "Booking workspace", purpose: "Book one-time or recurring service, or prepare a commercial, office or short-term rental proposal." },
+  { path: `${APP_ROOT}/agents/sales/setups/[setupId]`, label: "Service setup", purpose: "After a proposal is accepted: the agreement, billing, and each site's access and start." },
+  { path: `${APP_ROOT}/agents/sales/plans/[planId]`, label: "Recurring plan", purpose: "One recurring plan: upcoming visits, staffing, billing, agreement, exceptions and history, and changes to a visit or the series." },
+];
+
 export const SERVICES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/services/studio`, label: "Pricing Studio", purpose: "Test example jobs against live or draft services: price, time, crew, costs and what remains." },
   { path: `${APP_ROOT}/services/research`, label: "Research & Insights", purpose: "Research briefs: what was found, what is comparable, what is uncertain, with every source." },
@@ -250,6 +259,11 @@ export const FINANCE_PAGES: readonly { path: string; label: string; purpose: str
   { path: `${APP_ROOT}/finance/setup`, label: "Payments setup", purpose: "The company's own Stripe account, its invoice settings (tax, terms, numbering), pay tiers, tips and expense categories." },
 ];
 
+/** Pages inside Sales › Booking Forms. The list links to each experience's builder. */
+export const BOOKING_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/agents/sales/booking-forms/[id]`, label: "Booking experience", purpose: "One booking experience: its live preview, its words, look and behavior, test bookings, versions and publishing." },
+];
+
 /** Pages inside Cleaners. They have no sidebar entry of their own: the directory links to them. */
 export const CLEANER_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/cleaners/[id]/[[...section]]`, label: "Cleaner", purpose: "One person's profile, each section at its own address: overview, availability and jobs, onboarding and documents, skills and equipment, performance and coaching, pay, and activity." },
@@ -257,6 +271,11 @@ export const CLEANER_PAGES: readonly { path: string; label: string; purpose: str
   { path: `${APP_ROOT}/cleaners/onboarding`, label: "Onboarding checklist", purpose: "What each kind of worker needs, what an unmet item holds up, who reviews it and how long it stays valid." },
   { path: `${APP_ROOT}/cleaners/crews`, label: "Crews", purpose: "Permanent crews with a lead, the team for each upcoming job, and a crew builder that checks each person for one job." },
   { path: `${APP_ROOT}/cleaners/subcontractors`, label: "Subcontractor companies", purpose: "Companies that supply their own cleaners: their contact, their workers, and the contact's access to their own workers." },
+];
+
+/** Pages inside Clients & Properties. The directory links to them. */
+export const CLIENT_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/clients/[id]/[[...section]]`, label: "Client", purpose: "One client: Overview, Properties (and each property at its own address), Services, Conversations, Documents and Billing." },
 ];
 
 /** Pages that belong to Chat: one conversation, and the searchable history of every chat. They have no sidebar entry of their own. */
@@ -456,7 +475,8 @@ export const AGENTS: readonly AgentNav[] = [
  */
 export const EXISTING_ROUTES: readonly { pattern: string; today: string; becomes: string }[] = [
   { pattern: `${APP_ROOT}/decisions`, today: "Redirects to Approvals.", becomes: "Removed once old links have had time to move." },
-  { pattern: `${APP_ROOT}/records`, today: "Redirects to Customers & Properties.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/records`, today: "Redirects to Clients & Properties.", becomes: "Removed once old links have had time to move." },
+  { pattern: `${APP_ROOT}/customers`, today: "Redirects to Clients & Properties (renamed November 18, 2026), keeping its search.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/team`, today: "Redirects to Settings, where agent permissions and pause now live.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/schedule`, today: "Redirects to Dispatch › Schedule.", becomes: "Removed once old links have had time to move." },
   { pattern: `${APP_ROOT}/settings/services`, today: "Redirects to Services & Pricing (moved out of Settings on November 16, 2026).", becomes: "Removed once old links have had time to move." },

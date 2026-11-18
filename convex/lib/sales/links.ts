@@ -1,18 +1,14 @@
 /**
- * Quote links: how a customer opens one quote to read it, accept it, decline it or ask a question,
- * without signing in.
+ * Customer links for Sales: a proposal, a signing request, an assessor's findings page and a quote.
  *
- * The token is `<public id>.<signature>`, like pay links (convex/lib/finance/payLinks.ts): the public id
- * is 128 random bits stored on the quote, the signature an HMAC of it with ACTION_LINK_SECRET under
- * words of its own, so a quote link never opens a pay page or a cleaner page. The token is never stored.
- * Revoking the quote closes what the link can do; with no secret set, no link exists.
- *
- * A form's address is different on purpose: a published form is public, so it is found by its public id
- * alone and carries no signature.
+ * The same pattern as pay links (convex/lib/finance/payLinks.ts): the token is `<public id>.<signature>`,
+ * the public id 128 random bits stored on the row, the signature an HMAC of it with ACTION_LINK_SECRET
+ * under words of each kind's own, so one kind of link never opens another kind of page. The token is
+ * never stored and never written to events. With no secret set, no link exists.
  */
-import type { Doc } from "../../_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { siteOrigin } from "../dispatch/links";
+
+export type LinkKind = "proposal" | "sign" | "assess" | "quote";
 
 const encoder = new TextEncoder();
 
@@ -27,13 +23,13 @@ function secret(): string | null {
   return value && value.length >= 32 ? value : null;
 }
 
-export function quoteLinksConfigured(): boolean {
+export function salesLinksConfigured(): boolean {
   return secret() !== null;
 }
 
-async function sign(publicId: string, key: string): Promise<string> {
+async function sign(kind: LinkKind, publicId: string, key: string): Promise<string> {
   const imported = await crypto.subtle.importKey("raw", encoder.encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return base64url(new Uint8Array(await crypto.subtle.sign("HMAC", imported, encoder.encode(`selestial.quote.v1:${publicId}`))));
+  return base64url(new Uint8Array(await crypto.subtle.sign("HMAC", imported, encoder.encode(`selestial.${kind}.v1:${publicId}`))));
 }
 
 function same(a: string, b: string): boolean {
@@ -43,36 +39,29 @@ function same(a: string, b: string): boolean {
   return diff === 0;
 }
 
-export function newPublicId(): string {
+export function newLinkId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return base64url(bytes);
 }
 
-export async function quoteToken(quote: Pick<Doc<"salesQuotes">, "publicId">): Promise<string | null> {
+export async function linkToken(kind: LinkKind, publicId: string | undefined): Promise<string | null> {
   const key = secret();
-  return key && quote.publicId ? `${quote.publicId}.${await sign(quote.publicId, key)}` : null;
+  return key && publicId ? `${publicId}.${await sign(kind, publicId, key)}` : null;
 }
 
-/** The quote a token names, or null. A wrong signature, an unknown id, a quote never sent and a missing secret look the same. */
-export async function quoteForToken(ctx: QueryCtx | MutationCtx, token: string): Promise<Doc<"salesQuotes"> | null> {
+/** The public id a token names, or null. A wrong signature, a malformed token and a missing secret look the same. */
+export async function publicIdFor(kind: LinkKind, token: string): Promise<string | null> {
   const key = secret();
   if (!key || token.length > 200) return null;
   const dot = token.indexOf(".");
   if (dot <= 0) return null;
   const publicId = token.slice(0, dot);
-  if (!same(token.slice(dot + 1), await sign(publicId, key))) return null;
-  const quote = await ctx.db
-    .query("salesQuotes")
-    .withIndex("by_publicId", (q) => q.eq("publicId", publicId))
-    .unique();
-  return quote && quote.sentVersion !== undefined ? quote : null;
+  return same(token.slice(dot + 1), await sign(kind, publicId, key)) ? publicId : null;
 }
 
-export function quoteUrl(token: string): string {
-  return `${siteOrigin()}/c/quote/${token}`;
-}
+const PATHS: Record<LinkKind, string> = { proposal: "/c/proposal/", sign: "/c/sign/", assess: "/c/assess/", quote: "/c/quote/" };
 
-export function formUrl(publicId: string): string {
-  return `${siteOrigin()}/c/form/${publicId}`;
+export function linkUrl(kind: LinkKind, token: string): string {
+  return `${siteOrigin()}${PATHS[kind]}${token}`;
 }

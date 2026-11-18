@@ -1,262 +1,160 @@
 /**
- * Whether the company could do a job at a time, before any job exists. The rules are Dispatch's own
- * (convex/lib/dispatch/eligibility.ts `assess`): ready for work, every requirement met, the skills, the
- * area, said they can work then, no time off, no other job overlapping or inside the time kept between
- * jobs. Sales applies them to a time instead of a job, then takes away what is already reserved for
- * other prospects.
+ * Capacity: can the company take this visit at this time, and holding it while a booking waits.
  *
- * Four different things, never confused:
- *   open time      enough eligible cleaners are free then (this file's answer);
- *   reserved time  a hold was placed for one opportunity, for a limited time (salesHolds);
- *   booked         a job exists (booking.ts makes it, after checking this again);
- *   crew confirmed a cleaner accepted the job. That is Dispatch's, and Sales never says it.
+ * A slot fits when enough ready cleaners are free for the whole visit after subtracting the crew already
+ * promised in the same hours: visits still waiting for cleaners, and other bookings' active holds. The
+ * check and the hold are written in one Convex transaction, so two people booking the last crew at the
+ * same moment cannot both get it: one transaction is retried, sees the other's hold, and is refused.
+ *
+ * A hold is a reservation of crew for a span, not an assignment: no cleaner is told or promised anything.
+ * It lapses at `expiresAt`. A payment that arrives after a hold lapsed does not book the visit: the
+ * booking checks capacity again and, if the slot is gone, goes back to staff as a conflict with the money
+ * kept on the invoice (see convex/bookings.ts).
  */
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
-import { localParts, overlaps, type Span } from "../availability";
-import { companyFacts, readinessOf } from "../cleaners/records";
-import { exceptionSpan } from "../cleaners/schedule";
-import { assess, type CleanerFacts, type ExclusionCode } from "../dispatch/eligibility";
-import { requiredCrew } from "../dispatch/crew";
-import { heldSpans } from "../dispatch/facts";
-import { dispatchSettings } from "../dispatch/settings";
-import { businessSettingsOf, normalizePostalCode } from "../settings/business";
+import { localParts } from "../availability";
+import { whoIsFree } from "../cleaners/free";
+import { businessSettingsOf } from "../settings/business";
+import { ACTIVE_ASSIGNMENT } from "../statuses";
 import { addLocalDays, startOfLocalDay } from "../time";
-import { salesSettings } from "./settings";
 
-type Ctx = QueryCtx | MutationCtx;
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-
-export type Need = { serviceName: string; skills: string[]; crew: number; postalCode: string };
-
-export type SlotAnswer = {
-  ok: boolean;
-  /** Eligible cleaners free then, after other prospects' reserved time is taken away. */
-  free: number;
-  needed: number;
-  /** Why not, in words for a person. Empty when ok. */
-  reasons: string[];
-  checkedAt: number;
+export type CapacityAnswer = {
+  state: "fits" | "tight" | "full" | "closed" | "unknown";
+  /** Ready cleaners free for the whole span, before other promises. */
+  freeCleaners: number;
+  /** Crew already promised in overlapping hours: waiting visits and other bookings' holds. */
+  promised: number;
+  crew: number;
+  /** Plain words for the person booking. */
+  why: string;
+  blockers: string[];
 };
 
-type Loaded = {
-  company: Doc<"companies">;
-  cleaners: { doc: Doc<"cleaners">; windows: CleanerFacts["windows"]; timeOff: Span[]; held: Span[]; off: Span[]; extra: Span[] }[];
-  blockers: (cleaner: Doc<"cleaners">, at: number) => string[];
-  holds: Doc<"salesHolds">[];
-  /** Visits already booked that still need cleaners: the places nobody has been offered or accepted yet. */
-  unstaffed: { span: Span; places: number }[];
-};
+const HOLD_MINUTES_DEFAULT = 60 * 24;
 
-/** Reads once what any number of times can then be checked against: every ready cleaner's hours, time off and jobs, and the time already reserved. */
-export async function loadCapacity(ctx: Ctx, company: Doc<"companies">, need: Pick<Need, "serviceName" | "skills">, range: Span): Promise<Loaded> {
-  const cleaners = await ctx.db
-    .query("cleaners")
-    .withIndex("by_company_status", (q) => q.eq("companyId", company._id).eq("status", "ready"))
-    .take(200);
-  const known = await companyFacts(ctx, company);
-  const fromDay = localParts(range.startsAt, company.timezone).day;
-  const toDay = localParts(range.endsAt, company.timezone).day;
-  const out: Loaded["cleaners"] = [];
-  for (const doc of cleaners) {
-    const windows = known.windows.get(doc._id) ?? [];
-    const timeOff = await ctx.db
-      .query("timeOff")
-      .withIndex("by_company_cleaner_end", (q) => q.eq("companyId", company._id).eq("cleanerId", doc._id).gt("endsAt", range.startsAt))
-      .take(100);
-    const exceptions = await ctx.db
-      .query("availabilityExceptions")
-      .withIndex("by_company_cleaner_date", (q) => q.eq("companyId", company._id).eq("cleanerId", doc._id).gte("date", fromDay).lte("date", toDay))
-      .take(60);
-    out.push({
-      doc,
-      windows: windows.map((row) => ({ weekday: row.weekday, startMinute: row.startMinute, endMinute: row.endMinute })),
-      timeOff: timeOff.map((row) => ({ startsAt: row.startsAt, endsAt: row.endsAt })),
-      // No job exists yet, so nothing is left out of what the cleaner already holds.
-      held: await heldSpans(ctx, company._id, doc._id, "" as Id<"jobs">),
-      off: exceptions.filter((row) => row.kind === "unavailable").map((row) => exceptionSpan(row, company.timezone)),
-      extra: exceptions.filter((row) => row.kind === "available").map((row) => exceptionSpan(row, company.timezone)),
-    });
+export async function checkCapacity(
+  ctx: QueryCtx | MutationCtx,
+  company: Doc<"companies">,
+  span: { startsAt: number; endsAt: number },
+  crew: number,
+  ignoreBooking?: Id<"bookings">,
+): Promise<CapacityAnswer> {
+  const tz = company.timezone;
+  const settings = businessSettingsOf(company);
+  const blockers: string[] = [];
+  if (settings.hours.length) {
+    const start = localParts(span.startsAt, tz);
+    const end = localParts(span.endsAt, tz);
+    const fits = start.day === end.day && settings.hours.some((w) => w.weekday === start.weekday && w.startMinute <= start.minute && end.minute <= w.endMinute);
+    if (!fits) blockers.push("This time is outside the company's operating hours.");
   }
-  const holds = await ctx.db
-    .query("salesHolds")
-    .withIndex("by_company_start", (q) => q.eq("companyId", company._id).gte("startsAt", range.startsAt - 24 * HOUR).lte("startsAt", range.endsAt))
-    .take(300);
-  // A booked visit with no cleaner yet will need one of these same people. Counting only accepted work would let
-  // Sales sell a time that Dispatch has not staffed yet.
+  if (span.startsAt < Date.now()) blockers.push("This time has already passed.");
+  if (blockers.length) return { state: "closed", freeCleaners: 0, promised: 0, crew, why: blockers[0]!, blockers };
+
+  const free = await whoIsFree(ctx, company, span);
+  const freeCleaners = free.filter((row) => row.available && row.ready).length;
+
+  // Crew still owed to visits in overlapping hours that are not fully staffed.
+  const dayStart = startOfLocalDay(span.startsAt, tz);
   const jobs = await ctx.db
     .query("jobs")
-    .withIndex("by_company_start", (q) => q.eq("companyId", company._id).gte("startsAt", range.startsAt - 24 * HOUR).lte("startsAt", range.endsAt))
-    .take(500);
-  const unstaffed: Loaded["unstaffed"] = [];
+    .withIndex("by_company_start", (q) => q.eq("companyId", company._id).gte("startsAt", dayStart - 12 * 3_600_000).lt("startsAt", span.endsAt))
+    .take(300);
+  let promised = 0;
   for (const job of jobs) {
-    if (job.status !== "scheduled") continue;
+    if (job.status !== "scheduled" || job.endsAt <= span.startsAt || job.startsAt >= span.endsAt) continue;
     const assignments = await ctx.db
       .query("assignments")
       .withIndex("by_company_job", (q) => q.eq("companyId", company._id).eq("jobId", job._id))
-      .take(50);
-    const places = requiredCrew(job) - assignments.filter((row) => row.status === "offered" || row.status === "accepted").length;
-    if (places > 0) unstaffed.push({ span: { startsAt: job.startsAt, endsAt: job.endsAt }, places });
+      .take(20);
+    const staffed = assignments.filter((row) => ACTIVE_ASSIGNMENT.includes(row.status)).length;
+    promised += Math.max(0, (job.requiredCrew ?? 1) - staffed);
   }
-  const service = { name: need.serviceName, skills: need.skills };
-  return { company, cleaners: out, blockers: (cleaner, at) => readinessOf(cleaner, known, company, at, service).blockers.map((view) => view.label), holds, unstaffed };
+  promised += await heldCrew(ctx, company, span, ignoreBooking);
+
+  if (free.length === 0) return { state: "unknown", freeCleaners: 0, promised, crew, why: "No cleaners have set their availability yet, so capacity can't be checked.", blockers: ["Cleaners' availability is not set up."] };
+  const left = freeCleaners - promised;
+  if (left >= crew + 1) return { state: "fits", freeCleaners, promised, crew, why: `${left} cleaner${left === 1 ? "" : "s"} free after other commitments; this visit needs ${crew}.`, blockers: [] };
+  if (left >= crew) return { state: "tight", freeCleaners, promised, crew, why: `Exactly ${left} cleaner${left === 1 ? "" : "s"} free after other commitments; this visit needs ${crew}.`, blockers: [] };
+  const why = left <= 0 ? "No cleaners are free for this time after other commitments." : `Only ${left} cleaner${left === 1 ? "" : "s"} free after other commitments; this visit needs ${crew}.`;
+  return { state: "full", freeCleaners, promised, crew, why, blockers: [why] };
 }
 
-const WHY: Partial<Record<ExclusionCode, (count: number) => string>> = {
-  already_booked: (count) => `${count} already ${count === 1 ? "has" : "have"} a job then`,
-  too_close: (count) => `${count} ${count === 1 ? "has" : "have"} another job too close to it`,
-  outside_hours: (count) => `${count} ${count === 1 ? "has" : "have"} not said they can work then`,
-  outside_area: (count) => `${count} ${count === 1 ? "does" : "do"} not work in that area`,
-  missing_skill: (count) => `${count} ${count === 1 ? "lacks" : "lack"} a skill the service needs`,
-  time_off: (count) => `${count} ${count === 1 ? "has" : "have"} time off`,
-  date_exception: (count) => `${count} said they cannot work that day`,
-  requirements: (count) => `${count} ${count === 1 ? "has" : "have"} not met what is needed before work`,
-};
-
-/** The company's own rules for a time: its area, its hours, and how much notice it asks for. Null when the time is inside them. */
-/** Why no time at all can be offered at this address, whatever the hour. Null when the company works there. */
-export function areaProblem(company: Doc<"companies">, need: Pick<Need, "postalCode">): string | null {
-  const settings = businessSettingsOf(company);
-  const code = normalizePostalCode(need.postalCode);
-  if (!code) return "The property's postal code is not known yet.";
-  if (settings.serviceAreas.length > 0 && !settings.serviceAreas.includes(code)) return `The company does not work in ${code}.`;
-  return null;
-}
-
-export function ruleProblem(company: Doc<"companies">, need: Pick<Need, "postalCode">, span: Span, now: number): string | null {
-  const settings = businessSettingsOf(company);
-  const area = areaProblem(company, need);
-  if (area) return area;
-  if (span.startsAt >= span.endsAt) return "The time is not valid.";
-  const notice = salesSettings(company).booking.minimumNoticeHours;
-  if (span.startsAt < now + notice * HOUR) return notice > 0 ? `Bookings need at least ${notice} hours' notice.` : "That time has passed.";
-  if (settings.hours.length > 0) {
-    const start = localParts(span.startsAt, company.timezone);
-    const end = localParts(span.endsAt, company.timezone);
-    const fits = start.day === end.day && settings.hours.some((window) => window.weekday === start.weekday && window.startMinute <= start.minute && end.minute <= window.endMinute);
-    if (!fits) return "That time is outside the company's operating hours.";
-  }
-  return null;
-}
-
-/** Whether one time is open, against what `loadCapacity` read. Pure: the same facts give the same answer. */
-export function assessSlot(loaded: Loaded, need: Need, span: Span, now: number, except: { opportunityId?: Id<"salesOpportunities"> } = {}): SlotAnswer {
-  const rule = ruleProblem(loaded.company, need, span, now);
-  if (rule) return { ok: false, free: 0, needed: need.crew, reasons: [rule], checkedAt: now };
-  const buffer = dispatchSettings(loaded.company).travelBufferMinutes;
-  const job = { span, requiredSkills: need.skills, postalCode: normalizePostalCode(need.postalCode), timezone: loaded.company.timezone, travelBufferMinutes: buffer };
-  let eligible = 0;
-  const counts = new Map<ExclusionCode, number>();
-  for (const cleaner of loaded.cleaners) {
-    const facts: CleanerFacts = {
-      id: cleaner.doc._id,
-      name: cleaner.doc.name,
-      status: cleaner.doc.status,
-      skills: cleaner.doc.skills,
-      serviceAreas: cleaner.doc.serviceAreas,
-      windows: cleaner.windows,
-      timeOff: cleaner.timeOff,
-      held: cleaner.held,
-      blockers: loaded.blockers(cleaner.doc, Math.max(span.startsAt, now)),
-      exceptionsOff: cleaner.off,
-      extraAvailable: cleaner.extra,
-      endedForJob: null,
-      priorVisitsForCustomer: 0,
-      pay: { ok: true, payCents: 0, basis: "" } as CleanerFacts["pay"],
-    };
-    // Whether a cleaner's pay is set up is Dispatch's question when it makes the offer, not a reason the time is not open.
-    const exclusion = assess(facts, job, { serviceArea: true, travelBuffer: true, ended: false, pay: false });
-    if (exclusion) counts.set(exclusion.code, (counts.get(exclusion.code) ?? 0) + 1);
-    else eligible += 1;
-  }
-  const padded = { startsAt: span.startsAt - buffer * MINUTE, endsAt: span.endsAt + buffer * MINUTE };
-  const reserved = loaded.holds.filter((hold) => hold.status === "held" && hold.expiresAt > now && hold.opportunityId !== except.opportunityId && overlaps({ startsAt: hold.startsAt, endsAt: hold.endsAt }, padded)).reduce((sum, hold) => sum + hold.crew, 0);
-  const promised = loaded.unstaffed.filter((row) => overlaps(row.span, padded)).reduce((sum, row) => sum + row.places, 0);
-  const free = Math.max(0, eligible - reserved - promised);
-  if (free >= need.crew) return { ok: true, free, needed: need.crew, reasons: [], checkedAt: now };
-  const reasons: string[] = [];
-  if (loaded.cleaners.length === 0) reasons.push("No cleaner is marked ready for work, so no time can be confirmed.");
-  else {
-    reasons.push(`${need.crew === 1 ? "A cleaner is" : `${need.crew} cleaners are`} needed and ${free} ${free === 1 ? "is" : "are"} free then.`);
-    const why = [...counts.entries()].sort((a, b) => b[1] - a[1]).flatMap(([code, count]) => (WHY[code] ? [WHY[code]!(count)] : [])).slice(0, 3);
-    if (why.length > 0) reasons.push(`Of the others: ${why.join("; ")}.`);
-    if (promised > 0) reasons.push(`${promised} ${promised === 1 ? "is" : "are"} needed for a visit that is booked then and not staffed yet.`);
-    if (reserved > 0) reasons.push(`${reserved} ${reserved === 1 ? "is" : "are"} reserved for another prospect's booking.`);
-  }
-  return { ok: false, free, needed: need.crew, reasons, checkedAt: now };
-}
-
-/** One time, checked now. The check a booking runs immediately before it commits. */
-export async function checkSlot(ctx: Ctx, company: Doc<"companies">, need: Need, span: Span, except: { opportunityId?: Id<"salesOpportunities"> } = {}): Promise<SlotAnswer> {
+async function heldCrew(ctx: QueryCtx | MutationCtx, company: Doc<"companies">, span: { startsAt: number; endsAt: number }, ignoreBooking?: Id<"bookings">): Promise<number> {
+  const day = localParts(span.startsAt, company.timezone).day;
+  const holds = await ctx.db
+    .query("capacityHolds")
+    .withIndex("by_company_day_status", (q) => q.eq("companyId", company._id).eq("day", day).eq("status", "held"))
+    .take(200);
   const now = Date.now();
-  const rule = ruleProblem(company, need, span, now);
-  if (rule) return { ok: false, free: 0, needed: need.crew, reasons: [rule], checkedAt: now };
-  return assessSlot(await loadCapacity(ctx, company, need, span), need, span, now, except);
+  return holds.filter((h) => h.bookingId !== ignoreBooking && h.expiresAt > now && h.startsAt < span.endsAt && span.startsAt < h.endsAt).reduce((sum, h) => sum + h.crew, 0);
 }
 
-/**
- * Times that are open in the days ahead, for a customer to choose from. Up to three starts a day inside
- * the company's hours (or 8 to 5 when none are set). They are open at the moment of asking and nothing
- * more: a time is checked again when it is reserved and again when it is booked.
- */
-export async function openSlots(ctx: Ctx, company: Doc<"companies">, need: Need, input: { durationMinutes: number; days?: number; limit?: number; except?: { opportunityId?: Id<"salesOpportunities"> } }): Promise<Span[]> {
+/** Holds crew for a booking, after checking in the same transaction that it still fits. */
+export async function holdCapacity(
+  ctx: MutationCtx,
+  company: Doc<"companies">,
+  input: { bookingId: Id<"bookings">; startsAt: number; endsAt: number; crew: number; holdMinutes?: number },
+): Promise<{ ok: true; holdId: Id<"capacityHolds">; expiresAt: number } | { ok: false; answer: CapacityAnswer }> {
+  const answer = await checkCapacity(ctx, company, input, input.crew, input.bookingId);
+  if (answer.state !== "fits" && answer.state !== "tight") return { ok: false, answer };
+  await releaseHolds(ctx, company._id, input.bookingId, "released");
   const now = Date.now();
+  // A hold never outlives the visit's own start.
+  const expiresAt = Math.min(now + (input.holdMinutes ?? HOLD_MINUTES_DEFAULT) * 60_000, input.startsAt);
+  const holdId = await ctx.db.insert("capacityHolds", {
+    companyId: company._id,
+    bookingId: input.bookingId,
+    day: localParts(input.startsAt, company.timezone).day,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    crew: input.crew,
+    crewMinutes: Math.round(((input.endsAt - input.startsAt) / 60_000) * input.crew),
+    status: "held",
+    expiresAt,
+    createdAt: now,
+  });
+  return { ok: true, holdId, expiresAt };
+}
+
+export async function releaseHolds(ctx: MutationCtx, companyId: Id<"companies">, bookingId: Id<"bookings">, to: "released" | "consumed"): Promise<void> {
+  const holds = await ctx.db
+    .query("capacityHolds")
+    .withIndex("by_company_booking", (q) => q.eq("companyId", companyId).eq("bookingId", bookingId))
+    .take(20);
+  for (const hold of holds) if (hold.status === "held") await ctx.db.patch(hold._id, { status: to });
+}
+
+/** A live hold for the booking, or null if it lapsed or was released. */
+export async function liveHold(ctx: QueryCtx | MutationCtx, companyId: Id<"companies">, bookingId: Id<"bookings">): Promise<Doc<"capacityHolds"> | null> {
+  const holds = await ctx.db
+    .query("capacityHolds")
+    .withIndex("by_company_booking", (q) => q.eq("companyId", companyId).eq("bookingId", bookingId))
+    .take(20);
+  return holds.find((h) => h.status === "held" && h.expiresAt > Date.now()) ?? null;
+}
+
+/** Marks lapsed holds expired. Called by the bookings sweep. */
+export async function expireHolds(ctx: MutationCtx, now: number): Promise<number> {
+  const due = await ctx.db
+    .query("capacityHolds")
+    .withIndex("by_status_expires", (q) => q.eq("status", "held").lte("expiresAt", now))
+    .take(200);
+  for (const hold of due) await ctx.db.patch(hold._id, { status: "expired" });
+  return due.length;
+}
+
+/** The next `days` days' capacity at one time of day, for "other dates to offer". */
+export async function nearbyDays(ctx: QueryCtx, company: Doc<"companies">, startsAt: number, minutes: number, crew: number, days: number): Promise<{ startsAt: number; state: CapacityAnswer["state"] }[]> {
   const tz = company.timezone;
-  const days = Math.min(input.days ?? 10, 14);
-  const limit = Math.min(input.limit ?? 6, 12);
-  const first = startOfLocalDay(now, tz);
-  const range = { startsAt: now, endsAt: addLocalDays(first, days + 1, tz) };
-  // Outside the service area, or with no postal code, no hour is open: nothing to search.
-  if (areaProblem(company, need)) return [];
-  const loaded = await loadCapacity(ctx, company, need, range);
-  if (loaded.cleaners.length === 0) return [];
-  const hours = businessSettingsOf(company).hours;
-  const duration = Math.max(15, input.durationMinutes) * MINUTE;
-  const out: Span[] = [];
-  for (let offset = 0; offset <= days && out.length < limit; offset += 1) {
-    const dayStart = addLocalDays(first, offset, tz);
-    const weekday = localParts(dayStart + 12 * HOUR, tz).weekday;
-    const windows = hours.length > 0 ? hours.filter((window) => window.weekday === weekday) : [{ weekday, startMinute: 8 * 60, endMinute: 17 * 60 }];
-    let found = 0;
-    for (const window of windows) {
-      for (let minute = window.startMinute; minute * MINUTE + duration <= window.endMinute * MINUTE && found < 3 && out.length < limit; minute += 120) {
-        const span = { startsAt: dayStart + minute * MINUTE, endsAt: dayStart + minute * MINUTE + duration };
-        if (assessSlot(loaded, need, span, now, input.except).ok) {
-          out.push(span);
-          found += 1;
-        }
-      }
-    }
+  const minuteOfDay = localParts(startsAt, tz).minute;
+  const base = startOfLocalDay(startsAt, tz);
+  const out: { startsAt: number; state: CapacityAnswer["state"] }[] = [];
+  for (let i = 1; i <= days; i += 1) {
+    const at = addLocalDays(base, i, tz) + minuteOfDay * 60_000;
+    const answer = await checkCapacity(ctx, company, { startsAt: at, endsAt: at + minutes * 60_000 }, crew);
+    out.push({ startsAt: at, state: answer.state });
   }
   return out;
-}
-
-/**
- * Reserves a time for one opportunity, if it is open right now. A mutation is one transaction, so two
- * prospects asking for the last opening at the same moment cannot both get it: the second one's check
- * sees the first one's hold. An opportunity holds at most one time; a new hold releases the old.
- */
-export async function placeHold(ctx: MutationCtx, company: Doc<"companies">, opportunity: Doc<"salesOpportunities">, need: Need, span: Span): Promise<{ ok: true; hold: Doc<"salesHolds"> } | { ok: false; answer: SlotAnswer }> {
-  const answer = await checkSlot(ctx, company, need, span, { opportunityId: opportunity._id });
-  if (!answer.ok) return { ok: false, answer };
-  await releaseHolds(ctx, opportunity, "released");
-  const now = Date.now();
-  const holdId = await ctx.db.insert("salesHolds", { companyId: company._id, opportunityId: opportunity._id, startsAt: span.startsAt, endsAt: span.endsAt, crew: need.crew, postalCode: normalizePostalCode(need.postalCode), status: "held", expiresAt: now + salesSettings(company).booking.holdMinutes * MINUTE, createdAt: now });
-  await ctx.db.patch(opportunity._id, { booking: { ...opportunity.booking, holdId }, updatedAt: now });
-  return { ok: true, hold: (await ctx.db.get(holdId))! };
-}
-
-export async function releaseHolds(ctx: MutationCtx, opportunity: Pick<Doc<"salesOpportunities">, "_id" | "companyId">, to: "released" | "converted" | "expired", jobId?: Id<"jobs">): Promise<void> {
-  const holds = await ctx.db
-    .query("salesHolds")
-    .withIndex("by_company_opportunity", (q) => q.eq("companyId", opportunity.companyId).eq("opportunityId", opportunity._id))
-    .take(20);
-  for (const hold of holds) if (hold.status === "held") await ctx.db.patch(hold._id, { status: to, ...(jobId ? { jobId } : {}) });
-}
-
-/** The opportunity's live hold, if it has one that has not run out. */
-export async function liveHold(ctx: Ctx, opportunity: Doc<"salesOpportunities">, now: number): Promise<Doc<"salesHolds"> | null> {
-  const hold = opportunity.booking?.holdId ? await ctx.db.get(opportunity.booking.holdId) : null;
-  return hold && hold.status === "held" && hold.expiresAt > now ? hold : null;
 }

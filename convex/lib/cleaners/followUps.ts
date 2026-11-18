@@ -35,6 +35,10 @@ const OPEN: readonly Doc<"followUps">["status"][] = ["scheduled", "awaiting_appr
 
 export const followUpKey = (topic: FollowUpTopic, cleanerId: Id<"cleaners">) => `cleaner.${topic}:${cleanerId}`;
 
+/** Names a question a cleaner asked from their portal. While one is unanswered, routine reminders wait. */
+export const helpKey = (cleanerId: Id<"cleaners">) => `cleaner.help:${cleanerId}`;
+const WAITING_ON_US = "They asked the office a question that is not answered yet. Reminders wait until a person replies.";
+
 /** The onboarding steps a reminder can ask about: things the cleaner can do and has not done. Items waiting on the company are not theirs to chase. */
 export function cleanerOwes(views: RequirementView[]): RequirementView[] {
   return views.filter((view) => view.cleanerCompletes && !view.met && view.state !== "submitted" && view.state !== "awaiting_review");
@@ -159,6 +163,7 @@ export async function followUpBlocker(ctx: MutationCtx, followUpId: Id<"followUp
   const cleaner = await ctx.db.get(followUp.cleanerId);
   if (!company || !cleaner) return "The cleaner is no longer in the record.";
   if (cleaner.status === "ended" || cleaner.status === "suspended" || cleaner.status === "paused") return `They are ${cleaner.status} now, so routine reminders stop.`;
+  if (await liveTaskByKey(ctx, company._id, helpKey(cleaner._id))) return WAITING_ON_US;
   const need = await needFor(ctx, company, cleaner, followUp.topic, Date.now());
   if (!need) return "What it was about is done.";
   return null;
@@ -235,7 +240,7 @@ async function handToPerson(ctx: MutationCtx, company: Doc<"companies">, cleaner
       actor: { kind: "agent", agent: followUp.agent },
     });
     await ctx.db.patch(taskId, { handoffTo: "team_coordinator" });
-    await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: "Reminders did not get a reply. Will you contact them yourself?", dueAt: due, withPersonSince: Date.now() }, { kind: "agent", agent: followUp.agent });
+    await setTaskState(ctx, (await ctx.db.get(taskId))!, "needs_decision", { openQuestion: `${followUp.attempt} reminders did not get a reply. ${followUp.summary ?? ""} Will you contact them yourself? Not answering is not a decision on their part.`.replace(/\s+/g, " "), dueAt: due, withPersonSince: Date.now() }, { kind: "agent", agent: followUp.agent });
     await ctx.db.patch(followUp._id, { taskId });
   }
   await finish(ctx, followUp, "stopped", `${followUp.attempt} reminders without a reply. A person was asked to reach out.`);
@@ -264,6 +269,11 @@ export async function runFollowUp(ctx: MutationCtx, followUpId: Id<"followUps">,
     return { ok: false, detail: done ? "What it was about is already done." : "They are not active now." };
   }
   const settings = cleanersSettings(company);
+  // Their own question comes first: nothing routine goes to them until a person has answered it.
+  if (await liveTaskByKey(ctx, company._id, helpKey(cleaner._id))) {
+    await ctx.db.patch(followUp._id, { dueAt: now + settings.reminderEveryHours * HOUR, updatedAt: now });
+    return { ok: false, detail: WAITING_ON_US };
+  }
   // Did they act on the last reminder's link? Then wait for the review; acting is an answer.
   if (followUp.status === "sent" && followUp.linkId) {
     const link = await ctx.db.get(followUp.linkId);

@@ -101,11 +101,17 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "googleAdsSnapshots", index: "by_company_account" },
   { table: "googleDriveTexts", index: "by_company_resource" },
   { table: "googleSettings", index: "by_company" },
-  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, costs, quotes, imports and research.
+  // Services & Pricing (convex/lib/services/schema.ts): the catalog, every version, drafts, reviews, property prices, costs, quotes, imports and research.
   { table: "services", index: "by_company_status" },
   { table: "serviceVersions", index: "by_company_service_version" },
   { table: "serviceDrafts", index: "by_company_service" },
   { table: "serviceChanges", index: "by_company_updated", omit: ["scheduledFunctionId"], why: "An internal reference to the scheduler." },
+  { table: "propertyPrices", index: "by_company_state" },
+  // Clients & Properties (convex/lib/clients/schema.ts): contacts, plans, internal notes and texts clients sent.
+  { table: "clientContacts", index: "by_company_customer" },
+  { table: "servicePlans", index: "by_company_customer" },
+  { table: "clientNotes", index: "by_company_customer" },
+  { table: "inboundMessages", index: "by_company_customer" },
   { table: "pricingProfiles", index: "by_company" },
   { table: "serviceQuotes", index: "by_company_created" },
   { table: "serviceImports", index: "by_company_created" },
@@ -114,6 +120,26 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   // Finance: the company's own money (convex/lib/finance/schema.ts).
   { table: "financeSettings", index: "by_company" },
   { table: "stripeAccounts", index: "by_company", omit: ["onboarding"], why: "A single-use Stripe onboarding link." },
+  { table: "agreementSigningLinks", index: "by_company_request", omit: ["publicId"], why: "Half of a signing link." },
+  // Sales (convex/lib/sales/schema.ts).
+  { table: "salesOpportunities", index: "by_company_updated" },
+  { table: "salesDrafts", index: "by_company_updated" },
+  { table: "salesQuotes", index: "by_company_created", omit: ["publicId"], why: "Half of a quote link." },
+  { table: "bookings", index: "by_company_created" },
+  { table: "recurringPlans", index: "by_company_status" },
+  { table: "planVisits", index: "by_company_state" },
+  { table: "proposals", index: "by_company_updated", omit: ["publicId"], why: "Half of a proposal link." },
+  { table: "assessments", index: "by_company_status", omit: ["publicId"], why: "Half of an assessment link." },
+  { table: "serviceSetups", index: "by_company_status" },
+  // The Sales agent (convex/lib/sales/agentSchema.ts).
+  { table: "salesMessages", index: "by_company_opportunity" },
+  { table: "salesActions", index: "by_company_created" },
+  { table: "salesRuns", index: "by_company_status" },
+  { table: "salesFollowUps", index: "by_company_status_due" },
+  { table: "salesBatches", index: "by_company_status" },
+  { table: "recurringPlanVersions", index: "by_company_created" },
+  { table: "proposalVersions", index: "by_company_created" },
+  { table: "proposalResponses", index: "by_company_at" },
   { table: "invoices", index: "by_company_created", omit: ["publicId"], why: "Half of a pay link." },
   { table: "payments", index: "by_company_invoice", omit: ["stripe.clientSecret"], why: "Lets a browser finish an unfinished card payment." },
   { table: "refunds", index: "by_company_invoice" },
@@ -127,18 +153,6 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "expenseReceipts", index: "by_company_sha", omit: ["storageId"], why: "An internal file reference; the receipt files themselves are not in the export. What was read from each is." },
   { table: "expenseRules", index: "by_company" },
   { table: "expenseImports", index: "by_company_created" },
-  // Sales (convex/lib/sales/schema.ts): opportunities, conversations, what Sales prepared and did, quotes, reminders, forms and holds.
-  { table: "salesOpportunities", index: "by_company_created" },
-  { table: "salesMessages", index: "by_company_opportunity" },
-  { table: "salesActions", index: "by_company_created" },
-  { table: "salesRuns", index: "by_company_opportunity" },
-  { table: "salesQuotes", index: "by_company_opportunity", omit: ["publicId"], why: "Half of a customer's quote link." },
-  { table: "salesQuoteVersions", index: "by_company_quote_version" },
-  { table: "salesFollowUps", index: "by_company_opportunity" },
-  { table: "salesForms", index: "by_company_status" },
-  { table: "salesFormSubmissions", index: "by_company_form" },
-  { table: "salesHolds", index: "by_company_start" },
-  { table: "salesBatches", index: "by_company_status" },
   // Cleaners (convex/lib/cleaners/schema.ts). The export is the Owner's, so pay and personnel records are included.
   { table: "subcontractors", index: "by_company_status" },
   { table: "workerAffiliations", index: "by_company_cleaner" },
@@ -154,10 +168,20 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "recordDisputes", index: "by_company_cleaner" },
   { table: "personnelRequests", index: "by_company_status" },
   { table: "payArrangements", index: "by_company_cleaner" },
+  // Booking Experiences (convex/lib/booking/schema.ts).
+  { table: "bookingSettings", index: "by_company" },
+  { table: "bookingExperiences", index: "by_company_updated" },
+  { table: "bookingExperienceVersions", index: "by_company_experience_version" },
+  { table: "bookingSessions", index: "by_company_created", omit: ["tokenHash"], why: "A hash of a customer's private booking link." },
+  { table: "bookingHolds", index: "by_company_start" },
+  { table: "bookingImages", index: "by_company" },
+  { table: "bookingAcceptances", index: "by_company_session", omit: ["ipHash"], why: "A one-way hash kept only as signing evidence." },
+  { table: "bookingEvents", index: "by_company_experience_at" },
 ];
 
 /** Company tables kept out of the export, and why. */
 export const NOT_EXPORTED: Readonly<Record<string, string>> = {
+  clientViews: "The client directory's search rows, rebuilt from clients, contacts and properties, which are exported.",
   numberSearches: "Lists of numbers that were for sale at the moment of a search; the number the company asked for is in its texting request.",
   actionLinks: "Each row is half of a cleaner's link; a copy of it must never leave the record.",
   applicantLinks: "Each row is half of an applicant's link; a copy of it must never leave the record.",
@@ -177,6 +201,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   googleBusy: "A short-lived copy of busy times read from Google Calendar; the calendar itself is the record.",
   googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
   portalCodes: "Hashes of one-time codes that unlock a portal for ten minutes; nothing in them is about the business.",
+  capacityHolds: "Short-lived reservations of a day's minutes while a booking waits; the booking keeps what matters.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 

@@ -7,12 +7,10 @@
 import { statementQuery } from "./lib/builders";
 import { STATEMENT_DAYS } from "./lib/finance/statementLinks";
 import { localDateKey } from "./lib/finance/settings";
-import { hoursWords, owedOn } from "./lib/finance/teamPay";
+import { EARNING_STATE_WORDS as STATE_WORDS, hoursWords, owedOn, TEAM_PAY_METHOD_WORDS as METHOD_WORDS } from "./lib/finance/teamPay";
 
 const DAY = 86_400_000;
 
-const STATE_WORDS = { calculated: "Being reviewed", needs_review: "Being reviewed", approved: "Approved, not paid yet", payment_started: "Payment on its way", paid: "Paid", void: "Set aside" } as const;
-const METHOD_WORDS = { zelle: "Zelle", venmo: "Venmo", cash: "Cash", check: "Check", bank_transfer: "Bank transfer", payroll: "Payroll", other: "Other" } as const;
 
 export const view = statementQuery({
   args: {},

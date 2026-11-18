@@ -36,8 +36,8 @@ export function guardViolations(files: GuardFile[]): string[] {
  */
 export const PUBLIC_QUERY_FILES = [
   "convex/trust.ts",
-  // A published booking form is public by definition: its questions, the company's name and the services it lists. Nothing else.
-  "convex/salesFormPages.ts",
+  // A published booking page: only what the page shows every visitor (docs/booking/00-architecture.md).
+  "convex/bookingPublic.ts",
 ] as const;
 
 /** A `publicQuery` anywhere except the reviewed files is a violation. */

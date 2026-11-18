@@ -205,7 +205,7 @@ describe("Agreements in Company Chat", () => {
     const id2 = await ask(s, s.as, "Send the scope for signature.");
     step = stepsOf(await thread(s, s.as, id2)).find((x) => x.tool === "send_agreement_for_signature")!;
     expect(step.status).toBe("refused");
-    expect(step.summary).toMatch(/No e-signature provider is connected/);
+    expect(step.summary).toMatch(/Signing links aren't set up/);
   });
 
   it("expires an approval whose agreement changed after the preview", async () => {

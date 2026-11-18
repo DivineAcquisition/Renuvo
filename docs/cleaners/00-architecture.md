@@ -43,7 +43,7 @@ starts their workflows; it never keeps a second copy.
 |---|---|---|
 | Applicants and hiring | Recruiter | A hire arrives as a linked cleaner (one record, history kept). The profile links back to the application. |
 | Offers, assignments, coverage | Dispatch | Reads assignments for jobs, history and conflicts. Crew assembly offers through Dispatch's own `offer` path. |
-| Earnings, payments | Finance (not built) | Shows the pay arrangement and the pay stated on each job. Says plainly that approved earnings and payments are not recorded yet. |
+| Earnings, payments | Finance › Team Pay | Shows the pay arrangement and its history, the pay stated on each job, and reads Team Pay for each job's state, adjustments waiting for approval, approved earnings and payments. Keeps no ledger of its own. |
 | Documents to sign | Agreements | A requirement can point at a workforce agreement; it is accepted only when the agreement is signed. |
 | Services, durations, skills | Services & Pricing | Reads the skills a job requires from the job. Equipment needs can name a service. |
 
@@ -77,7 +77,9 @@ index that starts with it.
 Six things are kept apart and each has its own words on screen:
 
 1. **Relationship type**: employee, independent contractor, subcontractor worker.
-2. **Engagement status**: onboarding, active, paused, suspended, ended. Set by a person.
+2. **Engagement status**: onboarding, active, paused, suspended, ended. Set by a person. A subcontractor
+   worker whose company's working relationship has ended takes no work, whatever their own status, until they
+   are moved to another company or engaged directly.
 3. **Onboarding progress**: each requirement's state.
 4. **Job eligibility** ("Ready for assignments"): active, and every requirement that blocks assignments is
    accepted and current. Equipment and skill requirements tied to a service only block that service.

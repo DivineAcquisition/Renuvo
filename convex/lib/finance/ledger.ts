@@ -57,8 +57,14 @@ export async function recompute(ctx: MutationCtx, invoiceId: Id<"invoices">): Pr
     paidAt = undefined;
   }
   await ctx.db.patch(invoiceId, { totals, status, paidAt, updatedAt: now });
-  // When the money on an invoice changes, a booking waiting on its deposit is looked at again (convex/salesBookings.ts).
-  if (totals.paidCents !== invoice.totals.paidCents || totals.refundedCents !== invoice.totals.refundedCents || status !== invoice.status) await ctx.scheduler.runAfter(0, internal.salesBookings.invoiceChanged, { invoiceId });
+  // A booking waiting on this invoice looks again (convex/bookings.ts). Money alone never confirms a time.
+  if (totals.paidCents !== invoice.totals.paidCents || status !== invoice.status) {
+    const booking = await ctx.db
+      .query("bookings")
+      .withIndex("by_company_invoice", (q) => q.eq("companyId", invoice.companyId).eq("invoiceId", invoiceId))
+      .first();
+    if (booking && booking.status !== "confirmed" && booking.status !== "cancelled") await ctx.scheduler.runAfter(0, internal.bookings.invoiceChanged, { invoiceId });
+  }
   return (await ctx.db.get(invoiceId))!;
 }
 

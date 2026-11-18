@@ -7,11 +7,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { addMember, company, refusal, start, type T } from "../tests/harness";
+import { addMember, company, refusal, start, withLinkSecret, type T } from "../tests/harness";
 import { billing } from "../tests/setupBilling";
 import { api, internal } from "./_generated/api";
 import { NOT_FOUND } from "./lib/errors";
 import { mockSigning, resetMockSigning, signBody } from "./lib/agreements/signing";
+import { linkToken } from "./lib/sales/links";
 
 const SECRET = "test-signature-webhook-secret-0123456789";
 
@@ -323,8 +324,9 @@ describe("signing", () => {
     const id = await s.ready();
     const result = await s.as.query(api.agreementSigning.blockers, { companyId: s.companyId, agreementId: id });
     expect(result.signing).toMatchObject({ configured: false, provider: null });
-    expect(result.blockers.join(" ")).toMatch(/No e-signature provider is connected/);
-    expect(await refusal(s.as.mutation(api.agreementSigning.send, { companyId: s.companyId, agreementId: id }))).toMatch(/No e-signature provider/);
+    // Selestial hosts signing itself when no provider is connected, but only once signing links can be made.
+    expect(result.blockers.join(" ")).toMatch(/Signing links aren't set up/);
+    expect(await refusal(s.as.mutation(api.agreementSigning.send, { companyId: s.companyId, agreementId: id }))).toMatch(/Signing links aren't set up/);
     expect((await s.get(s.as, id)).workflow).toBe("approved");
     const exported = await s.as.mutation(api.companyAgreements.exportVersion, { companyId: s.companyId, agreementId: id, format: "pdf" });
     expect(exported.markdown).toContain("Standard clean");
@@ -684,3 +686,44 @@ describe("lifecycle, renewals and plans", () => {
   });
 });
 
+
+describe("Selestial-hosted signing", () => {
+  it("gives each signer their own link to the exact approved version and records a typed signature", async () => {
+    delete process.env.SIGNATURE_PROVIDER;
+    await withLinkSecret(async () => {
+      const s = await setup();
+      const id = await s.ready();
+      expect((await s.as.query(api.agreementSigning.status, { companyId: s.companyId })).provider).toBe("selestial");
+      await s.as.mutation(api.agreementSigning.send, { companyId: s.companyId, agreementId: id });
+      await s.settle();
+      const links = await s.t.run((ctx) => ctx.db.query("agreementSigningLinks").collect());
+      expect(links.map((l) => l.signerEmail).sort()).toEqual(["dana@example.com", "pat@example.com"]);
+      // The signing emails carry the link as a placeholder; no token is stored.
+      const messages = await s.t.run((ctx) => ctx.db.query("messages").collect());
+      const signing = messages.filter((m) => m.purpose === "signature_request");
+      expect(signing.length).toBe(2);
+      expect(signing.every((m) => m.body.includes("{sign}") && !m.body.includes(links[0]!.publicId))).toBe(true);
+
+      const dana = links.find((l) => l.signerEmail === "dana@example.com")!;
+      const token = (await linkToken("sign", dana.publicId))!;
+      expect(await s.t.query(api.sign.view, { token: `${dana.publicId}.wrong` })).toBeNull();
+      const view = (await s.t.query(api.sign.view, { token }))!;
+      expect(view.state).toBe("open");
+      if (!("hash" in view) || !view.hash) throw new Error();
+      const hash: string = view.hash;
+      expect(await refusal(s.t.mutation(api.sign.signNow, { token, typedName: "Dana Whitfield", hash, agreed: false }))).toMatch(/agree/);
+      expect(await refusal(s.t.mutation(api.sign.signNow, { token, typedName: "Dana Whitfield", hash: "other", agreed: true }))).toMatch(/changed/);
+      await s.t.mutation(api.sign.signNow, { token, typedName: "Dana Whitfield", hash, agreed: true });
+      expect((await s.t.mutation(api.sign.signNow, { token, typedName: "Dana Whitfield", hash, agreed: true })).already).toBe(true);
+      expect((await s.get(s.as, id)).workflow).toBe("partially_signed");
+
+      const pat = links.find((l) => l.signerEmail === "pat@example.com")!;
+      const patToken = (await linkToken("sign", pat.publicId))!;
+      await s.t.mutation(api.sign.signNow, { token: patToken, typedName: "Pat Owner", hash, agreed: true });
+      await s.settle();
+      expect((await s.get(s.as, id)).workflow).toBe("signed");
+      const signed = await s.t.run((ctx) => ctx.db.get(dana._id));
+      expect(signed?.signature).toMatchObject({ typedName: "Dana Whitfield", version: view.version, hash });
+    });
+  });
+});

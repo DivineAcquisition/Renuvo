@@ -1,15 +1,16 @@
 /**
- * Follow-ups, for the Sales workspace and for the timer that brings one due. A reminder coming due does
- * not send anything by itself: it starts a run, which checks the conversation as it is then and either
- * stops the reminder with the reason or writes the message and routes it by the Owner's permission.
+ * The Sales agent's reminders to customers, for the Sales workspace and for the timer that brings one
+ * due. A reminder coming due does not send anything by itself: it starts a run, which checks the
+ * conversation as it is then and either stops the reminder with the reason or writes the message and
+ * routes it by the Owner's permission.
  */
 import { v } from "convex/values";
 
 import { internalMutation } from "./_generated/server";
 import { companyQuery, managerMutation } from "./lib/builders";
 import { byMember, recordEvent } from "./lib/events";
-import { ownedFollowUp, PURPOSE_WORDS, STOP_CONDITIONS } from "./lib/sales/followUps";
-import { setNext } from "./lib/sales/opportunities";
+import { ownedFollowUp, PURPOSE_WORDS, STOP_CONDITIONS } from "./lib/sales/agentFollowUps";
+import { load, setNext } from "./lib/sales/agentOpportunity";
 import { enqueueRun } from "./lib/sales/runs";
 
 const DAY = 24 * 60 * 60_000;
@@ -64,8 +65,8 @@ export const list = companyQuery({
         stopReason: row.stopReason ?? null,
         stopsWhen: STOP_CONDITIONS[row.purpose],
         channel: opportunity?.channel ?? "sms",
-        // Who sends it: Sales, unless a person is handling the conversation, in which case nothing is sent.
-        by: opportunity?.takeover ? ("held" as const) : ("sales" as const),
+        // Who sends it: the agent, unless a person is handling the conversation, in which case nothing is sent.
+        by: opportunity?.followUps === "paused" ? ("held" as const) : ("sales" as const),
         doneAt: row.doneAt ?? null,
       };
     };
@@ -76,7 +77,7 @@ export const list = companyQuery({
   },
 });
 
-/** A person cancels one planned reminder. The opportunity then waits on them, not on Sales. */
+/** A person cancels one planned reminder. The opportunity then waits on them, not on the agent. */
 export const cancel = managerMutation({
   args: { followUpId: v.id("salesFollowUps"), note: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -85,10 +86,10 @@ export const cancel = managerMutation({
     const now = Date.now();
     await ctx.db.patch(followUp._id, { status: "cancelled", stopReason: args.note?.trim().slice(0, 300) || "Cancelled by a person.", doneAt: now });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "follow_up.cancelled", actor: byMember(ctx), subject: { table: "salesFollowUps", id: followUp._id }, data: { purpose: followUp.purpose, attempt: followUp.attempt } });
-    const opportunity = await ctx.db.get(followUp.opportunityId);
+    const opportunity = await load(ctx, followUp.opportunityId).catch(() => null);
     if (opportunity) {
-      await ctx.db.patch(opportunity._id, { humanTouches: opportunity.humanTouches + 1 });
-      await setNext(ctx, opportunity, { what: "You cancelled Sales's reminder. Decide the next step, or have Sales pick it back up.", by: "owner", dueAt: now + DAY }, byMember(ctx));
+      await ctx.db.patch(opportunity._id, { humanTouches: opportunity.agent.humanTouches + 1 });
+      await setNext(ctx, await load(ctx, opportunity._id), { what: "You cancelled the agent's reminder. Decide the next step, or have the agent pick it back up.", by: "owner", dueAt: now + DAY }, byMember(ctx));
     }
     return null;
   },

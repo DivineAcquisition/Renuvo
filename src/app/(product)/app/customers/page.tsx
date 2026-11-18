@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { CustomersScreen } from "@/components/app/screens/records";
-
-export const metadata: Metadata = { title: "Customers & Properties" };
-
-export default function Page() {
-  return <CustomersScreen />;
+/** Customers & Properties became Clients & Properties on November 18, 2026. Old links keep their search. */
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) if (typeof value === "string") params.set(key, value);
+  const query = params.toString();
+  redirect(`/app/clients${query ? `?${query}` : ""}`);
 }

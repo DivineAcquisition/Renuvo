@@ -1,5 +1,5 @@
 /**
- * What Sales has prepared and is waiting on a person for: one draft at a time, or the first review
+ * What the Sales agent has prepared and is waiting on a person for: one draft at a time, or the first review
  * batch. Deciding here is the same decision as in the approvals queue, checked the same way at the
  * moment it is made. Nothing decided here changes a permission.
  */
@@ -11,25 +11,26 @@ import { normalAddress } from "./lib/compliance/recipients";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { batchActions, decideAction, staleReason, syncBatchTask } from "./lib/sales/actions";
-import { versionOf } from "./lib/sales/quotes";
+import { view } from "./lib/sales/agentOpportunity";
+import { quotePer, quoteService, quoteTotal } from "./lib/sales/agentQuotes";
+import { actionView } from "./lib/sales/agentViews";
 import { salesSettings } from "./lib/sales/settings";
-import { actionView } from "./lib/sales/views";
 
 type Ctx = Parameters<Parameters<typeof companyQuery>[0]["handler"]>[0];
 
 /** One waiting action as a person reviews it: who it goes to, what it says, which quote it carries, and what sending it does. */
 async function reviewItem(ctx: Ctx, action: Doc<"salesActions">) {
   const customer = await ctx.db.get(action.customerId);
-  const opportunity = await ctx.db.get(action.opportunityId);
+  const row = await ctx.db.get(action.opportunityId);
+  const opportunity = row ? view(row) : null;
   const quote = action.quoteId ? await ctx.db.get(action.quoteId) : null;
-  const version = quote && action.quoteVersion !== undefined ? await versionOf(ctx, quote, action.quoteVersion) : null;
   const to = action.channel ? normalAddress(action.channel, action.channel === "email" ? customer?.email : customer?.phone) : null;
   const stale = opportunity ? await staleReason(ctx, opportunity, action, "sales") : "The opportunity no longer exists.";
   const consequence =
     action.kind === "send_quote"
       ? "The customer gets a private link to this quote. Accepting it starts the booking steps; it does not confirm a booking."
-      : action.kind === "booking_confirmation"
-        ? "Sales checks every requirement and capacity again, creates the job and hands it to Dispatch, then tells the customer they are booked."
+      : action.kind === "booking_request"
+        ? "The agent checks the time against capacity again and holds it. Payment and an agreement, when your Playbook asks for them, come next; then the booking is confirmed and handed to Dispatch."
         : action.kind === "follow_up"
           ? "One reminder goes out. If it is the last in its sequence and gets no answer, the opportunity comes back to you."
           : action.kind === "question"
@@ -40,7 +41,7 @@ async function reviewItem(ctx: Ctx, action: Doc<"salesActions">) {
     // The body as it will be edited: the link stays a placeholder until the message is sent.
     editable: action.body ?? "",
     recipient: { name: customer?.name ?? "A prospect", to, channel: action.channel ?? null },
-    quote: quote && version ? { number: quote.number, version: version.version, totalCents: version.totalCents, per: version.per, service: version.serviceName, depositCents: version.depositCents ?? null } : null,
+    quote: quote ? { totalCents: quoteTotal(quote), per: quotePer(quote), service: quoteService(quote), depositCents: quote.depositCents ?? null } : null,
     consequence,
     stale,
   };
@@ -81,7 +82,7 @@ export const decide = managerMutation({
     const action = await ctx.db.get(args.actionId);
     if (!action || action.companyId !== ctx.companyId) return { ok: false, detail: "Not found." };
     // The first batch is the Owner's to decide, as one review.
-    if (action.batchId && salesSettings(ctx.company).firstBatchDecidedAt === null) throw userError("This is part of Sales's first review batch. The Owner decides it from the Sales overview.", "not_allowed");
+    if (action.batchId && salesSettings(ctx.company).firstBatchDecidedAt === null) throw userError("This is part of the agent's first review batch. The Owner decides it from the Sales overview.", "not_allowed");
     if (args.decision === "send" && args.body !== undefined && action.body?.includes("{link}") && !args.body.includes("{link}")) return { ok: false, detail: "Keep {link} in the message: it becomes the customer's quote link." };
     return decideAction(ctx, ctx.company, action, ctx.member, args.decision === "send" ? { kind: "send", body: args.body, subject: args.subject } : { kind: "skip", note: args.note });
   },

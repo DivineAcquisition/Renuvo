@@ -35,6 +35,8 @@ export type CleanerFacts = {
   held: Span[];
   /** Requirements that block work and are not met for this job's service, by name (lib/cleaners/readiness.ts). */
   blockers?: string[];
+  /** Why they take no work at all though their own engagement is active, finishing "<Name> …". */
+  notTakingWork?: string | null;
   /** Dates the cleaner said they cannot work, outside their weekly pattern. */
   exceptionsOff?: Span[];
   /** Times the cleaner said they can work on a date, outside their weekly pattern. */
@@ -79,6 +81,7 @@ const ENDED_WORDS: Record<Ended, string> = {
 export function assess(cleaner: CleanerFacts, job: JobFacts, rules: Rules = DISPATCH_RULES): Exclusion | null {
   if (cleaner.status !== "ready") return { code: "not_ready", reason: "is not marked ready for work" };
   // Active is not eligible: every requirement for work must be met, the same readiness the Cleaners workspace shows.
+  if (cleaner.notTakingWork) return { code: "not_ready", reason: cleaner.notTakingWork };
   if (cleaner.blockers && cleaner.blockers.length > 0) return { code: "requirements", reason: `has not met what is needed before work: ${cleaner.blockers.map((label) => label.toLowerCase()).join(", ")}` };
   if (rules.ended && cleaner.endedForJob) return { code: "already_asked", reason: ENDED_WORDS[cleaner.endedForJob], ended: cleaner.endedForJob };
   const missing = job.requiredSkills.filter((skill) => !cleaner.skills.includes(skill));

@@ -31,8 +31,7 @@ export function addressFor(customer: Pick<Doc<"customers">, "email" | "phone">, 
   return normalAddress(channel, channel === "email" ? customer.email : customer.phone);
 }
 
-/** The company's own connected mailbox that may send, if there is one. Customer email goes from it; otherwise from Selestial's sending address under the company's name. */
-export async function ownMailbox(ctx: Ctx, companyId: Id<"companies">) {
+async function ownMailbox(ctx: Ctx, companyId: Id<"companies">) {
   return (
     await ctx.db
       .query("mailboxConnections")

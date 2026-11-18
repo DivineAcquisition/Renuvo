@@ -13,6 +13,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { portalMutation, portalQuery, type PortalAccess } from "./lib/builders";
 import { cleanersSettings, DAY, HOUR } from "./lib/cleaners/settings";
+import { helpKey } from "./lib/cleaners/followUps";
+import { acknowledgmentHolds } from "./lib/cleaners/readiness";
 import { cleanerReadiness } from "./lib/cleaners/records";
 import { cleanerTime, commitmentsBetween, currentClashes } from "./lib/cleaners/schedule";
 import { queueCleanerMessage, channelsFor } from "./lib/cleaners/outbox";
@@ -284,14 +286,17 @@ export const submitRequirement = portalMutation({
 /** Acknowledging the company's policies is the person's own act, so it is complete when they do it. */
 export const acknowledge = portalMutation({
   action: "acknowledge",
-  args: { key: v.string() },
+  /** `words`: what the page showed them. An agreement is to exact words, so older words cannot be agreed to. */
+  args: { key: v.string(), words: v.string() },
   handler: async (ctx, args) => {
     const row = await requirementRow(ctx, args.key);
     const def = (await cleanerReadiness(ctx, ctx.company, cleanerOf(ctx), Date.now())).definitions.find((item) => item.key === args.key);
     if (def?.kind !== "acknowledgment") throw userError("This step is not an acknowledgment.");
-    if (row.status === "accepted") return null;
+    const current = (def.description ?? "").trim();
+    if (args.words.trim() !== current) throw userError("What you are agreeing to changed since this page opened. Read it again, then agree.");
     const now = Date.now();
-    await ctx.db.patch(row._id, { status: "accepted", submittedAt: now, submittedBy: { kind: "cleaner", linkId: ctx.link._id }, acceptedAt: now, reviewNote: "Acknowledged by the cleaner through their own link.", expiresAt: def.validForDays ? now + def.validForDays * DAY : undefined, updatedAt: now });
+    if (row.status === "accepted" && acknowledgmentHolds(def, row) && (row.expiresAt === undefined || row.expiresAt > now)) return null;
+    await ctx.db.patch(row._id, { status: "accepted", submittedAt: now, submittedBy: { kind: "cleaner", linkId: ctx.link._id }, acceptedAt: now, acknowledged: { words: current, at: now }, reviewNote: "Acknowledged by the cleaner through their own link.", expiresAt: def.validForDays ? now + def.validForDays * DAY : undefined, updatedAt: now });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "cleaner.requirement_accepted", actor: actorOf(ctx), subject: { table: "cleaners", id: row.cleanerId }, data: { key: args.key } });
     await syncHandoffRequirement(ctx, cleanerOf(ctx), args.key, true, actorOf(ctx), "Acknowledged by the cleaner.");
     return null;
@@ -424,6 +429,8 @@ export const askForHelp = portalMutation({
       dueAt: Date.now() + DAY,
       completionCondition: "A person replied to them",
       about: { table: "cleaners", id: cleaner._id },
+      // Named, so routine reminders can see the question is open and wait for a person's reply.
+      key: helpKey(cleaner._id),
       actor: actorOf(ctx),
     });
     return null;
@@ -488,7 +495,7 @@ export const verifyCode = portalMutation({
   },
 });
 
-/** Their pay arrangement and the pay each job stated, once a code unlocked it. Finance is not built. */
+/** Their pay arrangement and the pay each job stated, once a code unlocked it. What was approved and paid is on their Team Pay earnings statement. */
 export const earnings = portalQuery({
   args: { asOf: v.number() },
   handler: async (ctx, args) => {

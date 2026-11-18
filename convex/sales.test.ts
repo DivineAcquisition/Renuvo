@@ -1,99 +1,187 @@
-/**
- * @vitest-environment edge-runtime
- */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AREA, HOUR, JOB_START } from "../tests/harness";
-import { flush, PROSPECT, quoteLink, salesTestEnv, setup } from "../tests/salesHarness";
+import { addMember, company, NOW, readyCleaner, refusal, start } from "../tests/harness";
 import { api } from "./_generated/api";
+import { cadenceDates, cadenceProblem, localInstant, previewVisits, pricingSchedule, visitsPerMonth } from "./lib/sales/cadence";
+import { homeSpec, publish } from "../tests/salesHarness";
 
-/**
- * The whole journey, on the rules reader with the mock text service: a form submission becomes an
- * opportunity, Sales quotes it from the published service, the customer accepts on the quote page and
- * chooses a time, Sales checks every requirement and capacity, makes the job, and Dispatch has it.
- */
-describe("Sales: inquiry to booking", () => {
-  let undo: () => void;
+describe("cadences", () => {
+  it("keeps every four weeks apart from monthly and every two weeks apart from twice a month", () => {
+    expect(pricingSchedule({ kind: "every_4_weeks", weekday: 2 })).toBe("every_28_days");
+    expect(pricingSchedule({ kind: "monthly", dayOfMonth: 2 })).toBe("once_per_month");
+    expect(pricingSchedule({ kind: "every_2_weeks", weekday: 2 })).toBe("every_14_days");
+    expect(pricingSchedule({ kind: "twice_monthly", days: [1, 15] })).toBe("twice_per_month");
+    const fourWeekly = cadenceDates({ kind: "every_4_weeks", weekday: 2 }, "2027-03-02", "2027-03-02", "2028-02-28");
+    const monthly = cadenceDates({ kind: "monthly", dayOfMonth: 2 }, "2027-03-02", "2027-03-02", "2028-02-28");
+    expect(fourWeekly).toHaveLength(13);
+    expect(monthly).toHaveLength(12);
+  });
+
+  it("counts real dates per month instead of assuming four weekly visits", () => {
+    const weekly = cadenceDates({ kind: "weekly", weekdays: [1] }, "2027-03-01", "2027-03-01", "2027-05-31");
+    expect(visitsPerMonth(weekly)).toEqual([
+      { month: "2027-03", visits: 5 },
+      { month: "2027-04", visits: 4 },
+      { month: "2027-05", visits: 5 },
+    ]);
+  });
+
+  it("supports several visits a week, anchored on the first date", () => {
+    expect(cadenceDates({ kind: "weekly", weekdays: [1, 4] }, "2027-03-01", "2027-03-01", "2027-03-14")).toEqual(["2027-03-01", "2027-03-04", "2027-03-08", "2027-03-11"]);
+    // Every two weeks stays on the anchor's weeks even when the window starts later.
+    expect(cadenceDates({ kind: "every_2_weeks", weekday: 2 }, "2027-03-02", "2027-03-10", "2027-04-01")).toEqual(["2027-03-16", "2027-03-30"]);
+  });
+
+  it("uses the month's last day for day 31 and for 'last day'", () => {
+    expect(cadenceDates({ kind: "monthly", dayOfMonth: 31 }, "2027-01-31", "2027-01-31", "2027-04-30")).toEqual(["2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30"]);
+    expect(cadenceDates({ kind: "twice_monthly", days: [15, 0] }, "2028-02-01", "2028-02-01", "2028-02-29")).toEqual(["2028-02-15", "2028-02-29"]);
+  });
+
+  it("rejects cadences a person could not mean", () => {
+    expect(cadenceProblem({ kind: "weekly", weekdays: [] })).toMatch(/at least one/);
+    expect(cadenceProblem({ kind: "twice_monthly", days: [10, 12] })).toMatch(/a week apart/);
+    expect(cadenceProblem({ kind: "twice_monthly", days: [5, 5] })).toMatch(/different/);
+  });
+
+  it("keeps the clock time across daylight-saving changes", () => {
+    const before = localInstant("2027-03-13", 9 * 60, "America/Chicago");
+    const after = localInstant("2027-03-15", 9 * 60, "America/Chicago");
+    expect(new Date(before).getUTCHours()).toBe(15);
+    expect(new Date(after).getUTCHours()).toBe(14);
+  });
+
+  it("marks closed days as conflicts in the preview and never moves them", () => {
+    const visits = previewVisits({ cadence: { kind: "weekly", weekdays: [0] }, firstDate: "2027-03-07", count: 3, closedWeekdays: [0] });
+    expect(visits.map((v) => v.date)).toEqual(["2027-03-07", "2027-03-14", "2027-03-21"]);
+    expect(visits.every((v) => v.conflict)).toBe(true);
+    expect(visits[0]!.first).toBe(true);
+  });
+});
+
+describe("sales workspace drafts and quotes", () => {
   beforeEach(() => {
-    undo = salesTestEnv();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
   });
-  afterEach(() => undo());
+  afterEach(() => vi.useRealTimers());
 
-  it("takes a form inquiry through a quote, an acceptance and a booking Dispatch can staff", async () => {
-    const s = await setup({ autonomous: true });
-    const { publicId } = await s.publishForm();
-    expect(await s.submit(publicId)).toMatchObject({ status: "saved" });
-    await flush(s.t);
+  async function setup() {
+    const t = start();
+    const owner = await company(t, "owner-a", "Alpha Cleaning");
+    const key = await publish(owner.as, owner.companyId, homeSpec());
+    return { t, ...owner, key };
+  }
 
-    // The form's answers are facts already, so nothing is asked again: Sales goes straight to the price.
-    const [opportunity] = await s.opportunities();
-    expect(opportunity).toMatchObject({ stage: "quote_sent", channel: "sms", source: { kind: "form" } });
-    const detail = await s.opportunity(opportunity._id);
-    expect(detail.checklist.filter((row) => row.phase === "quote").every((row) => row.state === "known")).toBe(true);
-    // $120 base + 2 more bedrooms at $20 + 1 more bathroom at $25.
-    expect(detail.quote).toMatchObject({ status: "sent", sentVersion: 1 });
-    expect(detail.quote!.versions[0]).toMatchObject({ totalCents: 18500, serviceName: "Standard clean", outcome: "firm" });
-    const texts = s.textsTo(PROSPECT.phone);
-    expect(texts).toHaveLength(1);
-    expect(texts[0]).toContain("$185.00");
-    expect(texts[0]).toContain("Alpha Cleaning's assistant");
-    expect(texts[0]).toContain("Reply STOP to opt out.");
+  it("prices a booking on the server from the published service and lists what is still needed", async () => {
+    const { as, companyId, key } = await setup();
+    const draftId = await as.mutation(api.sales.startDraft, { companyId, mode: "booking" });
+    let draft = await as.query(api.sales.draft, { companyId, draftId });
+    expect(draft.catalog.map((s) => s.key)).toContain(key);
+    let summary = await as.query(api.sales.price, { companyId, draftId });
+    expect(summary.mode).toBe("booking");
+    if (summary.mode !== "booking") throw new Error();
+    expect(summary.needs.map((n) => n.key)).toEqual(expect.arrayContaining(["customer", "property", "service", "date", "time", "payment"]));
 
-    // The customer's page: the offer, and times that are open now.
-    const token = quoteLink(PROSPECT.phone);
-    const page = (await s.t.query(api.salesQuotePages.view, { token }))!;
-    expect(page).toMatchObject({ state: "open", needsAddress: true, quote: { totalCents: 18500 } });
-    expect(page.slots.length).toBeGreaterThan(0);
-    const slot = page.slots.find((row) => row.startsAt === JOB_START) ?? page.slots[0];
-
-    const accepted = await s.t.mutation(api.salesQuotePages.accept, { token, version: page.quote.version, hash: page.quote.hash, name: "Maria Lopez", slotStartsAt: slot.startsAt, address: { line1: "12 Elm St", city: "Austin", region: "TX", postalCode: AREA }, access: "Key under the mat." });
-    expect(accepted).toEqual({ status: "accepted", slot: "reserved" });
-    await flush(s.t);
-
-    // One job, made from the accepted version, at the accepted price, on the chosen time.
-    const won = (await s.opportunities())[0];
-    expect(won.stage).toBe("won");
-    const job = await s.t.run(async (ctx) => (await ctx.db.get(won.jobId!))!);
-    expect(job).toMatchObject({ status: "scheduled", priceCents: 18500, startsAt: slot.startsAt, serviceType: "Standard clean", sales: { opportunityId: won._id, quoteVersion: 1 } });
-    expect(job.instructions).toContain("Key under the mat.");
-    expect(job.serviceSnapshot).toMatchObject({ priceSource: "quote" });
-    expect(await s.t.run(async (ctx) => (await ctx.db.query("jobs").collect()).length)).toBe(1);
-
-    // Dispatch took it in the same step: the visit has its cover task. Nobody has accepted it yet, and Sales did not say so.
-    const tasks = await s.t.run(async (ctx) => ctx.db.query("tasks").collect());
-    expect(tasks.some((task) => task.agent === "dispatch" && task.key === `dispatch.cover:${job._id}`)).toBe(true);
-    const confirmation = s.textsTo(PROSPECT.phone).at(-1)!;
-    expect(confirmation).toContain("You're booked");
-    expect(confirmation).toContain("arranging your cleaning team");
-    expect(confirmation).not.toMatch(/cleaner (is|has been) confirmed|confirmed (crew|cleaner)/i);
-
-    const overview = await s.as.query(api.sales.overview, { companyId: s.companyId, asOf: Date.now() });
-    expect(overview.measures).toMatchObject({ inquiries: 1, quotesSent: 1, quotesAccepted: 1, bookings: 1, quotedValueCents: 18500, bookedValueCents: 18500 });
-    expect(overview.recentBookings[0]).toMatchObject({ jobId: job._id, capacityVerified: true });
-    // Asking again for the same booking makes nothing new.
-    expect(await s.as.mutation(api.sales.confirm, { companyId: s.companyId, opportunityId: won._id })).toMatchObject({ ok: true, jobId: job._id });
-    expect(await s.t.run(async (ctx) => (await ctx.db.query("jobs").collect()).length)).toBe(1);
+    const created = await as.mutation(api.sales.quickCreate, {
+      companyId,
+      draftId,
+      customer: { name: "Dana Whitfield", email: "dana@example.com" },
+      property: { address: { line1: "12 Elm St", city: "Austin", region: "TX", postalCode: "78701" } },
+      confirmedNew: false,
+    });
+    if (!created.created) throw new Error();
+    draft = await as.query(api.sales.draft, { companyId, draftId });
+    await as.mutation(api.sales.saveDraft, { companyId, draftId, revision: draft.draft.revision, customerId: created.customerId, propertyId: created.propertyId, body: { service: { key, input: { bedrooms: 3, bathrooms: 2 } }, payment: { policy: "deposit", depositCents: 5000 }, schedule: { date: "2027-03-02", arrivalMinute: 9 * 60 } } });
+    summary = await as.query(api.sales.price, { companyId, draftId });
+    if (summary.mode !== "booking") throw new Error();
+    // 120 + 2 bedrooms × 20 + 1 bathroom × 25 = 185.
+    expect(summary.firstCents).toBe(18500);
+    expect(summary.dueNowCents).toBe(5000);
+    expect(summary.dueLaterCents).toBe(13500);
+    expect(summary.needs.find((n) => n.key === "service")).toBeUndefined();
+    // Nobody has set availability, so capacity is unknown rather than guessed.
+    expect(summary.capacity?.state).toBe("unknown");
+    // The Owner sees contribution; costs are not set up, so it says so instead of claiming a profit.
+    expect(summary.contribution).not.toBeNull();
   });
 
-  it("asks only what the service's price needs, reads the answer, and never asks it twice", async () => {
-    const s = await setup({ autonomous: true });
-    await s.text(PROSPECT.phone, "Hi, how much for a house cleaning? We're in 78701.");
-    await flush(s.t);
-    const [opportunity] = await s.opportunities();
-    expect(opportunity).toMatchObject({ stage: "qualifying", source: { kind: "sms" } });
-    // The postal code was in the message, so it is not asked for. Bedrooms and bathrooms are.
-    const first = s.textsTo(PROSPECT.phone)[0];
-    expect(first).toContain("How many bedrooms?");
-    expect(first).toContain("How many bathrooms");
-    expect(first).not.toMatch(/ZIP|postal/i);
+  it("warns about duplicates instead of merging, and creates only when the person confirms", async () => {
+    const { as, companyId } = await setup();
+    await as.mutation(api.customers.create, { companyId, name: "Dana Whitfield", kind: "home", email: "dana@example.com" });
+    const draftId = await as.mutation(api.sales.startDraft, { companyId, mode: "booking" });
+    const first = await as.mutation(api.sales.quickCreate, { companyId, draftId, customer: { name: "D. Whitfield", email: "DANA@example.com" }, confirmedNew: false });
+    expect(first.created).toBe(false);
+    if (first.created) throw new Error();
+    expect(first.duplicates[0]!.why).toMatch(/email/);
+    const second = await as.mutation(api.sales.quickCreate, { companyId, draftId, customer: { name: "D. Whitfield", email: "dana@example.com" }, confirmedNew: true });
+    expect(second.created).toBe(true);
+    const found = await as.query(api.sales.findCustomers, { companyId, q: "whitfield" });
+    expect(found).toHaveLength(2);
+  });
 
-    await s.text(PROSPECT.phone, "3 bed 2 bath");
-    await flush(s.t);
-    const after = (await s.opportunities())[0];
-    expect(after.stage).toBe("quote_sent");
-    expect(after.facts.find((fact) => fact.key === "bedrooms")).toMatchObject({ value: 3, status: "stated", source: { kind: "customer", excerpt: "3 bed" } });
-    expect(s.textsTo(PROSPECT.phone).at(-1)).toContain("$185.00");
-    // First response is measured from the inquiry to the first message that actually left.
-    expect(after.firstResponseAt! - after.receivedAt).toBeLessThan(HOUR);
+  it("prices recurring service with a different first visit and saves a quote with both", async () => {
+    const { as, companyId, key } = await setup();
+    const deepKey = await publish(as, companyId, homeSpec({ name: "Deep clean", pricing: { method: "bed_bath", baseCents: 20000, includedBedrooms: 1, includedBathrooms: 1, perBedroomCents: 3000, perBathroomCents: 3000, perHalfBathCents: 1000, baseLaborMinutes: 200, perBedroomMinutes: 40, perBathroomMinutes: 40, perHalfBathMinutes: 20 } }));
+    const draftId = await as.mutation(api.sales.startDraft, { companyId, mode: "booking", bookingKind: "recurring" });
+    const riya = await as.mutation(api.sales.quickCreate, { companyId, draftId, customer: { name: "Riya Shah", phone: "512-555-0100" }, property: { address: { line1: "4 Oak Ave", city: "Austin", region: "TX", postalCode: "78702" } }, confirmedNew: false });
+    if (!riya.created) throw new Error();
+    const draft = await as.query(api.sales.draft, { companyId, draftId });
+    await as.mutation(api.sales.saveDraft, {
+      companyId,
+      draftId,
+      revision: draft.draft.revision,
+      customerId: riya.customerId,
+      propertyId: riya.propertyId,
+      body: {
+        service: { key, input: { bedrooms: 2, bathrooms: 1 } },
+        firstVisit: { mode: "different", service: { key: deepKey, input: { bedrooms: 2, bathrooms: 1 } } },
+        recurring: { cadence: { kind: "every_4_weeks", weekday: 2 }, billing: "per_visit" },
+        payment: { policy: "after_service" },
+      },
+    });
+    const summary = await as.query(api.sales.price, { companyId, draftId });
+    if (summary.mode !== "booking") throw new Error();
+    expect(summary.first?.name).toBe("Deep clean");
+    expect(summary.firstCents).toBe(23000);
+    expect(summary.ongoingCents).toBe(14000);
+    expect(summary.dueNowCents).toBe(0);
+    // The service has no every-4-weeks rate, which is said rather than borrowed from monthly.
+    expect(summary.recurringNote).toMatch(/no recurring rate/);
+    const latest = await as.query(api.sales.draft, { companyId, draftId });
+    const saved = await as.mutation(api.sales.saveQuoteFromDraft, { companyId, draftId, revision: latest.draft.revision });
+    const list = await as.query(api.sales.quotes, { companyId });
+    expect(list[0]!._id).toBe(saved.quoteId);
+    expect(list[0]!.firstCents).toBe(23000);
+    expect(list[0]!.cadence).toMatch(/Every 4 weeks/);
+  });
+
+  it("refuses a stale revision and keeps other companies' drafts out of reach", async () => {
+    const { t, as, companyId } = await setup();
+    const draftId = await as.mutation(api.sales.startDraft, { companyId, mode: "booking" });
+    await as.mutation(api.sales.saveDraft, { companyId, draftId, revision: 0, body: { notes: { office: "first" } } });
+    expect(await refusal(as.mutation(api.sales.saveDraft, { companyId, draftId, revision: 0, body: { notes: { office: "second" } } }))).toMatch(/another window/);
+    const other = await company(t, "owner-b", "Beta Cleaning");
+    expect(await refusal(other.as.query(api.sales.draft, { companyId: other.companyId, draftId }))).toMatch(/not found/i);
+  });
+
+  it("lets office staff take a booking draft and records who did", async () => {
+    const { t, as, companyId } = await setup();
+    const office = await addMember(t, as, companyId, "office-1", "office");
+    const draftId = await office.mutation(api.sales.startDraft, { companyId, mode: "booking" });
+    const view = await office.query(api.sales.draft, { companyId, draftId });
+    expect(view.createdBy).not.toBe("A team member");
+    const summary = await office.query(api.sales.price, { companyId, draftId });
+    if (summary.mode !== "booking") throw new Error();
+    expect(summary.contribution).toBeNull();
+  });
+
+  it("reports capacity from cleaners' availability", async () => {
+    const { as, companyId } = await setup();
+    await readyCleaner(as, companyId, "Ana");
+    const at = localInstant("2027-03-02", 9 * 60, "America/Chicago");
+    const fits = await as.query(api.sales.capacity, { companyId, startsAt: at, minutes: 120, crew: 1 });
+    expect(fits.state).toBe("tight");
+    const full = await as.query(api.sales.capacity, { companyId, startsAt: at, minutes: 120, crew: 2 });
+    expect(full.state).toBe("full");
   });
 });

@@ -1,13 +1,13 @@
 /**
- * Email replies to Sales. The email service tells Selestial a message arrived at the receiving domain
+ * Email replies to the Sales agent. The email service tells Selestial a message arrived at the receiving domain
  * (convex/http.ts); the message itself is fetched here, since the notice carries no body, and is filed
  * on the opportunity its reply address names.
  *
  * Three checks stand between an arriving email and "the customer said":
  *  - the reply address must carry a valid signature, so a made-up address names nothing;
  *  - the sender must be the customer's own email address and the mail must not have failed
- *    authentication. Mail from anyone else is kept and shown to a person, and Sales does not act on it;
- *  - only what the person wrote is read. The quoted earlier message, which holds Sales's own words and
+ *    authentication. Mail from anyone else is kept and shown to a person, and the agent does not act on it;
+ *  - only what the person wrote is read. The quoted earlier message, which holds the agent's own words and
  *    prices, is cut off first. An automatic reply is not filed as speech at all.
  *
  * The same message delivered twice is one message.
@@ -20,8 +20,8 @@ import { normalAddress } from "./lib/compliance/recipients";
 import { recordEvent } from "./lib/events";
 import { allow } from "./lib/rateLimit";
 import { quiet } from "./lib/sales/actions";
+import { load, setNext, SYSTEM, view } from "./lib/sales/agentOpportunity";
 import { recordInbound } from "./lib/sales/intake";
-import { setNext, SYSTEM } from "./lib/sales/opportunities";
 import { bareAddress, isAutomatic, opportunityForReply, replyText, textFromHtml } from "./lib/sales/replyAddress";
 import { enqueueRun } from "./lib/sales/runs";
 
@@ -63,7 +63,8 @@ export const fetch = internalAction({
 export const receive = internalMutation({
   args: { providerId: v.string(), from: v.string(), recipients: v.array(v.string()), subject: v.string(), text: v.string(), automatic: v.boolean(), failedAuthentication: v.boolean(), receivedAt: v.number() },
   handler: async (ctx, args): Promise<{ taken: boolean; why: string }> => {
-    const opportunity = await opportunityForReply(ctx, args.recipients);
+    const row = await opportunityForReply(ctx, args.recipients);
+    const opportunity = row ? view(row) : null;
     if (!opportunity) return { taken: false, why: "no_conversation" };
     const customer = await ctx.db.get(opportunity.customerId);
     const sender = bareAddress(args.from);
@@ -85,9 +86,9 @@ export const receive = internalMutation({
       if (seen) return { taken: true, why: "duplicate" };
       const why = args.failedAuthentication ? `An email that claims to be from ${sender} arrived on this conversation and did not pass the sender checks.` : `An email from ${sender} arrived on this conversation. That is not the address on record for ${customer.name}.`;
       await ctx.db.insert("salesMessages", { companyId: opportunity.companyId, opportunityId: opportunity._id, customerId: opportunity.customerId, direction: "note", channel: "internal", author: { kind: "system" }, subject: args.subject.slice(0, 200) || undefined, body: `${why}\n\n${body}`.slice(0, 4000), providerId: args.providerId, at });
-      if (opportunity.stage !== "won" && opportunity.stage !== "closed_lost") {
+      if (opportunity.agent.stage !== "won" && opportunity.agent.stage !== "closed_lost") {
         await quiet(ctx, opportunity, "An email arrived from an address that is not the customer's.", SYSTEM);
-        await setNext(ctx, (await ctx.db.get(opportunity._id))!, { what: `${why} Read it and decide whether it is them.`, by: "owner", dueAt: Date.now() + DAY }, SYSTEM);
+        await setNext(ctx, await load(ctx, opportunity._id), { what: `${why} Read it and decide whether it is them.`, by: "owner", dueAt: Date.now() + DAY }, SYSTEM);
       }
       await recordEvent(ctx, { companyId: opportunity.companyId, type: "opportunity.unverified_email", actor: SYSTEM, subject: { table: "salesOpportunities", id: opportunity._id }, data: { failedAuthentication: args.failedAuthentication } });
       return { taken: true, why: "unverified_sender" };
@@ -95,8 +96,8 @@ export const receive = internalMutation({
 
     const { message, created } = await recordInbound(ctx, opportunity, { channel: "email", body, subject: args.subject, providerId: args.providerId, at });
     if (!created) return { taken: true, why: "duplicate" };
-    const fresh = (await ctx.db.get(opportunity._id))!;
-    if (!fresh.takeover && fresh.stage !== "won" && fresh.stage !== "closed_lost") await enqueueRun(ctx, fresh, { trigger: "reply", key: `reply:${message._id}`, messageId: message._id });
+    const fresh = await load(ctx, opportunity._id);
+    if (!fresh.agent.takeover && fresh.agent.stage !== "won" && fresh.agent.stage !== "closed_lost") await enqueueRun(ctx, fresh, { trigger: "reply", key: `reply:${message._id}`, messageId: message._id });
     return { taken: true, why: "reply" };
   },
 });

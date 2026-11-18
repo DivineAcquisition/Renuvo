@@ -85,7 +85,7 @@ export const TASKS: Record<Task, { label: string; unit: string; available: boole
   },
   sales_message_reading: {
     label: "Sales message read by AI",
-    unit: "One customer message read and one reply worded by the AI reader for Sales. Messages the reader is not used for (read by the company's rules, or never answered) are not charged.",
+    unit: "One customer message read, and one reply worded, by the AI reader for the Sales agent. Messages read by the company's rules are not charged.",
     available: true,
   },
 };
@@ -150,7 +150,7 @@ export const RATE_CARDS: readonly RateCard[] = [
       campaign_generation: null,
       /** Research briefs did not exist when this card was approved. Under this card they have no rate, so they cannot run. */
       research_brief: null,
-      /** Sales did not exist when this card was approved, so its AI reading has no rate here and the company's rules read instead. */
+      /** The Sales agent did not exist when this card was approved: its AI reading has no rate, so the company's rules read instead. */
       sales_message_reading: null,
     },
     specs: {
@@ -178,7 +178,7 @@ export const RATE_CARDS: readonly RateCard[] = [
       agreement_draft: null,
       campaign_generation: null,
       research_brief: 10,
-      /** Not approved on this card either: until a card gives it a rate, Sales reads by rule and charges nothing. */
+      /** Not approved on this card either: until a card gives it a rate, the Sales agent reads by rule and charges nothing. */
       sales_message_reading: null,
     },
     specs: {

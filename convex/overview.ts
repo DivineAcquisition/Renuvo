@@ -3,6 +3,7 @@
  * record, each statement points at the record behind it, and anything that is not connected yet says
  * "not set up" instead of showing a number.
  */
+import { agentStage } from "./lib/sales/agentOpportunity";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -273,10 +274,10 @@ async function aboutContext(ctx: Ctx, about: Doc<"tasks">["about"], asOf: number
   if (about.table === "cleaners") return [{ label: "Cleaner", value: (doc as Doc<"cleaners">).name, ref: null }];
   if (about.table === "salesOpportunities") {
     const opportunity = doc as Doc<"salesOpportunities">;
-    const customer = await ctx.db.get(opportunity.customerId);
+    const customer = opportunity.customerId ? await ctx.db.get(opportunity.customerId) : null;
     return [
-      { label: "Prospect", value: customer?.name ?? "Unknown", ref: null },
-      { label: "Stage", value: opportunity.stage.replace(/_/g, " "), ref: null },
+      { label: "Prospect", value: customer?.name ?? opportunity.title, ref: null },
+      { label: "Stage", value: agentStage(opportunity).replace(/_/g, " "), ref: null },
     ];
   }
   if (about.table !== "properties") return [];
@@ -408,7 +409,7 @@ export const sidebar = companyQuery({
         paused: ctx.company.pausedAgents.includes("sales"),
         /** Opportunities whose next step is a person's. */
         withYou: salesWork.counts.needsDecision,
-        /** Opportunities Sales is working on at this moment: a run is in progress. */
+        /** Opportunities the agent is working on at this moment: a run is in progress. */
         running: salesRunning.length,
         /** Opportunities waiting on a customer's reply. */
         waiting: salesWork.counts.waiting,
@@ -517,17 +518,20 @@ export const week = companyQuery({
     const tomorrowStart = addLocalDays(startOfLocalDay(args.asOf, tz), 1, tz);
     const thisFrom = addLocalDays(tomorrowStart, -7, tz);
     const lastFrom = addLocalDays(tomorrowStart, -14, tz);
+    // Inquiries the Sales agent filed in a period (deals a person entered by hand are not inquiries).
+    const inquiriesBetween = async (from: number, to: number) =>
+      (
+        await ctx.db
+          .query("salesOpportunities")
+          .withIndex("by_company_updated", (q) => q.eq("companyId", ctx.companyId).gte("updatedAt", from))
+          .take(2000)
+      ).filter((row) => row.intake !== undefined && row.createdAt >= from && row.createdAt < to);
     const completedBetween = async (from: number, to: number) =>
       ctx.db
         .query("jobs")
         .withIndex("by_company_status_start", (q) => q.eq("companyId", ctx.companyId).eq("status", "completed").gte("startsAt", from).lt("startsAt", to))
         .take(1000);
     const [thisWeek, lastWeek] = [await completedBetween(thisFrom, tomorrowStart), await completedBetween(lastFrom, thisFrom)];
-    const inquiriesBetween = async (from: number, to: number) =>
-      ctx.db
-        .query("salesOpportunities")
-        .withIndex("by_company_created", (q) => q.eq("companyId", ctx.companyId).gte("createdAt", from).lt("createdAt", to))
-        .take(1000);
     const revenue = (jobs: Doc<"jobs">[]) => jobs.reduce((sum, job) => sum + (job.priceCents ?? 0), 0);
     const unpriced = thisWeek.filter((job) => job.priceCents === undefined).length;
     const upcoming = await visitsBetween(ctx, args.asOf, addLocalDays(tomorrowStart, 7, tz));
@@ -550,7 +554,7 @@ export const week = companyQuery({
       {
         key: "conversion",
         label: "Inquiries booked",
-        why: "Inquiries received in the period that became a confirmed booking. A booking is a job on the schedule, not a quote sent or accepted.",
+        why: "Inquiries received in the period that became a confirmed booking. A booking is a confirmed visit, not a quote sent or accepted.",
         state: "measured",
         kind: "count",
         value: (await inquiriesBetween(thisFrom, tomorrowStart)).filter((row) => row.stage === "won").length,

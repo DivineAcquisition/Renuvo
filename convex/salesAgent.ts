@@ -1,5 +1,5 @@
 /**
- * One run of the Sales workflow, in separate steps so a crash between any two is recoverable and
+ * One run of the Sales agent, in separate steps so a crash between any two is recoverable and
  * nothing is done twice:
  *
  *   begin    (a mutation) takes a queued run, checks Sales is not paused and no person holds the
@@ -27,15 +27,14 @@ import { reserveExecution } from "./lib/billing/reserve";
 import { recordEvent } from "./lib/events";
 import { routeAction } from "./lib/sales/actions";
 import { advance, wantsWork } from "./lib/sales/agent";
-import { releaseHolds } from "./lib/sales/capacity";
+import { stopFollowUps } from "./lib/sales/agentFollowUps";
+import { isOpen, load, setNext, SYSTEM, unansweredMessage, view, type Opp } from "./lib/sales/agentOpportunity";
+import { expireDue } from "./lib/sales/agentQuotes";
+import { readingValidator, type RunStep } from "./lib/sales/agentSchema";
 import { kindOfService, requirementsFor, type Requirement } from "./lib/sales/facts";
-import { stopFollowUps } from "./lib/sales/followUps";
 import { checked, readByRule, type ReadInput } from "./lib/sales/interpret";
 import { salesModel, type WordingInput } from "./lib/sales/model";
-import { isOpen, setNext, SYSTEM } from "./lib/sales/opportunities";
-import { expireDue } from "./lib/sales/quotes";
 import { enqueueRun } from "./lib/sales/runs";
-import { OPEN_STAGES, readingValidator, type RunStep } from "./lib/sales/schema";
 import { salesSettings } from "./lib/sales/settings";
 import { acceptWording } from "./lib/sales/words";
 import { publishedCatalog } from "./lib/services/store";
@@ -51,12 +50,13 @@ async function end(ctx: MutationCtx, run: Doc<"salesRuns">, status: "done" | "fa
 }
 
 /** Every question any service of this kind might ask, so a first message's details are not lost before the service is known. */
-function requirementsAcross(catalog: Awaited<ReturnType<typeof publishedCatalog>>, opportunity: Doc<"salesOpportunities">): Requirement[] {
+function requirementsAcross(catalog: Awaited<ReturnType<typeof publishedCatalog>>, opportunity: Opp): Requirement[] {
+  const kind = opportunity.agent.kind;
   const chosen = catalog.find((row) => row.service.key === opportunity.serviceKey);
-  if (chosen) return requirementsFor(chosen.version.spec, opportunity.kind);
+  if (chosen) return requirementsFor(chosen.version.spec, kind);
   const out = new Map<string, Requirement>();
-  for (const row of catalog.filter((item) => kindOfService(item.version.spec) === opportunity.kind)) for (const requirement of requirementsFor(row.version.spec, opportunity.kind)) if (!out.has(requirement.key)) out.set(requirement.key, requirement);
-  if (out.size === 0) for (const requirement of requirementsFor(null, opportunity.kind)) out.set(requirement.key, requirement);
+  for (const row of catalog.filter((item) => kindOfService(item.version.spec) === kind)) for (const requirement of requirementsFor(row.version.spec, kind)) if (!out.has(requirement.key)) out.set(requirement.key, requirement);
+  if (out.size === 0) for (const requirement of requirementsFor(null, kind)) out.set(requirement.key, requirement);
   return [...out.values()];
 }
 
@@ -65,7 +65,8 @@ export const begin = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run || run.status !== "queued") return null;
-    const opportunity = await ctx.db.get(run.opportunityId);
+    const row = await ctx.db.get(run.opportunityId);
+    const opportunity = row ? view(row) : null;
     const company = await ctx.db.get(run.companyId);
     if (!opportunity || !company) {
       await end(ctx, run, "skipped", "The opportunity no longer exists.");
@@ -76,11 +77,11 @@ export const begin = internalMutation({
       await end(ctx, run, "skipped", "Sales is paused, so it did nothing. This is picked up when Sales is resumed.");
       return null;
     }
-    if (opportunity.takeover) {
-      await end(ctx, run, "skipped", "A person is handling this conversation, so Sales did nothing.");
+    if (opportunity.agent.takeover) {
+      await end(ctx, run, "skipped", "A person is handling this conversation, so the agent did nothing.");
       return null;
     }
-    if (!isOpen(opportunity.stage) && opportunity.stage !== "deferred") {
+    if (!isOpen(opportunity.agent.stage) && opportunity.agent.stage !== "deferred") {
       await end(ctx, run, "skipped", "The opportunity is closed.");
       return null;
     }
@@ -90,9 +91,9 @@ export const begin = internalMutation({
     const settings = salesSettings(company);
     let read: ReadInput | null = null;
     if (message && message.companyId === company._id && message.direction === "in" && message.author.kind === "customer") {
-      const latest = opportunity.asked.reduce((max, row) => Math.max(max, row.at), 0);
-      const open = opportunity.asked.filter((row) => row.at === latest && !row.key.startsWith("booking:"));
-      read = { text: message.body, requirements: requirementsAcross(await publishedCatalog(ctx, company._id), opportunity), lastAsked: open.length === 1 ? open[0].key : null, quoteOut: opportunity.stage === "quote_sent" };
+      const latest = opportunity.agent.asked.reduce((max, row) => Math.max(max, row.at), 0);
+      const open = opportunity.agent.asked.filter((row) => row.at === latest && !row.key.startsWith("booking:"));
+      read = { text: message.body, requirements: requirementsAcross(await publishedCatalog(ctx, company._id), opportunity), lastAsked: open.length === 1 ? open[0].key : null, quoteOut: opportunity.agent.stage === "quote_sent" };
     }
     // An AI reading is one billable unit. It is opened here and held in the action; without a hold, the rules read.
     let executionId: Id<"aiExecutions"> | null = null;
@@ -107,7 +108,7 @@ export const begin = internalMutation({
       read,
       executionId,
       billingNote,
-      wording: { tone: settings.voice.tone, channel: opportunity.channel, companyName: company.name, approvedAnswers: settings.answers.map((row) => ({ question: row.question, answer: row.answer })), customerMessage: message?.direction === "in" ? message.body : null, customerName: customer?.name ?? "" },
+      wording: { tone: settings.voice.tone, channel: opportunity.agent.channel, companyName: company.name, approvedAnswers: settings.answers.map((row) => ({ question: row.question, answer: row.answer })), customerMessage: message?.direction === "in" ? message.body : null, customerName: customer?.name ?? "" },
     };
   },
 });
@@ -152,7 +153,7 @@ export const finish = internalMutation({
         const accepted = acceptWording(action.body, row.text, action.channel);
         if (accepted) await ctx.db.patch(action._id, { body: accepted, writtenBy: args.reader, updatedAt: Date.now() });
         else if (row.text) steps.push(note("send_message", "refused", "The AI's rewording added something the draft did not say, so the company's own wording was kept."));
-        const opportunity = await ctx.db.get(action.opportunityId);
+        const opportunity = await load(ctx, action.opportunityId).catch(() => null);
         if (opportunity) {
           const routed = await routeAction(ctx, company, opportunity, (await ctx.db.get(action._id))!);
           steps.push(note("send_message", routed === "sent" ? "done" : routed === "failed" || routed === "not_allowed" ? "refused" : "proposed", `${routed === "sent" ? "Sent" : routed === "awaiting_approval" ? "Waiting for your approval" : routed === "batched" ? "In your first review batch" : routed === "held" ? "Held: Sales is paused" : routed === "not_allowed" ? "Not sent: switched off for Sales" : "Could not be sent"}: ${action.summary}`));
@@ -179,8 +180,8 @@ export const failed = internalMutation({
       return null;
     }
     await end(ctx, run, "failed", "Sales could not finish working on this after three tries. Nothing was sent. You can have Sales try again, or handle it yourself.");
-    const opportunity = await ctx.db.get(run.opportunityId);
-    if (opportunity && isOpen(opportunity.stage)) await setNext(ctx, opportunity, { what: "Sales could not finish working on this. Have it try again, or handle it yourself.", by: "owner", dueAt: Date.now() + 60 * MINUTE });
+    const opportunity = await load(ctx, run.opportunityId).catch(() => null);
+    if (opportunity && isOpen(opportunity.agent.stage)) await setNext(ctx, opportunity, { what: "The agent could not finish working on this. Have it try again, or handle it yourself.", by: "owner", dueAt: Date.now() + 60 * MINUTE });
     await recordEvent(ctx, { companyId: run.companyId, type: "opportunity.run_failed", actor: SYSTEM, subject: { table: "salesOpportunities", id: run.opportunityId } });
     return null;
   },
@@ -239,8 +240,9 @@ export const run = internalAction({
 
 /**
  * Run on a schedule. It finds what a missed trigger would otherwise leave stuck: a run that started and
- * never finished, an opportunity whose next step is Sales's and overdue (after a pause, for example), a
- * quote past its last day, a hold that ran out, a reminder whose timer was lost.
+ * never finished, an opportunity whose next step is the agent's and overdue (after a pause, for example),
+ * a quote past its last day, a reminder whose timer was lost. Expired booking holds are the booking
+ * engine's sweep (convex/bookings.ts).
  */
 export const sweep = internalMutation({
   args: {},
@@ -256,18 +258,10 @@ export const sweep = internalMutation({
       touched += 1;
     }
     for (const quote of await expireDue(ctx, now)) {
-      const opportunity = await ctx.db.get(quote.opportunityId);
-      if (!opportunity || opportunity.stage !== "quote_sent") continue;
+      const opportunity = quote.opportunityId ? await load(ctx, quote.opportunityId).catch(() => null) : null;
+      if (!opportunity || !opportunity.intake || opportunity.agent.stage !== "quote_sent" || opportunity.quoteId !== quote._id) continue;
       await stopFollowUps(ctx, opportunity, "The quote expired.", SYSTEM);
-      await setNext(ctx, opportunity, { what: "The quote expired without an answer. Send a fresh quote, defer it, or close it.", by: "owner", dueAt: now + 24 * 60 * MINUTE });
-      touched += 1;
-    }
-    const holds = await ctx.db
-      .query("salesHolds")
-      .withIndex("by_status_expires", (q) => q.eq("status", "held").lt("expiresAt", now))
-      .take(100);
-    for (const hold of holds) {
-      await ctx.db.patch(hold._id, { status: "expired" });
+      await setNext(ctx, opportunity, { what: "The quote expired without an answer. Have the agent send a fresh quote, defer it, or close it.", by: "owner", dueAt: now + 24 * 60 * MINUTE });
       touched += 1;
     }
     const due = await ctx.db
@@ -275,32 +269,25 @@ export const sweep = internalMutation({
       .withIndex("by_status_due", (q) => q.eq("status", "scheduled").lt("dueAt", now - 2 * MINUTE))
       .take(100);
     for (const followUp of due) await ctx.scheduler.runAfter(0, internal.salesFollowUps.due, { followUpId: followUp._id });
-    for (const stage of [...OPEN_STAGES, "deferred" as const]) {
+    for (const stage of ["new", "qualifying", "quoting"] as const) {
       const rows = await ctx.db
         .query("salesOpportunities")
         .withIndex("by_stage_updated", (q) => q.eq("stage", stage))
         .order("desc")
         .take(200);
-      for (const opportunity of rows) {
-        if (stage === "deferred" || !wantsWork(opportunity, now)) continue;
+      for (const row of rows) {
+        const opportunity = view(row);
+        if (!opportunity || opportunity.agent.stage === "deferred" || !wantsWork(opportunity, now)) continue;
         const company = await ctx.db.get(opportunity.companyId);
         if (!company || company.pausedAgents.includes("sales")) continue;
         // One pick-up per opportunity per revision per hour, so a sweep that finds nothing new starts nothing.
-        const runId = await enqueueRun(ctx, opportunity, { trigger: "resume", key: `resume:${opportunity._id}:${opportunity.revision}:${Math.floor(now / (60 * MINUTE))}` });
+        // A message that arrived while Sales was paused, or before a run failed, is still unanswered: read it.
+        const unanswered = await unansweredMessage(ctx, opportunity);
+        const key = `resume:${opportunity._id}:${opportunity.agent.revision}:${Math.floor(now / (60 * MINUTE))}`;
+        const runId = await enqueueRun(ctx, opportunity, unanswered ? { trigger: "reply", key, messageId: unanswered._id } : { trigger: "resume", key });
         if (runId) touched += 1;
       }
     }
     return touched;
   },
 });
-
-/** Released when an opportunity closes without a booking, so the time is open to others again. */
-export const releaseFor = internalMutation({
-  args: { opportunityId: v.id("salesOpportunities") },
-  handler: async (ctx, args) => {
-    const opportunity = await ctx.db.get(args.opportunityId);
-    if (opportunity) await releaseHolds(ctx, opportunity, "released");
-    return null;
-  },
-});
-

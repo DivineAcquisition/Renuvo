@@ -1,69 +1,89 @@
-# Sales: what it is built on
+# Sales agent: what it is built on
 
-Sales turns an inquiry into a confirmed booking, a documented decline, or a next step with an owner
-and a time. It works by text, email and intake forms. It does not make calls and does not contact
-people who have not asked. Existing customers rebooking or coming back are Retention's.
+The Sales agent turns an inquiry into a confirmed booking, a documented decline, or a next step with
+an owner and a time. It works by text and email. It does not make calls and does not contact people
+who have not asked. Existing customers rebooking or coming back are Retention's: a text from a known
+client with no open inquiry stays in their client conversation.
+
+The agent is a worker on the Sales workspace, not a second Sales product. An inquiry is a pipeline
+opportunity, a quote is a booking-workspace quote, and a booking goes through the bookings engine.
+A person and the agent work on the same records.
 
 ## Reused, not rebuilt
 
-| Shared system | How Sales uses it |
+| Shared system | How the agent uses it |
 | --- | --- |
-| Customers and properties | An inquiry matches or creates one `customers` row; an address becomes a `properties` row. A partial match waits for a person. |
-| Services & Pricing | Every price is the pricing engine's `quote()` over a published service. Sales stores the result as an immutable quote version. |
-| Authority and approvals | `sales.reply_and_quote`, `sales.follow_up`, `sales.confirm_booking` in the shared permission catalog; "Ask me first" goes to the one approvals queue. |
-| Messaging and consent | Every message goes through the one outbox and `checkSend`: consent, opt-outs, quiet hours, sender readiness. |
-| Tasks and events | Each open opportunity keeps one task; everything is recorded with `recordEvent`. |
-| Billing | Reading a message with AI opens, reserves and settles an execution. Viewing records and pricing cost nothing. |
-| Agreements | Sales reads whether a signed agreement is in force. It does not write or send one. |
-| Finance | The Owner drafts a deposit invoice from the accepted quote; Finance issues and collects it. Sales reads the ledger. |
-| Jobs and Dispatch | A booking is a job made by the same `createJob` the schedule uses, handed to Dispatch. Capacity uses Dispatch's own rules. |
-| Company Chat | An opportunity can be attached to a chat; two read-only tools read the pipeline and one opportunity. |
+| Pipeline (`salesOpportunities`) | An inquiry is an opportunity with `intake` set. The agent's stage is read from the pipeline stage and milestone (`agentStage` in `convex/lib/sales/agentOpportunity.ts`). Taking over is the pipeline's own `followUps: "paused"`. |
+| Booking workspace (`salesDrafts`, `salesQuotes`) | The agent fills a draft and saves a quote through `saveQuote`, priced by `priceBooking` over a published service. A changed price is a new quote row; the old one is marked superseded and its link stops accepting. |
+| Bookings engine (`convex/bookings.ts`) | `requestFromAgent` holds capacity, asks for the payment link through approvals, waits for a required agreement, confirms, and hands the job to Dispatch. |
+| Booking Forms | The company's booking pages. The agent has no forms of its own. |
+| Customers and properties | An inquiry matches or creates one customer; an address becomes a property. A partial match waits for a person. |
+| Authority and approvals | `sales.reply_and_quote`, `sales.follow_up`, `sales.confirm_booking` in the permission catalog. "Ask me first" goes to the approvals queue as `sales_action` or `sales_quote`. |
+| Messaging and consent | Every message goes through the Sales outbox and `checkSend`: consent, opt-outs, quiet hours, sender readiness. STOP and plain-language stops opt the prospect out. |
+| Tasks and events | Each open inquiry keeps one task. Everything is recorded with `recordEvent`. |
+| Billing | Reading a message with AI is the `sales_message_reading` task. Without a rate on the company's card, the rules reader is used and nothing is charged. |
 
-## Added for Sales
+## Added for the agent
 
-Tables: opportunities, the conversation, prepared actions, runs, quotes and their versions, follow-ups,
-forms and submissions, time holds, and the first review batch (`convex/lib/sales/schema.ts`).
+Tables (`convex/lib/sales/agentSchema.ts`):
+- the conversation (`salesMessages`)
+- prepared actions (`salesActions`)
+- runs (`salesRuns`)
+- follow-ups (`salesFollowUps`)
+- the first review batch (`salesBatches`)
 
-The runtime (`convex/salesAgent.ts`, `convex/lib/sales/agent.ts`) runs once per event: a new inquiry, a
-reply, a quote decision, a reminder coming due, an agreement or payment change, a person handing the
-conversation back. A reader (the company's rules, or an AI model when one is connected) only reads the
-customer's message into checked facts. Code decides what is asked, priced, sent and booked.
+Quotes gain a public page id, hash, deposit, terms and the customer's answer. Opportunities gain the
+agent's facts and next step. Both changes are optional fields on main's tables.
 
-## Four states that are never confused
+The runtime (`convex/salesAgent.ts`, `convex/lib/sales/agent.ts`) runs once per event:
+- a new inquiry
+- a reply
+- a quote decision
+- a reminder coming due
+- a person handing the conversation back
+- a sweep that picks up work left after a pause or a failure
 
-Open time (enough eligible cleaners are free) → reserved (a hold with an expiry) → booked (a job
-exists) → crew confirmed (Dispatch's, when a cleaner accepts). The screens name each one.
+A reader (the company's rules, or an AI model when one is connected and billed) only reads the
+customer's message into checked facts. Code decides what is asked, priced, sent and booked. A
+rewording is kept only if it adds no number, no link and no promise.
 
-## Decisions worth knowing
+## The quote page
 
-- **First review.** Until the Owner decides the first batch, nothing Sales prepares is sent. Deciding
-  it changes no permission.
-- **Conversations.** The tab is named Conversations and keeps the address `calls-messages`. Voice is
-  not built and nothing suggests it is.
-- **Advertising.** `sales.draft_ad_campaign` and the Google lead form stay as they were. A Google lead
-  now files a Sales opportunity. The permission sits under Sales only for compatibility and should
-  move to Marketing when Marketing is built; the Playbook shows it apart and says so.
-- **Booking forms can be framed.** `/c/form/*` is the one path without `X-Frame-Options: DENY`, so a
-  company can embed its own form.
+`/c/quote/<token>` shows the quote exactly as approved (`QuotePreview`, the same component the drawer
+shows). The customer can accept it, give the address, choose an open time, ask a question or decline.
+Accepting is a yes to the price and scope only. The booking is confirmed separately, when the
+booking's checklist is done.
+
+## Things a person still does
+
+- Approve the payment link. It goes through Approvals to an Owner or Manager.
+- Prepare a required agreement from the drawer, then review and send it from the booking.
+- Answer disputes, damage claims and anything the agent escalates.
 
 ## Email replies
 
-Every email Sales sends carries a reply address of its own on the receiving domain
+Every email the agent sends carries a reply address of its own on the receiving domain
 (`SALES_REPLY_DOMAIN`, for example `reply.selestial.io`): `r-<random key>@…`, with the key kept on the
-opportunity. Resend receives mail for that domain and posts `email.received` to `/webhooks/resend`;
-the notice has no body, so `convex/salesInbound.ts` fetches the message and files it.
+opportunity. Resend receives mail for that domain and posts `email.received` to `/webhooks/resend`.
+The notice has no body, so `convex/salesInbound.ts` fetches the message and files it.
 
 - The address says which conversation. Who sent it is checked separately: only mail from the
-  customer's own address that did not fail SPF/DKIM/DMARC is read as the customer. Anything else is
-  kept as a note for a person, and Sales does not act on it.
+  customer's own address that passed SPF/DKIM/DMARC is read as the customer. Anything else is kept as
+  a note for a person, and the agent does not act on it.
 - The quoted earlier message and the signature are cut off before reading.
 - Automatic replies are dropped. A message delivered twice is one message.
 
-Settings: `SALES_REPLY_DOMAIN`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` on Convex, and
-`email.received` ticked on the Resend webhook that points at `/webhooks/resend`.
+Settings needed:
+- `SALES_REPLY_DOMAIN`, `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` on Convex.
+- `email.received` ticked on the Resend webhook that points at `/webhooks/resend`.
+- The receiving domain's MX record pointed at Resend.
+
+Without `SALES_REPLY_DOMAIN`, replies go to the company's own address and the overview says so.
 
 ## Not built
 
-- A first email sent to a company's own address (not a reply to Sales). `internal.salesIntake.email`
-  is the door for a reader of a company mailbox; none is connected.
-- Voice, cold outbound, and sending an agreement or collecting a payment from Sales.
+- Chat tools for the agent's conversations. Chat reads the pipeline through the Sales workspace's
+  existing tools.
+- A first email sent to a company's own address (not a reply). `internal.salesIntake.email` is the
+  door for a mailbox reader; none is connected.
+- Voice and cold outbound.

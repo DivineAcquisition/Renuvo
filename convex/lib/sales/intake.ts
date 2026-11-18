@@ -1,5 +1,5 @@
 /**
- * Taking an inquiry in, from any source, once.
+ * Taking an inquiry in, from any source, once, as a pipeline opportunity the Sales agent works.
  *
  *  - Who it is. A person is matched to a customer on record only by their own address: the same email,
  *    or the same phone with the same name. The same phone under a different name (a household, a front
@@ -24,8 +24,8 @@ import type { Channel, PermissionSource } from "../compliance/schema";
 import { recordEvent, type Actor } from "../events";
 import { RECORD_STATUSES, type WorkKind } from "../statuses";
 import { quiet } from "./actions";
-import { SALES, setNext, SYSTEM } from "./opportunities";
-import type { Fact, ServiceKind, Source } from "./schema";
+import { agentStage, load, SALES, SEGMENT_OF_KIND, setNext, type Opp } from "./agentOpportunity";
+import type { Fact, ServiceKind, Source } from "./agentSchema";
 
 type Ctx = QueryCtx | MutationCtx;
 const MINUTE = 60_000;
@@ -78,7 +78,7 @@ export type NewInquiry = {
   /** A customer already on record, chosen by a person. Skips matching. */
   customerId?: Id<"customers">;
   kind: ServiceKind;
-  source: { kind: Source; formId?: Id<"salesForms">; submissionId?: Id<"salesFormSubmissions">; externalId?: string; campaign?: string; medium?: string; referrer?: string };
+  source: { kind: Source; externalId?: string; campaign?: string; medium?: string; referrer?: string };
   inquiry: string;
   receivedAt: number;
   channel: Channel;
@@ -93,6 +93,7 @@ export type NewInquiry = {
 };
 
 export async function opportunityByKey(ctx: Ctx, companyId: Id<"companies">, dedupeKey: string): Promise<Doc<"salesOpportunities"> | null> {
+  // An inquiry is named by its source's own id, so the same one is never filed twice.
   return ctx.db
     .query("salesOpportunities")
     .withIndex("by_company_dedupe", (q) => q.eq("companyId", companyId).eq("dedupeKey", dedupeKey))
@@ -100,9 +101,11 @@ export async function opportunityByKey(ctx: Ctx, companyId: Id<"companies">, ded
 }
 
 /** Files one inquiry as one opportunity. The same `dedupeKey` answers with the opportunity it already made. */
-export async function fileInquiry(ctx: MutationCtx, company: Doc<"companies">, input: NewInquiry): Promise<{ opportunity: Doc<"salesOpportunities">; created: boolean }> {
+const SOURCE_WORDS: Record<Source, string> = { form: "Form", sms: "Text message", email: "Email", manual: "Entered by the team", import: "Import", google_lead: "Google lead form", booking_page: "Booking page" };
+
+export async function fileInquiry(ctx: MutationCtx, company: Doc<"companies">, input: NewInquiry): Promise<{ opportunity: Opp; created: boolean }> {
   const existing = await opportunityByKey(ctx, company._id, input.dedupeKey);
-  if (existing) return { opportunity: existing, created: false };
+  if (existing) return { opportunity: await load(ctx, existing._id), created: false };
   const now = Date.now();
   const name = input.contact.name.trim().slice(0, 160) || input.contact.email?.trim() || input.contact.phone?.trim() || "New inquiry";
   let customer: Doc<"customers"> | null = input.customerId ? await ctx.db.get(input.customerId) : null;
@@ -125,8 +128,14 @@ export async function fileInquiry(ctx: MutationCtx, company: Doc<"companies">, i
   }
   const opportunityId = await ctx.db.insert("salesOpportunities", {
     companyId: company._id,
+    title: name,
+    segment: SEGMENT_OF_KIND[input.kind],
     customerId: customer._id,
-    source: input.source,
+    stage: "new",
+    ...(input.actor.kind === "member" ? { ownerMemberId: input.actor.memberId, createdBy: input.actor.memberId } : {}),
+    source: SOURCE_WORDS[input.source.kind],
+    followUps: "on",
+    intake: input.source,
     inquiry: input.inquiry.trim().slice(0, 4000) || "(no message)",
     receivedAt: input.receivedAt,
     kind: input.kind,
@@ -134,8 +143,6 @@ export async function fileInquiry(ctx: MutationCtx, company: Doc<"companies">, i
     ...(input.timing?.trim() ? { timing: { text: input.timing.trim().slice(0, 300) } } : {}),
     facts: (input.facts ?? []).slice(0, 60),
     asked: [],
-    stage: "new",
-    stageAt: now,
     match,
     channel: input.channel,
     humanTouches: input.actor.kind === "member" ? 1 : 0,
@@ -147,8 +154,8 @@ export async function fileInquiry(ctx: MutationCtx, company: Doc<"companies">, i
   });
   await ctx.db.insert("salesMessages", { companyId: company._id, opportunityId, customerId: customer._id, direction: "in", channel: input.source.kind === "form" ? "form" : input.source.kind === "sms" ? "sms" : input.source.kind === "email" ? "email" : "internal", author: input.actor.kind === "member" ? { kind: "member", memberId: input.actor.memberId } : { kind: "customer" }, body: input.inquiry.trim().slice(0, 4000) || "(no message)", providerId: input.providerId, at: input.receivedAt });
   await recordEvent(ctx, { companyId: company._id, type: "opportunity.created", actor: input.actor, subject: { table: "salesOpportunities", id: opportunityId }, data: { source: input.source.kind, kind: input.kind, match: match.state } });
-  let opportunity = (await ctx.db.get(opportunityId))!;
-  opportunity = await setNext(ctx, opportunity, match.state === "needs_review" ? { what: `${name} may already be a customer. Say whether they are the same person before Sales replies.`, by: "owner", dueAt: now + 60 * MINUTE } : { what: `Read ${name}'s inquiry and reply`, by: "sales", dueAt: now + 15 * MINUTE }, SALES);
+  let opportunity = await load(ctx, opportunityId);
+  opportunity = await setNext(ctx, opportunity, match.state === "needs_review" ? { what: `${name} may already be a customer. Say whether they are the same person before the agent replies.`, by: "owner", dueAt: now + 60 * MINUTE } : { what: `Read ${name}'s inquiry and reply`, by: "sales", dueAt: now + 15 * MINUTE }, SALES);
   return { opportunity, created: true };
 }
 
@@ -156,7 +163,7 @@ export async function fileInquiry(ctx: MutationCtx, company: Doc<"companies">, i
  * A message from the customer on an open opportunity. Kept once per provider id. Whatever Sales had
  * planned or drafted before it arrived is stopped: nothing written before a reply goes out after it.
  */
-export async function recordInbound(ctx: MutationCtx, opportunity: Doc<"salesOpportunities">, input: { channel: "sms" | "email"; body: string; subject?: string; providerId?: string; at: number }): Promise<{ message: Doc<"salesMessages">; created: boolean }> {
+export async function recordInbound(ctx: MutationCtx, opportunity: Opp, input: { channel: "sms" | "email"; body: string; subject?: string; providerId?: string; at: number }): Promise<{ message: Doc<"salesMessages">; created: boolean }> {
   if (input.providerId) {
     const seen = await ctx.db
       .query("salesMessages")
@@ -167,21 +174,25 @@ export async function recordInbound(ctx: MutationCtx, opportunity: Doc<"salesOpp
   const messageId = await ctx.db.insert("salesMessages", { companyId: opportunity.companyId, opportunityId: opportunity._id, customerId: opportunity.customerId, direction: "in", channel: input.channel, author: { kind: "customer" }, subject: input.subject?.slice(0, 200), body: input.body.trim().slice(0, 4000), providerId: input.providerId, at: input.at });
   // An out-of-order delivery never moves the clock backwards.
   const lastInboundAt = Math.max(opportunity.lastInboundAt ?? 0, input.at);
-  await ctx.db.patch(opportunity._id, { lastInboundAt, revision: opportunity.revision + 1, updatedAt: Date.now() });
-  await quiet(ctx, opportunity, "The customer replied.", SYSTEM);
-  await recordEvent(ctx, { companyId: opportunity.companyId, type: "opportunity.reply_received", actor: SYSTEM, subject: { table: "salesOpportunities", id: opportunity._id }, data: { channel: input.channel } });
+  await ctx.db.patch(opportunity._id, { lastInboundAt, revision: opportunity.agent.revision + 1, updatedAt: Date.now() });
+  await quiet(ctx, opportunity, "The customer replied.", { kind: "system" });
+  await recordEvent(ctx, { companyId: opportunity.companyId, type: "opportunity.reply_received", actor: { kind: "system" }, subject: { table: "salesOpportunities", id: opportunity._id }, data: { channel: input.channel } });
   return { message: (await ctx.db.get(messageId))!, created: true };
 }
 
-/** The open opportunity a message from this customer belongs to: the one Sales last wrote to, else the newest. */
-export async function openOpportunityFor(ctx: Ctx, companyId: Id<"companies">, customerId: Id<"customers">): Promise<Doc<"salesOpportunities"> | null> {
+/**
+ * The open opportunity the agent works that a message from this customer belongs to: the one the agent
+ * last wrote to, else the newest. A deal a person runs by hand is never picked up from a text.
+ */
+export async function openOpportunityFor(ctx: Ctx, companyId: Id<"companies">, customerId: Id<"customers">): Promise<Opp | null> {
   const rows = await ctx.db
     .query("salesOpportunities")
     .withIndex("by_company_customer", (q) => q.eq("companyId", companyId).eq("customerId", customerId))
     .take(50);
-  const open = rows.filter((row) => row.stage !== "won" && row.stage !== "closed_lost");
+  const open = rows.filter((row) => row.intake !== undefined && agentStage(row) !== "won" && agentStage(row) !== "closed_lost");
   if (open.length === 0) return null;
-  return open.sort((a, b) => (b.lastOutboundAt ?? b.createdAt) - (a.lastOutboundAt ?? a.createdAt))[0];
+  const best = open.sort((a, b) => (b.lastOutboundAt ?? b.createdAt) - (a.lastOutboundAt ?? a.createdAt))[0];
+  return load(ctx, best._id);
 }
 
 /** Whether anyone has ever cleaned for this customer. Such a customer's messages belong to Retention, not to Sales. */

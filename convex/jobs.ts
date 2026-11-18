@@ -10,21 +10,20 @@ import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyMutation, companyQuery, managerMutation, type MemberAccess } from "./lib/builders";
-import { endAssignment } from "./lib/dispatch/assignmentState";
 import { coverageOf, requiredCrew, staffing, type Coverage } from "./lib/dispatch/crew";
 import { reviewKey } from "./lib/dispatch/live";
 import { commitMove, planMove } from "./lib/dispatch/reschedule";
-import { checkedArrival, checkedCrew, createJob, span, type NewJob } from "./lib/dispatch/createJob";
 import { coverJob } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
+import { cancelVisit, createVisit, createVisitArgs } from "./lib/jobs/visits";
 import { byMember, recordEvent } from "./lib/events";
 import { businessSettingsOf, checkArea, checkHours } from "./lib/settings/business";
-import { quoteInputValidator } from "./lib/services/schema";
 import { ACTIVE_ASSIGNMENT, assertChange, JOB_CHANGES, jobStatusValidator, type JobStatus } from "./lib/statuses";
 import { liveTaskByKey, setTaskState } from "./lib/taskState";
 import { cents, instant, optionalText, tags, text } from "./lib/text";
 
 export { coverageOf, type Coverage };
+export { createVisitArgs };
 
 async function assignmentsOf(ctx: (QueryCtx | MutationCtx) & MemberAccess, job: Doc<"jobs">) {
   return ctx.db
@@ -32,6 +31,25 @@ async function assignmentsOf(ctx: (QueryCtx | MutationCtx) & MemberAccess, job: 
     .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))
     .take(100);
 }
+
+function span(startsAt: number, endsAt: number) {
+  const start = instant(startsAt, "The start time");
+  const end = instant(endsAt, "The end time");
+  if (start >= end) throw userError("A job must start before it ends.");
+  if (end - start > 24 * 60 * 60 * 1000) throw userError("A job cannot be longer than a day.");
+  return { startsAt: start, endsAt: end };
+}
+
+function checkedCrew(crew: number): number {
+  if (!Number.isInteger(crew) || crew < 1 || crew > 12) throw userError("A job needs a whole number of cleaners, from 1 to 12.");
+  return crew;
+}
+
+function checkedArrival(minutes: number): number {
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 12 * 60) throw userError("The arrival window must be a whole number of minutes, up to 12 hours.");
+  return minutes;
+}
+
 
 export const list = companyQuery({
   args: { from: v.number(), to: v.number(), status: v.optional(jobStatusValidator) },
@@ -62,31 +80,8 @@ export const get = companyQuery({
 });
 
 export const create = companyMutation({
-  args: {
-    customerId: v.id("customers"),
-    propertyId: v.id("properties"),
-    /**
-     * A service from Services & Pricing, by its key. Its published version's name, scope, skills and crew
-     * fill whatever is not given, and its price comes from the pricing engine with `quoteInput`. Archived
-     * services are refused.
-     */
-    serviceId: v.optional(v.string()),
-    /** The answers the service's price needs (size, rooms, extras, frequency). */
-    quoteInput: v.optional(quoteInputValidator),
-    /** The total the person was shown. If the engine now gives a different one, the visit is refused, not silently repriced. */
-    expectedTotalCents: v.optional(v.number()),
-    serviceType: v.optional(v.string()),
-    scope: v.optional(v.string()),
-    requiredSkills: v.optional(v.array(v.string())),
-    priceCents: v.optional(v.number()),
-    startsAt: v.number(),
-    endsAt: v.number(),
-    requiredCrew: v.optional(v.number()),
-    arrivalWindowMinutes: v.optional(v.number()),
-    hardDeadlineAt: v.optional(v.number()),
-    instructions: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => createJob(ctx, ctx.company, byMember(ctx), args as NewJob),
+  args: createVisitArgs,
+  handler: async (ctx, args) => createVisit(ctx, byMember(ctx), args),
 });
 
 /**
@@ -296,14 +291,7 @@ export const cancel = companyMutation({
   args: { jobId: v.id("jobs"), reason: v.string() },
   handler: async (ctx, args) => {
     const job = await owned(ctx, args.jobId);
-    const reason = text(args.reason, "The reason", 500);
-    await change(ctx, job, "cancelled");
-    await ctx.db.patch(job._id, { cancelReason: reason });
-    for (const assignment of await assignmentsOf(ctx, job)) {
-      if (!ACTIVE_ASSIGNMENT.includes(assignment.status)) continue;
-      await endAssignment(ctx, assignment, "cancelled", byMember(ctx), { endReason: "The job was cancelled.", endCause: "job_cancelled", data: { cause: "job_cancelled" } });
-    }
-    await coverJob(ctx, job._id);
+    await cancelVisit(ctx, job, text(args.reason, "The reason", 500), byMember(ctx));
     return null;
   },
 });

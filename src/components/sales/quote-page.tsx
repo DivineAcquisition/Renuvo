@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * The customer's quote page, opened from a private link with no sign-in. It shows one quote, exactly the
- * version that was sent, and lets the customer accept it, decline it or ask a question.
+ * The customer's quote page, opened from a private link with no sign-in. It shows one quote, exactly as
+ * it was sent, and lets the customer choose a time, accept it, decline it or ask a question.
  *
  * Accepting is a yes to the price and the scope. It is not a confirmed booking, and the page says so:
  * the booking is confirmed by the company once the time and anything else it needs are in place. A
- * quote that was revised, withdrawn or has passed its last day says which, and cannot be accepted.
+ * quote that was replaced, withdrawn or has passed its last day says which, and cannot be accepted.
  */
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import { QuotePreview } from "./quote-preview";
 
-type View = NonNullable<FunctionReturnType<typeof api.salesQuotePages.view>>;
+type View = NonNullable<FunctionReturnType<typeof api.quotePage.view>>;
 
 const control =
   "block w-full min-h-12 rounded-xl border border-border bg-card px-3.5 py-2.5 text-base text-strong placeholder:text-muted-foreground/70 focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30 disabled:opacity-60";
@@ -57,7 +57,7 @@ const time = (at: number, timezone: string) => new Intl.DateTimeFormat("en-US", 
 const slotWords = (slot: { startsAt: number; endsAt: number }, timezone: string) => `${day(slot.startsAt, timezone)}, ${time(slot.startsAt, timezone)} to ${time(slot.endsAt, timezone)}`;
 
 function Accept({ token, view }: { token: string; view: View }) {
-  const accept = useMutation(api.salesQuotePages.accept);
+  const accept = useMutation(api.quotePage.accept);
   const id = useId();
   const [name, setName] = useState(view.customerName && !/^[+\d]|@/.test(view.customerName) ? view.customerName : "");
   const [slot, setSlot] = useState<number | null>(null);
@@ -75,9 +75,9 @@ function Accept({ token, view }: { token: string; view: View }) {
     if (!addressDone) return setProblem("Enter the address where the service will be.");
     setBusy(true);
     try {
-      const result = await accept({ token, version: view.quote.version, hash: view.quote.hash, name, ...(slot !== null ? { slotStartsAt: slot } : {}), ...(view.needsAddress ? { address } : {}), ...(access.trim() ? { access } : {}) });
+      const result = await accept({ token, hash: view.quote.hash ?? "", name, ...(slot !== null ? { startsAt: slot } : {}), ...(view.needsAddress ? { address } : {}), ...(access.trim() ? { access } : {}) });
       if (result.status !== "accepted") setProblem(result.message);
-      else if (result.slot === "not_reserved") setNote("Your acceptance is in. The time you chose was just taken, so we’ll contact you to pick another.");
+      else if (result.time === "not_open") setNote("Your acceptance is in. The time you chose was just taken, so choose another below.");
     } catch (error) {
       setProblem(problemWords(error));
     } finally {
@@ -119,14 +119,14 @@ function Accept({ token, view }: { token: string; view: View }) {
           </Label>
           <input id={`${id}-access`} value={access} onChange={(event) => setAccess(event.target.value)} placeholder="Someone will be home, a key, a door code" disabled={busy} className={control} />
         </div>
-        {view.slots.length > 0 ? (
+        {view.times.length > 0 ? (
           <fieldset className="grid gap-2">
             <legend className="mb-1 text-sm font-semibold text-strong">
               Choose a time <span className="font-normal text-muted-foreground">(optional)</span>
             </legend>
-            <p className="text-xs text-muted-foreground">These times are open right now. Choosing one holds it for you while we finish the booking; it is confirmed when we tell you.</p>
+            <p className="text-xs text-muted-foreground">These times are open right now. The time is held when your booking is requested, and confirmed when we tell you.</p>
             <div className="grid gap-2">
-              {view.slots.map((option) => (
+              {view.times.map((option) => (
                 <label key={option.startsAt} className={cn("flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm has-focus-visible:outline-2 has-focus-visible:outline-brand-500", slot === option.startsAt ? "border-brand-500 bg-brand-500/5 text-strong" : "border-border bg-card text-strong")}>
                   <input type="radio" name={`${id}-slot`} checked={slot === option.startsAt} onChange={() => setSlot(option.startsAt)} disabled={busy} className="size-4 accent-[var(--color-brand-500)]" />
                   {slotWords(option, tz)}
@@ -163,9 +163,76 @@ function Accept({ token, view }: { token: string; view: View }) {
   );
 }
 
+/** After accepting: choose the time, or add the address and how to get in, until the booking holds a time. */
+function Finish({ token, view }: { token: string; view: View }) {
+  const finish = useMutation(api.quotePage.finish);
+  const id = useId();
+  const [slot, setSlot] = useState<number | null>(view.chosen?.startsAt ?? null);
+  const [address, setAddress] = useState({ line1: "", city: "", region: "", postalCode: "" });
+  const [access, setAccess] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<{ ok: boolean; message: string } | null>(null);
+  const tz = view.company.timezone;
+  const submit = async () => {
+    setBusy(true);
+    setAnswer(null);
+    try {
+      const addressGiven = address.line1.trim() && address.city.trim() && address.region.trim() && address.postalCode.trim();
+      setAnswer(await finish({ token, ...(slot !== null && slot !== view.chosen?.startsAt ? { startsAt: slot } : {}), ...(view.needsAddress && addressGiven ? { address } : {}), ...(access.trim() ? { access } : {}) }));
+    } catch (error) {
+      setAnswer({ ok: false, message: problemWords(error) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Panel>
+      <h2 className="text-lg font-semibold text-strong">Finish your booking</h2>
+      <div className="mt-4 grid gap-4">
+        {view.needsAddress ? (
+          <fieldset className="grid gap-3">
+            <legend className="mb-1 text-sm font-semibold text-strong">Where is the service?</legend>
+            <input aria-label="Street address" autoComplete="address-line1" placeholder="Street address" value={address.line1} onChange={(event) => setAddress({ ...address, line1: event.target.value })} disabled={busy} className={control} />
+            <div className="grid gap-3 sm:grid-cols-[1fr_6rem_8rem]">
+              <input aria-label="City" autoComplete="address-level2" placeholder="City" value={address.city} onChange={(event) => setAddress({ ...address, city: event.target.value })} disabled={busy} className={control} />
+              <input aria-label="State" autoComplete="address-level1" placeholder="State" value={address.region} onChange={(event) => setAddress({ ...address, region: event.target.value })} disabled={busy} className={control} />
+              <input aria-label="ZIP" autoComplete="postal-code" placeholder="ZIP" value={address.postalCode} onChange={(event) => setAddress({ ...address, postalCode: event.target.value })} disabled={busy} className={control} />
+            </div>
+          </fieldset>
+        ) : null}
+        {view.needsAccess ? (
+          <div className="grid gap-1.5">
+            <Label id={`${id}-access`}>How will our team get in?</Label>
+            <input id={`${id}-access`} value={access} onChange={(event) => setAccess(event.target.value)} placeholder="Someone will be home, a key, a door code" disabled={busy} className={control} />
+          </div>
+        ) : null}
+        {view.times.length > 0 ? (
+          <fieldset className="grid gap-2">
+            <legend className="mb-1 text-sm font-semibold text-strong">Choose a time</legend>
+            {view.times.map((option) => (
+              <label key={option.startsAt} className={cn("flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm has-focus-visible:outline-2 has-focus-visible:outline-brand-500", slot === option.startsAt ? "border-brand-500 bg-brand-500/5 text-strong" : "border-border bg-card text-strong")}>
+                <input type="radio" name={`${id}-slot`} checked={slot === option.startsAt} onChange={() => setSlot(option.startsAt)} disabled={busy} className="size-4 accent-[var(--color-brand-500)]" />
+                {slotWords(option, tz)}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
+        {answer ? (
+          <p role={answer.ok ? "status" : "alert"} className={cn("rounded-xl px-3.5 py-3 text-sm", answer.ok ? "bg-success/10 text-strong" : "border border-destructive/30 bg-destructive/5 text-destructive-foreground")}>
+            {answer.message}
+          </p>
+        ) : null}
+        <button type="button" onClick={() => void submit()} disabled={busy} className={primary}>
+          {busy ? "Sending…" : "Save"}
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
 function AskOrDecline({ token, view }: { token: string; view: View }) {
-  const ask = useMutation(api.salesQuotePages.ask);
-  const decline = useMutation(api.salesQuotePages.decline);
+  const ask = useMutation(api.quotePage.ask);
+  const decline = useMutation(api.quotePage.decline);
   const id = useId();
   const [mode, setMode] = useState<"ask" | "decline" | null>(null);
   const [text, setText] = useState("");
@@ -241,7 +308,7 @@ function AskOrDecline({ token, view }: { token: string; view: View }) {
 }
 
 export function QuotePage({ token }: { token: string }) {
-  const view = useQuery(api.salesQuotePages.view, { token });
+  const view = useQuery(api.quotePage.view, { token });
 
   if (view === undefined) {
     return (
@@ -268,20 +335,20 @@ export function QuotePage({ token }: { token: string }) {
   return (
     <Shell company={view.company.name}>
       <h1 className="sr-only">Your quote from {view.company.name}</h1>
-      {view.state === "accepted" && view.acceptance ? (
+      {view.state === "accepted" && view.quote.acceptance ? (
         <Panel tone="good">
           <p className="text-lg font-semibold text-strong" role="status">
-            {view.booked ? "You’re booked" : "Thanks, your acceptance is in"}
+            {view.booking?.status === "confirmed" ? "You’re booked" : "Thanks, your acceptance is in"}
           </p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            {view.acceptance.name} accepted this quote on {day(view.acceptance.at, tz)}.{" "}
-            {view.booked
-              ? view.chosenSlot
-                ? `Your visit is confirmed for ${slotWords(view.chosenSlot, tz)}.`
-                : "Your visit is confirmed."
-              : view.chosenSlot
-                ? `You asked for ${slotWords(view.chosenSlot, tz)}. It is held for you and is not confirmed yet: ${view.company.name} will confirm it once everything is in place.`
-                : `Your visit is not booked yet: ${view.company.name} will contact you to set the time.`}
+            {view.quote.acceptance.name} accepted this quote on {day(view.quote.acceptance.at, tz)}.{" "}
+            {view.booking?.status === "confirmed"
+              ? `Your visit is confirmed for ${day(view.booking.startsAt, tz)} at ${time(view.booking.startsAt, tz)}.`
+              : view.booking
+                ? `We’re holding ${day(view.booking.startsAt, tz)} at ${time(view.booking.startsAt, tz)} for you. It is confirmed once everything ${view.company.name} asked for is done.`
+                : view.chosen
+                  ? `You asked for ${slotWords(view.chosen, tz)}. ${view.company.name} is booking it now and will confirm.`
+                  : "Choose a time below so we can book your visit."}
           </p>
         </Panel>
       ) : view.state === "declined" ? (
@@ -298,24 +365,24 @@ export function QuotePage({ token }: { token: string }) {
           </p>
           <p className="mt-1 text-sm text-muted-foreground">Its last day has passed, so it can no longer be accepted. Ask {view.company.name} for a fresh quote: prices and open times may have changed.</p>
         </Panel>
-      ) : view.state === "revoked" ? (
+      ) : view.state === "withdrawn" || view.state === "superseded" ? (
         <Panel tone="warn">
           <p className="text-lg font-semibold text-strong" role="status">
-            This quote was withdrawn
+            {view.state === "superseded" ? "This quote was replaced" : "This quote was withdrawn"}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">{view.company.name} withdrew it, so it can no longer be accepted. Contact them for a new one.</p>
+          <p className="mt-1 text-sm text-muted-foreground">{view.state === "superseded" ? `${view.company.name} sent a newer quote. Use the link in their latest message.` : `${view.company.name} withdrew it, so it can no longer be accepted. Contact them for a new one.`}</p>
         </Panel>
       ) : (
         <div className="px-1">
           <p className="font-heading text-2xl tracking-tight text-strong">{first ? `Hi ${first}, here is your quote` : "Here is your quote"}</p>
-          {view.revised ? <p className="mt-1 text-sm text-muted-foreground">This is an updated quote (version {view.quote.version}). It replaces the one you were sent before.</p> : null}
         </div>
       )}
 
-      <QuotePreview version={view.quote} company={view.company.name} number={view.number} validUntil={view.validUntil} timezone={tz} className="rounded-3xl shadow-[0_24px_60px_-32px_rgba(27,14,69,0.35)]" />
+      <QuotePreview quote={view.quote} company={view.company.name} timezone={tz} className="rounded-3xl shadow-[0_24px_60px_-32px_rgba(27,14,69,0.35)]" />
 
       {view.state === "open" ? <Accept token={token} view={view} /> : null}
-      {view.state !== "revoked" ? <AskOrDecline token={token} view={view} /> : null}
+      {view.state === "accepted" && !view.booking && (view.times.length > 0 || view.needsAddress || view.needsAccess) ? <Finish token={token} view={view} /> : null}
+      {view.state !== "withdrawn" && view.state !== "superseded" ? <AskOrDecline token={token} view={view} /> : null}
       <p className="px-2 text-center text-xs text-muted-foreground">This page is private to you. Anyone with the link can see this quote, so share it with care.</p>
     </Shell>
   );

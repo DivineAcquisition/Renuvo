@@ -230,9 +230,7 @@ describe("Services & Pricing", () => {
       const change = await as.query(api.services.change, { companyId, changeId });
       const dispatch = change.agentNotes.find((note) => note.agent === "dispatch");
       expect(dispatch).toMatchObject({ status: "concern", suggestion: { field: "team.crewSize", value: 3 } });
-      // Sales reads the spec for what a customer must answer before it can quote. A fixed price needs only where the property is.
-      expect(change.agentNotes.find((note) => note.agent === "sales")).toMatchObject({ status: "ok", title: "Sales can quote this from answers" });
-      expect(change.agentNotes.find((note) => note.agent === "retention")?.status).toBe("unavailable");
+      expect(change.agentNotes.find((note) => note.agent === "sales")?.status).toBe("unavailable");
       await as.mutation(api.services.applySuggestion, { companyId, serviceId, field: "team.crewSize", value: 3 });
       expect((await as.query(api.services.change, { companyId, changeId })).state).toBe("returned");
       expect((await as.query(api.services.service, { companyId, serviceId })).draft?.spec.team.crewSize).toBe(3);
@@ -351,6 +349,50 @@ describe("Services & Pricing", () => {
       // Chat never publishes: that stays the Owner's act in the workspace.
       expect((await as.query(api.services.service, { companyId, serviceId })).live).toBeNull();
       expect(mockChat.seen[0].tools).not.toContain("publish_service");
+    });
+
+    it("proposes a property's own price only after the person approves, quotes with it once the Owner approves, and never approves it itself", async () => {
+      const { t, as, companyId } = await setup();
+      const { serviceId } = await publishNew(as, companyId, readySpec());
+      const where = await place(as, companyId);
+      const manager = await addMember(t, as, companyId, "manager-a", "manager");
+      const input = { service: "Standard clean", propertyId: where.propertyId, baseCents: 18500, endsAfter: "2027-06-30", reason: "Walkthrough on Feb 26." };
+      mockChat.script = [{ toolCalls: [{ name: "propose_property_price", input }] }, { text: "Sent to the Owner." }];
+      const sent = await manager.mutation(api.chat.send, { companyId, text: "Give 12 Elm St its own price of $185 until the end of June.", clientKey: "pp-1" });
+      await settle(t);
+      const chat = await manager.query(api.chat.thread, { companyId, conversationId: sent.conversationId });
+      const step = Object.values(chat.steps).find((s) => (s as { tool: string }).tool === "propose_property_price") as { stepId: string; status: string; preview?: { summary: string; lines: string[] } };
+      expect(step.status).toBe("awaiting_approval");
+      expect(step.preview?.summary).toBe("Propose $185.00 as 12 Elm St, Austin's own base price for Standard clean");
+      expect(step.preview?.lines.join(" ")).toContain("After June 30, 2027, the property pays the service's price again.");
+      expect((await as.query(api.services.changes, { companyId })).changes.filter((c) => c.kind === "property_price")).toEqual([]);
+      await manager.mutation(api.chat.decideStep, { companyId, stepId: step.stepId, approve: true });
+      await settle(t);
+      const [change] = (await as.query(api.services.changes, { companyId })).changes.filter((c) => c.kind === "property_price");
+      expect(change).toMatchObject({ state: "in_review", title: "Own price for 12 Elm St, Austin" });
+      // Chat has no tool to approve it: the Owner does, in Changes.
+      expect(mockChat.seen[0].tools).not.toContain("approve_property_price");
+      const review = await as.query(api.services.change, { companyId, changeId: change.id });
+      expect(review.evidence).toEqual([expect.objectContaining({ label: "Proposed in Chat" })]);
+      await as.mutation(api.services.approve, { companyId, changeId: change.id, hash: review.hash, publish: true });
+
+      // Quoting at the property uses its own approved price; a price the model makes up is refused as input.
+      mockChat.script = [
+        { toolCalls: [{ name: "quote_service", input: { service: "Standard clean", propertyId: where.propertyId, input: { bedrooms: 2, bathrooms: 1, propertyPrice: { baseCents: 100 } } } }] },
+        { toolCalls: [{ name: "quote_service", input: { service: "Standard clean", propertyId: where.propertyId, input: { bedrooms: 2, bathrooms: 1 } } }] },
+        { text: "$185." },
+      ];
+      await as.mutation(api.chat.send, { companyId, text: "What does a clean at 12 Elm St cost?", clientKey: "pp-2" });
+      await settle(t);
+      const results = (mockChat.seen.at(-1)!.messages as { role: string; content: { type: string; content?: string }[] | string }[])
+        .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+        .filter((c) => c.type === "tool_result")
+        .map((c) => JSON.parse(c.content!));
+      expect(results[0]).toMatchObject({ status: "invalid_input", why: "input.input.propertyPrice is not expected." });
+      expect(results[1].summary).toBe("Standard clean: $185.00 per visit");
+      expect(results[1].result.propertyPrice).toBe("12 Elm St, Austin has its own base price of $185.00, approved by the Owner (ends after June 30, 2027).");
+      expect(results[1].result.lines[0]).toMatchObject({ label: "Base price for this property", amountCents: 18500 });
+      expect((await as.query(api.services.service, { companyId, serviceId })).live?.version).toBe(1);
     });
 
     it("gives every reply the business, the person and where the conversation started, even after its first messages scroll away", async () => {

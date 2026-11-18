@@ -11,7 +11,7 @@
  */
 import { claudeSalesModel } from "./claude";
 import { readByRule, type ReadInput } from "./interpret";
-import type { Reading } from "./schema";
+import type { Reading } from "./agentSchema";
 
 export type WordingInput = {
   /** The message as the company's templates wrote it. Every fact in it is already checked. */

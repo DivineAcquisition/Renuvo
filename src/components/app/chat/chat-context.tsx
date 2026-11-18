@@ -7,7 +7,7 @@ import { breadcrumbsFor } from "@/lib/app/navigation-helpers";
 import { chatStorageKey, parseStoredChat } from "@/lib/app/chat/session";
 
 /** A record a page offers to the chat as context. The server checks it again, and labels it from the record. */
-export type OfferedRecord = { table: "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "chatArtifacts" | "invoices" | "salesOpportunities"; id: string };
+export type OfferedRecord = { table: "customers" | "properties" | "cleaners" | "jobs" | "tasks" | "applications" | "hiringNeeds" | "chatArtifacts" | "invoices"; id: string };
 
 type ChatStore = {
   /** The chat open in the side panel and remembered for this person in this company. */

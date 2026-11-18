@@ -12,7 +12,7 @@ import { queueMessage } from "../messaging/outbox";
 import { assertChange, ASSIGNMENT_CHANGES, type AssignmentStatus, type EndCause } from "../statuses";
 import { jobCoverageRequests, settleCoverage } from "./coverage";
 import { requiredCrew, staffing } from "./crew";
-import { heldSpans, jobAssignments } from "./facts";
+import { heldSpans, jobAssignments, standingProblem } from "./facts";
 import { issueLink, revokeAssignmentLinks } from "./links";
 import { dispatchPolicy } from "./policy";
 import { confirmedSms, withdrawnSms } from "./sms";
@@ -80,6 +80,10 @@ export async function answerOffer(ctx: MutationCtx, assignment: Doc<"assignments
     return { status: "refused", code: "filled", message: requiredCrew(job) === 1 ? "Another cleaner has already accepted this job." : "This job already has every cleaner it needs." };
   }
   if (cleaner.status !== "ready") return { status: "refused", code: "not_ready", message: "This cleaner is not marked ready for work, so the offer cannot be accepted." };
+  // What was true when the offer went out is read again: a document that lapsed, a requirement applied since, or
+  // a subcontractor relationship that ended stops the acceptance, never a job they already have.
+  const standing = await standingProblem(ctx, job, cleaner);
+  if (standing) return { status: "refused", code: "not_ready", message: `This cleaner ${standing}, so the offer cannot be accepted.` };
   const span = { startsAt: job.startsAt, endsAt: job.endsAt };
   const committed = await heldSpans(ctx, job.companyId, cleaner._id, job._id, ["accepted"]);
   if (committed.some((other) => overlaps(other, span))) {

@@ -136,15 +136,32 @@ export async function eraseCustomerRecords(ctx: Ctx, customer: Doc<"customers">)
   const steps: EraseStep[] = [];
   const name = customer.name;
 
-  await ctx.db.patch(customer._id, { name: ERASED_CUSTOMER, email: undefined, phone: undefined, preferences: undefined, status: "archived" });
-  steps.push({ step: "Customer details", state: "done", detail: "Name replaced with \"Erased customer\"; email, phone and preferences removed; the customer is archived." });
+  await ctx.db.patch(customer._id, { name: ERASED_CUSTOMER, email: undefined, phone: undefined, preferences: undefined, privateNotes: undefined, communication: undefined, relationshipNote: undefined, archivedReason: undefined, status: "archived" });
+  steps.push({ step: "Customer details", state: "done", detail: "Name replaced with \"Erased customer\"; email, phone, preferences and notes removed; the customer is archived." });
+
+  const contacts = await ctx.db
+    .query("clientContacts")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const contact of contacts) await ctx.db.patch(contact._id, { name: ERASED_CUSTOMER, title: undefined, email: undefined, phone: undefined, status: "archived" });
+  const notes = await ctx.db
+    .query("clientNotes")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const note of notes) await ctx.db.delete(note._id);
+  const inbound = await ctx.db
+    .query("inboundMessages")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const message of inbound) await ctx.db.patch(message._id, { from: "erased", body: "(erased)" });
+  steps.push({ step: "Contacts, notes and texts", state: "done", detail: `${contacts.length} contact${contacts.length === 1 ? "" : "s"} scrubbed, ${notes.length} internal note${notes.length === 1 ? "" : "s"} deleted, ${inbound.length} received text${inbound.length === 1 ? "" : "s"} blanked.` });
 
   const properties = await ctx.db
     .query("properties")
     .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
     .take(MAX_ROWS);
   for (const property of properties) {
-    await ctx.db.patch(property._id, { label: undefined, address: { line1: "Erased address", city: "", region: "", postalCode: "" }, accessInstructions: undefined, status: "archived" });
+    await ctx.db.patch(property._id, { label: undefined, address: { line1: "Erased address", city: "", region: "", postalCode: "" }, accessInstructions: undefined, parking: undefined, crewNotes: undefined, clientNotes: undefined, officeNotes: undefined, details: undefined, status: "archived" });
   }
   steps.push({ step: "Properties", state: "done", detail: `${properties.length} address${properties.length === 1 ? "" : "es"} and access instructions removed.` });
 
@@ -165,51 +182,7 @@ export async function eraseCustomerRecords(ctx: Ctx, customer: Doc<"customers">)
   const scrubbed = await scrubName(ctx, name, ERASED_CUSTOMER);
   steps.push({ step: "Name in tasks and approvals", state: "done", detail: `The name was replaced in ${scrubbed} task${scrubbed === 1 ? "" : "s"}, approval${scrubbed === 1 ? "" : "s"} or coverage note${scrubbed === 1 ? "" : "s"}.` });
 
-  // What Sales holds: the conversation's words, what the customer told it, and anything still waiting to go.
-  const opportunities = await ctx.db
-    .query("salesOpportunities")
-    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
-    .take(MAX_ROWS);
-  let words = 0;
-  let stopped = 0;
-  for (const opportunity of opportunities) {
-    const thread = await ctx.db
-      .query("salesMessages")
-      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
-      .take(MAX_ROWS);
-    for (const row of thread) {
-      await ctx.db.patch(row._id, { body: "Erased.", subject: undefined });
-      words += 1;
-    }
-    const actions = await ctx.db
-      .query("salesActions")
-      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
-      .take(MAX_ROWS);
-    for (const action of actions) await ctx.db.patch(action._id, { body: undefined, subject: undefined, evidence: [], summary: "Erased.", reason: "Erased.", ...(action.status === "prepared" || action.status === "awaiting_approval" ? { status: "discarded" as const, result: "The customer's details were erased." } : {}) });
-    const reminders = await ctx.db
-      .query("salesFollowUps")
-      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
-      .take(MAX_ROWS);
-    for (const reminder of reminders) {
-      if (reminder.status === "scheduled") stopped += 1;
-      await ctx.db.patch(reminder._id, { preview: "Erased.", ...(reminder.status === "scheduled" ? { status: "cancelled" as const, stopReason: "The customer's details were erased." } : {}) });
-    }
-    const outbox = await ctx.db
-      .query("messages")
-      .withIndex("by_company_opportunity", (q) => q.eq("companyId", ctx.companyId).eq("opportunityId", opportunity._id))
-      .take(MAX_ROWS);
-    for (const message of outbox) await ctx.db.patch(message._id, { body: "Erased.", to: undefined, subject: undefined, ...(message.status === "queued" || message.status === "held" ? { status: "not_sent" as const, problem: "The customer's details were erased before it went." } : {}) });
-    await ctx.db.patch(opportunity._id, { inquiry: "Erased.", facts: [], asked: [], timing: undefined, nextAction: undefined, ...(opportunity.stage !== "won" && opportunity.stage !== "closed_lost" ? { stage: "closed_lost" as const, stageAt: Date.now(), outcome: { kind: "lost" as const, reason: "other" as const, note: "The customer's details were erased.", at: Date.now(), by: { kind: "system" as const } } } : {}) });
-  }
-  const submissions = opportunities.length;
-  for (const opportunity of opportunities) {
-    if (!opportunity.source.submissionId) continue;
-    const submission = await ctx.db.get(opportunity.source.submissionId);
-    if (submission) await ctx.db.patch(submission._id, { answers: {}, contact: { name: ERASED_CUSTOMER } });
-  }
-  steps.push({ step: "Sales conversations", state: "done", detail: `${submissions} inquir${submissions === 1 ? "y" : "ies"} closed; the words of ${words} message${words === 1 ? "" : "s"}, what the customer told Sales and their form answers removed; ${stopped} planned reminder${stopped === 1 ? "" : "s"} cancelled. Quotes keep their amounts, for the company's records.` });
-
-  steps.push({ step: "Queued messages", state: "done", detail: "Any message still waiting to go to this customer was stopped." });
+  steps.push({ step: "Queued messages", state: "done", detail: "Selestial does not message customers yet, so none were waiting." });
   steps.push({ step: "Action links", state: "done", detail: "Customers have no action links." });
 
   const withdrawn = await withdrawExports(ctx);

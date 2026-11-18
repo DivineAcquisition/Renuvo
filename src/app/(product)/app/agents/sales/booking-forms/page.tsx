@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import { SalesFormsScreen } from "@/components/app/screens/sales/forms";
+import { BookingFormsHome } from "@/components/app/booking/home";
 
-export const metadata: Metadata = { title: "Booking Forms" };
+export const metadata: Metadata = { title: "Booking Experiences" };
 
 export default function Page() {
-  return <SalesFormsScreen />;
+  return (
+    <Suspense>
+      <BookingFormsHome />
+    </Suspense>
+  );
 }
