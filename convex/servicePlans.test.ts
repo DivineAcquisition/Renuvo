@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { addMember, company, NOW, refusal, start } from "../tests/harness";
+import { addMember, company, dispatchJob, NOW, refusal, start } from "../tests/harness";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { blankSpec, defaultModifiers, type Spec } from "./lib/services/spec";
@@ -262,5 +262,64 @@ describe("Properties", () => {
     const { propertyId } = await weekly(as, companyId);
     const detail = await as.query(api.clientProperties.detail, { companyId, propertyId });
     expect(await refusal(as.mutation(api.clientProperties.archive, { companyId, propertyId, expectedRevision: detail.property.revision }))).toContain("Not archived");
+  });
+});
+
+describe("Clients & Properties scenarios", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const inView = async (as: As, companyId: Id<"companies">, view: "residential_recurring" | "residential_one_time") =>
+    (await as.query(api.clients.directory, { companyId, view, paginationOpts: { numItems: 25, cursor: null } })).page.map((row) => row.name);
+
+  it("files a residential client with a plan and a one-time deep clean under both, from one record", async () => {
+    const { t, as, companyId } = await setup();
+    const plan = await weekly(as, companyId);
+    expect(await inView(as, companyId, "residential_recurring")).toEqual(["Dana Whitfield"]);
+    expect(await inView(as, companyId, "residential_one_time")).toEqual([]);
+    await dispatchJob(as, companyId, { customerId: plan.customerId, propertyId: plan.propertyId }, { priceCents: 32500 });
+    expect(await inView(as, companyId, "residential_one_time")).toEqual(["Dana Whitfield"]);
+    expect(await inView(as, companyId, "residential_recurring")).toEqual(["Dana Whitfield"]);
+    expect(await t.run(async (ctx) => (await ctx.db.query("customers").collect()).length)).toBe(1);
+  });
+
+  it("never reads a signed proposal as booked service", async () => {
+    const { t, as, companyId } = await setup();
+    const where = await client(as, companyId);
+    const agreementId = await as.mutation(api.companyAgreements.create, { companyId, docType: "recurring_residential", links: [{ table: "customers", id: where.customerId }] });
+    // The signing service reported every signature.
+    await t.run(async (ctx) => ctx.db.patch(agreementId as Id<"agreements">, { workflow: "signed", provenance: "provider_signed", signedVersion: 1 }));
+    const docs = await as.query(api.clientDocuments.proposals, { companyId, customerId: where.customerId });
+    expect(docs.agreements[0]).toMatchObject({ workflow: "signed", next: "Signed. No service is booked by signing: book a visit or set up a plan." });
+    const summary = await as.query(api.clients.summary, { companyId, customerId: where.customerId });
+    expect(summary.nextVisit).toBeNull();
+    expect(await t.run(async (ctx) => (await ctx.db.query("jobs").collect()).length)).toBe(0);
+  });
+
+  it("keeps every part of a client's profile to its own company", async () => {
+    const { t, as, companyId } = await setup();
+    const plan = await weekly(as, companyId);
+    const other = await company(t, "owner-b", "Beta Cleaning");
+    const b = { companyId: other.companyId };
+    const reads = [
+      () => other.as.query(api.clients.profile, { ...b, customerId: plan.customerId }),
+      () => other.as.query(api.servicePlans.forClient, { ...b, customerId: plan.customerId }),
+      () => other.as.query(api.clientProperties.detail, { ...b, propertyId: plan.propertyId }),
+      () => other.as.query(api.clientConversations.thread, { ...b, customerId: plan.customerId }),
+      () => other.as.query(api.clientConversations.composer, { ...b, customerId: plan.customerId }),
+      () => other.as.query(api.clientDocuments.documents, { ...b, customerId: plan.customerId }),
+      () => other.as.query(api.clientDocuments.proposals, { ...b, customerId: plan.customerId }),
+      () => other.as.query(api.clientBilling.summary, { ...b, customerId: plan.customerId }),
+    ];
+    for (const read of reads) expect(await refusal(read())).toBe("Not found.");
+    expect(await refusal(other.as.mutation(api.servicePlans.pause, { ...b, planId: plan.planId, from: "2027-03-09", shown: [], expectedRevision: 1 }))).toBe("Not found.");
+    expect(await refusal(other.as.mutation(api.clientConversations.addNote, { ...b, customerId: plan.customerId, body: "hello" }))).toBe("Not found.");
+    // And the first company's own reads still work.
+    expect((await as.query(api.clientConversations.thread, { companyId, customerId: plan.customerId })).items).toEqual([]);
   });
 });

@@ -251,14 +251,14 @@ function Compose({ profile }: { profile: Profile }) {
   const [mode, setMode] = useState<Mode>("message");
   return (
     <div className="border-t border-border p-4">
-      <div role="tablist" aria-label="Write" className="mb-3 inline-flex rounded-lg border border-border p-0.5 text-sm">
+      <div role="group" aria-label="Write" className="mb-3 inline-flex rounded-lg border border-border p-0.5 text-sm">
         {(
           [
             ["message", "Message the client", SendIcon],
             ["note", "Internal note", NotebookPenIcon],
           ] as const
         ).map(([id, label, Icon]) => (
-          <button key={id} role="tab" type="button" aria-selected={mode === id} onClick={() => setMode(id)} className={cn("inline-flex items-center gap-1.5 rounded-md px-3 py-1.5", mode === id ? "bg-brand-500/10 font-medium text-brand-300" : "text-muted-foreground hover:text-strong")}>
+          <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)} className={cn("inline-flex items-center gap-1.5 rounded-md px-3 py-1.5", mode === id ? "bg-brand-500/10 font-medium text-brand-300" : "text-muted-foreground hover:text-strong")}>
             <Icon className="size-4" aria-hidden /> {label}
           </button>
         ))}
