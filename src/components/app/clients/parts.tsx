@@ -94,7 +94,7 @@ export function NextServiceCard({ visit, timezone, onBook }: { visit: Visit | nu
 export function VisitRow({ visit, timezone, showProperty = true }: { visit: Visit; timezone: string; showProperty?: boolean }) {
   return (
     <li>
-      <OpenDetail kind="job" id={visit.id} className="grid w-full gap-1 rounded-xl border border-border px-3 py-2.5 text-left text-sm transition-colors hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+      <OpenDetail kind="job" id={visit.id} className="grid w-full gap-1 rounded-xl border border-border px-3 py-2.5 text-left text-sm transition-colors hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500/50 sm:grid-cols-[11.5rem_minmax(0,1fr)_auto] sm:items-center sm:gap-3">
         <span className="text-strong tabular-nums">{when(visit.startsAt, timezone)}</span>
         <span className="min-w-0">
           <span className="font-medium text-strong">{visit.service}</span>

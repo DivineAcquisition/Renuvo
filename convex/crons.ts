@@ -43,6 +43,8 @@ crons.interval("chat closes interrupted responses", { minutes: 2 }, internal.cha
 // Agreements: signing requests past their expiry are closed, renewal dates open a task for a person (never a renewal), and abandoned uploads are removed.
 crons.interval("expire agreement signing requests", { minutes: 30 }, internal.agreementSigning.sweep, {});
 crons.daily("remind about agreement renewals and expiries", { hourUTC: 13, minuteUTC: 11 }, internal.agreementRenewals.sweep, {});
+// Service plans keep their visits booked about four weeks ahead.
+crons.daily("service plans book their visits ahead", { hourUTC: 10, minuteUTC: 47 }, internal.servicePlans.bookAll, {});
 // Property prices: two weeks before a review or end date the Owner gets a task; past an end date it is marked ended.
 crons.daily("remind about property price review and end dates", { hourUTC: 12, minuteUTC: 23 }, internal.propertyPrices.sweep, {});
 crons.daily("remove abandoned agreement uploads", { hourUTC: 8, minuteUTC: 29 }, internal.agreementFiles.cleanup, {});
