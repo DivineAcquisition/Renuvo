@@ -192,10 +192,11 @@ async function jobDetail(ctx: Ctx, jobId: Id<"jobs">, asOf: number): Promise<Det
     { label: "Must finish by", value: job.hardDeadlineAt ? when(job.hardDeadlineAt, asOf, tz) : "No deadline set", ref: null, missing: !job.hardDeadlineAt },
     ...(job.requiredSkills.length > 0 ? [{ label: "Skills needed", value: job.requiredSkills.join(", "), ref: null }] : []),
     { label: "Crew instructions", value: job.instructions ?? "None recorded", ref: null, missing: !job.instructions },
-    { label: "Access instructions", value: property?.accessInstructions ?? "None recorded", ref: null, missing: !property?.accessInstructions },
+    // Codes, keys and alarms are for Owners and Managers (and the assigned crew, on their own job page).
+    { label: "Access instructions", value: !property?.accessInstructions ? "None recorded" : isManager(ctx.role) ? property.accessInstructions : "On file. Owners and Managers can see it.", ref: null, missing: !property?.accessInstructions },
     { label: "Price", value: price ?? "No price set", ref: null, missing: !price },
     { label: "Payment", value: "Payments are not connected yet", ref: null, missing: true },
-    { label: "Conversation", value: "Conversations are not built yet", ref: null, missing: true },
+    { label: "Conversation", value: "On the client's Conversations tab", ref: null },
   ];
 
   const items = await jobChecklist(ctx, job);

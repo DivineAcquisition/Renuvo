@@ -6,6 +6,7 @@
  * sees who it is to, at which address, on which channel, and what the sending policy says now.
  */
 import { useMutation, useQuery } from "convex/react";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
@@ -317,9 +318,14 @@ function MessageForm({ profile, composer }: { profile: Profile; composer: Compos
   const [who, setWho] = useState(String(Math.max(0, firstOk)));
   const recipient = composer.recipients[Number(who)] ?? composer.recipients[0];
   const preferred = composer.preferred === "email" ? "email" : "sms";
-  const [channel, setChannel] = useState<"sms" | "email">(recipient && !recipient[preferred].ok && recipient[preferred === "sms" ? "email" : "sms"].ok ? (preferred === "sms" ? "email" : "sms") : preferred);
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  // A draft from Chat arrives in the address. It is only text in the box: a person reads it, edits it and sends it.
+  const params = useSearchParams();
+  const drafted = params.get("draft");
+  const draftChannel = params.get("channel") === "email" ? "email" : params.get("channel") === "sms" ? "sms" : null;
+  const [channel, setChannel] = useState<"sms" | "email">(draftChannel ?? (recipient && !recipient[preferred].ok && recipient[preferred === "sms" ? "email" : "sms"].ok ? (preferred === "sms" ? "email" : "sms") : preferred));
+  const [subject, setSubject] = useState(params.get("subject") ?? "");
+  const [body, setBody] = useState(drafted ?? "");
+  const [fromChat, setFromChat] = useState(Boolean(drafted));
   const [about, setAbout] = useState("");
   const [later, setLater] = useState(false);
   const [sendDay, setSendDay] = useState("");
@@ -350,6 +356,12 @@ function MessageForm({ profile, composer }: { profile: Profile; composer: Compos
           });
           setBody("");
           setSubject("");
+          if (fromChat) {
+            setFromChat(false);
+            const url = new URL(window.location.href);
+            for (const key of ["draft", "channel", "subject"]) url.searchParams.delete(key);
+            window.history.replaceState(window.history.state, "", url.toString());
+          }
           setSent(result.status === "queued" ? "Sending now. Its delivery shows in the thread." : result.sendAt ? `Held. It goes ${when(result.sendAt, composer.timezone)}${result.words ? `: ${result.words}` : "."}` : "Held.");
         });
       }}
@@ -395,6 +407,7 @@ function MessageForm({ profile, composer }: { profile: Profile; composer: Compos
           <TextInput value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} required />
         </Field>
       ) : null}
+      {fromChat ? <p className="rounded-lg bg-info/[0.08] px-3 py-2 text-sm text-info-foreground">Drafted in Chat. Nothing has been sent: read it, check who it goes to, and edit it before sending.</p> : null}
       <Field label="Message" hint={channel === "sms" ? `${body.length}/1600 · texts over 160 characters arrive in parts` : undefined}>
         <TextArea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={channel === "sms" ? 1600 : 10000} required />
       </Field>
@@ -426,7 +439,7 @@ function MessageForm({ profile, composer }: { profile: Profile; composer: Compos
       <FormError message={error} />
       {sent ? <p className="text-sm text-muted-foreground">{sent}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={busy || blocked || !body.trim() || (later && sendAt === undefined)}>
+        <Button type="submit" variant="primary" loading={busy} disabled={busy || blocked || !body.trim() || (later && sendAt === undefined)}>
           <SendIcon aria-hidden /> {later ? "Schedule" : check.until ? "Send when allowed" : "Send"}
         </Button>
         {blocked ? <span className="text-xs text-muted-foreground">Choose another recipient or channel.</span> : null}

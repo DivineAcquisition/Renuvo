@@ -210,7 +210,7 @@ describe("Company Chat", () => {
     const conversationId = await ask(t, as, companyId, "Text Dana that we're running late.");
     const view = await thread(as, companyId, conversationId);
     expect(steps(view)[0]).toMatchObject({ tool: "send_customer_message", status: "unavailable" });
-    expect(steps(view)[0].summary).toMatch(/Customer Care is not built/);
+    expect(steps(view)[0].summary).toMatch(/Chat never sends to clients/);
     expect(await t.run((ctx) => ctx.db.query("messages").collect())).toEqual([]);
   });
 
