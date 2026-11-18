@@ -312,10 +312,15 @@ export function DispatchScheduleScreen() {
         title="Schedule"
         lead="Each ready cleaner’s day: what they accepted, what is held for them by an open offer, and the hours and time off they gave. Visits still short a cleaner sit in the first lane."
         actions={
-          <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
-            <Plus aria-hidden />
-            Add a visit
-          </Button>
+          <>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/app/agents/sales/new?mode=booking&from=dispatch">Create booking</Link>
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
+              <Plus aria-hidden />
+              Add a visit
+            </Button>
+          </>
         }
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">

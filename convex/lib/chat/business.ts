@@ -116,6 +116,13 @@ export function personContext(member: Doc<"members">, role: Role, timezone: stri
  */
 export async function conversationFocus(ctx: QueryCtx, conversation: Doc<"conversations">): Promise<string | null> {
   const lines: string[] = [];
+  if (conversation.origin?.kind === "sales_draft") {
+    const draft = await ctx.db.get(conversation.origin.draftId);
+    if (draft && draft.companyId === conversation.companyId) {
+      const customer = draft.customerId ? await ctx.db.get(draft.customerId) : null;
+      lines.push(`- It began in the Sales workspace on a ${draft.mode === "booking" ? (draft.bookingKind === "recurring" ? "recurring booking" : "one-time booking") : `${draft.segment} proposal`} draft (draft id ${draft._id}) for ${customer ? clip(customer.name, 80) : "a customer not chosen yet"}. Use the sales tools to read the draft and prepare changes to it; a person reviews and applies them in the workspace. Never send, charge, sign or confirm from here.`);
+    }
+  }
   if (conversation.origin?.kind === "research") lines.push(`- It began in Services & Pricing › Research & Insights, with the question: "${clip(conversation.origin.question, 500)}". Keep helping with that research unless the person moves on.`);
   const briefs = await ctx.db
     .query("researchBriefs")

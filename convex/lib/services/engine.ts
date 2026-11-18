@@ -192,6 +192,8 @@ export function scheduleFacts(schedule: Schedule): ScheduleFacts {
       return { schedule, label: scheduleLabel(schedule), visitsPerYear: DAYS_PER_YEAR / 7, monthlyAverage: DAYS_PER_YEAR / 7 / 12, visitsPerMonthRange: [4, 5] };
     case "every_14_days":
       return { schedule, label: scheduleLabel(schedule), visitsPerYear: DAYS_PER_YEAR / 14, monthlyAverage: DAYS_PER_YEAR / 14 / 12, visitsPerMonthRange: [2, 3] };
+    case "every_28_days":
+      return { schedule, label: scheduleLabel(schedule), visitsPerYear: DAYS_PER_YEAR / 28, monthlyAverage: DAYS_PER_YEAR / 28 / 12, visitsPerMonthRange: [1, 2] };
     case "twice_per_month":
       return { schedule, label: scheduleLabel(schedule), visitsPerYear: 24, monthlyAverage: 2, visitsPerMonthRange: [2, 2] };
     case "once_per_month":
@@ -229,8 +231,8 @@ export function scheduleDates(schedule: Schedule, start: string, months: number,
   const startDate = new Date(first * 86_400_000);
   const endExclusive = Math.round(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + months, 1) / 86_400_000);
   const out: string[] = [];
-  if (schedule === "every_7_days" || schedule === "every_14_days") {
-    const step = schedule === "every_7_days" ? 7 : 14;
+  if (schedule === "every_7_days" || schedule === "every_14_days" || schedule === "every_28_days") {
+    const step = schedule === "every_7_days" ? 7 : schedule === "every_14_days" ? 14 : 28;
     for (let day = first; day < endExclusive; day += step) out.push(dayString(day));
     return out;
   }

@@ -68,4 +68,10 @@ crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.re
 // Booking Experiences: holds that ended, and sessions customers walked away from.
 crons.interval("bookings let go of ended holds", { minutes: 5 }, internal.bookingOps.sweep, {});
 
+// Sales: lapsed holds and Dispatch handoffs that need another try; recurring plans made to their horizon.
+crons.interval("sales bookings sweep", { minutes: 10 }, internal.bookings.sweep, {});
+crons.interval("recurring plans make their visits", { hours: 6 }, internal.plans.sweep, {});
+crons.interval("proposals past their expiry", { hours: 1 }, internal.proposals.sweep, {});
+crons.interval("sales follow-up reminders", { minutes: 30 }, internal.pipeline.sweep, {});
+
 export default crons;

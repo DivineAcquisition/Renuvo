@@ -234,6 +234,14 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 ];
 
 /** Pages inside Services & Pricing. The first four are its tabs; the rest are reached from them. They have no sidebar entry of their own. */
+/** Pages inside Sales that are not tabs: the booking and proposal workspace and its entry point. */
+export const SALES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
+  { path: `${APP_ROOT}/agents/sales/new`, label: "New booking or proposal", purpose: "Starts a workspace draft from Sales, a customer or Dispatch, with what they know filled in." },
+  { path: `${APP_ROOT}/agents/sales/book/[draftId]`, label: "Booking workspace", purpose: "Book one-time or recurring service, or prepare a commercial, office or short-term rental proposal." },
+  { path: `${APP_ROOT}/agents/sales/setups/[setupId]`, label: "Service setup", purpose: "After a proposal is accepted: the agreement, billing, and each site's access and start." },
+  { path: `${APP_ROOT}/agents/sales/plans/[planId]`, label: "Recurring plan", purpose: "One recurring plan: upcoming visits, staffing, billing, agreement, exceptions and history, and changes to a visit or the series." },
+];
+
 export const SERVICES_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/services/studio`, label: "Pricing Studio", purpose: "Test example jobs against live or draft services: price, time, crew, costs and what remains." },
   { path: `${APP_ROOT}/services/research`, label: "Research & Insights", purpose: "Research briefs: what was found, what is comparable, what is uncertain, with every source." },
@@ -349,8 +357,8 @@ export const AGENTS: readonly AgentNav[] = [
     responsibility: "Turns inquiries into confirmed bookings.",
     backendAgent: "sales",
     tabs: [
-      ["pipeline", "Pipeline"],
-      ["quotes-proposals", "Quotes & Proposals"],
+      ["pipeline", "Pipeline", LIVE],
+      ["quotes-proposals", "Quotes & Proposals", LIVE],
       ["follow-ups", "Follow-ups"],
       ["calls-messages", "Calls & Messages"],
       // Booking Experiences (docs/booking/00-architecture.md): built before the Sales agent itself is released.

@@ -33,7 +33,7 @@ export type AreaUnit = (typeof AREA_UNITS)[number];
 export const areaUnitValidator = literals(AREA_UNITS);
 
 /** How often a recurring visit happens. These are calendars, not "N visits a month". */
-export const SCHEDULES = ["every_7_days", "every_14_days", "twice_per_month", "once_per_month"] as const;
+export const SCHEDULES = ["every_7_days", "every_14_days", "every_28_days", "twice_per_month", "once_per_month"] as const;
 export type Schedule = (typeof SCHEDULES)[number];
 export const scheduleValidator = literals(SCHEDULES);
 

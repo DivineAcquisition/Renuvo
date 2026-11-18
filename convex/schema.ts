@@ -23,6 +23,7 @@ import { levelValidator } from "./lib/permissionCatalog";
 import { recruiterSettingsValidator, recruiterTables } from "./lib/recruiter/schema";
 import { grantableRoleValidator, roleValidator } from "./lib/roles";
 import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/settings/business";
+import { salesTables } from "./lib/sales/schema";
 import { servicesTables } from "./lib/services/schema";
 import {
   agentValidator,
@@ -112,6 +113,15 @@ export const proposalValidator = v.union(
   // Cleaners workspace (convex/lib/cleaners/followUps.ts carries it out).
   /** Send one routine follow-up to a cleaner. It is checked again, in full, when approved. */
   v.object({ kind: v.literal("send_cleaner_follow_up"), followUpId: v.id("followUps") }),
+  // Sales (convex/bookings.ts and convex/plans.ts carry these out).
+  /** Issue a booking's invoice and send its payment link (asked for by an Office member). */
+  v.object({ kind: v.literal("sales_payment_link"), bookingId: v.id("bookings") }),
+  /** A booking's first visit at a price a person changed. Decided by the Owner. */
+  v.object({ kind: v.literal("sales_price_override"), bookingId: v.id("bookings") }),
+  /** A recurring plan's new price from a date. Decided by the Owner. */
+  v.object({ kind: v.literal("plan_change"), planId: v.id("recurringPlans"), version: v.number() }),
+  /** A proposal version with custom rates, approved as exactly that content. Decided by the Owner. */
+  v.object({ kind: v.literal("proposal_rates"), proposalId: v.id("proposals"), version: v.number(), hash: v.string() }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -636,6 +646,12 @@ export default defineSchema({
       v.literal("booking_confirmation"),
       v.literal("booking_request_received"),
       v.literal("booking_recovery"),
+      // Sales, to customers: booking requests and confirmations, proposals, signing and assessments (convex/lib/sales/outbox.ts).
+      v.literal("booking_request"),
+      v.literal("booking_confirmed"),
+      v.literal("proposal_sent"),
+      v.literal("signature_request"),
+      v.literal("assessment_link"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -647,6 +663,11 @@ export default defineSchema({
     /** The provider reported that the address rejected the message. */
     bouncedAt: v.optional(v.number()),
     cleanerId: v.optional(v.id("cleaners")),
+    /**
+     * Sales messages: the links the body carries as placeholders, made at the moment of sending from the
+     * record each names, so no token is ever at rest and a closed record sends nothing.
+     */
+    salesLinks: v.optional(v.array(v.object({ placeholder: v.string(), kind: v.union(v.literal("pay"), v.literal("proposal"), v.literal("sign"), v.literal("assess")), id: v.string() }))),
     /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
     customerId: v.optional(v.id("customers")),
     invoiceId: v.optional(v.id("invoices")),
@@ -877,6 +898,9 @@ export default defineSchema({
   ...financeTables,
   // ── Booking Experiences (convex/lib/booking/schema.ts) ───────────────────────────────────────────
   ...bookingTables,
+
+  // ── Sales: the booking and proposal workspace and what it commits the company to (convex/lib/sales) ─
+  ...salesTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

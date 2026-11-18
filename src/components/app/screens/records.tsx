@@ -8,6 +8,7 @@ import { AgreementsForRecord } from "@/components/app/agreements/record";
 import { canManage, useCompany } from "@/components/app/company";
 import { FormError, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
+
 import { NewCleanerForm, NewCustomerForm } from "@/components/app/screens/forms";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { Home, Plus } from "@/components/icons";
@@ -57,9 +58,14 @@ export function CustomersPanel() {
                   <span className="font-medium text-strong">{customer.name}</span>
                   <span className="block text-xs text-muted-foreground">{[customer.email, customer.phone].filter(Boolean).join(" · ") || "No contact details"}</span>
                 </span>
-                <Badge variant="outline" size="sm">
-                  {KIND[customer.kind]}
-                </Badge>
+                <span className="flex items-center gap-2">
+                  <Badge variant="outline" size="sm">
+                    {KIND[customer.kind]}
+                  </Badge>
+                  <Link href={`/app/agents/sales/new?mode=booking&customer=${customer._id}&from=customer`} className="rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
+                    Book service
+                  </Link>
+                </span>
                 {ownPrices?.[customer._id]?.length ? <OwnPrices rows={ownPrices[customer._id]} /> : null}
                 <div className="basis-full">
                   <AgreementsForRecord table="customers" id={customer._id} />

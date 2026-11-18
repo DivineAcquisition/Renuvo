@@ -39,6 +39,7 @@ import { BOOKING_TOOLS } from "./bookingTools";
 import { CLEANER_TOOLS } from "./cleanerTools";
 import { SERVICE_TOOLS } from "./serviceTools";
 import { GOOGLE_TOOLS } from "./googleTools";
+import { SALES_TOOLS } from "./salesTools";
 import { FINANCE_TOOLS } from "./financeTools";
 import { CLIENT_TOOLS } from "./clientTools";
 import { localDay } from "./localDay";
@@ -187,7 +188,7 @@ const scenarioField: Field = {
     overheadPerVisitCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000_00 },
     targetMarginPercent: { type: "number", optional: true, min: 0, max: 99.9, description: "Profit as a percent of the price." },
     markupPercent: { type: "number", optional: true, min: 0, max: 1000, description: "Profit as a percent of the cost." },
-    schedule: { type: "string", optional: true, enum: ["every_7_days", "every_14_days", "twice_per_month", "once_per_month"], description: "For recurring service: the visit calendar. Monthly figures use its annual average (every 7 days is 4.35 visits a month, every 14 days 2.17), never 4 or 2." },
+    schedule: { type: "string", optional: true, enum: ["every_7_days", "every_14_days", "every_28_days", "twice_per_month", "once_per_month"], description: "For recurring service: the visit calendar. Monthly figures use its annual average (every 7 days is 4.35 visits a month, every 14 days 2.17, every 28 days 1.09), never 4, 2 or 1." },
     visitsPerMonth: { type: "number", optional: true, min: 0, max: 100, description: "Only for a fixed number of visits per calendar month. For an every-N-days schedule, give schedule instead." },
     roundToCents: { type: "number", optional: true, integer: true, min: 0, max: 100_000, description: "Round prices up to a multiple of this many cents." },
   },
@@ -1039,7 +1040,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...BOOKING_TOOLS, ...CLIENT_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...BOOKING_TOOLS, ...CLIENT_TOOLS, ...SALES_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

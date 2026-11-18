@@ -23,7 +23,12 @@ export function defaultInput(spec: Spec): QuoteInput {
 }
 
 /** The job's facts, shaped by how the service is priced. Only the inputs that matter are shown. */
-export function JobInputs({ spec, input, onInput, compact }: { spec: Spec; input: QuoteInput; onInput: (input: QuoteInput) => void; compact?: boolean }) {
+/**
+ * The answers a service's price needs. `fromBooking` hides what a booking supplies itself (how often, the
+ * postal code, the visit date, how full the day is and the first-visit choice), so a person never types
+ * a value the schedule or the address already decides.
+ */
+export function JobInputs({ spec, input, onInput, compact, fromBooking }: { spec: Spec; input: QuoteInput; onInput: (input: QuoteInput) => void; compact?: boolean; fromBooking?: boolean }) {
   const p = spec.pricing;
   const set = (patch: Partial<QuoteInput>) => onInput({ ...input, ...patch });
   const grid = compact ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3";
@@ -56,7 +61,7 @@ export function JobInputs({ spec, input, onInput, compact }: { spec: Spec; input
             </select>
           </label>
         ) : null}
-        {spec.modifiers.recurring.enabled && p.method !== "recurring_package" ? (
+        {!fromBooking && spec.modifiers.recurring.enabled && p.method !== "recurring_package" ? (
           <label className="grid grid-cols-1 gap-1.5 text-sm">
             <span className="font-medium text-strong">How often</span>
             <select className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.schedule ?? ""} onChange={(event) => set({ schedule: (event.target.value || undefined) as QuoteInput["schedule"] })}>
@@ -69,22 +74,22 @@ export function JobInputs({ spec, input, onInput, compact }: { spec: Spec; input
             </select>
           </label>
         ) : null}
-        {spec.modifiers.area.enabled ? (
+        {!fromBooking && spec.modifiers.area.enabled ? (
           <label className="grid grid-cols-1 gap-1.5 text-sm">
             <span className="font-medium text-strong">Postal code</span>
             <input className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.postalCode ?? ""} onChange={(event) => set({ postalCode: event.target.value || undefined })} />
           </label>
         ) : null}
-        {spec.modifiers.demand.enabled || spec.modifiers.promotions.length ? (
+        {!fromBooking && (spec.modifiers.demand.enabled || spec.modifiers.promotions.length) ? (
           <label className="grid grid-cols-1 gap-1.5 text-sm">
             <span className="font-medium text-strong">Visit date</span>
             <input type="date" className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.date ?? ""} onChange={(event) => set({ date: event.target.value || undefined })} />
           </label>
         ) : null}
-        {spec.modifiers.demand.enabled && spec.modifiers.demand.busyDay.enabled ? <NumberInput label="How full the day is" unit="% booked" max={100} value={input.dayFullnessPercent ?? null} onValue={(v) => set({ dayFullnessPercent: v ?? undefined })} tip="For a real visit this is read from the schedule. Here you can try any value." /> : null}
+        {!fromBooking && spec.modifiers.demand.enabled && spec.modifiers.demand.busyDay.enabled ? <NumberInput label="How full the day is" unit="% booked" max={100} value={input.dayFullnessPercent ?? null} onValue={(v) => set({ dayFullnessPercent: v ?? undefined })} tip="For a real visit this is read from the schedule. Here you can try any value." /> : null}
       </div>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-        {spec.modifiers.firstClean.enabled && p.method !== "recurring_package" ? <Check label="First visit" checked={input.firstVisit === true} onChange={(firstVisit) => set({ firstVisit })} /> : null}
+        {!fromBooking && spec.modifiers.firstClean.enabled && p.method !== "recurring_package" ? <Check label="First visit" checked={input.firstVisit === true} onChange={(firstVisit) => set({ firstVisit })} /> : null}
         {spec.modifiers.rush.enabled ? <Check label="Rush" checked={input.rush === true} onChange={(rush) => set({ rush })} /> : null}
         {spec.modifiers.afterHours.enabled ? <Check label="After hours" checked={input.afterHours === true} onChange={(afterHours) => set({ afterHours })} /> : null}
       </div>

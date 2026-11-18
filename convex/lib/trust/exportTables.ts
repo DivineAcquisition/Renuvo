@@ -120,6 +120,20 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   // Finance: the company's own money (convex/lib/finance/schema.ts).
   { table: "financeSettings", index: "by_company" },
   { table: "stripeAccounts", index: "by_company", omit: ["onboarding"], why: "A single-use Stripe onboarding link." },
+  { table: "agreementSigningLinks", index: "by_company_request", omit: ["publicId"], why: "Half of a signing link." },
+  // Sales (convex/lib/sales/schema.ts).
+  { table: "salesOpportunities", index: "by_company_updated" },
+  { table: "salesDrafts", index: "by_company_updated" },
+  { table: "salesQuotes", index: "by_company_created" },
+  { table: "bookings", index: "by_company_created" },
+  { table: "recurringPlans", index: "by_company_status" },
+  { table: "planVisits", index: "by_company_state" },
+  { table: "proposals", index: "by_company_updated", omit: ["publicId"], why: "Half of a proposal link." },
+  { table: "assessments", index: "by_company_status", omit: ["publicId"], why: "Half of an assessment link." },
+  { table: "serviceSetups", index: "by_company_status" },
+  { table: "recurringPlanVersions", index: "by_company_created" },
+  { table: "proposalVersions", index: "by_company_created" },
+  { table: "proposalResponses", index: "by_company_at" },
   { table: "invoices", index: "by_company_created", omit: ["publicId"], why: "Half of a pay link." },
   { table: "payments", index: "by_company_invoice", omit: ["stripe.clientSecret"], why: "Lets a browser finish an unfinished card payment." },
   { table: "refunds", index: "by_company_invoice" },
@@ -181,6 +195,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   googleBusy: "A short-lived copy of busy times read from Google Calendar; the calendar itself is the record.",
   googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
   portalCodes: "Hashes of one-time codes that unlock a portal for ten minutes; nothing in them is about the business.",
+  capacityHolds: "Short-lived reservations of a day's minutes while a booking waits; the booking keeps what matters.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 
