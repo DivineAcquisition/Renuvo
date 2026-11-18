@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** Records became two pages: Customers & Properties, and Cleaners. Old links land on the first. */
+/** Records became two pages: Clients & Properties, and Cleaners. Old links land on the first. */
 export default function Page() {
-  redirect("/app/customers");
+  redirect("/app/clients");
 }

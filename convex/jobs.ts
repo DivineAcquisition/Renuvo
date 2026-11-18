@@ -21,6 +21,7 @@ import { byMember, recordEvent } from "./lib/events";
 import { businessSettingsOf, checkArea, checkHours, findService } from "./lib/settings/business";
 import type { Quote, QuoteInput } from "./lib/services/engine";
 import { quote as runQuote, saveQuote, visitInput, visitScope } from "./lib/services/operations";
+import { refreshClient } from "./lib/clients/directory";
 import { addPropertyTasks, dayOf, engineInput, priceInForce, withPropertyTasks } from "./lib/services/propertyPrices";
 import { quoteInputValidator } from "./lib/services/schema";
 import { publishedByKey } from "./lib/services/store";
@@ -200,6 +201,12 @@ export const create = companyMutation({
     if (own?.addedTasks?.length) await addPropertyTasks(ctx, ctx.companyId, jobId, own.addedTasks);
     await recordEvent(ctx, { companyId: ctx.companyId, type: "job.created", actor: byMember(ctx), subject: { table: "jobs", id: jobId }, data: template ? { checklistVersion: template.version } : undefined });
     await coverJob(ctx, jobId);
+    // Booking a visit makes a prospect a client, on the same record, with its history.
+    if (customer.relationship === "prospect") {
+      await ctx.db.patch(customer._id, { relationship: "active", relationshipAt: Date.now(), revision: (customer.revision ?? 0) + 1, updatedAt: Date.now() });
+      await recordEvent(ctx, { companyId: ctx.companyId, type: "customer.became_client", actor: byMember(ctx), subject: { table: "customers", id: customer._id }, data: { reason: "first visit booked" } });
+    }
+    await refreshClient(ctx, customer._id);
     return jobId;
   },
 });

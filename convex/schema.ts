@@ -12,6 +12,7 @@ import { billingTables } from "./lib/billing/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
 import { financeTables } from "./lib/finance/schema";
+import { clientsTables, communicationValidator, propertyDetailsValidator, propertyKindValidator, relationshipValidator } from "./lib/clients/schema";
 import { trustTables } from "./lib/trust/schema";
 import { staffTables } from "./lib/trust/staffSchema";
 import { v } from "convex/values";
@@ -300,6 +301,27 @@ export default defineSchema({
     preferences: v.optional(v.string()),
     status: recordStatusValidator,
     createdAt: v.number(),
+    // ── Clients & Properties (convex/lib/clients). Absent on clients made before it: read with clientFields(). ──
+    /** A person or a business. A business's contacts are its people. */
+    type: v.optional(v.union(v.literal("person"), v.literal("business"))),
+    /** Absent: "active" for an active record, "former" for an archived one. */
+    relationship: v.optional(relationshipValidator),
+    relationshipNote: v.optional(v.string()),
+    relationshipAt: v.optional(v.number()),
+    /** The team member responsible for the relationship. */
+    accountOwnerId: v.optional(v.id("members")),
+    communication: v.optional(communicationValidator),
+    /** Owner and Manager only. Never in search, previews or agent summaries. */
+    privateNotes: v.optional(v.string()),
+    /** Where the client came from: added by a person, a Google lead, an import or a booking. */
+    source: v.optional(v.string()),
+    archivedAt: v.optional(v.number()),
+    archivedReason: v.optional(v.string()),
+    /** Counts saves. A save names the revision it started from; a different one is refused, never overwritten. */
+    revision: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+    /** A person who is handling this client's conversation themselves. Agent follow-ups to the client wait. */
+    conversationHeld: v.optional(v.object({ by: v.id("members"), since: v.number() })),
   }).index("by_company_status", ["companyId", "status"]),
 
   properties: defineTable({
@@ -307,10 +329,26 @@ export default defineSchema({
     customerId: v.id("customers"),
     label: v.optional(v.string()),
     address: addressValidator,
-    kind: workKindValidator,
+    kind: propertyKindValidator,
+    /** Gate codes, lockboxes, alarms. Owner and Manager only; a cleaner sees them on an accepted visit. Never in search, previews or agent summaries. */
     accessInstructions: v.optional(v.string()),
     status: recordStatusValidator,
     createdAt: v.number(),
+    // ── Clients & Properties (convex/lib/clients). ──
+    timezone: v.optional(v.string()),
+    details: v.optional(propertyDetailsValidator),
+    /** For the crew: parking and where to go. Not sensitive. */
+    parking: v.optional(v.string()),
+    /** For the crew: how this property is cleaned. */
+    crewNotes: v.optional(v.string()),
+    /** What the client asked for or was told, in their words. */
+    clientNotes: v.optional(v.string()),
+    /** Owner and Manager only. */
+    officeNotes: v.optional(v.string()),
+    siteContactId: v.optional(v.id("clientContacts")),
+    archivedAt: v.optional(v.number()),
+    revision: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_company_customer", ["companyId", "customerId"])
     .index("by_company_postal", ["companyId", "address.postalCode"]),
@@ -414,11 +452,19 @@ export default defineSchema({
     completionReturns: v.optional(v.number()),
     /** The checklist template version this visit's checklist was copied from, if any. */
     checklistTemplate: v.optional(v.object({ templateId: v.id("checklistTemplates"), version: v.number() })),
+    /** The service plan that booked this visit, and the day of the series it is. */
+    planId: v.optional(v.id("servicePlans")),
+    planDate: v.optional(v.string()),
+    /** Cancelled because a person skipped it (a plan's visit), kept apart from a cancellation. */
+    skipped: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
     .index("by_company_status_start", ["companyId", "status", "startsAt"])
     .index("by_company_customer", ["companyId", "customerId"])
+    .index("by_company_customer_start", ["companyId", "customerId", "startsAt"])
+    .index("by_company_property_start", ["companyId", "propertyId", "startsAt"])
+    .index("by_company_plan", ["companyId", "planId", "startsAt"])
     .index("by_status_start", ["status", "startsAt"]),
 
   assignments: defineTable({
@@ -496,7 +542,8 @@ export default defineSchema({
   })
     .index("by_company_status_due", ["companyId", "status", "dueAt"])
     .index("by_company_agent_status", ["companyId", "agent", "status"])
-    .index("by_company_key", ["companyId", "key"]),
+    .index("by_company_key", ["companyId", "key"])
+    .index("by_company_about", ["companyId", "about.id"]),
 
   // ── Authority (brief, section 7) ───────────────────────────────────────────────────────────────
   /** One row per action the owner has changed. An action with no row is at its starting level. */
@@ -626,6 +673,7 @@ export default defineSchema({
     .index("by_company_application", ["companyId", "applicationId"])
     .index("by_company_invoice", ["companyId", "invoiceId"])
     .index("by_company_cleaner", ["companyId", "cleanerId", "queuedAt"])
+    .index("by_company_customer", ["companyId", "customerId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
 
@@ -797,6 +845,7 @@ export default defineSchema({
   ...googleTables,
   // ── Cleaners: subcontractors, requirements, crews, portal, follow-ups, coaching, personnel ──────
   ...cleanersTables,
+  ...clientsTables,
 
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,

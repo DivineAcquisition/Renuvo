@@ -290,12 +290,12 @@ function ServiceField({ value, onChoose, onLegacy }: { value: string; onChoose: 
 }
 
 /** A visit for a customer at one of their properties, on the company's clock. */
-export function NewVisitForm({ onDone }: { onDone: () => void }) {
+export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?: { customerId?: string; propertyId?: string } }) {
   const { companyId, timezone } = useCompany();
   const customers = useQuery(api.customers.list, { companyId });
   const create = useMutation(api.jobs.create);
   const { busy, error, run, setError } = useRun();
-  const [form, setForm] = useState({ customerId: "", propertyId: "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "", crew: "1", arrival: "0", deadlineDate: "", deadlineTime: "", instructions: "" });
+  const [form, setForm] = useState({ customerId: initial?.customerId ?? "", propertyId: initial?.propertyId ?? "", serviceId: "", duration: 0, serviceType: "", scope: "", skills: "", date: "", from: "", to: "", price: "", crew: "1", arrival: "0", deadlineDate: "", deadlineTime: "", instructions: "" });
   /** A service from Services & Pricing, the job's facts for its price, and whether the person typed their own price. */
   const [service, setService] = useState<Live | null>(null);
   const [facts, setFacts] = useState<QuoteInput>({});
