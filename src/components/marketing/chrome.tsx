@@ -2,12 +2,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Logo } from "@/components/brand/logo";
+import { SiteNav } from "@/components/marketing/site-nav";
 import { CookiePreferencesLink } from "@/components/consent/banner";
-import { Menu } from "@/components/icons";
 import { Button, type ButtonSize } from "@/components/ui/button";
-import { APP_NAME } from "@/lib/constants";
 import { ASSESSMENT_PATH, FOOTER, NAV } from "@/lib/marketing/content";
-import { marketingNavLink, marketingPageGutter, marketingShell } from "@/lib/marketing/ui";
+import { marketingPageGutter, marketingShell } from "@/lib/marketing/ui";
 import { AGENT_PAGE_IDS, AGENT_PAGES, agentPagePath } from "@/lib/marketing/agent-pages";
 import { cn } from "@/lib/utils";
 
@@ -24,76 +23,84 @@ export function EarlyAccessLink({ position, size = "xl", className, children }: 
 
 export const outlineCta = cn(ctaShape, "border-border bg-card hover:bg-muted");
 
-/** The section links. Away from the home page they lead back to it. */
-function NavLinks({ className, onHome }: { className?: string; onHome: boolean }) {
-  return (
-    <ul className={className}>
-      {NAV.links.map((link) => (
-        <li key={link.href}>
-          <a href={onHome ? link.href : `/${link.href}`} className={cn(marketingNavLink, "block")}>
-            {link.label}
-          </a>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
+/** The public site's header: the floating nav with menus (src/components/marketing/site-nav.tsx). */
 export function SiteHeader({ onHome = true }: { onHome?: boolean }) {
-  return (
-    <header className={cn("sticky top-0 z-50 border-b border-border bg-background", marketingPageGutter)}>
-      <div className={cn(marketingShell, "flex h-[4.5rem] items-center justify-between gap-4")}>
-        <Link href="/" className="shrink-0 rounded-md" aria-label={`${APP_NAME} home`}>
-          <Logo />
-        </Link>
-        <nav aria-label={onHome ? "On this page" : "Selestial"} className="hidden lg:block">
-          <NavLinks onHome={onHome} className="flex items-center gap-0.5 rounded-lg border border-border bg-muted p-1" />
-        </nav>
-        <EarlyAccessLink position="nav" size="lg" className="hidden shrink-0 lg:inline-flex">
-          {NAV.cta}
-        </EarlyAccessLink>
-        <details className="relative shrink-0 lg:hidden">
-          <summary className="flex size-10 cursor-pointer list-none items-center justify-center rounded-md border border-border bg-muted text-strong [&::-webkit-details-marker]:hidden">
-            <span className="sr-only">{NAV.openMenu}</span>
-            <Menu className="size-4" aria-hidden />
-          </summary>
-          <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg border border-border bg-card p-3 shadow-xl">
-            <EarlyAccessLink position="nav" size="lg" className="w-full">
-              {NAV.cta}
-            </EarlyAccessLink>
-            <nav aria-label="On this page" className="mt-2">
-              <NavLinks onHome={onHome} className="grid gap-1" />
-            </nav>
-          </div>
-        </details>
-      </div>
-    </header>
-  );
+  return <SiteNav onHome={onHome} />;
 }
 
-/** The footer's link groups. Every link here goes to a page that exists. */
-export const FOOTER_AGENTS = [
-  { href: "/agents", label: "All agents" },
-  ...AGENT_PAGE_IDS.map((id) => ({ href: agentPagePath(id), label: AGENT_PAGES[id].status === "live" ? AGENT_PAGES[id].name : `${AGENT_PAGES[id].name} (soon)` })),
-] as const;
-
-export const FOOTER_TRUST = [
-  { href: "/security", label: "Security" },
-  { href: "/security/subprocessors", label: "Subprocessors" },
-  { href: "/security/report", label: "Report a vulnerability" },
-  { href: "/security/review", label: "Request a security review" },
-] as const;
-
-export const FOOTER_LEGAL = [
-  { href: "/privacy", label: "Privacy" },
-  { href: "/terms", label: "Terms" },
-  { href: "/cookies", label: "Cookies" },
-  { href: "/privacy/requests", label: "Data requests" },
-  { href: "/messaging", label: "Messaging practices" },
-  { href: "mailto:support@selestial.io", label: "Contact" },
-] as const;
+/**
+ * The footer's link groups. Every link goes to a page or home section that exists; "/#id" works from any page.
+ * "cookies" marks where the Cookie preferences control sits, since it opens a dialog rather than a page.
+ */
+export const FOOTER_COLUMNS: { id: string; title: string; links: { href: string; label: string }[] }[] = [
+  {
+    id: "product",
+    title: "Product",
+    links: [
+      { href: "/#see-it-work", label: "See it work" },
+      { href: "/#how-it-works", label: "How the agents coordinate" },
+      { href: "/#platform", label: "Platform" },
+      { href: "/#connections", label: "Integrations" },
+      { href: "/#pricing", label: "Pricing" },
+      { href: ASSESSMENT_PATH, label: "Operations assessment" },
+    ],
+  },
+  {
+    id: "agents",
+    title: "Agents",
+    links: [{ href: "/agents", label: "All agents" }, ...AGENT_PAGE_IDS.map((id) => ({ href: agentPagePath(id), label: AGENT_PAGES[id].status === "live" ? AGENT_PAGES[id].name : `${AGENT_PAGES[id].name} (soon)` }))],
+  },
+  {
+    id: "company",
+    title: "Company",
+    links: [
+      { href: "/#philosophy", label: "Our philosophy" },
+      { href: "mailto:support@selestial.io", label: "Contact" },
+      { href: "/sign-in", label: "Sign in" },
+    ],
+  },
+  {
+    id: "trust",
+    title: "Trust",
+    links: [
+      { href: "/security", label: "Security" },
+      { href: "/security/subprocessors", label: "Subprocessors" },
+      { href: "/security/report", label: "Report a vulnerability" },
+      { href: "/security/review", label: "Request a security review" },
+    ],
+  },
+  {
+    id: "legal",
+    title: "Legal & Privacy",
+    links: [
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
+      { href: "/cookies", label: "Cookies" },
+      { href: "cookies", label: "Cookie preferences" },
+      { href: "/privacy/requests", label: "Data requests" },
+      { href: "/messaging", label: "Messaging practices" },
+    ],
+  },
+];
 
 const footerLink = "rounded text-sm text-muted-foreground transition-colors hover:text-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]";
+
+function FooterLink({ href, label }: { href: string; label: string }) {
+  if (href === "cookies") return <CookiePreferencesLink className={cn(footerLink, "text-left")} />;
+  // In-page and mail links stay plain anchors so the browser scrolls and opens them as usual.
+  if (href.startsWith("/#") || href.startsWith("mailto:") || href === "/sign-in") {
+    return (
+      <a href={href} className={footerLink}>
+        {label}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={footerLink}>
+      {label}
+    </Link>
+  );
+}
 
 /**
  * The site footer. `entity` is shown only when the operator's details are verified in the trust
@@ -101,74 +108,32 @@ const footerLink = "rounded text-sm text-muted-foreground transition-colors hove
  */
 export function SiteFooter({ entity }: { entity?: { name: string; address: string | null } | null }) {
   return (
-    <footer className={cn("border-t border-border py-12", marketingPageGutter)}>
-      <div className={cn(marketingShell, "grid gap-10 md:grid-cols-[1.2fr_1fr_1fr_1fr]")}>
-        <div>
+    <footer className={cn("border-t border-border py-14", marketingPageGutter)}>
+      <div className={cn(marketingShell, "grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 lg:grid-cols-[1.5fr_repeat(5,minmax(0,1fr))]")}>
+        <div className="col-span-2 sm:col-span-3 lg:col-span-1">
           <Logo />
           <p className="mt-3 text-sm text-strong">{FOOTER.tagline}</p>
-          <p className="mt-2 text-sm text-muted-foreground">{FOOTER.roles.join(" · ")}</p>
-          <p className="mt-6 max-w-sm text-xs leading-relaxed text-muted-foreground">{FOOTER.note}</p>
+          <p className="mt-6 max-w-xs text-xs leading-relaxed text-muted-foreground">{FOOTER.note}</p>
+          <EarlyAccessLink position="footer" size="lg" className="mt-5">
+            Get early access
+          </EarlyAccessLink>
         </div>
-        <nav aria-labelledby="footer-agents">
-          <h2 id="footer-agents" className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
-            Agents
-          </h2>
-          <ul className="mt-3 grid gap-2">
-            {FOOTER_AGENTS.map((link) => (
-              <li key={link.href}>
-                <Link href={link.href} className={footerLink}>
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <nav aria-labelledby="footer-trust">
-          <h2 id="footer-trust" className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
-            Trust
-          </h2>
-          <ul className="mt-3 grid gap-2">
-            {FOOTER_TRUST.map((link) => (
-              <li key={link.href}>
-                <Link href={link.href} className={footerLink}>
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <nav aria-labelledby="footer-legal">
-          <h2 id="footer-legal" className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
-            Legal &amp; Privacy
-          </h2>
-          <ul className="mt-3 grid gap-2">
-            {FOOTER_LEGAL.slice(0, 3).map((link) => (
-              <li key={link.href}>
-                <Link href={link.href} className={footerLink}>
-                  {link.label}
-                </Link>
-              </li>
-            ))}
-            <li>
-              <CookiePreferencesLink className={cn(footerLink, "text-left")} />
-            </li>
-            {FOOTER_LEGAL.slice(3).map((link) => (
-              <li key={link.href}>
-                {link.href.startsWith("mailto:") ? (
-                  <a href={link.href} className={footerLink}>
-                    {link.label}
-                  </a>
-                ) : (
-                  <Link href={link.href} className={footerLink}>
-                    {link.label}
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </nav>
+        {FOOTER_COLUMNS.map((column) => (
+          <nav key={column.id} aria-labelledby={`footer-${column.id}`}>
+            <h2 id={`footer-${column.id}`} className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
+              {column.title}
+            </h2>
+            <ul className="mt-3 grid gap-2">
+              {column.links.map((link) => (
+                <li key={link.label}>
+                  <FooterLink href={link.href} label={link.label} />
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))}
       </div>
-      <div className={cn(marketingShell, "mt-10 flex flex-col gap-1 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:justify-between")}>
+      <div className={cn(marketingShell, "mt-12 flex flex-col gap-1 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:justify-between")}>
         <p>
           © {new Date().getFullYear()} {entity?.name ?? FOOTER.name}
           {entity?.name ? <span> · {FOOTER.name} is operated by {entity.name}</span> : null}
