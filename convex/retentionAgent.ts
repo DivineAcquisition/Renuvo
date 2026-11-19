@@ -25,7 +25,7 @@ import { emailProvider } from "./lib/messaging/email";
 import { senderGaps } from "./lib/messaging/policy";
 import { messagingProvider } from "./lib/messaging/provider";
 import { actionDef } from "./lib/permissionCatalog";
-import { ACTION_WORDS, actionsOf, careChannel, correctionCost, prepareAction, stampFor, submitAction, whenWords } from "./lib/retention/actions";
+import { ACTION_WORDS, actionsOf, careChannel, correctionCost, prepareAction, setCorrectionPay as setCorrectionPayOn, stampFor, submitAction, whenWords } from "./lib/retention/actions";
 import { addEntry, areasIn, cleanAreas, closeCase, DAY, entriesOf, HOUR, KIND_WORDS, moveCase, openCase as openCaseRecord, OUTCOME_WORDS, propertyName, SEGMENT_WORDS, STATUS_WORDS, VERIFIED_OUTCOMES } from "./lib/retention/cases";
 import { requestPlanChange } from "./lib/retention/continuity";
 import { DIAGNOSIS_WORDS, retentionModel } from "./lib/retention/diagnose";
@@ -265,7 +265,7 @@ export const caseDetail = companyQuery({
         authorization: action.authorization ?? null,
         message: action.message ? { channel: action.message.channel, subject: action.message.subject ?? null, body: action.message.body, hasLink: action.message.linkPurpose !== undefined } : null,
         delivery: message ? deliveryWords(message) : null,
-        visit: action.visit ? { areas: action.visit.areas, scope: action.visit.scope, startsAt: action.visit.startsAt ?? null, minutes: action.visit.minutes, when: action.visit.startsAt ? whenWords(action.visit.startsAt, tz) : null, payBasisCents: action.visit.payBasisCents ?? null, jobId: action.visit.jobId ?? null, avoiding: action.visit.avoidCleanerIds.length } : null,
+        visit: action.visit ? { areas: action.visit.areas, scope: action.visit.scope, startsAt: action.visit.startsAt ?? null, minutes: action.visit.minutes, when: action.visit.startsAt ? whenWords(action.visit.startsAt, tz) : null, payBasisCents: action.visit.payBasisCents ?? null, payHintCents: action.visit.payHintCents ?? null, jobId: action.visit.jobId ?? null, avoiding: action.visit.avoidCleanerIds.length } : null,
         money: action.money ? { amountCents: action.money.amountCents, invoiceId: action.money.invoiceId ?? null } : null,
         planChange: action.planChange ? { change: action.planChange.change, words: CHANGE_WORDS[action.planChange.change], from: action.planChange.from ?? null, until: action.planChange.until ?? null, requestedBy: action.planChange.requestedBy, visits: action.planChange.shown.length } : null,
         estimatedCostCents: action.estimatedCostCents ?? null,
@@ -498,6 +498,8 @@ export const proposeRemedy = managerMutation({
     areas: v.optional(v.array(v.string())),
     avoidCleanerIds: v.optional(v.array(v.id("cleaners"))),
     amountCents: v.optional(v.number()),
+    /** A correction visit's pay basis. Only the Owner sets it (see setCorrectionPay). */
+    payBasisCents: v.optional(v.number()),
     invoiceId: v.optional(v.id("invoices")),
     body: v.optional(v.string()),
     askCustomerFirst: v.optional(v.boolean()),
@@ -519,8 +521,16 @@ export const proposeRemedy = managerMutation({
       if (args.startsAt === undefined || args.startsAt <= Date.now()) throw userError("Choose a time in the future for the visit.");
       const cost = correctionCost(await originalVisit(ctx, evidence), minutes);
       const areas = cleanAreas(args.areas ?? row.areas);
-      const action = await prepareAction(ctx, row, { kind: "correction_visit", key, summary: `Correction visit for ${areas.join(", ") || "the reported work"} at ${propertyName(property)}, ${whenWords(args.startsAt, tz)}`, reason, permission: "retention.remedy_within_limit", visit: { areas, scope: args.scope ?? "targeted", startsAt: args.startsAt, endsAt: args.startsAt + minutes * 60_000, minutes, crew: 1, payBasisCents: cost.payBasisCents, avoidCleanerIds: args.avoidCleanerIds ?? [] }, estimatedCostCents: cost.estimateCents ?? undefined, costBasis: cost.basis, dueAt: row.dueAt, actor });
-      if (args.askCustomerFirst) return offerToCustomer(ctx, row, customer, action, `we would like to come back on ${whenWords(args.startsAt, tz)} to take care of ${areas.join(", ") || "it"}, at no charge`);
+      const action = await prepareAction(ctx, row, { kind: "correction_visit", key, summary: `Correction visit for ${areas.join(", ") || "the reported work"} at ${propertyName(property)}, ${whenWords(args.startsAt, tz)}`, reason, permission: "retention.remedy_within_limit", visit: { areas, scope: args.scope ?? "targeted", startsAt: args.startsAt, endsAt: args.startsAt + minutes * 60_000, minutes, crew: 1, payHintCents: cost.payHintCents, avoidCleanerIds: args.avoidCleanerIds ?? [] }, estimatedCostCents: cost.estimateCents ?? undefined, costBasis: cost.basis, dueAt: row.dueAt, actor });
+      const pay = args.payBasisCents;
+      if (pay !== undefined && !isOwner(ctx.role)) throw userError("Only the Owner sets what the crew is paid for a correction visit.");
+      if (pay !== undefined && (!Number.isInteger(pay) || pay < 0 || pay > 500_000)) throw userError("Enter an amount from $0 to $5,000.");
+      if (args.askCustomerFirst) {
+        const offered = await offerToCustomer(ctx, row, customer, action, `we would like to come back on ${whenWords(args.startsAt, tz)} to take care of ${areas.join(", ") || "it"}, at no charge`);
+        if (pay !== undefined) await setCorrectionPayOn(ctx, ctx.company, action._id, pay, ctx.member._id, false);
+        return offered;
+      }
+      if (pay !== undefined) return { actionId: action._id, ...(await setCorrectionPayOn(ctx, ctx.company, action._id, pay, ctx.member._id)) };
       return { actionId: action._id, ...(await submitAction(ctx, ctx.company, action._id, actor)) };
     }
     if (args.kind === "credit" || args.kind === "refund") {
@@ -578,6 +588,22 @@ export const submit = managerMutation({
     const fresh = (await ctx.db.get(action._id))!;
     await ctx.db.patch(action._id, { stamp: await stampFor(ctx, row, fresh), preparedAt: Date.now() });
     return submitAction(ctx, ctx.company, action._id, byMember(ctx));
+  },
+});
+
+/**
+ * The Owner sets what the crew's pay is worked out from for one correction visit, and books it. Each
+ * correction is decided on its own: no figure carries over, and nothing sets one automatically.
+ */
+export const setCorrectionPay = ownerMutation({
+  args: { actionId: v.id("retentionActions"), payBasisCents: v.number() },
+  handler: async (ctx, args) => {
+    const action = await owned(ctx, args.actionId);
+    await liveCase(ctx, action.caseId);
+    if (action.kind !== "correction_visit" || !action.visit) throw userError("Only a correction visit has crew pay to set.");
+    if (action.status !== "proposed") throw userError(`This was already ${action.status.replace(/_/g, " ")}.`);
+    if (!Number.isInteger(args.payBasisCents) || args.payBasisCents < 0 || args.payBasisCents > 500_000) throw userError("Enter an amount from $0 to $5,000.");
+    return setCorrectionPayOn(ctx, ctx.company, action._id, args.payBasisCents, ctx.member._id);
   },
 });
 

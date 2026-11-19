@@ -12,6 +12,7 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { NOT_FOUND } from "./lib/errors";
 import { mockEmails } from "./lib/messaging/email";
+import { composeNotice } from "./lib/notify/compose";
 import { mockRetentionModel } from "./lib/retention/diagnose";
 
 let undo: () => void;
@@ -59,14 +60,17 @@ describe("first-service follow-through and recovery", () => {
     // The correction is proposed, with an estimated cost, and nothing is booked before approval.
     const detail = await s.detail(recovery._id);
     const visit = detail.actions.find((a) => a.kind === "correction_visit")!;
-    expect(visit).toMatchObject({ status: "awaiting_approval", estimatedCostCents: 3000 });
-    expect(visit.visit?.payBasisCents).toBe(6000);
+    // Crew pay for a correction is the Owner's to set each time: nothing is assumed, and nothing is booked without it.
+    expect(visit).toMatchObject({ status: "proposed", estimatedCostCents: 3000 });
+    expect(visit.visit).toMatchObject({ payBasisCents: null, payHintCents: 6000, jobId: null });
+    expect(detail.card.needs).toContain("Set the crew's pay");
+    expect(await s.pending()).toEqual([]);
     expect(detail.timeline.some((e) => e.basis === "fact" && e.text.includes("skipped"))).toBe(true);
     expect(detail.timeline.some((e) => e.basis === "customer_stated" && e.quote?.includes("shower"))).toBe(true);
-    const [proposal] = await s.pending();
-    expect((await s.approve(proposal._id))?.ok).toBe(true);
+    // A Manager cannot set it. The Owner does, and that books the visit.
+    expect((await s.setPay(6000))[0]).toMatchObject({ status: "underway" });
 
-    // Approved: a visit exists for Dispatch, at no charge, and the case is open and under way.
+    // Booked: a visit exists for Dispatch, at no charge, and the case is open and under way.
     const after = await s.detail(recovery._id);
     const booked = after.actions.find((a) => a.kind === "correction_visit")!;
     expect(booked).toMatchObject({ status: "underway", handoff: { to: "dispatch", status: "open" } });
@@ -182,15 +186,14 @@ describe("recovery, in the cases that go wrong", () => {
     expect((await s.as.mutation(api.retentionAgent.runTool, { companyId: s.companyId, caseId, tool: "find_correction_visit", key: "tool-run-0001" })).repeated).toBe(true);
   });
 
-  it("does not book an approved visit whose time has since filled", async () => {
+  it("does not book a visit whose time has filled since it was prepared", async () => {
     const s = await retentionSetup();
     const jobId = await s.completed({ scope: SCOPE, checklist: CHECKLIST });
     const caseId = await report(s, jobId, "The shower was missed.");
-    const proposal = (await s.pending()).find((row) => row.action === "retention.remedy_within_limit")!;
     for (const cleanerId of Object.values(s.cleaners)) await s.as.mutation(api.cleaners.setStatus, { companyId: s.companyId, cleanerId, status: "paused" });
-    const carried = await s.approve(proposal._id);
-    expect(carried).toMatchObject({ ok: false });
-    expect(carried!.detail).toContain("no longer open");
+    const [carried] = await s.setPay();
+    expect(carried.status).not.toBe("underway");
+    expect(carried.detail).toContain("no longer open");
     const detail = await s.detail(caseId);
     expect(detail.card.status).toBe("needs_attention");
     expect(detail.actions.find((a) => a.kind === "correction_visit")!.visit!.jobId).toBeNull();
@@ -230,17 +233,38 @@ describe("recovery, in the cases that go wrong", () => {
     expect((await s.as.mutation(api.retentionAgent.runTool, { companyId: s.companyId, caseId, tool: "prepare_recovery_plan", key: "tool-run-0002" })).outcome).toBe("refused");
   });
 
-  it("acts without asking only inside the Owner's limits, and never treats an unknown cost as zero", async () => {
+  it("acts without asking only inside the Owner's limits, and never books a correction before the Owner sets crew pay", async () => {
     const s = await retentionSetup();
     await s.as.mutation(api.permissions.set, { companyId: s.companyId, action: "retention.remedy_within_limit", level: "execute_and_report", perActionCents: 2500, perDayCents: 10000 });
     const jobId = await s.completed({ scope: SCOPE, checklist: CHECKLIST });
     const caseId = await report(s, jobId, "The shower was missed.");
-    // Estimated at $30.00, over the $25.00 limit for one action: it asks.
-    expect((await s.detail(caseId)).actions.find((a) => a.kind === "correction_visit")).toMatchObject({ status: "awaiting_approval", authorization: expect.stringContaining("over the per-action limit") });
-    await s.as.mutation(api.permissions.set, { companyId: s.companyId, action: "retention.remedy_within_limit", level: "execute_and_report", perActionCents: 5000, perDayCents: 10000 });
-    const secondJob = await s.completed({ startsAt: JOB_START + WEEK, scope: SCOPE, checklist: CHECKLIST });
-    const second = await report(s, secondJob, "The kitchen counters were not wiped and the shower was skipped.");
-    expect((await s.detail(second)).actions.find((a) => a.kind === "correction_visit")).toMatchObject({ status: "underway", authorization: expect.stringContaining("without asking") });
+    // Even with Act and notify me on, the correction waits: what the crew is paid is the Owner's call each time.
+    expect((await s.detail(caseId)).actions.find((a) => a.kind === "correction_visit")).toMatchObject({ status: "proposed", visit: { payBasisCents: null, jobId: null } });
+    // A credit over the $25.00 limit for one action asks; one inside it is applied and reported.
+    const over = await s.as.mutation(api.retentionAgent.proposeRemedy, { companyId: s.companyId, caseId, kind: "credit", amountCents: 3000, reason: "For the missed shower." });
+    expect(over.status).toBe("awaiting_approval");
+    expect((await s.detail(caseId)).actions.find((a) => a.actionId === over.actionId)).toMatchObject({ authorization: expect.stringContaining("over the per-action limit") });
+    const inside = await s.as.mutation(api.retentionAgent.proposeRemedy, { companyId: s.companyId, caseId, kind: "credit", amountCents: 2000, reason: "For the missed shower." });
+    expect((await s.detail(caseId)).actions.find((a) => a.actionId === inside.actionId)).toMatchObject({ authorization: expect.stringContaining("without asking") });
+    expect(inside.status).not.toBe("awaiting_approval");
+  });
+
+  it("lets only the Owner set crew pay, and books the visit at the figure they set", async () => {
+    const s = await retentionSetup();
+    const manager = await addMember(s.t, s.as, s.companyId, "manny", "manager");
+    const jobId = await s.completed({ scope: SCOPE, checklist: CHECKLIST });
+    const caseId = await report(s, jobId, "The shower was missed.");
+    const action = (await s.actions()).find((a) => a.kind === "correction_visit")!;
+    expect(await refusal(manager.mutation(api.retentionAgent.setCorrectionPay, { companyId: s.companyId, actionId: action._id, payBasisCents: 4000 }))).toBeTruthy();
+    // Submitting it does not get round that: it stays prepared, with nothing in Approvals.
+    expect((await manager.mutation(api.retentionAgent.submit, { companyId: s.companyId, actionId: action._id })).status).toBe("proposed");
+    expect((await s.detail(caseId)).actions.find((a) => a.kind === "correction_visit")).toMatchObject({ status: "proposed", visit: { jobId: null } });
+    expect((await s.pending()).filter((row) => row.action === "retention.remedy_within_limit")).toEqual([]);
+    const set = await s.as.mutation(api.retentionAgent.setCorrectionPay, { companyId: s.companyId, actionId: action._id, payBasisCents: 4000 });
+    expect(set.status).toBe("underway");
+    const booked = (await s.detail(caseId)).actions.find((a) => a.kind === "correction_visit")!;
+    expect((await s.job(booked.visit!.jobId!)).job).toMatchObject({ priceCents: 4000 });
+    expect((await s.detail(caseId)).timeline.some((e) => e.text.includes("The Owner set the crew's pay basis"))).toBe(true);
   });
 });
 
@@ -704,5 +728,85 @@ describe("renewals and measures", () => {
     const manager = await addMember(s.t, s.as, s.companyId, "manager-a", "manager");
     const forManager = await manager.query(api.retentionAgent.outcomes, { companyId: s.companyId, asOf: Date.now() });
     expect(forManager.measures.some((m) => m.key === "recovery_cost" || m.key === "revenue_after")).toBe(false);
+  });
+});
+
+describe("what the people who run the company are told", () => {
+  type Notice = { event: string; ref?: string; status: string; subject: string | null; text: string | null };
+  /** The notices planned for the Owner, each written the way it would go now. */
+  async function notices(s: S): Promise<Notice[]> {
+    return s.t.run(async (ctx) => {
+      const rows = (await ctx.db.query("messages").collect()).filter((m) => m.companyId === s.companyId && m.purpose === "member_notice" && m.notice?.event.startsWith("retention_"));
+      const out: Notice[] = [];
+      for (const row of rows) {
+        const composed = await composeNotice(ctx, row, Date.now());
+        out.push({ event: row.notice!.event, ref: row.notice!.ref, status: row.status, subject: composed.ok ? composed.email.subject : null, text: composed.ok ? composed.email.text : composed.problem });
+      }
+      return out;
+    });
+  }
+  beforeEach(() => {
+    process.env.EMAIL_PROVIDER = "mock";
+    process.env.APP_ORIGIN = "https://app.selestial.test";
+  });
+  afterEach(() => {
+    delete process.env.EMAIL_PROVIDER;
+    delete process.env.APP_ORIGIN;
+  });
+
+  it("tells them at once about a serious concern, without the customer's words in the email", async () => {
+    const s = await retentionSetup();
+    const jobId = await s.completed({ scope: SCOPE, checklist: CHECKLIST });
+    const caseId = await report(s, jobId, "Your cleaner broke my grandmother's vase.");
+    const sent = (await notices(s)).filter((n) => n.event === "retention_serious");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ ref: caseId, subject: expect.stringContaining("serious concern") });
+    // Critical: it does not wait for the morning.
+    expect(sent[0].status).not.toBe("held");
+    expect(sent[0].text).not.toContain("grandmother");
+    expect(sent[0].text).toContain(`/app/agents/retention/needs-attention?case=${caseId}`);
+    // Once a person has taken it, a notice that had not gone yet is not sent.
+    await s.as.mutation(api.retentionAgent.takeOver, { companyId: s.companyId, caseId });
+    expect((await notices(s)).find((n) => n.event === "retention_serious")!.text).toContain("A person took the case");
+  });
+
+  it("says a case needs a decision once, and leaves approvals to the approval notice", async () => {
+    const s = await retentionSetup();
+    const jobId = await s.completed({ scope: SCOPE, checklist: CHECKLIST });
+    // The follow-through's feedback request is waiting in Approvals: that sent its own notice, so no second one.
+    expect(await notices(s)).toEqual([]);
+    const all = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((m) => m.purpose === "member_notice").map((m) => m.notice!.event));
+    expect(all).toContain("approval_needed");
+    // A correction waiting for the Owner to set crew pay has no approval, so the case itself says it needs them.
+    const caseId = await report(s, jobId, "The shower was missed.");
+    const decision = (await notices(s)).filter((n) => n.event === "retention_attention" && n.ref === caseId);
+    expect(decision).toHaveLength(1);
+    expect(decision[0].subject).toContain("needs your decision");
+    expect(decision[0].text).toContain("Set the crew's pay");
+    // Dealt with before it went: nothing to say.
+    await s.setPay();
+    expect((await notices(s)).find((n) => n.event === "retention_attention" && n.ref === caseId)!.text).toContain("stopped waiting on a person");
+  });
+
+  it("says a commitment is overdue once per deadline, and how a case ended", async () => {
+    const s = await retentionSetup();
+    const jobId = await s.completed({ scope: SCOPE, checklist: CHECKLIST });
+    const caseId = await report(s, jobId, "The shower was missed.");
+    const row = (await s.cases()).find((c) => c._id === caseId)!;
+    vi.setSystemTime(row.dueAt + HOUR);
+    await s.reconcile();
+    await s.reconcile();
+    const overdue = (await notices(s)).filter((n) => n.subject?.includes("overdue"));
+    expect(overdue).toHaveLength(1);
+    expect(overdue[0]).toMatchObject({ event: "retention_attention", ref: caseId });
+    // The follow-through for the same visit closed quietly; only the recovery case's outcome is sent, and not to the person who recorded it.
+    const manager = await addMember(s.t, s.as, s.companyId, "manny", "manager");
+    await manager.mutation(api.retentionAgent.close, { companyId: s.companyId, caseId, outcome: "handled_by_person", note: "Called the customer." });
+    const outcome = (await notices(s)).filter((n) => n.event === "retention_outcome");
+    expect(outcome).toHaveLength(1);
+    expect(outcome[0]).toMatchObject({ ref: caseId, subject: expect.stringContaining("Handled by a person") });
+    expect(outcome[0].text).toContain("not a statement that the customer is satisfied");
+    // The overdue notice, if it had not gone yet, no longer has anything to say.
+    expect((await notices(s)).find((n) => n.subject === null && n.event === "retention_attention")?.text ?? "closed").toContain("closed");
   });
 });

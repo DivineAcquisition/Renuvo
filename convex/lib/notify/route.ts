@@ -35,6 +35,8 @@ export type NoticeInput = {
   also?: Id<"members">[];
   /** Only these members (e.g. the person whose own access changed). Still checked against the company. */
   only?: Id<"members">[];
+  /** Members left out: the person who just did the thing doesn't need to be told. */
+  except?: Id<"members">[];
   now?: number;
 };
 
@@ -51,7 +53,7 @@ export async function recipientsFor(ctx: MutationCtx, input: NoticeInput): Promi
     .query("members")
     .withIndex("by_company", (q) => q.eq("companyId", input.companyId))
     .take(500);
-  const active = members.filter((m) => m.status === "active");
+  const active = members.filter((m) => m.status === "active" && !(input.except ?? []).includes(m._id));
   if (input.only) return active.filter((m) => input.only!.includes(m._id));
   const roles = rolesFor(EVENT_INFO[input.event].audience);
   return active.filter((m) => roles.includes(roleOf(m.role)) || (input.also ?? []).includes(m._id));

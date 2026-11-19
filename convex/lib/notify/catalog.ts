@@ -34,8 +34,8 @@ export const CATEGORY_INFO: Record<NoticeCategory, CategoryInfo> = {
   security: { label: "Security", about: "Changes to who can get in, connected inboxes, where payouts go, and your company's data.", defaultOn: true, locked: "everyone", unsubscribable: false },
   account: { label: "Account & connections", about: "A payment that didn't go through, credits running out, or an inbox that needs reconnecting.", defaultOn: true, locked: "owner", unsubscribable: false },
   approvals: { label: "Approvals", about: "When an agent you've set to Ask me first wants to do something, and a reminder before its deadline.", defaultOn: true, unsubscribable: true },
-  escalations: { label: "Urgent operations", about: "When a visit is at risk and Dispatch can't fix it on its own: a missed check-in, a likely no-show, nobody to cover.", defaultOn: true, unsubscribable: true },
-  activity: { label: "What your agents did", about: "Things agents did on their own when set to Act and notify me, and customer payments that failed.", defaultOn: true, unsubscribable: true },
+  escalations: { label: "Urgent operations", about: "When a visit is at risk and Dispatch can't fix it on its own, a customer raises a serious concern, a customer case needs your decision, or a commitment to a customer is overdue.", defaultOn: true, unsubscribable: true },
+  activity: { label: "What your agents did", about: "Things agents did on their own when set to Act and notify me, how customer cases ended, and customer payments that failed.", defaultOn: true, unsubscribable: true },
   digest: { label: "Weekly summary", about: "Monday morning: last week's visits, payments and decisions from your records, and what's waiting on you.", defaultOn: true, unsubscribable: true },
   product: { label: "Product news", about: "New features and changes to Selestial. A few times a year.", defaultOn: false, unsubscribable: true },
 };
@@ -57,7 +57,7 @@ export type Priority = "critical" | "high" | "normal" | "digest";
 /** Who gets it, by role. "connector" adds the member who connected the thing it's about. */
 export type Audience = "owner" | "managers" | "everyone";
 
-export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "agent_acted", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect"] as const;
+export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "agent_acted", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect", "retention_serious", "retention_attention", "retention_outcome"] as const;
 export type NoticeEvent = (typeof NOTICE_EVENTS)[number];
 export const noticeEventValidator = v.union(...NOTICE_EVENTS.map((e) => v.literal(e)));
 
@@ -83,6 +83,9 @@ export const EVENT_INFO: Record<NoticeEvent, EventInfo> = {
   credits_exhausted: { category: "account", priority: "high", audience: "owner", owner: "selestial", when: "Selestial Credits run out and AI work pauses." },
   customer_payment_failed: { category: "activity", priority: "high", audience: "managers", owner: "selestial", when: "A customer's card payment fails." },
   inbox_reconnect: { category: "account", priority: "critical", audience: "owner", owner: "selestial", when: "A connected inbox stops working." },
+  retention_serious: { category: "escalations", priority: "critical", audience: "managers", owner: "selestial", when: "A customer reports a safety, damage, theft or staff-conduct concern." },
+  retention_attention: { category: "escalations", priority: "high", audience: "managers", owner: "selestial", when: "A customer case needs a person's decision and no approval is already waiting, or a commitment to a customer has passed its deadline." },
+  retention_outcome: { category: "activity", priority: "normal", audience: "managers", owner: "selestial", when: "A recovery, plan-change, renewal or return case closes with its recorded outcome." },
 };
 
 /** The roles an audience reaches. */

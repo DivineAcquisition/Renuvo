@@ -219,7 +219,7 @@ export async function planRecovery(ctx: MutationCtx, company: Doc<"companies">, 
         summary: `Correction visit for ${what} at ${propertyName(property)}, ${whenWords(slot.startsAt, tz)}`,
         reason: `${row.diagnosis.reasons.join(" ")} A targeted correction of ${minutes} minutes, at no charge to the customer.`,
         permission: "retention.remedy_within_limit",
-        visit: { areas: row.areas, scope: "targeted", startsAt: slot.startsAt, endsAt: slot.endsAt, minutes, crew: 1, payBasisCents: cost.payBasisCents, avoidCleanerIds: options.wantsDifferentCleaner ? evidence.crew.map((c) => c.cleanerId) : [] },
+        visit: { areas: row.areas, scope: "targeted", startsAt: slot.startsAt, endsAt: slot.endsAt, minutes, crew: 1, payHintCents: cost.payHintCents, avoidCleanerIds: options.wantsDifferentCleaner ? evidence.crew.map((c) => c.cleanerId) : [] },
         estimatedCostCents: cost.estimateCents ?? undefined,
         costBasis: cost.basis,
         dueAt: row.dueAt,
@@ -229,6 +229,9 @@ export async function planRecovery(ctx: MutationCtx, company: Doc<"companies">, 
       if (routed.status === "awaiting_approval") {
         needs = needs ?? `Review the proposed correction visit for ${whenWords(slot.startsAt, tz)}.`;
         doing = "A correction visit is prepared and waiting for approval.";
+      } else if (routed.status === "proposed") {
+        needs = needs ?? `Set the crew's pay for the correction visit prepared for ${whenWords(slot.startsAt, tz)}. ${routed.detail}`;
+        doing = "A correction visit is prepared. It is not booked.";
       } else if (routed.status === "blocked") needs = `${ACTION_WORDS.correction_visit} was not carried out: ${plain(routed.detail)}`;
     } else {
       // No open time is a real answer. Retention says so and asks Dispatch; it does not promise a visit.

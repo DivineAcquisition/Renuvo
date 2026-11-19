@@ -286,7 +286,11 @@ export const retentionTables = {
     authorization: v.optional(v.string()),
     /** The message to send, for the actions that send one. "{link}" marks where a customer link goes. */
     message: v.optional(v.object({ channel: v.union(v.literal("sms"), v.literal("email")), subject: v.optional(v.string()), body: v.string(), linkPurpose: v.optional(literals(LINK_PURPOSES)), aboutActionId: v.optional(v.id("retentionActions")) })),
-    /** A correction visit: what is corrected, when, and the pay basis so the crew is paid for it. */
+    /**
+     * A correction visit: what is corrected and when. The Owner sets the pay basis (the amount the crew's
+     * pay is worked out from, as the price is on a paid visit) each time; nothing is booked without it.
+     * `payHintCents` is the original price in proportion to the minutes, shown as a starting point only.
+     */
     visit: v.optional(
       v.object({
         areas: v.array(v.string()),
@@ -296,6 +300,8 @@ export const retentionTables = {
         minutes: v.number(),
         crew: v.number(),
         payBasisCents: v.optional(v.number()),
+        payHintCents: v.optional(v.number()),
+        paySetBy: v.optional(v.id("members")),
         avoidCleanerIds: v.array(v.id("cleaners")),
         jobId: v.optional(v.id("jobs")),
       }),

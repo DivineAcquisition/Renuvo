@@ -69,9 +69,18 @@ export async function retentionSetup() {
       await flush(t);
       return result.carriedOut;
     },
-    /** Approves whatever Retention has waiting, in order, until nothing is. */
+    /** The Owner sets the crew's pay on the correction visits waiting for it, which books them. */
+    setPay: async (cents = 6000) => {
+      const waiting = (await helpers.actions()).filter((a) => a.kind === "correction_visit" && a.status === "proposed" && a.visit?.payBasisCents === undefined);
+      const results = [];
+      for (const action of waiting) results.push(await as.mutation(api.retentionAgent.setCorrectionPay, { companyId, actionId: action._id, payBasisCents: cents }));
+      await flush(t);
+      return results;
+    },
+    /** Approves whatever Retention has waiting, and sets pay on its correction visits, until nothing is. */
     approveAll: async () => {
       for (let i = 0; i < 6; i += 1) {
+        await helpers.setPay();
         const rows = (await as.query(api.approvals.list, { companyId })).filter((row) => row.agent === "retention");
         if (!rows.length) return;
         for (const row of rows) await as.mutation(api.approvals.decide, { companyId, approvalId: row._id, decision: "approved" });

@@ -20,7 +20,7 @@ import { localParts } from "./lib/availability";
 import { salesLinkMutation, salesLinkQuery } from "./lib/builders";
 import { readProfile } from "./lib/compliance/profile";
 import { allow } from "./lib/rateLimit";
-import { ACTION_WORDS, actionsOf, submitAction, whenWords } from "./lib/retention/actions";
+import { ACTION_WORDS, actionsOf, PAY_NOT_SET, submitAction, whenWords } from "./lib/retention/actions";
 import { addEntry, areasIn, cleanAreas, moveCase, openCase, propertyName, RETENTION, SYSTEM } from "./lib/retention/cases";
 import { manageable, requestPlanChange } from "./lib/retention/continuity";
 import { careLinkByPublicId, careLinkState, customerActor, noteCareAction } from "./lib/retention/links";
@@ -272,6 +272,7 @@ export const answerRemedy = salesLinkMutation({
       await moveCase(ctx, fresh, { status: "needs_attention", needs: "The customer accepted the proposed remedy. Approve it to book it.", doing: "The customer said yes. The remedy is waiting for approval." }, SYSTEM);
       return { ok: true, words: "Thank you. The office is confirming it and will be in touch with the details." };
     }
+    if (routed.status === "proposed" && routed.detail === PAY_NOT_SET) return { ok: true, words: "Thank you. The office is confirming it and will be in touch with the details." };
     return { ok: true, words: "Thank you. That time is no longer open, so the office will be in touch with another." };
   },
 });

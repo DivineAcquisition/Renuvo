@@ -325,6 +325,12 @@ export async function closeCase(ctx: MutationCtx, row: Doc<"retentionCases">, co
   await addEntry(ctx, fresh, { kind: "outcome", text: `${OUTCOME_WORDS[code]}${note ? ` ${note}` : ""}`, actor });
   await recordEvent(ctx, { companyId: row.companyId, type: "retention_case.closed", actor, subject: { table: "retentionCases", id: row._id }, data: { outcome: code } });
   await revokeCaseLinks(ctx, row.companyId, row._id, "The case was closed.", actor);
+  // A step that was prepared and never sent anywhere ends with the case, so it cannot be carried out later.
+  const prepared = await ctx.db
+    .query("retentionActions")
+    .withIndex("by_company_case", (q) => q.eq("companyId", row.companyId).eq("caseId", row._id))
+    .take(100);
+  for (const action of prepared) if (action.status === "proposed") await ctx.db.patch(action._id, { status: "cancelled", result: "The case was closed first.", updatedAt: now, doneAt: now });
   // Signals the case carried are settled with it.
   const signals = await ctx.db
     .query("retentionSignals")

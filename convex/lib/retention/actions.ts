@@ -148,13 +148,13 @@ async function setAction(ctx: MutationCtx, action: Action, patch: Partial<Action
  * What a correction visit is likely to cost in crew pay, from what the original crew was paid per minute.
  * With no pay on record there is no estimate, and the screens say so instead of showing a number.
  */
-export function correctionCost(original: { crewPayCents: number; durationMinutes: number; priceCents: number | null } | null, minutes: number): { estimateCents: number | null; basis: string; payBasisCents: number | undefined } {
-  if (!original || original.durationMinutes <= 0) return { estimateCents: null, basis: "No original visit to estimate from.", payBasisCents: undefined };
+export function correctionCost(original: { crewPayCents: number; durationMinutes: number; priceCents: number | null } | null, minutes: number): { estimateCents: number | null; basis: string; payHintCents: number | undefined } {
+  if (!original || original.durationMinutes <= 0) return { estimateCents: null, basis: "No original visit to estimate from.", payHintCents: undefined };
   const share = Math.min(1, minutes / original.durationMinutes);
-  const payBasisCents = original.priceCents === null ? undefined : Math.round(original.priceCents * share);
-  if (original.crewPayCents <= 0) return { estimateCents: null, basis: "The original visit has no crew pay on record, so there is no reliable cost estimate.", payBasisCents };
+  const payHintCents = original.priceCents === null ? undefined : Math.round(original.priceCents * share);
+  if (original.crewPayCents <= 0) return { estimateCents: null, basis: "The original visit has no crew pay on record, so there is no reliable cost estimate.", payHintCents };
   const estimateCents = Math.round(original.crewPayCents * share);
-  return { estimateCents, basis: `Estimate: ${minutes} of the original ${original.durationMinutes} minutes, at what the original crew was paid (${money(original.crewPayCents)}). Other costs, such as supplies or travel, are not included.`, payBasisCents };
+  return { estimateCents, basis: `Estimate: ${minutes} of the original ${original.durationMinutes} minutes, at what the original crew was paid (${money(original.crewPayCents)}). Other costs, such as supplies or travel, are not included.`, payHintCents };
 }
 
 /** Open times for a visit at this property over the coming days, from the same capacity check a booking uses. */
@@ -192,6 +192,29 @@ export async function correctionSlots(ctx: Ctx, company: Doc<"companies">, input
  * Sends a prepared action where the Owner's settings say it goes: carried out now, into the approvals
  * queue, or refused. Asked again for an action already routed, it answers with where that stands.
  */
+export const PAY_NOT_SET = "The Owner sets what the crew is paid for each correction visit. It is booked once that is set.";
+
+/**
+ * The Owner sets the pay basis on a prepared correction visit and books it. This is the Owner's own
+ * decision, so it is carried out without a second approval. Every other check still runs.
+ */
+export async function setCorrectionPay(ctx: MutationCtx, company: Doc<"companies">, actionId: Id<"retentionActions">, payBasisCents: number, memberId: Id<"members">, book = true): Promise<{ status: Action["status"]; detail: string }> {
+  const action = (await ctx.db.get(actionId))!;
+  const row = (await ctx.db.get(action.caseId))!;
+  const actor: Actor = { kind: "member", memberId };
+  const visit = { ...action.visit!, payBasisCents, paySetBy: memberId };
+  await ctx.db.patch(action._id, { visit, result: undefined, updatedAt: Date.now() });
+  const fresh = (await ctx.db.get(action._id))!;
+  await ctx.db.patch(action._id, { stamp: await stampFor(ctx, row, fresh), preparedAt: Date.now() });
+  await addEntry(ctx, row, { kind: "action", text: `The Owner set the crew's pay basis for the correction visit: ${money(payBasisCents)}.`, actor });
+  // Offered to the customer and not answered yet: the pay is set, and the visit waits for their yes.
+  const offer = (await actionsOf(ctx, row)).find((other) => other.message?.aboutActionId === action._id && (other.status === "proposed" || other.status === "awaiting_approval" || other.status === "underway"));
+  if (offer || !book) return { status: "proposed", detail: "The crew's pay is set. The visit is booked when the customer accepts it." };
+  await ctx.db.patch(action._id, { authorization: `${action.permission}: pay set and booked by the Owner` });
+  const result = await carryOut(ctx, company, (await ctx.db.get(action._id))!, actor);
+  return { status: (await ctx.db.get(action._id))!.status, detail: result.detail };
+}
+
 export async function submitAction(ctx: MutationCtx, company: Doc<"companies">, actionId: Id<"retentionActions">, actor: Actor): Promise<{ status: Action["status"]; detail: string }> {
   let action = (await ctx.db.get(actionId))!;
   if (action.status !== "proposed") return { status: action.status, detail: action.result ?? "Already routed." };
@@ -204,6 +227,17 @@ export async function submitAction(ctx: MutationCtx, company: Doc<"companies">, 
   if (actor.kind === "agent" && (row.heldBy || row.serious) && MESSAGE_KINDS.includes(action.kind)) {
     action = await setAction(ctx, action, { status: "blocked", result: "A person is handling this case, so Retention sends nothing to the customer until it is handed back." });
     return { status: action.status, detail: action.result! };
+  }
+  // What a crew is paid for a correction is the Owner's decision each time. Until it is set, nothing is
+  // booked and nothing goes to approval: the case waits on the Owner and says so.
+  if (action.kind === "correction_visit" && action.visit?.payBasisCents === undefined) {
+    const detail = PAY_NOT_SET;
+    if (action.result !== detail) {
+      await setAction(ctx, action, { result: detail });
+      await addEntry(ctx, row, { kind: "action", text: `Waiting for the Owner: ${action.summary}. ${detail}`, actor: SYSTEM });
+    }
+    if (!row.serious) await moveCase(ctx, (await ctx.db.get(row._id))!, { status: "needs_attention", doing: "A correction visit is prepared. It is not booked.", needs: `Set the crew's pay for the correction visit. ${detail}` }, actor);
+    return { status: "proposed", detail };
   }
   const cost = action.estimatedCostCents ?? action.money?.amountCents ?? null;
   const permit = await permitFor(ctx, company._id, action.permission, { cents: cost });
@@ -234,7 +268,7 @@ export async function submitAction(ctx: MutationCtx, company: Doc<"companies">, 
   action = await setAction(ctx, action, { authorization: permit.label });
   const result = await carryOut(ctx, company, action, actor);
   if (permit.level === "execute_and_report") {
-    await recordEvent(ctx, { companyId: company._id, type: "retention.reported", actor: RETENTION, subject: { table: "retentionActions", id: action._id }, data: { kind: action.kind, ok: result.ok } });
+    await recordEvent(ctx, { companyId: company._id, type: "retention.reported", actor: RETENTION, subject: { table: "retentionActions", id: action._id }, data: { kind: action.kind, action: action.permission, caseId: action.caseId, ok: result.ok } });
   }
   return { status: (await ctx.db.get(action._id))!.status, detail: result.detail };
 }
@@ -242,7 +276,7 @@ export async function submitAction(ctx: MutationCtx, company: Doc<"companies">, 
 function authorizes(action: Action, timezone: string): string {
   if (action.visit) {
     const when = action.visit.startsAt ? whenWords(action.visit.startsAt, timezone) : "a time Dispatch finds";
-    return `Book one correction visit (${action.visit.minutes} minutes, ${action.visit.areas.join(", ") || "the reported work"}) for ${when}, at no charge to the customer, and hand it to Dispatch to staff. ${action.visit.payBasisCents !== undefined ? `The crew is paid from a basis of ${money(action.visit.payBasisCents)}.` : "No pay basis is set; Dispatch will say if a cleaner's pay cannot be worked out."} Nothing else.`;
+    return `Book one correction visit (${action.visit.minutes} minutes, ${action.visit.areas.join(", ") || "the reported work"}) for ${when}, at no charge to the customer, and hand it to Dispatch to staff. The crew is paid from a basis of ${money(action.visit.payBasisCents ?? 0)}, set by the Owner. Nothing else.`;
   }
   if (action.money) return `${action.kind === "refund" ? "Ask the Owner to refund" : "Credit"} ${money(action.money.amountCents)}${action.money.invoiceId ? " on the linked invoice" : ""}. The money moves only through Finance.`;
   if (action.message) return `Send this exact ${action.message.channel === "sms" ? "text" : "email"} to the customer, if they have not written again since it was prepared: "${action.message.body.slice(0, 600)}"`;
@@ -317,6 +351,7 @@ export async function carryOut(ctx: MutationCtx, company: Doc<"companies">, acti
   if (action.kind === "correction_visit") {
     const visit = action.visit;
     if (!visit || visit.startsAt === undefined || visit.endsAt === undefined) return fail("No time was chosen for the visit.", "proposed");
+    if (visit.payBasisCents === undefined) return fail(PAY_NOT_SET, "proposed");
     if (!property) return fail("The case has no property to send a crew to.");
     if (property.status !== "active") return fail("The property is archived.");
     const capacity = await checkCapacity(ctx, company, { startsAt: visit.startsAt, endsAt: visit.endsAt }, visit.crew);
