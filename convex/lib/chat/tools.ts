@@ -44,6 +44,7 @@ import { describeOpportunity, opportunityLink, PIPELINE_TOOLS } from "./pipeline
 import { view } from "../sales/agentOpportunity";
 import { FINANCE_TOOLS } from "./financeTools";
 import { CLIENT_TOOLS } from "./clientTools";
+import { RETENTION_TOOLS } from "./retentionTools";
 import { localDay } from "./localDay";
 import { ARTIFACT_KINDS, ARTIFACT_STATES, type ArtifactKind, type ArtifactState, type Link, type RecordRef } from "./schema";
 import type { Work } from "./work";
@@ -1052,7 +1053,7 @@ export const ASK_FOLLOWUP = {
   input: { type: "object" as const, properties: { question: { type: "string" as const, max: 300 }, options: { type: "array" as const, items: { type: "string" as const, max: 80 }, maxItems: 5, minItems: 2 } } },
 };
 
-const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...BOOKING_TOOLS, ...CLIENT_TOOLS, ...SALES_TOOLS, ...PIPELINE_TOOLS];
+const ALL: ChatTool[] = [...TOOLS, ...AGREEMENT_TOOLS, ...SERVICE_TOOLS, ...GOOGLE_TOOLS, ...FINANCE_TOOLS, ...CLEANER_TOOLS, ...BOOKING_TOOLS, ...CLIENT_TOOLS, ...SALES_TOOLS, ...PIPELINE_TOOLS, ...RETENTION_TOOLS];
 export const TOOL_BY_NAME = new Map(ALL.map((tool) => [tool.name, tool]));
 export const ALL_TOOLS: readonly ChatTool[] = ALL;
 

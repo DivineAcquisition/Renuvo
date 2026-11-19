@@ -537,6 +537,13 @@ export const week = companyQuery({
     const unpriced = thisWeek.filter((job) => job.priceCents === undefined).length;
     const upcoming = await visitsBetween(ctx, args.asOf, addLocalDays(tomorrowStart, 7, tz));
     const gaps = upcoming.filter((visit) => isUnstaffed(visit.state)).length;
+    const recurringRunning =
+      (await ctx.db.query("servicePlans").withIndex("by_company_state", (q) => q.eq("companyId", ctx.companyId).eq("state", "active")).take(1000)).filter((plan) => plan.kind === "recurring").length +
+      (await ctx.db.query("recurringPlans").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "active")).take(1000)).length;
+    let openIssues = 0;
+    for (const status of ["needs_context", "needs_attention", "action_underway", "waiting_on_customer", "monitoring"] as const) {
+      openIssues += (await ctx.db.query("retentionCases").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", status)).take(500)).filter((row) => row.kind === "recovery").length;
+    }
     const notSetUp = (key: string, label: string, why: string, limitation: string, kind: "count" | "cents" = "count"): Measure => ({ key, label, why, state: "not_set_up", kind, value: null, previous: null, limitation });
 
     const measures: Measure[] = [
@@ -563,8 +570,26 @@ export const week = companyQuery({
         limitation: `Out of ${plural((await inquiriesBetween(thisFrom, tomorrowStart)).length, "inquiry", "inquiries")} received. An inquiry still open may yet book.`,
       },
       notSetUp("cash", "Cash collected", "Money actually received.", "Payments are not connected.", "cents"),
-      notSetUp("recurring", "Recurring customers", "Size and direction of the repeat customer base.", "Recurring plans arrive with Retention."),
-      notSetUp("issues", "Customer issues unresolved", "Service problems that could damage retention.", "Service issues arrive with Retention."),
+      {
+        key: "recurring",
+        label: "Recurring plans running",
+        why: "Size of the repeat customer base.",
+        state: "measured",
+        kind: "count",
+        value: recurringRunning,
+        previous: null,
+        limitation: "Plans running now, from both plan systems. Paused plans are not counted, and a plan is not a customer: one customer can have several.",
+      },
+      {
+        key: "issues",
+        label: "Customer issues unresolved",
+        why: "Service problems that could damage retention.",
+        state: "measured",
+        kind: "count",
+        value: openIssues,
+        previous: null,
+        limitation: "Open recovery cases in Retention. A customer who has not reported a problem is not thereby satisfied.",
+      },
     ];
     return { from: thisFrom, to: tomorrowStart, previousFrom: lastFrom, measures };
   },

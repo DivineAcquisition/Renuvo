@@ -125,7 +125,9 @@ describe("the Overview", () => {
     const dispatch = team.agents.find((row) => row.agent === "dispatch")!;
     expect(dispatch).toMatchObject({ state: "clear", department: { id: "operations" } });
     expect(dispatch.recentOutcomes[0].outcome).toContain("Rosa");
-    expect(team.agents.filter((row) => row.state === "not_built").map((row) => row.agent)).toEqual(["retention"]);
+    // Every agent the backend knows is built now; Retention has nothing open, which is not the same as "not built".
+    expect(team.agents.filter((row) => row.state === "not_built").map((row) => row.agent)).toEqual([]);
+    expect(team.agents.find((row) => row.agent === "retention")).toMatchObject({ state: "clear", department: { id: "growth" } });
   });
 
   it("says who is on an uncovered visit today, and stops the run where nobody can be asked", async () => {
@@ -168,7 +170,10 @@ describe("the Overview", () => {
     expect(measure("coverage_gaps")).toMatchObject({ value: 0 });
     // The Sales agent counts bookings from its own record: none here, out of no inquiries. It is a count, never a guess.
     expect(measure("conversion")).toMatchObject({ state: "measured", value: 0, previous: 0 });
-    for (const key of ["cash", "recurring", "issues"]) expect(measure(key)).toMatchObject({ state: "not_set_up", value: null });
+    expect(measure("cash")).toMatchObject({ state: "not_set_up", value: null });
+    // Counted from Retention's own records: no plan is running and no recovery case is open here.
+    expect(measure("recurring")).toMatchObject({ state: "measured", value: 0 });
+    expect(measure("issues")).toMatchObject({ state: "measured", value: 0, limitation: expect.stringContaining("not thereby satisfied") });
   });
 
   it("keeps approvals to Owners and Managers, and another company out entirely", async () => {

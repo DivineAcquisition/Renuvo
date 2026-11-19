@@ -158,6 +158,7 @@ import type * as lib_chat_model from "../lib/chat/model.js";
 import type * as lib_chat_pipelineTools from "../lib/chat/pipelineTools.js";
 import type * as lib_chat_pricing from "../lib/chat/pricing.js";
 import type * as lib_chat_prompt from "../lib/chat/prompt.js";
+import type * as lib_chat_retentionTools from "../lib/chat/retentionTools.js";
 import type * as lib_chat_salesTools from "../lib/chat/salesTools.js";
 import type * as lib_chat_serviceTools from "../lib/chat/serviceTools.js";
 import type * as lib_chat_state from "../lib/chat/state.js";
@@ -594,6 +595,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chat/pipelineTools": typeof lib_chat_pipelineTools;
   "lib/chat/pricing": typeof lib_chat_pricing;
   "lib/chat/prompt": typeof lib_chat_prompt;
+  "lib/chat/retentionTools": typeof lib_chat_retentionTools;
   "lib/chat/salesTools": typeof lib_chat_salesTools;
   "lib/chat/serviceTools": typeof lib_chat_serviceTools;
   "lib/chat/state": typeof lib_chat_state;
