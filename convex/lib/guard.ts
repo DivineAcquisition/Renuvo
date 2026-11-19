@@ -38,6 +38,8 @@ export const PUBLIC_QUERY_FILES = [
   "convex/trust.ts",
   // A published booking page: only what the page shows every visitor (docs/booking/00-architecture.md).
   "convex/bookingPublic.ts",
+  // The unsubscribe page for a notification: only the category name and company the signed token names.
+  "convex/notifications.ts",
 ] as const;
 
 /** A `publicQuery` anywhere except the reviewed files is a violation. */

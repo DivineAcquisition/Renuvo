@@ -40,10 +40,35 @@ export async function verifyOidc(token: string, keys: Jwk[], expected: { audienc
   return claims;
 }
 
-export async function googleKeys(): Promise<Jwk[]> {
+let cached: { keys: Jwk[]; until: number } | null = null;
+
+/**
+ * Google's current signing keys. Kept for as long as Google says they may be (Cache-Control max-age, at
+ * most a day), so a burst of notifications doesn't fetch them each time. A token signed with a key not in
+ * the cached set fetches them again once, since Google rotates keys.
+ */
+export async function googleKeys(kid?: string, now = Date.now()): Promise<Jwk[]> {
+  if (cached && cached.until > now && (!kid || cached.keys.some((key) => key.kid === kid))) return cached.keys;
   const response = await fetch("https://www.googleapis.com/oauth2/v3/certs").catch(() => null);
-  if (!response?.ok) return [];
-  return ((await response.json()) as { keys?: Jwk[] }).keys ?? [];
+  if (!response?.ok) return cached?.keys ?? [];
+  const keys = ((await response.json()) as { keys?: Jwk[] }).keys ?? [];
+  const maxAge = Number(/max-age=(\d+)/.exec(response.headers.get("cache-control") ?? "")?.[1] ?? 3600);
+  cached = { keys, until: now + Math.min(Math.max(maxAge, 60), 86_400) * 1000 };
+  return keys;
+}
+
+/** The key id a token names, so the cache can tell when it needs fresh keys. */
+export function tokenKid(token: string): string | undefined {
+  try {
+    return (JSON.parse(new TextDecoder().decode(b64urlBytes(token.split(".")[0] ?? ""))) as { kid?: string }).kid;
+  } catch {
+    return undefined;
+  }
+}
+
+/** For tests: forget the cached keys. */
+export function forgetGoogleKeys() {
+  cached = null;
 }
 
 /** The decoded message of a push: Gmail's {emailAddress, historyId} or Business Profile's notification. */

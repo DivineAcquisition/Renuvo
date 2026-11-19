@@ -79,7 +79,7 @@ describe("Selestial prepares, the Owner approves", () => {
     expect(queue.waiting[0].body).toContain("$240.00");
     expect(queue.waiting[0].body).toContain("{link}");
     // Nothing went anywhere.
-    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect()).length)).toBe(0);
+    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice"))).length)).toBe(0);
 
     // A week late, the overdue step replaces the waiting note.
     vi.setSystemTime(NOW + 15 * DAY);
@@ -117,6 +117,11 @@ describe("Selestial prepares, the Owner approves", () => {
     expect(mockEmails[0]).toMatchObject({ to: "dana@example.com", fromName: "Alpha Cleaning", replyTo: "owner-a@example.com", subject: "Invoice INV-1001 from Alpha Cleaning" });
     expect(mockEmails[0].text).toMatch(/https:\/\/link\.selestial\.test\/c\/pay\/[\w-]+\.[\w-]+/);
     expect(mockEmails[0].text).not.toContain("{link}");
+    // Sent through Selestial's shared sender: the company's name "via Selestial", in the company's own frame.
+    expect(mockEmails[0].from).toBe('"Alpha Cleaning via Selestial" <messages@mail.selestial.test>');
+    expect(mockEmails[0].html).toContain("Alpha Cleaning · sent via Selestial");
+    expect(mockEmails[0].html).toContain("You&#39;re getting this because you&#39;re a customer of Alpha Cleaning.");
+    expect(mockEmails[0].html).toMatch(/<a href="https:\/\/link\.selestial\.test\/c\/pay\//);
     const history = await s.as.query(api.financeMessages.forInvoice, { companyId: s.companyId, invoiceId: s.invoiceId });
     expect(history.history[0].delivery).toMatchObject({ state: "completed", words: "Delivered" });
     expect(history.invoiceDelivered).toBe(true);
@@ -231,6 +236,6 @@ describe("Chat over Finance", () => {
     expect(prepared.data).toMatchObject({ sent: 0 });
     expect(prepared.data.prepared).toHaveLength(1);
     expect((await s.as.query(api.financeMessages.queue, { companyId: s.companyId })).waiting).toHaveLength(1);
-    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect()).length)).toBe(0);
+    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice"))).length)).toBe(0);
   });
 });

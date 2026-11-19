@@ -521,6 +521,25 @@ export function oauthCallback(def: { handler: (ctx: ActionCtx, params: URLSearch
 }
 
 /**
+ * The address in a notice's List-Unsubscribe header (RFC 8058). A mail program's own Unsubscribe button
+ * POSTs here with the signed token in the address, and only a POST changes anything. A GET (a person or a
+ * link scanner opening the address) is sent to the app's page, which asks before doing anything. The
+ * token is the only authorization, checked by `post`; the answer is the same whatever it found.
+ */
+export function oneClickUnsubscribe(def: { post: (ctx: ActionCtx, token: string) => Promise<void>; page: (token: string) => string | null }): PublicHttpAction {
+  return httpAction(async (ctx, request) => {
+    const token = new URL(request.url).searchParams.get("t") ?? "";
+    if (!token || token.length > 200) return new Response(null, { status: 400 });
+    if (request.method === "POST") {
+      await def.post(ctx, token);
+      return new Response(null, { status: 200, headers: { "Cache-Control": "no-store" } });
+    }
+    const page = def.page(token);
+    return page ? new Response(null, { status: 302, headers: { Location: page, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } }) : new Response("Not found.", { status: 404 });
+  });
+}
+
+/**
  * A GET for a stored file, served only for a request whose address the deployment signed and that has
  * not expired. `verify` decides; anything it refuses is a plain 404, so a wrong id, a wrong signature
  * and an expired address cannot be told apart.

@@ -88,7 +88,10 @@ describe("Resend's webhook signature", () => {
     expect(await check({ secret: "not-a-secret" })).toBe(false);
     expect(webhookOutcome(body)).toEqual({ providerMessageId: "re_123", outcome: "bounced" });
     expect(webhookOutcome(JSON.stringify({ type: "email.delivered", data: { email_id: "re_9" } }))).toEqual({ providerMessageId: "re_9", outcome: "delivered" });
-    expect(webhookOutcome(JSON.stringify({ type: "email.complained", data: { email_id: "re_9" } }))?.outcome).toBe("bounced");
+    // A complaint is kept apart from a bounce: the address works, the person called the mail spam.
+    expect(webhookOutcome(JSON.stringify({ type: "email.complained", data: { email_id: "re_9" } }))?.outcome).toBe("complained");
+    expect(webhookOutcome(JSON.stringify({ type: "email.suppressed", data: { email_id: "re_9" } }))?.outcome).toBe("suppressed");
+    expect(webhookOutcome(JSON.stringify({ type: "email.delivery_delayed", data: { email_id: "re_9" } }))?.outcome).toBe("delayed");
     expect(webhookOutcome(JSON.stringify({ type: "email.opened", data: { email_id: "re_9" } }))).toBeNull();
     expect(webhookOutcome("not json")).toBeNull();
   });
@@ -108,10 +111,10 @@ describe("Resend's webhook on the deployment", () => {
   it("a signed bounce report moves the application to contact needed; an unsigned one is refused and changes nothing", async () => {
     const s = await setup();
     const { applicationId } = await invited(s, indeedApplication({ text: "Slow Sam applied to House Cleaner.\nEmail: slow.sam@example.test" }));
-    const providerMessageId = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect())[0].providerMessageId!);
+    const providerMessageId = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")))[0].providerMessageId!);
     // The test inbox's mock provider names itself "mock-email"; a real Resend message would carry "resend".
     await s.t.run(async (ctx) => {
-      const [message] = await ctx.db.query("messages").collect();
+      const [message] = await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice"));
       await ctx.db.patch(message._id, { provider: "resend" });
     });
     const body = JSON.stringify({ type: "email.bounced", data: { email_id: providerMessageId } });

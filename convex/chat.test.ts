@@ -211,7 +211,7 @@ describe("Company Chat", () => {
     const view = await thread(as, companyId, conversationId);
     expect(steps(view)[0]).toMatchObject({ tool: "send_customer_message", status: "unavailable" });
     expect(steps(view)[0].summary).toMatch(/Chat never sends to clients/);
-    expect(await t.run((ctx) => ctx.db.query("messages").collect())).toEqual([]);
+    expect(await t.run((ctx) => ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")))).toEqual([]);
   });
 
   it("gives advice on an unbuilt specialist's topic, and says plainly which of its actions cannot run", async () => {

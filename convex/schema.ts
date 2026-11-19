@@ -28,6 +28,8 @@ import { salesTables } from "./lib/sales/schema";
 import { setupTables } from "./lib/setup/schema";
 import { retentionSettingsValidator, retentionTables } from "./lib/retention/schema";
 import { servicesTables } from "./lib/services/schema";
+import { noticeEventValidator, noticeFactsValidator } from "./lib/notify/catalog";
+import { notifyTables } from "./lib/notify/schema";
 import {
   agentValidator,
   approvalStatusValidator,
@@ -691,6 +693,8 @@ export default defineSchema({
       v.literal("feedback_request"),
       v.literal("care_update"),
       v.literal("return_offer"),
+      // Selestial, to a member of the company: a notification (convex/lib/notify).
+      v.literal("member_notice"),
     ),
     /** Absent means a text. */
     channel: v.optional(v.union(v.literal("sms"), v.literal("email"))),
@@ -701,6 +705,11 @@ export default defineSchema({
     applicantLinkId: v.optional(v.id("applicantLinks")),
     /** The provider reported that the address rejected the message. */
     bouncedAt: v.optional(v.number()),
+    /** The person marked the email as spam. Kept apart from a bounce: the address works, they don't want it. */
+    complainedAt: v.optional(v.number()),
+    /** A notification: the member it went to, what it's about, and facts captured when it happened. */
+    memberId: v.optional(v.id("members")),
+    notice: v.optional(v.object({ event: noticeEventValidator, ref: v.optional(v.string()), facts: v.optional(noticeFactsValidator) })),
     cleanerId: v.optional(v.id("cleaners")),
     /**
      * Sales messages: the links the body carries as placeholders, made at the moment of sending from the
@@ -759,6 +768,7 @@ export default defineSchema({
     .index("by_company_cleaner", ["companyId", "cleanerId", "queuedAt"])
     .index("by_company_customer", ["companyId", "customerId", "queuedAt"])
     .index("by_company_opportunity", ["companyId", "opportunityId", "queuedAt"])
+    .index("by_company_member", ["companyId", "memberId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
     .index("by_status_attempted", ["status", "attemptedAt"]),
 
@@ -948,6 +958,7 @@ export default defineSchema({
 
   // ── Sales: the booking and proposal workspace and what it commits the company to (convex/lib/sales) ─
   ...salesTables,
+  ...notifyTables,
   ...setupTables,
   // ── Retention: signals, cases, actions, feedback and customer links (convex/lib/retention/schema.ts) ─
   ...retentionTables,

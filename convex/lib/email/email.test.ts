@@ -54,6 +54,8 @@ describe("the invitation email", () => {
 
   it("says who invited them, to what, as what, and until which day", () => {
     const mail = invitationEmail(input);
+    // Set on the shared kit, with the mark served from the app's own address.
+    expect(mail.html).toContain('src="https://app.selestial.test/email/selestial-mark.png"');
     expect(mail.subject).toBe("Ada Owner invited you to Alpha Cleaning on Selestial");
     for (const body of [mail.text, mail.html.replace(/<[^>]+>/g, "")]) {
       expect(body).toContain("Ada Owner invited you to join Alpha Cleaning on Selestial. Your role will be Office.");
@@ -78,7 +80,7 @@ describe("the invitation email", () => {
   it("cannot be bent by a name", () => {
     const mail = invitationEmail({ ...input, companyName: `Alpha <img src=x onerror=alert(1)>\r\nBcc: someone@example.com`, inviterName: `"><script>x</script>` });
     expect(mail.subject).not.toMatch(/[\r\n]/);
-    expect(mail.html).not.toContain("<img");
+    expect(mail.html).not.toContain("<img src=x");
     expect(mail.html).not.toContain("<script>");
     expect(mail.html).toContain("&lt;script&gt;");
   });
