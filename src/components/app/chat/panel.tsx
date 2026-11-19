@@ -26,6 +26,8 @@ export function AskButton() {
       onClick={() => (panelOpen ? closePanel() : openPanel())}
       aria-expanded={panelOpen}
       aria-controls="ask-selestial"
+      // On a phone the words are hidden, so the button is named for screen readers either way.
+      aria-label="Ask Selestial"
       className={cn(
         "inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500",
         panelOpen ? "border-brand-500/50 bg-brand-500/15 text-brand-300" : "border-brand-500/30 bg-gradient-to-b from-brand-500/10 to-transparent text-strong hover:border-brand-500/60",

@@ -7,6 +7,7 @@
  * POST /webhooks/autumn         plan, purchase and balance changes from Autumn. Needs AUTUMN_WEBHOOK_SECRET.
  * GET  /oauth/google/callback   where Google sends an Owner back after they allowed access: the company's
  *                               Google connection (convex/google.ts) or a Gmail hiring inbox, told apart by the state.
+ * GET  /oauth/jobber/callback   where Jobber sends an Owner back after they allowed Selestial to read their clients.
  * POST /webhooks/google/calendar  Calendar push notifications, checked against each channel's own secret token.
  * POST /webhooks/google/pubsub    Gmail and Business Profile notifications through Pub/Sub, with Google's signed OIDC token.
  * POST /webhooks/google/leads     Google Ads lead form leads, with the company's lead key.
@@ -22,6 +23,7 @@ import { exchangeCode, googleApp } from "./lib/recruiter/gmail";
 import { hashToken, seal } from "./lib/recruiter/secrets";
 import { afterConnect, googleRedirectUri } from "./recruiterMailbox";
 import { afterGoogle } from "./google";
+import { jobberCallback } from "./connectors";
 import { exchange as googleExchange, googleApp as googleConnectApp, identityFrom, redirectUri as googleConnectRedirect } from "./lib/google/oauth";
 import { endpoints as googleEndpoints } from "./lib/google/platform";
 import { googleKeys, pushData, tokenKid, verifyOidc } from "./lib/google/pubsub";
@@ -80,14 +82,53 @@ http.route({
       return verifyWebhook({ secret, id: request.headers.get("svix-id"), timestamp: request.headers.get("svix-timestamp"), signature: request.headers.get("svix-signature"), body, now: Date.now() });
     },
     handler: async (ctx, body, request) => {
-      let parsed: { type?: unknown; data?: { customer_id?: unknown } } = {};
+      let parsed: { type?: unknown; data?: { customer_id?: unknown; feature_id?: unknown; quantity_granted?: unknown; reason?: unknown; invoice?: { stripe_id?: unknown; hosted_invoice_url?: unknown } } } = {};
       try {
         parsed = JSON.parse(body) as typeof parsed;
       } catch {
         return;
       }
       const customerId = typeof parsed.data?.customer_id === "string" ? parsed.data.customer_id : undefined;
-      await ctx.runMutation(internal.billing.webhookReceived, { deliveryId: request.headers.get("svix-id")!, type: typeof parsed.type === "string" ? parsed.type : "unknown", customerId });
+      const data = parsed.data ?? {};
+      const str = (value: unknown) => (typeof value === "string" ? value.slice(0, 200) : undefined);
+      await ctx.runMutation(internal.billing.webhookReceived, {
+        deliveryId: request.headers.get("svix-id")!,
+        type: typeof parsed.type === "string" ? parsed.type : "unknown",
+        customerId,
+        featureId: str(data.feature_id),
+        quantity: typeof data.quantity_granted === "number" && Number.isFinite(data.quantity_granted) ? data.quantity_granted : undefined,
+        invoiceId: str(data.invoice?.stripe_id),
+        invoiceUrl: str(data.invoice?.hosted_invoice_url),
+        reason: str(data.reason),
+      });
+    },
+  }),
+});
+
+/**
+ * Stripe, Selestial's own account (the one Autumn charges through): refunds of messaging top-ups. A refunded
+ * top-up takes its funds back from the messaging balance, once per event (convex/messagingFunds.ts). Needs
+ * STRIPE_BILLING_WEBHOOK_SECRET. Disputes name the charge, not the invoice, so staff match those by hand.
+ */
+http.route({
+  path: "/webhooks/stripe-billing",
+  method: "POST",
+  handler: providerWebhook({
+    verify: async (request, body) => {
+      const secret = process.env.STRIPE_BILLING_WEBHOOK_SECRET?.trim();
+      if (!secret) return false;
+      return verifyStripeSignature({ secret, header: request.headers.get("stripe-signature"), body, now: Date.now() });
+    },
+    handler: async (ctx, body) => {
+      let parsed: { id?: unknown; type?: unknown; data?: { object?: { invoice?: unknown; amount_refunded?: unknown } } } = {};
+      try {
+        parsed = JSON.parse(body) as typeof parsed;
+      } catch {
+        return;
+      }
+      const object = parsed.data?.object;
+      if (parsed.type !== "charge.refunded" || typeof parsed.id !== "string" || typeof object?.invoice !== "string" || typeof object.amount_refunded !== "number") return;
+      await ctx.runMutation(internal.messagingFunds.paymentEventReceived, { invoiceId: object.invoice.slice(0, 100), eventId: parsed.id.slice(0, 100), kind: "refund", cents: Math.round(object.amount_refunded) });
     },
   }),
 });
@@ -126,9 +167,9 @@ http.route({
     handler: async (ctx, body) => {
       const event = telnyxEvent(body);
       if (event.kind === "receipt") {
-        await ctx.runMutation(internal.messaging.receipt, { provider: "telnyx", eventId: event.eventId, providerMessageId: event.providerMessageId, outcome: event.outcome, problem: event.problem ?? undefined });
+        await ctx.runMutation(internal.messaging.receipt, { provider: "telnyx", eventId: event.eventId, providerMessageId: event.providerMessageId, outcome: event.outcome, problem: event.problem ?? undefined, ...(event.costUnits !== null ? { providerCost: event.costUnits } : {}), ...(event.errorCode ? { errorCode: event.errorCode } : {}) });
       } else if (event.kind === "inbound") {
-        await ctx.runMutation(internal.inbound.telnyx, { eventId: event.eventId, to: event.to, from: event.from, body: event.text, receivedAt: event.receivedAt });
+        await ctx.runMutation(internal.inbound.telnyx, { eventId: event.eventId, to: event.to, from: event.from, body: event.text, receivedAt: event.receivedAt, ...(event.providerMessageId ? { providerMessageId: event.providerMessageId } : {}), ...(event.parts ? { parts: event.parts } : {}), media: event.media });
       }
     },
   }),
@@ -156,6 +197,13 @@ http.route({
       return new Response(file, { status: 200, headers: { "content-type": file.type || "application/octet-stream", "cache-control": `private, max-age=${seconds}`, "referrer-policy": "no-referrer", "x-content-type-options": "nosniff" } });
     },
   }),
+});
+
+/** Where Jobber sends the Owner back after they allowed Selestial to read their clients (convex/connectors.ts). */
+http.route({
+  path: "/oauth/jobber/callback",
+  method: "GET",
+  handler: oauthCallback({ handler: (ctx, params) => jobberCallback(ctx, params) }),
 });
 
 http.route({

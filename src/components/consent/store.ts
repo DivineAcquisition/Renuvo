@@ -2,17 +2,22 @@
 
 import { useSyncExternalStore } from "react";
 
-import { CONSENT_COOKIE, CONSENT_LIFETIME_DAYS, choiceFromCookieHeader, isCurrent, makeChoice, serializeChoice, type Choice } from "@/lib/consent/model";
+import { CONSENT_COOKIE, CONSENT_LIFETIME_DAYS, CONSENT_VERSION, choiceFromCookieHeader, isCurrent, makeChoice, serializeChoice, type Choice } from "@/lib/consent/model";
 import { OPTIONAL_COOKIE_PREFIXES } from "@/lib/consent/tools";
 
 export const CHANGED = "selestial:consent";
 export const OPEN = "selestial:consent-open";
 /** Hides the banner for this tab after "Close". It records no choice: optional tools stay off. */
 const CLOSED_KEY = "selestial.consent.closed";
+/**
+ * The visitor has read the essential-cookies notice shown while no optional tool is set up. It is not a
+ * consent choice: once an optional tool is turned on, the banner asks for a real choice regardless.
+ */
+const NOTICE_KEY = `selestial.consent.notice.v${CONSENT_VERSION}`;
 
-export type Snapshot = { ready: boolean; choice: Choice | null; current: boolean; gpc: boolean; closed: boolean };
+export type Snapshot = { ready: boolean; choice: Choice | null; current: boolean; gpc: boolean; closed: boolean; noticeSeen: boolean };
 
-const SERVER: Snapshot = { ready: false, choice: null, current: false, gpc: false, closed: false };
+const SERVER: Snapshot = { ready: false, choice: null, current: false, gpc: false, closed: false, noticeSeen: false };
 let cached: { key: string; value: Snapshot } | null = null;
 
 function gpcOn(): boolean {
@@ -27,14 +32,23 @@ function closedThisTab(): boolean {
   }
 }
 
+function noticeSeen(): boolean {
+  try {
+    return window.localStorage.getItem(NOTICE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function read(): Snapshot {
   const raw = document.cookie;
   const gpc = gpcOn();
   const closed = closedThisTab();
-  const key = `${raw}|${gpc}|${closed}`;
+  const seen = noticeSeen();
+  const key = `${raw}|${gpc}|${closed}|${seen}`;
   if (cached?.key === key) return cached.value;
   const choice = choiceFromCookieHeader(raw);
-  const value = { ready: true, choice, current: isCurrent(choice, Date.now()), gpc, closed };
+  const value = { ready: true, choice, current: isCurrent(choice, Date.now()), gpc, closed, noticeSeen: seen };
   cached = { key, value };
   return value;
 }
@@ -93,6 +107,21 @@ export function closeWithoutChoosing() {
     window.sessionStorage.setItem(CLOSED_KEY, "1");
   } catch {
     // Without storage the banner simply shows again on the next page.
+  }
+  window.dispatchEvent(new Event(CHANGED));
+}
+
+/** "OK" on the essential-cookies notice: remembered in this browser so the notice doesn't return on every visit. */
+export function acknowledgeNotice() {
+  try {
+    window.localStorage.setItem(NOTICE_KEY, "1");
+  } catch {
+    // Without storage it is remembered for this tab only.
+    try {
+      window.sessionStorage.setItem(CLOSED_KEY, "1");
+    } catch {
+      // Nothing else to do: the notice shows again on the next page.
+    }
   }
   window.dispatchEvent(new Event(CHANGED));
 }

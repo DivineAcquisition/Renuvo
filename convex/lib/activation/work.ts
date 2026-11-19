@@ -324,17 +324,19 @@ async function roleDraft(env: Env): Promise<Result> {
     const need = id ? await ctx.db.get(id as Id<"hiringNeeds">) : null;
     if (need && need.companyId === env.company._id) {
       const open = need.status === "open";
+      const words = open ? "open to applicants" : need.status === "paused" ? "paused, not taking applications" : "draft, not published";
       return {
         kind: "done",
         state: open ? "completed" : "ready_for_review",
-        statusLine: open ? `Your open role “${need.title}” already has an application form.` : `Your draft role “${need.title}” is ready for review.`,
-        steps: [step(now, `Found your ${open ? "open" : "draft"} role “${need.title}” and left it exactly as it is.`)],
-        outputs: [{ kind: "hiring_role", ref: { table: "hiringNeeds", id: need._id, label: `${need.title}: role and application form`, href: "/app/agents/recruiter/hiring-needs" }, state: open ? "open to applicants" : "draft, not published", created: false }],
+        statusLine: open ? `Your open role “${need.title}” already has an application form.` : `Your role “${need.title}” is ready for review.`,
+        steps: [step(now, `Found your role “${need.title}” (${words}) and left it exactly as it is.`)],
+        outputs: [{ kind: "hiring_role", ref: { table: "hiringNeeds", id: need._id, label: `${need.title}: role and application form`, href: "/app/agents/recruiter/hiring-needs" }, state: words, created: false }],
       };
     }
   }
   const draft = roleDraftFor(s);
   const needId = await draftNeed(ctx, env.company._id, env.access.member, draft, agentActor("recruiter"));
+  await notePrepared(ctx, env.company._id, { hiringNeedId: needId });
   return {
     kind: "done",
     state: "ready_for_review",

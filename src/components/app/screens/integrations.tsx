@@ -81,7 +81,7 @@ function GoogleCardAction({ feature, live, owner, onOpen, name }: { feature: Fea
   const fresh = live?.state === "ready";
   if (fresh && !owner) return <p className="text-xs text-muted-foreground">Not connected yet. Your Owner can connect it.</p>;
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 grid-cols-1 gap-1.5">
       <div className="flex flex-wrap items-center gap-2">
         {fresh ? (
           <button type="button" disabled={busy} onClick={() => connect()} className={primary}>
@@ -152,7 +152,7 @@ function CardAction({ integration, live, requested, onOpen }: { integration: Int
   }
   if (!owner) return <p className="text-xs text-muted-foreground">Coming soon. Your Owner can ask Selestial for it.</p>;
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 grid-cols-1 gap-1.5">
       <button
         type="button"
         disabled={busy}
@@ -228,7 +228,7 @@ function IntegrationCard({ integration, highlight, overview, onOpen }: { integra
       <p className="text-sm leading-relaxed text-muted-foreground">{integration.does}</p>
       <Abilities can={integration.can} />
       {integration.note ? <p className="text-xs leading-relaxed text-muted-foreground">{integration.note}</p> : null}
-      <div className="mt-auto grid gap-3 border-t border-border pt-3">
+      <div className="mt-auto grid min-w-0 grid-cols-1 gap-3 border-t border-border pt-3">
         <CardAction integration={integration} live={live} requested={requested} onOpen={onOpen} />
         <UsedBy agents={integration.agents} highlight={highlight} />
       </div>
@@ -353,14 +353,14 @@ export function IntegrationsScreen({ embedded = false }: { embedded?: boolean })
           <p className="py-6 text-center text-sm text-muted-foreground">No tool matches that. Try another word, or show all.</p>
         </Panel>
       ) : (
-        <div className="grid gap-5">
+        <div className="grid grid-cols-1 gap-5">
           {CATEGORIES.map((category) => {
             const inGroup = visible.filter((integration) => integration.category === category.id);
             if (inGroup.length === 0) return null;
             return (
               <Panel key={category.id} title={category.label} action={<span className="text-xs text-muted-foreground">{inGroup.length === 1 ? "1 tool" : `${inGroup.length} tools`}</span>}>
                 <p className="mb-4 text-sm text-muted-foreground">{category.lead}</p>
-                <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {inGroup.map((integration) => (
                     <IntegrationCard key={integration.id} integration={integration} highlight={agent} overview={overview} onOpen={() => { setResult(null); setOpenCard(integration.id); }} />
                   ))}

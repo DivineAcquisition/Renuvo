@@ -255,7 +255,8 @@ describe("Dispatch: from a staffing need to accepted coverage", () => {
 
     // A delivery report that arrives twice changes nothing the second time.
     const receipt = { provider: "mock", eventId: "evt-1", providerMessageId: "does-not-matter", outcome: "delivered" as const };
-    expect(await s.t.mutation(internal.messaging.receipt, receipt)).toBe("ignored");
+    // A report for a message nobody has settled yet is kept until its send settles (it can beat the send's answer).
+    expect(await s.t.mutation(internal.messaging.receipt, receipt)).toBe("early");
     expect(await s.t.mutation(internal.messaging.receipt, receipt)).toBe("duplicate");
 
     // Lena declines; Rosa's send dies with no answer. Nobody knows if it went, so it is not sent again.

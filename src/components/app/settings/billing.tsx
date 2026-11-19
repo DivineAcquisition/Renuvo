@@ -6,17 +6,20 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AiFeatures } from "@/components/app/billing/ai-features";
+import { MessagingTab, ThreeBalances } from "@/components/app/billing/messaging";
 import { UsageDashboard } from "@/components/app/billing/usage";
 import { AvatarStack, CreditRing, HeroCard, HeroStat, Motion, SegmentedTabs } from "@/components/app/billing/visuals";
 import { useCompany } from "@/components/app/company";
 import { FormError, useRun } from "@/components/app/form";
 import { Guard } from "@/components/app/settings/guard";
 import { Panel } from "@/components/app/shell";
-import { Check, Coins, Gauge, Wallet } from "@/components/icons";
+import { Check, Coins, Gauge, MessageSquareText, Wallet } from "@/components/icons";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { money } from "@/lib/app/format";
+
+import { formatUnits } from "../../../../convex/lib/messagingBilling/money";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -28,10 +31,10 @@ const day = (at: number | null | undefined) => (at ? new Date(at).toLocaleDateSt
 const n = (value: number) => value.toLocaleString("en-US");
 
 /** Settings → Plan & Usage. Only the Owner reaches the query: for anyone else it is skipped, never sent. */
-type Tab = "plan" | "usage" | "billing";
+type Tab = "plan" | "usage" | "messaging" | "billing";
 const tabOf = (params: URLSearchParams | null): Tab => {
   const value = params?.get("tab");
-  return value === "usage" || value === "billing" ? value : "plan";
+  return value === "usage" || value === "messaging" || value === "billing" ? value : "plan";
 };
 function useTab(): Tab {
   return tabOf(useSearchParams());
@@ -39,7 +42,8 @@ function useTab(): Tab {
 
 const TABS = [
   { id: "plan", label: "Plan", href: "/app/settings/billing?tab=plan", icon: Wallet },
-  { id: "usage", label: "Usage", href: "/app/settings/billing?tab=usage", icon: Gauge },
+  { id: "usage", label: "AI credits", href: "/app/settings/billing?tab=usage", icon: Gauge },
+  { id: "messaging", label: "Messaging", href: "/app/settings/billing?tab=messaging", icon: MessageSquareText },
   { id: "billing", label: "Billing", href: "/app/settings/billing?tab=billing", icon: Coins },
 ] as const;
 
@@ -55,7 +59,7 @@ function PlanUsageInner() {
   if (!data) return <Skeleton className="h-96 rounded-2xl" />;
   return (
     <Motion>
-    <div className="grid gap-5">
+    <div className="grid min-w-0 gap-5 [&>*]:min-w-0">
       {!data.connected ? (
         <div role="status" className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-5">
           <p className="text-sm font-semibold text-strong">Billing isn&apos;t available for your account yet</p>
@@ -101,7 +105,13 @@ function ConnectedView({ data }: { data: Connected }) {
       ) : null}
       <Tabs />
       {intentId ? <IntentDialog intentId={intentId} onClose={() => setIntentId(null)} /> : null}
-      {tab === "plan" ? <CurrentPlan data={data} onIntent={setIntentId} /> : null}
+      {tab === "plan" ? (
+        <>
+          <CurrentPlan data={data} onIntent={setIntentId} />
+          <ThreeBalances plan={account?.plan ? (data.catalog.plans.find((row) => row.id === account.plan) ?? null) : null} credits={account?.credits ?? null} />
+        </>
+      ) : null}
+      {tab === "messaging" ? <MessagingTab onIntent={setIntentId} /> : null}
       {tab === "usage" ? (
         <UsageDashboard
           afterOverview={
@@ -402,7 +412,7 @@ function IntentDialog({ intentId, onClose }: { intentId: Id<"billingIntents">; o
   if (intent === undefined) return null;
   if (intent === null) return null;
   const preview = intent.preview;
-  const what = intent.kind === "top_up" ? `Add ${n(intent.quantity ?? 0)} credits` : intent.kind === "plan_change" ? `Move to ${intent.planId === "expand" ? "Expand" : "Operate"}` : intent.kind === "cancel" ? "End the plan at renewal" : intent.kind === "uncancel" ? "Keep the plan" : "Billing portal";
+  const what = intent.kind === "messaging_top_up" ? `Add ${formatUnits(intent.quantity ?? 0)} to your messaging balance` : intent.kind === "top_up" ? `Add ${n(intent.quantity ?? 0)} credits` : intent.kind === "plan_change" ? `Move to ${intent.planId === "expand" ? "Expand" : "Operate"}` : intent.kind === "cancel" ? "End the plan at renewal" : intent.kind === "uncancel" ? "Keep the plan" : "Billing portal";
   return (
     <div role="dialog" aria-label={what} className="rounded-2xl border border-brand-500/40 bg-card p-4">
       <h3 className="text-base font-semibold text-strong">{what}</h3>

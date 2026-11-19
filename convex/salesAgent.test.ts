@@ -103,6 +103,22 @@ describe("Sales agent: inquiry to booking", () => {
     expect(company?.sales?.firstBatchDecidedAt).toBeDefined();
   });
 
+  it("does not send an approved message whose kind the Owner has since switched off", async () => {
+    const s = await agentSetup();
+    await s.text(PROSPECT.phone, "3 bed 2 bath house cleaning please, 78701");
+    await flush(s.t);
+    const waiting = await s.as.query(api.salesActions.waiting, { companyId: s.companyId });
+    if (waiting.firstBatch.decided) throw new Error();
+    const item = waiting.firstBatch.items[0];
+    const permission = await s.t.run(async (ctx) => (await ctx.db.get(item.actionId))!.permission);
+    await s.as.mutation(api.permissions.set, { companyId: s.companyId, action: permission, level: "off" });
+    const result = await s.as.mutation(api.salesActions.decideBatch, { companyId: s.companyId, batchId: waiting.firstBatch.batchId!, items: [{ actionId: item.actionId, decision: "send" }] });
+    expect(result.sent).toBe(0);
+    expect(result.results[0]).toMatchObject({ ok: false, detail: expect.stringMatching(/switched off/) });
+    await flush(s.t);
+    expect(s.textsTo(PROSPECT.phone)).toHaveLength(0);
+  });
+
   it("asks first when the Owner said so, and the approval sends exactly what was approved", async () => {
     const s = await agentSetup();
     await s.reviewed();

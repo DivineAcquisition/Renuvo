@@ -99,6 +99,8 @@ export async function queueSalesMessage(ctx: MutationCtx, planned: PlannedSalesM
     // Replies come back to the conversation when the receiving domain is set up; otherwise to the company's own address.
     ...(email && opportunity ? { replyTo: (await replyAddressFor(ctx, opportunity)) ?? (await readProfile(ctx, company._id)).identity.supportEmail ?? undefined } : {}),
     customerId: customer._id,
+    // Spending: carrying out one of the agent's prepared actions is Sales' work, even when a person edited it first.
+    ...(planned.actionId || intent.agent ? { agent: "sales" } : {}),
     salesLinks: planned.links,
     ...(opportunity ? { opportunityId: opportunity._id } : {}),
     to: status === "not_sent" ? undefined : (to ?? undefined),

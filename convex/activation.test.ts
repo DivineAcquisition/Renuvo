@@ -231,6 +231,18 @@ describe("Activation", () => {
     expect(await refusal(as.mutation(api.hiringNeeds.setStatus, { companyId, needId: needs[0]._id, status: "draft" }))).toContain("not turned back into a draft");
   });
 
+  it("reuses the hiring brief setup prepared, so there is only ever one role", async () => {
+    const t = start();
+    const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+    await confirmSetup(as, companyId, "recruiter");
+    const { needId } = await as.mutation(api.setup.prepareHiringBrief, { companyId });
+    const { activationId } = await as.mutation(api.activation.start, { companyId, source: "setup" });
+    await drain(t);
+    const role = (await byTemplate(t, activationId))["recruiter.role_draft"];
+    expect(role.outputs[0]).toMatchObject({ created: false, state: "draft, not published", ref: { id: needId } });
+    expect(await as.query(api.hiringNeeds.list, { companyId })).toHaveLength(1);
+  });
+
   it("checks coverage through Dispatch's own workflow and lists only real readiness gaps", async () => {
     const t = start();
     const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");

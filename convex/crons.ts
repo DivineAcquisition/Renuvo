@@ -7,6 +7,7 @@ const crons = cronJobs();
 // Deadlines are kept by the system, not by a page someone has open.
 crons.interval("expire unanswered offers", { minutes: 5 }, internal.assignments.expireDue, {});
 crons.interval("expire undecided approvals", { minutes: 15 }, internal.approvals.expireDue, {});
+crons.interval("setup records its later milestones", { hours: 1 }, internal.setupProgress.catchUp, {});
 
 // Dispatch looks over the coming days for visits that still have no cleaner.
 crons.interval("dispatch looks for uncovered visits", { minutes: 15 }, internal.dispatch.sweep, {});
@@ -54,6 +55,8 @@ crons.daily("remove abandoned agreement uploads", { hourUTC: 8, minuteUTC: 29 },
 crons.interval("creative studio follows up quiet generations", { minutes: 5 }, internal.media.sweep, {});
 // Billing: settlements that failed are retried, holds left behind by stopped work are released, and work that never reported back is closed.
 crons.interval("billing settles and recovers AI work", { minutes: 5 }, internal.billing.sweep, {});
+crons.interval("messaging charges settle and recover", { minutes: 5 }, internal.messagingBilling.sweep, {});
+crons.interval("texting number monthly fees", { hours: 6 }, internal.texting.chargeNumbers, {});
 
 // Google: the job worker, calendar sync and watches, reviews, Local Services leads, conversions, drive times and Gmail watches.
 crons.interval("google works its queue", { minutes: 1 }, internal.googleWork.tick, {});

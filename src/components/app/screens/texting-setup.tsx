@@ -8,10 +8,10 @@ import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/co
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { money } from "@/lib/app/format";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { formatUnits } from "../../../../convex/lib/messagingBilling/money";
 
 type Variant = NonNullable<BadgeProps["variant"]>;
 const STATUS: Record<string, { label: string; variant: Variant }> = {
@@ -86,6 +86,8 @@ export function TextingSetup({ companyName, identity }: { companyName: string; i
   const mine = useMine();
   const startSearch = useMutation(api.texting.searchNumbersFor);
   const submit = useMutation(api.texting.request);
+  const terms = useQuery(api.texting.feeTerms, { companyId });
+  const [feesAccepted, setFeesAccepted] = useState(false);
   const { busy, error, run, setError } = useRun();
   const [areaCode, setAreaCode] = useState("");
   const [searchId, setSearchId] = useState<Id<"numberSearches"> | null>(null);
@@ -163,7 +165,7 @@ export function TextingSetup({ companyName, identity }: { companyName: string; i
                       <span className="font-medium text-strong tabular-nums">{row.phoneNumber}</span>
                       <span className="text-xs text-muted-foreground">
                         {[row.locality, row.region].filter(Boolean).join(", ")}
-                        {row.monthlyCents !== null ? ` · ${money(row.monthlyCents)}/mo` : ""}
+                        {terms?.required ? ` · ${formatUnits(terms.monthly)}/mo` : ""}
                       </span>
                     </label>
                   ))}
@@ -178,7 +180,8 @@ export function TextingSetup({ companyName, identity }: { companyName: string; i
                 event.preventDefault();
                 if (!searchId) return setError("Search for a number first.");
                 void run(async () => {
-                  await submit({ companyId, searchId, phoneNumber: pick.phoneNumber, brand, consentWording: consent });
+                  if (terms?.required && !feesAccepted) return setError("Read and accept the number and registration fees first.");
+                  await submit({ companyId, searchId, phoneNumber: pick.phoneNumber, brand, consentWording: consent, ...(terms?.required && feesAccepted ? { feesWording: terms.wording } : {}) });
                   setStarting(false);
                 });
               }}
@@ -230,13 +233,24 @@ export function TextingSetup({ companyName, identity }: { companyName: string; i
               <Field label="4. What cleaners agree to" hint="Carriers require it to name your business and say HELP, STOP, how often texts come, and that rates may apply. Use these exact words when cleaners agree; they are kept on file and filed with the carriers.">
                 <TextArea value={consent} onChange={(event) => setConsent(event.target.value)} rows={4} required />
               </Field>
-              <p className="rounded-lg bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                Asking costs nothing. If Selestial approves, it buys {pick.phoneNumber}
-                {pick.upfrontCents !== null ? ` (${money(pick.upfrontCents)} up front, ${money(pick.monthlyCents ?? 0)} a month at today’s price)` : ""} and pays the carriers’ registration fees, and the number is registered for work texts to your cleaners only. No marketing can be sent from it.
-              </p>
+              {terms?.required ? (
+                <>
+                  <p className="rounded-lg bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                    Asking costs nothing. If Selestial approves, it buys {pick.phoneNumber} and files the carrier registration, and the number is registered for work texts to your cleaners only. No marketing can be sent from it. The number costs {formatUnits(terms.monthly)} a month from your messaging balance once it is live. Carrier registration fees are passed on at Selestial&apos;s actual cost, never marked up, and listed on the Messaging tab of Plan &amp; Usage when charged.
+                  </p>
+                  <label className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 p-3 text-sm text-strong">
+                    <input type="checkbox" className="mt-1 size-4 accent-brand-600" checked={feesAccepted} onChange={(event) => setFeesAccepted(event.target.checked)} />
+                    <span>{terms.wording}</span>
+                  </label>
+                </>
+              ) : (
+                <p className="rounded-lg bg-card px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                  Asking costs nothing. If Selestial approves, it buys {pick.phoneNumber} and pays the carriers&apos; registration fees, and the number is registered for work texts to your cleaners only. No marketing can be sent from it.
+                </p>
+              )}
               <FormError message={error} />
               <div className="flex gap-2">
-                <Button type="submit" variant="primary" size="sm" loading={busy}>
+                <Button type="submit" variant="primary" size="sm" loading={busy} disabled={Boolean(terms?.required) && !feesAccepted}>
                   Send the request to Selestial
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setStarting(false)}>

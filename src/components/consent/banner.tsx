@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { closeWithoutChoosing, OPEN, openPreferences, saveChoice, useConsent } from "@/components/consent/store";
+import { acknowledgeNotice, closeWithoutChoosing, OPEN, openPreferences, saveChoice, useConsent } from "@/components/consent/store";
 import { X } from "@/components/icons";
 import { allowed } from "@/lib/consent/model";
 import type { TrackingTool } from "@/lib/consent/tools";
@@ -34,12 +34,37 @@ export function ConsentControls({ tools }: { tools: TrackingTool[] }) {
     if (ok) setOpen(false);
   };
 
-  // With no optional tool set up there is nothing to ask about; the footer link still explains that.
-  const showBanner = snap.ready && configured.length > 0 && !snap.current && !snap.closed && !open;
+  // With an optional tool set up, a real choice is asked for. With none, the banner says so plainly (only essential
+  // cookies are used) until the visitor acknowledges it; there is nothing optional to accept or reject.
+  const asking = configured.length > 0;
+  const showBanner = snap.ready && !snap.closed && !open && (asking ? !snap.current : !snap.noticeSeen);
 
   return (
     <>
-      {showBanner ? (
+      {showBanner && !asking ? (
+        <section role="region" aria-label="Cookie notice" className="fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-3xl rounded-2xl border border-[#e4e7ef] bg-white p-4 text-[#211a35] shadow-[0_24px_60px_-24px_rgba(33,26,53,0.45)] sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">Cookies on this site</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[#667085]">
+                We use only essential cookies, which keep the site working and secure. No analytics or advertising cookies run here. If we ever add them, we&apos;ll ask you first.{" "}
+                <a href="/cookies" className="font-medium text-[#5126c7] underline-offset-4 hover:underline">
+                  Cookie details
+                </a>
+              </p>
+            </div>
+            <div className="grid shrink-0 grid-cols-2 gap-2 sm:flex">
+              <button type="button" className={quiet} onClick={openPreferences}>
+                Preferences
+              </button>
+              <button type="button" className={cn(button, "icon-gradient border-[#5126c7]/40")} onClick={acknowledgeNotice}>
+                OK
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+      {showBanner && asking ? (
         <section role="region" aria-label="Cookie choices" className="fixed inset-x-3 bottom-3 z-[60] mx-auto max-w-3xl rounded-2xl border border-[#e4e7ef] bg-white p-4 text-[#211a35] shadow-[0_24px_60px_-24px_rgba(33,26,53,0.45)] sm:p-5">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">

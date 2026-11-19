@@ -192,10 +192,10 @@ export function WebsiteProgress() {
   return (
     <div className="grid gap-2 rounded-xl border border-border px-3 py-2.5 text-sm" aria-live="polite">
       <p className="flex items-center gap-2 font-medium text-strong">
-        <Globe className="size-4 text-brand-600" aria-hidden />
+        <Globe className="size-4 text-brand-300" aria-hidden />
         {running ? `Reading ${read.host}` : read.status === "ready" ? `Read ${read.pages.filter((page) => page.ok).length} pages of ${read.host}` : read.status === "stopped" ? "You stopped the reading" : `Couldn't read ${read.host}`}
         {running ? (
-          <button type="button" className="ml-auto text-xs font-medium text-brand-700 underline-offset-4 hover:underline dark:text-brand-300" onClick={() => void stop({ companyId, readId: read.readId })}>
+          <button type="button" className="ml-auto text-xs font-medium text-brand-300 underline-offset-4 hover:underline" onClick={() => void stop({ companyId, readId: read.readId })}>
             Stop
           </button>
         ) : null}

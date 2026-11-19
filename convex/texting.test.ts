@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { addMember, company, refusal, start } from "../tests/harness";
 import { ADMIN, REVIEWER } from "../tests/trustHarness";
-import { api } from "./_generated/api";
+import { billing } from "../tests/setupBilling";
+import { api, internal } from "./_generated/api";
 import { consentGaps, defaultConsentWording } from "./lib/messaging/campaign";
+import { numberFeesWording } from "./lib/messagingBilling/wording";
 
 /** Lets the scheduled search run: the clock moves a moment, then whatever started is finished. */
 async function flush(t: ReturnType<typeof start>) {
@@ -152,6 +154,57 @@ describe("Texting: a number and a carrier registration, asked for by the Owner a
     // The number was bought and the brand filed once, however many times it ran.
     const posts = telnyx.calls.filter((call) => call.method === "POST").map((call) => call.path);
     expect(posts).toEqual(["/number_orders", "/10dlc/brand"]);
+  });
+
+  it("charges the number and its registration from the messaging balance only with the Owner's authorization, each once", async () => {
+    process.env.MESSAGING_BILLING = "on";
+    try {
+      vi.setSystemTime(Date.UTC(2026, 10, 19, 15));
+      const telnyx = fakeTelnyx();
+      vi.stubGlobal("fetch", telnyx.fetcher);
+      const t = start();
+      const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+      await t.action(internal.billing.syncCompany, { companyId });
+      billing.seed(companyId, { messaging: { purchased: 10_000, promo: 0, promoExpiresAt: null, used: 0 } });
+      await t.action(internal.billing.syncCompany, { companyId });
+      const admin = t.withIdentity(ADMIN);
+      const searchId = await as.mutation(api.texting.searchNumbersFor, { companyId, areaCode: "512" });
+      await flush(t);
+      // Telnyx's own price is Selestial's cost and is not what the company pays.
+      const terms = await as.query(api.texting.feeTerms, { companyId });
+      expect(terms).toMatchObject({ required: true, monthly: 30_000, wording: numberFeesWording(30_000) });
+      expect(terms.wording).toContain("$3.00 a month");
+      expect(terms.wording).toContain("A low balance never releases the number.");
+      const ask = (feesWording?: string) => as.mutation(api.texting.request, { companyId, searchId, phoneNumber: "+15125550142", brand, consentWording: defaultConsentWording("Alpha Cleaning"), ...(feesWording ? { feesWording } : {}) });
+      expect(await refusal(ask())).toMatch(/accept the number and registration fees/);
+      expect(await refusal(ask("I agree"))).toMatch(/accept the number and registration fees/);
+      const requestId = await ask(terms.wording);
+      // Nothing is charged by asking.
+      expect(await t.run(async (ctx) => ctx.db.query("messagingCharges").collect())).toHaveLength(0);
+      await admin.mutation(api.texting.approve, { requestId });
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      expect(await as.query(api.texting.mine, { companyId })).toMatchObject({ status: "active" });
+      const fees = async () => (await t.run(async (ctx) => ctx.db.query("messagingCharges").collect())).filter((row) => row.kind === "number_monthly" || row.kind === "registration_fee");
+      expect((await fees()).map((row) => [row.kind, row.amount])).toEqual([["number_monthly", 30_000]]);
+      // The daily sweep doesn't charge the same month twice; the next month is charged once.
+      await t.mutation(internal.texting.chargeNumbers, {});
+      expect(await fees()).toHaveLength(1);
+      vi.setSystemTime(Date.UTC(2026, 11, 2, 15));
+      await t.mutation(internal.texting.chargeNumbers, {});
+      await t.mutation(internal.texting.chargeNumbers, {});
+      expect((await fees()).map((row) => row.activity)).toEqual(["Texting number +15125550142, 2026-11", "Texting number +15125550142, 2026-12"]);
+      // A registration fee at actual cost, entered by staff, once per key.
+      await admin.mutation(api.texting.chargeRegistrationFee, { requestId, cents: 1_550, description: "Campaign vetting", key: "vetting" });
+      await admin.mutation(api.texting.chargeRegistrationFee, { requestId, cents: 1_550, description: "Campaign vetting", key: "vetting" });
+      expect(await refusal(as.mutation(api.texting.chargeRegistrationFee, { requestId, cents: 100, description: "x", key: "y" }))).toBe("Not found.");
+      await t.finishAllScheduledFunctions(vi.runAllTimers);
+      expect((await fees()).filter((row) => row.kind === "registration_fee").map((row) => [row.activity, row.amount])).toEqual([["Carrier registration: Campaign vetting", 155_000]]);
+      // The fees took the $1.00 balance below zero. The number is still active: a low balance never releases it.
+      expect(billing.messagingLeft(billing.customerFor(`company_${companyId}`))).toBe(10_000 - 30_000 - 30_000 - 155_000);
+      expect(await as.query(api.texting.mine, { companyId })).toMatchObject({ status: "active" });
+    } finally {
+      delete process.env.MESSAGING_BILLING;
+    }
   });
 
   it("checks consent wording for what carriers require", () => {

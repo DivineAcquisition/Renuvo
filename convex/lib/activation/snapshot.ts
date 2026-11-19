@@ -182,7 +182,8 @@ export async function snapshotOf(ctx: Ctx, company: Doc<"companies">, now: numbe
     recruiter: {
       openNeeds: openNeeds.length,
       openNeedId: openNeeds[0]?._id ?? null,
-      draftNeedId: draftNeeds[0]?._id ?? null,
+      // The brief setup prepared, if any, is the draft: activation never makes a second role.
+      draftNeedId: (setup?.prepared?.hiringNeedId && (await ctx.db.get(setup.prepared.hiringNeedId))?.status !== "closed" ? setup.prepared.hiringNeedId : null) ?? draftNeeds[0]?._id ?? null,
       inbox,
       applications: applications.length,
       inviteLevel: await levelOf(ctx, companyId, "recruiter.send_invitation"),

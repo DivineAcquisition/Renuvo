@@ -35,7 +35,8 @@ export type Role = "owner" | "manager" | "office";
  * live: a page exists at the destination's own path and does the job.
  * interim: no page at its own path yet, but an existing page serves it in whole or part. `missing`
  *   says what that page does not yet do. Links go to `servedBy` until the real page exists.
- * planned: not built. `notice` means a page already sits at the path, but it only says "not built yet".
+ * planned: not built. `notice` means a page already sits at the path, but it only says what is coming (for an
+ * agent: what it will do, and a request for early access). It never presents the thing as working.
  *   A planned destination is never linked as if it worked.
  */
 export type Availability = { status: "live" } | { status: "interim"; servedBy: string; missing: string } | { status: "planned"; notice?: true };
@@ -55,6 +56,8 @@ export type Destination = {
 
 const LIVE: Availability = { status: "live" };
 const PLANNED: Availability = { status: "planned" };
+/** Not built, with a page that says what it will be (a coming-soon agent). */
+const COMING_SOON_PAGE: Availability = { status: "planned", notice: true };
 const interim = (servedBy: string, missing: string): Availability => ({ status: "interim", servedBy, missing });
 
 // ── Routes ──────────────────────────────────────────────────────────────────────────────────────────
@@ -237,6 +240,7 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 /** Company setup: a full-screen guided start for the Owner, outside the sidebar. Reached at company creation and from Home. */
 export const SETUP_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/setup`, label: "Set up your company", purpose: "The Owner confirms the company's details, chooses what Selestial helps with first, and opens the workspace." },
+  { path: `${APP_ROOT}/first-work`, label: "Your first work", purpose: "Where setup lands: what is prepared, what waits for a decision, what agents sent, and one next step." },
 ];
 
 /** Pages inside Sales that are not tabs: the booking and proposal workspace and its entry point. */
@@ -326,7 +330,8 @@ function agent(spec: { id: AgentId; label: string; department: DepartmentId; res
     responsibility: spec.responsibility,
     backendAgent: spec.backendAgent,
     workflow: spec.workflow ?? "planned",
-    overview: { path: agentPath(spec.id), availability: spec.overview ?? PLANNED, minimumRole: "office" },
+    // An agent with no workflow yet still has a page: what it will do, and a request for early access.
+    overview: { path: agentPath(spec.id), availability: spec.overview ?? (spec.workflow === "built" ? PLANNED : COMING_SOON_PAGE), minimumRole: "office" },
     tabs: spec.tabs.map(([id, label, availability]) => ({ id, label, path: tabPath(spec.id, id), availability: availability ?? PLANNED, minimumRole: "office" })),
   };
 }

@@ -204,8 +204,8 @@ describe("what is available today", () => {
       const built = agent.backendAgent !== null && AGENT_PROFILES[agent.backendAgent].built;
       expect(agent.workflow, agent.id).toBe(built ? "built" : "planned");
       if (agent.workflow === "planned") {
-        // An agent with no workflow has no overview and no agent-specific page to open.
-        expect(agent.overview.availability.status, agent.id).toBe("planned");
+        // An agent with no workflow has no working overview: only a page saying what it will do (coming soon).
+        expect(agent.overview.availability, agent.id).toEqual({ status: "planned", notice: true });
       }
     }
     // The backend groups the agents it knows into the same three departments, under the same names.

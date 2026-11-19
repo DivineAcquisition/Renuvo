@@ -30,6 +30,11 @@ const topUpPrice = process.env.SELESTIAL_TOP_UP_PRICE ? Number(process.env.SELES
 const topUpUnits = process.env.SELESTIAL_TOP_UP_UNITS ? required("SELESTIAL_TOP_UP_UNITS") : null;
 
 export const credits = feature({ featureId: AUTUMN.credits, name: "Selestial Credits", type: "metered", consumable: true });
+/**
+ * The prepaid messaging balance, counted in units of $0.0001 (approved launch rate card msg-2026-11). Only
+ * one-off grants: it never resets with the monthly credits, and purchased funds carry forward.
+ */
+export const messaging = feature({ featureId: AUTUMN.messaging, name: "Messaging balance", type: "metered", consumable: true });
 
 const agentFeatures = AGENT_IDS.map((agent) => feature({ featureId: `agent_${agent.replace(/-/g, "_")}`, name: `${AGENT_CATALOG[agent].name} agent`, type: "boolean" }));
 const platformFeatures = (Object.keys(PLAN_FEATURES) as (keyof typeof PLAN_FEATURES)[]).map((id) => feature({ featureId: `feature_${id}`, name: PLAN_FEATURES[id].name, type: "boolean" }));
@@ -57,4 +62,8 @@ if (topUpPrice !== null && topUpUnits !== null) {
   plans.push(plan({ planId: AUTUMN.topUpPlan, versionSlug: "v1", active: true, name: "Credit top-up", addOn: true, items: [{ featureId: credits.featureId, price: { amount: topUpPrice, billingUnits: topUpUnits, interval: "one_off", billingMethod: "prepaid" } }] }));
 }
 
-export default atmn({ features: [credits, ...agentFeatures, ...platformFeatures], plans });
+// Messaging funds: $1 buys 10,000 units ($0.0001 each), bought in whole dollars, one-off, never reset.
+// Both plans use the same messaging rates; the funds are the company's, whichever plan it is on.
+plans.push(plan({ planId: AUTUMN.messagingTopUpPlan, versionSlug: "v1", active: true, name: "Messaging funds", addOn: true, items: [{ featureId: messaging.featureId, price: { amount: 1, billingUnits: 10_000, interval: "one_off", billingMethod: "prepaid" } }] }));
+
+export default atmn({ features: [credits, messaging, ...agentFeatures, ...platformFeatures], plans });

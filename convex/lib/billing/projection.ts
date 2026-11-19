@@ -13,6 +13,8 @@ export type Projection = {
     purchased: { granted: number; remaining: number; expiresAt: number | null };
     nextResetAt: number | null;
   } | null;
+  /** The messaging balance in units of $0.0001. Promotional funds (granted, with their own expiry) are kept apart from purchased funds. */
+  messaging: { remaining: number; purchased: number; promotional: { remaining: number; expiresAt: number | null } } | null;
 };
 
 const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
@@ -39,7 +41,18 @@ export function projectCustomer(customer: RawCustomer, now: number): Projection 
       nextResetAt: when(balance.next_reset_at),
     };
   }
+  const money = customer.balances?.[AUTUMN.messaging] ?? null;
+  let messaging: Projection["messaging"] = null;
+  if (money) {
+    const rows = money.breakdown ?? [];
+    // Purchased funds come from the messaging top-up plan; funds granted directly (no plan) are promotional.
+    const promo = rows.filter((row) => row.plan_id === null);
+    const promoExpiries = promo.map((row) => when(row.expires_at)).filter((value): value is number => value !== null);
+    const promoRemaining = promo.reduce((sum, row) => sum + num(row.remaining), 0);
+    messaging = { remaining: Math.round(num(money.remaining)), purchased: Math.round(num(money.remaining) - promoRemaining), promotional: { remaining: Math.round(promoRemaining), expiresAt: promoExpiries.length ? Math.min(...promoExpiries) : null } };
+  }
   return {
+    messaging,
     plan: active ? planIdFromAutumn(active.plan_id) : null,
     subscription: {
       pastDue: active?.past_due === true,

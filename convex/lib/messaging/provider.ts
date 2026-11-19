@@ -3,6 +3,7 @@
  * The mock answers from the number alone, so a test can ask for a delivered message, a failure, a
  * carrier that never confirms, or a send that dies half way.
  */
+import { countSegments } from "../messagingBilling/segments";
 import { telnyxProvider } from "./telnyx";
 
 /** `from` is the company's texting number. The mock ignores it. */
@@ -10,7 +11,7 @@ export type SendInput = { to: string; from?: string; body: string; idempotencyKe
 
 export type SendResult =
   /** The provider took the message. `delivered` is set only when it also confirmed the handset got it. */
-  | { ok: true; providerMessageId: string; delivered: boolean }
+  | { ok: true; providerMessageId: string; delivered: boolean; parts?: number }
   /** It did not go. `retryable` means trying again may work. `problem` is words for a person, never a raw response. */
   | { ok: false; retryable: boolean; problem: string };
 
@@ -40,7 +41,10 @@ export const mockProvider: MessagingProvider = {
       return { ok: false, retryable: tail === "0002", problem: tail === "0002" ? "The carrier did not answer." : "The carrier says this number cannot receive texts." };
     }
     mockOutbox.push({ ...input, result: "accepted" });
-    return { ok: true, providerMessageId: `mock-${input.idempotencyKey}`, delivered: tail !== "0004" };
+    // Like Telnyx, the mock reports the billable segment count. Numbers ending 0005 report one more than the
+    // local estimate, as a provider counting differently would.
+    const parts = countSegments(input.body).segments + (tail === "0005" ? 1 : 0);
+    return { ok: true, providerMessageId: `mock-${input.idempotencyKey}`, delivered: tail !== "0004", parts };
   },
 };
 
