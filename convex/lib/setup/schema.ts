@@ -22,6 +22,23 @@ export const FACT_SOURCES = ["owner", "website", "import", "sign_in"] as const;
 export const factSourceValidator = v.union(...FACT_SOURCES.map((value) => v.literal(value)));
 export const factValueValidator = v.union(v.string(), v.array(v.string()));
 
+export const workResultValidator = v.object({
+  /** What was prepared. */
+  title: v.string(),
+  summary: v.string(),
+  /** Which company information it used. */
+  used: v.array(v.string()),
+  /** What remains uncertain or missing. */
+  uncertain: v.array(v.string()),
+  /** The records it points at, each with where to open it. Only real records. */
+  items: v.array(v.object({ label: v.string(), detail: v.string(), href: v.optional(v.string()) })),
+  /** The next decision, and where it is made. */
+  next: v.object({ words: v.string(), href: v.string() }),
+  /** Real counts behind the summary, for "Your first work". */
+  counts: v.record(v.string(), v.number()),
+});
+export type WorkResult = typeof workResultValidator.type;
+
 export const setupTables = {
   /** One per company. Absent for companies made before setup existed: they are never sent through it. */
   companySetups: defineTable({
@@ -49,7 +66,7 @@ export const setupTables = {
       enteredAt: v.optional(v.number()),
     }),
     /** What setup prepared, so going through it again opens the same drafts instead of making new ones. */
-    prepared: v.optional(v.object({ serviceId: v.optional(v.id("services")), agreementId: v.optional(v.id("agreements")), experienceId: v.optional(v.id("bookingExperiences")) })),
+    prepared: v.optional(v.object({ serviceId: v.optional(v.id("services")), agreementId: v.optional(v.id("agreements")), experienceId: v.optional(v.id("bookingExperiences")), hiringNeedId: v.optional(v.id("hiringNeeds")) })),
     updatedAt: v.number(),
   }).index("by_company", ["companyId"]),
 
@@ -57,6 +74,25 @@ export const setupTables = {
    * One reading of the owner's own website. Each page read is recorded as it is read, so the screen shows
    * real progress. The first completed read is free; a failed or stopped read does not count.
    */
+  /**
+   * One agent's first work, prepared during setup (lib/setup/work.ts). Each row is a real, persisted run:
+   * "preparing" while it is scheduled, then what it found. It reads the company's own records and contacts
+   * no one. A new run for the same agent replaces nothing: the newest row is the one shown.
+   */
+  setupWork: defineTable({
+    companyId: v.id("companies"),
+    agent: v.union(v.literal("sales"), v.literal("recruiter"), v.literal("dispatch"), v.literal("retention")),
+    /** preparing: scheduled. ready_for_review: there is something to look at. waiting: nothing to review until something is added. */
+    status: v.union(v.literal("preparing"), v.literal("ready_for_review"), v.literal("waiting"), v.literal("failed")),
+    /** What the run is doing, in words that match what the code does. */
+    activity: v.string(),
+    result: v.optional(workResultValidator),
+    problem: v.optional(v.string()),
+    requestedBy: v.id("members"),
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  }).index("by_company_agent", ["companyId", "agent", "startedAt"]),
+
   websiteReads: defineTable({
     companyId: v.id("companies"),
     host: v.string(),

@@ -23,6 +23,7 @@ import { api } from "../../../../convex/_generated/api";
 import { CATEGORY_CHOICES, SCALE_CHOICES, TOOL_CHOICES, WORKFORCE_CHOICES, type Choice } from "../../../../convex/lib/setup/facts";
 import { connectionsFor, PRIORITY_INFO, QUESTIONS, STAGES, stepsFor, UNSURE } from "../../../../convex/lib/setup/path";
 import { ConnectedImport } from "./connectors";
+import { AgentWork } from "./work";
 import { ClientImport } from "./import";
 import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
@@ -517,30 +518,9 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                   </p>
                 ) : null}
                 <PrepareDrafts priority={priority} secondary={secondary} categories={many(facts["services.categories"])} prepared={view.prepared} />
-                <h2 className="text-sm font-semibold text-strong">Where each part of your team stands</h2>
-                <ul className="grid gap-2.5">
-                  {[...view.agents].sort((a, b) => Number(b.agent === info?.agent) - Number(a.agent === info?.agent)).map((agent) => (
-                    <li key={agent.agent} className="rounded-xl border border-border p-3.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium text-strong">{agent.name}</p>
-                        <AgentBadge state={agent.state} />
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{agent.words}</p>
-                      {agent.gaps.length > 0 ? (
-                        <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
-                          {agent.gaps.map((gap) => (
-                            <li key={gap.words} className="flex gap-1.5">
-                              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground/60" aria-hidden />
-                              <span>
-                                <span className="font-medium text-strong">Next: {gap.next}.</span> {gap.words}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                <h2 className="text-sm font-semibold text-strong">Your team&apos;s first work</h2>
+                <p className="-mt-2 text-sm text-muted-foreground">Each agent reviews your own records and says what it found. Nobody is contacted and nothing is sent.</p>
+                <AgentWork first={info?.agent ?? null} canEdit={view.canEdit} hiringBrief={Boolean(view.prepared.hiringBrief)} />
                 <Why>You do not need to finish any of this now. Each next step is waiting on the page it belongs to once you open your workspace.</Why>
               </>
             ) : null}

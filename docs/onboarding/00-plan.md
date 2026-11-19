@@ -2,7 +2,7 @@
 
 **"Tell us enough about your company. Watch Selestial prepare useful work. Review what matters. Start operating."**
 
-Status: Phase 1 merged (#110), Phase 2a merged (#116). Phase 2b built November 18, 2026. Each phase is marked here as it is built and verified.
+Status: Phase 1 merged (#110), Phase 2a merged (#116), Phase 2b in review (#118). Phase 3 built November 19, 2026. Each phase is marked here as it is built and verified.
 
 ## What was there before
 
@@ -42,7 +42,7 @@ Inspected on `main` at `2cbf867`.
 | 1 | Resumable guided flow, priority, adaptive questions, shared facts, readiness, responsive screens | Built |
 | 2a | Website reader, client import, integration guidance, service, agreement and booking drafts | Merged (#116) |
 | 2b | Jobber connection (OAuth), Housecall Pro key import | Built |
-| 3 | First work per built agent, with prerequisite checks | Not started |
+| 3 | First work per built agent, with prerequisite checks | Built |
 | 4 | Exact-action review, authority, safe execution, "Your first work" | Not started |
 | 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Not started |
 
@@ -60,6 +60,37 @@ Inspected on `main` at `2cbf867`.
 | BookingKoala | Spreadsheet only, until its API is documented. |
 | First batch | One review screen in setup across agents (Phase 4). |
 | Delivery | One PR per phase. |
+
+## Phase 3: verified
+
+- **What runs** (`lib/setup/work.ts`, `setupWork.ts`): reaching the prepare step starts one run per agent. Each
+  is a persisted `setupWork` row, shown as "preparing" with what it is doing until it runs, then its result.
+  Every run only reads the company's records: it sends nothing, offers no work, drafts no message and uses
+  no credits. Starting again while a run is preparing starts nothing twice. Only the Owner starts runs;
+  everyone in the company can see them.
+- **Each result** says what was prepared, what it used, what is still open, the real records it points at
+  (each with a link), and one next decision. Counts come from records read at that moment.
+  - Sales: open inquiries, follow-ups that are due, inquiries with no next step, replies waiting for review,
+    and whether it can quote firmly or only take quote requests.
+  - Recruiter: hiring briefs and applications waiting. "Prepare a hiring brief" saves a brief from confirmed
+    facts only, **paused**: it takes no applications until the Owner opens it, and pay is left for the Owner
+    to approve as on any role.
+  - Dispatch: visits in the next 14 days short of people, who could cover each (Dispatch's own ranking,
+    shown as a proposal; no offer is made), and cleaners without weekly hours. It does not use Dispatch's
+    coverage sweep, which can send offers at higher authority.
+  - Retention (not built): clients whose last completed visit is over 45 days old with nothing booked, and
+    open concerns. A list for the owner; nothing is drafted or sent.
+- **States**: the work's own state (preparing, ready for review, waiting, failed) sits beside the agent's
+  readiness, which it never replaces. An agent not on the plan or paused by the Owner gets no review, only
+  the reason.
+- **Tests**: `convex/setupWork.test.ts` (9): preparing state and no double start, honest empty states,
+  Owner only and company isolation, Dispatch coverage without any assignment, approval, sales action or
+  message being created, Retention's list, Sales counts, the paused hiring brief prepared once, and plan
+  and pause gating.
+- **Rendered** at 1440 and 390 wide with seeded records. Found while rendering: a long next-step button
+  pushed the card past the phone's width (it now wraps), and Sales said "no published service" twice.
+- **Changed wording**: Dispatch's priority card said "ask cleaners for the hours"; it now says it shows
+  which cleaners haven't given their hours, since nothing is sent.
 
 ## Phase 2b: verified
 
@@ -150,6 +181,7 @@ Inspected on `main` at `2cbf867`.
 
 - Recurring schedules from an import are kept as notes on the client; turning them into recurring plans
   needs a published service.
-- Agent first work (Phase 3), first-batch review and "Your first work" (Phase 4).
+- First-batch review, authority choice and "Your first work" (Phase 4). Sales reply drafts are prepared by
+  the Sales agent itself and reviewed in its first batch; setup points to them rather than creating them.
 - Help is written guidance per question. Chat inside setup is not wired.
 - Home has no "continue setup" entry yet; `/app/setup` is reachable directly (Phase 4).

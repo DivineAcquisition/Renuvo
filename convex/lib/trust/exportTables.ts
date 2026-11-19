@@ -98,6 +98,7 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   // Google (convex/lib/google/schema.ts). What was connected, chosen, received and sent; never a credential.
   { table: "googleConnections", index: "by_company" },
   { table: "connectorConnections", index: "by_company_system" },
+  { table: "setupWork", index: "by_company_agent" },
   { table: "googleResources", index: "by_company_kind" },
   { table: "googleJobs", index: "by_company_status", omit: ["payload"], why: "Internal work instructions; what each job did is in its result and in the event log." },
   { table: "googleCalendarLinks", index: "by_company_subject" },
