@@ -404,6 +404,53 @@ export async function chargeInbound(ctx: Ctx, input: { companyId: Id<"companies"
   return chargeId;
 }
 
+/**
+ * A charge or credit that is not a message: a number's monthly fee, a carrier registration fee, a support
+ * credit, or funds taken back for a refunded or disputed top-up. Positive takes from the balance, negative
+ * gives back. With a key it is posted once, however often it is asked for. The balance shown moves at once;
+ * Autumn is told by the settlement sweep.
+ */
+export async function postAdjustment(
+  ctx: Ctx,
+  input: { companyId: Id<"companies">; env: AutumnEnv; kind: "number_monthly" | "registration_fee" | "adjustment"; amount: number; activity: string; reason?: string; key?: string; by?: Id<"members">; note?: string },
+): Promise<Id<"messagingCharges">> {
+  if (!Number.isSafeInteger(input.amount) || input.amount === 0) throw new Error("An adjustment is a whole, non-zero amount.");
+  const key = input.key?.slice(0, 120);
+  if (key) {
+    const existing = await ctx.db
+      .query("messagingCharges")
+      .withIndex("by_company_inbound", (q) => q.eq("companyId", input.companyId).eq("inboundKey", key))
+      .first();
+    if (existing) return existing._id;
+  }
+  const now = Date.now();
+  const chargeId = await ctx.db.insert("messagingCharges", {
+    companyId: input.companyId,
+    env: input.env,
+    kind: input.kind,
+    ...(key ? { inboundKey: key } : {}),
+    activity: input.activity,
+    count: 1,
+    rateCardVersion: input.kind === "number_monthly" ? rateCardAt(now).version : "fee",
+    unitPrice: input.amount,
+    reserved: 0,
+    amount: input.amount,
+    state: "captured",
+    settlement: "pending_track",
+    settleAttempts: 0,
+    nextSettleAt: now,
+    ...(input.reason ? { reason: input.reason.slice(0, 300) } : {}),
+    ...(input.by ? { by: input.by } : {}),
+    history: [{ at: now, kind: input.kind, amount: input.amount, ...(input.note ? { note: input.note.slice(0, 300) } : {}) }],
+    createdAt: now,
+    updatedAt: now,
+    capturedAt: now,
+  });
+  await spendLocally(ctx, input.companyId, input.env, input.amount);
+  await ctx.scheduler.runAfter(0, internal.messagingBilling.settle, { chargeId });
+  return chargeId;
+}
+
 /** Owner notices for the messaging balance: low, empty, overdrawn, and the staff escalation at the floor. */
 export async function balanceNotices(ctx: Ctx, account: Account) {
   if (!account.messaging) return;

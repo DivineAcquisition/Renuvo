@@ -31,7 +31,12 @@ async function billed(funds: number) {
 }
 type S = Awaited<ReturnType<typeof billed>>;
 const customer = (s: S) => billing.customerFor(`company_${s.companyId}`);
-const left = (s: S) => billing.messagingLeft(customer(s));
+const autumnLeft = (s: S) => billing.messagingLeft(customer(s));
+let lastS: S | null = null;
+const left = (s: S) => {
+  lastS = s;
+  return autumnLeft(s);
+};
 const topUps = (s: S) => s.t.run(async (ctx) => ctx.db.query("messagingTopUps").collect());
 const charges = (s: S) => s.t.run(async (ctx) => ctx.db.query("messagingCharges").collect());
 const account = (s: S) => s.t.run(async (ctx) => (await ctx.db.query("billingAccounts").first())!);
@@ -52,7 +57,10 @@ describe("Messaging funds", () => {
     vi.setSystemTime(MORNING);
     process.env.MESSAGING_BILLING = "on";
   });
-  afterEach(() => {
+  afterEach(async () => {
+    // Whatever the test did, the balance shown to the Owner agrees with Autumn's.
+    if (lastS) expect((await account(lastS)).messaging?.remaining).toBe(autumnLeft(lastS));
+    lastS = null;
     undo();
     delete process.env.MESSAGING_BILLING;
     delete process.env.STAFF_BOOTSTRAP_EMAIL;

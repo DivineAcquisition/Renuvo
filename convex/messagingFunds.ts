@@ -13,7 +13,7 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { connectedOrRefuse, startIntent } from "./billing";
 import { accountFor, customerIdFor } from "./lib/billing/access";
@@ -22,7 +22,7 @@ import { AUTUMN } from "./lib/billing/catalog";
 import { ownerMutation, staffMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
-import { controlsOf, noticeOnce, refundCharge } from "./lib/messagingBilling/ledger";
+import { controlsOf, noticeOnce, postAdjustment, refundCharge } from "./lib/messagingBilling/ledger";
 import { centsToUnits, UNITS_PER_CENT } from "./lib/messagingBilling/money";
 import { autoTopUpWording } from "./lib/messagingBilling/wording";
 
@@ -229,27 +229,16 @@ export async function paymentEvent(ctx: MutationCtx, input: { invoiceId: string;
   }
   await ctx.db.patch(topUp._id, { status, clawedBack: topUp.clawedBack + change, applied: [...topUp.applied, input.eventId].slice(-20), updatedAt: now });
   if (change !== 0) {
-    const chargeId: Id<"messagingCharges"> = await ctx.db.insert("messagingCharges", {
+    await postAdjustment(ctx, {
       companyId: topUp.companyId,
       env: topUp.env,
       kind: "adjustment",
-      activity: change > 0 ? (input.kind === "refund" ? "Top-up refunded: funds taken back" : "Top-up payment disputed: funds held back") : "Dispute won: funds returned",
-      count: 1,
-      rateCardVersion: "payment",
-      unitPrice: change,
-      reserved: 0,
       amount: change,
-      state: "captured",
-      settlement: "pending_track",
-      settleAttempts: 0,
-      nextSettleAt: now,
-      reason: `${input.kind} ${input.eventId}`.slice(0, 300),
-      history: [{ at: now, kind: input.kind, amount: change }],
-      createdAt: now,
-      updatedAt: now,
-      capturedAt: now,
+      activity: change > 0 ? (input.kind === "refund" ? "Top-up refunded: funds taken back" : "Top-up payment disputed: funds held back") : "Dispute won: funds returned",
+      reason: change > 0 ? (input.kind === "refund" ? "The payment for this top-up was refunded." : "The payment for this top-up is disputed.") : "The dispute was decided in your favor.",
+      // The payment event is kept for the audit, not shown.
+      note: `${input.kind} ${input.eventId}`,
     });
-    await ctx.scheduler.runAfter(0, internal.messagingBilling.settle, { chargeId });
   }
   await recordEvent(ctx, { companyId: topUp.companyId, type: `billing.messaging_${input.kind}`, actor: { kind: "system" }, subject: { table: "companies", id: topUp.companyId }, data: { cents: input.cents } });
   return topUp._id;
@@ -277,15 +266,8 @@ export const supportCredit = staffMutation({
     const reason = args.reason.trim();
     if (reason.length < 5) throw userError("Say why, so the credit can be audited.");
     const amount = centsToUnits(wholeDollarsOrCents(args.cents));
-    const existing = await ctx.db
-      .query("messagingCharges")
-      .withIndex("by_company_inbound", (q) => q.eq("companyId", args.companyId).eq("inboundKey", `support:${args.key}`))
-      .first();
-    if (existing) return existing._id;
-    const now = Date.now();
-    const chargeId = await ctx.db.insert("messagingCharges", { companyId: args.companyId, env: state.env, kind: "adjustment", inboundKey: `support:${args.key}`.slice(0, 120), activity: "Credit from Selestial support", count: 1, rateCardVersion: "support", unitPrice: -amount, reserved: 0, amount: -amount, state: "captured", settlement: "pending_track", settleAttempts: 0, nextSettleAt: now, reason: reason.slice(0, 300), history: [{ at: now, kind: "support_credit", amount: -amount, note: reason.slice(0, 300) }], createdAt: now, updatedAt: now, capturedAt: now });
+    const chargeId = await postAdjustment(ctx, { companyId: args.companyId, env: state.env, kind: "adjustment", amount: -amount, activity: "Credit from Selestial support", reason, key: `support:${args.key}`, note: reason });
     await recordEvent(ctx, { companyId: args.companyId, type: "billing.messaging_support_credit", actor: { kind: "system" }, subject: { table: "messagingCharges", id: chargeId }, data: { cents: args.cents, staff: ctx.staff._id } });
-    await ctx.scheduler.runAfter(0, internal.messagingBilling.settle, { chargeId });
     return chargeId;
   },
 });

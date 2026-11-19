@@ -184,6 +184,10 @@ export const complianceTables = {
     assignedAt: v.optional(v.number()),
     lastCheckedAt: v.optional(v.number()),
     activeAt: v.optional(v.number()),
+    /** The Owner's authorization for the number's monthly fee and the registration fees, in the exact words shown. */
+    fees: v.optional(v.object({ authorizedAt: v.number(), authorizedBy: v.id("members"), wording: v.string() })),
+    /** The last calendar month ("YYYY-MM") the monthly number fee was charged for. */
+    feeMonth: v.optional(v.string()),
   })
     .index("by_company_requested", ["companyId", "requestedAt"])
     .index("by_status_requested", ["status", "requestedAt"]),

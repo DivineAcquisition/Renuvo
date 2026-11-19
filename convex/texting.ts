@@ -12,7 +12,7 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { companyQuery, ownerMutation, staffMutation, staffQuery } from "./lib/builders";
 import { e164, readProfile, writeProfile } from "./lib/compliance/profile";
 import { brandDetailsValidator } from "./lib/compliance/schema";
@@ -38,6 +38,11 @@ import {
   searchNumbers,
   type Answer,
 } from "./lib/messaging/telnyxAccount";
+import { meteringOn, postAdjustment } from "./lib/messagingBilling/ledger";
+import { rateCardAt } from "./lib/messagingBilling/rates";
+import { numberFeesWording } from "./lib/messagingBilling/wording";
+import { localParts } from "./lib/availability";
+import { billingState } from "./lib/billing/access";
 import { allow } from "./lib/rateLimit";
 import { email, optionalText, text } from "./lib/text";
 
@@ -133,8 +138,12 @@ function checkedBrand(input: typeof brandDetailsValidator.type): typeof brandDet
  * number from one of this company's own searches can be asked for, and only one request is open at once.
  */
 export const request = ownerMutation({
-  args: { searchId: v.id("numberSearches"), phoneNumber: v.string(), brand: brandDetailsValidator, consentWording: v.string() },
+  args: { searchId: v.id("numberSearches"), phoneNumber: v.string(), brand: brandDetailsValidator, consentWording: v.string(), feesWording: v.optional(v.string()) },
   handler: async (ctx, args) => {
+    // The number's fees come from the messaging balance, so the Owner authorizes them in exactly these words first.
+    const feesWording = numberFeesWording(rateCardAt(Date.now()).numberMonthly);
+    if (meteringOn() && args.feesWording !== feesWording) throw userError("Read and accept the number and registration fees to ask for a number.");
+    const fees = args.feesWording === feesWording ? { authorizedAt: Date.now(), authorizedBy: ctx.member._id, wording: feesWording } : undefined;
     const searched = await ctx.db.get(args.searchId);
     const chosen = searched && searched.companyId === ctx.companyId ? searched.results?.find((row) => row.phoneNumber === args.phoneNumber) : undefined;
     if (!chosen) throw userError("Choose a number from your search.");
@@ -154,10 +163,75 @@ export const request = ownerMutation({
       consentWording,
       requestedBy: ctx.member._id,
       requestedAt: Date.now(),
+      ...(fees ? { fees } : {}),
       step: "Waiting for Selestial to approve the request.",
     });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "texting.requested", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { phoneNumber: chosen.phoneNumber } });
     return requestId;
+  },
+});
+
+/** What the Owner authorizes with a number request, and whether it is required now. */
+export const feeTerms = companyQuery({
+  args: {},
+  handler: async () => {
+    const card = rateCardAt(Date.now());
+    return { required: meteringOn(), monthly: card.numberMonthly, wording: numberFeesWording(card.numberMonthly) };
+  },
+});
+
+/**
+ * Charges an active number's monthly fee for the calendar month `at` falls in, once. Only with the Owner's
+ * authorization, and only while messaging is metered. A low balance never stops or releases the number: the
+ * fee may take the balance below zero, and outbound messages then wait for funds.
+ */
+async function chargeNumberMonth(ctx: MutationCtx, row: Doc<"textingRequests">, at: number) {
+  if (!meteringOn() || row.status !== "active") return;
+  const state = billingState();
+  if (!state.connected) return;
+  const company = await ctx.db.get(row.companyId);
+  if (!company) return;
+  const month = localParts(at, company.timezone).day.slice(0, 7);
+  if (row.feeMonth === month) return;
+  if (!row.fees) {
+    await recordEvent(ctx, { companyId: row.companyId, type: "texting.fee_not_authorized", actor: SYSTEM, subject: { table: "companies", id: row.companyId }, data: { month } });
+    return;
+  }
+  await postAdjustment(ctx, { companyId: row.companyId, env: state.env, kind: "number_monthly", amount: rateCardAt(at).numberMonthly, activity: `Texting number ${row.phoneNumber}, ${month}`, reason: "Monthly fee for your business texting number.", key: `number:${row._id}:${month}` });
+  await ctx.db.patch(row._id, { feeMonth: month });
+}
+
+/** Once a day: each active number's fee for the new month, charged once. */
+export const chargeNumbers = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const active = await ctx.db
+      .query("textingRequests")
+      .withIndex("by_status_requested", (q) => q.eq("status", "active"))
+      .take(1000);
+    for (const row of active) await chargeNumberMonth(ctx, row, now);
+    return active.length;
+  },
+});
+
+/**
+ * Selestial staff: a carrier registration fee at Selestial's actual cost, as the carrier registry billed it,
+ * taken from the messaging balance under the Owner's authorization. Posted once per key.
+ */
+export const chargeRegistrationFee = staffMutation({
+  args: { requestId: v.id("textingRequests"), cents: v.number(), description: v.string(), key: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.requestId);
+    if (!row) notFound();
+    if (!row.fees) throw userError("The Owner did not authorize registration fees from the messaging balance for this request. Ask them first; nothing was charged.");
+    if (!Number.isSafeInteger(args.cents) || args.cents <= 0 || args.cents > 50_000) throw userError("Enter the fee in cents, as billed by the carrier registry (up to $500).");
+    const description = text(args.description, "What the fee is", 120);
+    const state = billingState();
+    if (!state.connected) throw userError("Billing isn't connected, so nothing was charged.");
+    const chargeId = await postAdjustment(ctx, { companyId: row.companyId, env: state.env, kind: "registration_fee", amount: args.cents * 100, activity: `Carrier registration: ${description}`, reason: "At Selestial's actual cost, as billed by the carrier registry.", key: `registration:${row._id}:${args.key}`, note: `staff ${ctx.staff._id}` });
+    await recordEvent(ctx, { companyId: row.companyId, type: "texting.registration_fee", actor: SYSTEM, subject: { table: "companies", id: row.companyId }, data: { cents: args.cents } });
+    return chargeId;
   },
 });
 
@@ -338,6 +412,8 @@ export const activate = internalMutation({
     }
     await ctx.db.patch(row._id, { status: "active", activeAt: now, step: "Active. Texts go out from this number.", problem: undefined });
     await recordEvent(ctx, { companyId: row.companyId, type: "texting.active", actor: SYSTEM, subject: { table: "companies", id: row.companyId }, data: { phoneNumber: row.phoneNumber } });
+    // The first month's fee, from the day it goes live.
+    await chargeNumberMonth(ctx, (await ctx.db.get(row._id))!, now);
     return null;
   },
 });

@@ -43,3 +43,8 @@ export const TOP_UP_STATE_WORDS: Record<string, string> = {
   disputed: "Disputed",
   dispute_won: "Paid (dispute resolved)",
 };
+
+/** The exact words the Owner authorizes when asking for a texting number. Stored with the request. */
+export function numberFeesWording(monthly: number): string {
+  return `I authorize Selestial to take ${formatUnits(monthly)} a month from my messaging balance for this texting number while it is active, starting the day it goes live, and the carrier registration fees at Selestial's actual cost, each listed on the Messaging tab when it is charged. A low balance never releases the number.`;
+}
