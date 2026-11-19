@@ -6,9 +6,9 @@
  * wordless sketches of the screens an agent works in. Decoration and demonstration only: every word is
  * also in the page, and with reduced motion everything is shown at once.
  */
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { agentPortrait } from "@/components/app/agent";
 import { CheckCircle2, ShieldCheck } from "@/components/icons";
@@ -16,6 +16,23 @@ import { cn } from "@/lib/utils";
 
 export type MockKind = "photos" | "checklist" | "chat" | "calendar" | "bars" | "offer" | "list" | "week" | "progress" | "rank" | "pipeline";
 export type SceneSpec = { trigger: { title: string; detail: string }; work: string[]; outcomes: { title: string; detail: string }[] };
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+function onReducedMotionChange(change: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener("change", change);
+  return () => query.removeEventListener("change", change);
+}
+
+/**
+ * Whether the visitor asked for reduced motion. The page is rendered on the server, which cannot know, so
+ * the first render in the browser answers "no" as the server did, and the real answer follows straight
+ * after. Reading it any earlier makes the browser's first render differ from the server's.
+ */
+function useReducedMotion(): boolean {
+  return useSyncExternalStore(onReducedMotionChange, () => window.matchMedia(REDUCED_MOTION).matches, () => false);
+}
 
 // ── The worked example ─────────────────────────────────────────────────────────────────────────────
 
