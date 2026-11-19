@@ -44,6 +44,27 @@ export const spendingControlsValidator = v.object({
   autoTopUp: v.object({ enabled: v.boolean(), credits: v.optional(v.number()), maxPerMonth: v.optional(v.number()) }),
 });
 
+export const messagingControlsValidator = v.object({
+  /** Outbound messaging may spend at most this much in a calendar month. Unset: no limit. */
+  monthlyLimit: v.optional(v.number()),
+  /** A single batch or campaign may spend at most this much. Unset: no limit. */
+  batchLimit: v.optional(v.number()),
+  /** Monthly outbound limit per agent. Missing agents: no limit. */
+  agentLimits: v.optional(v.record(v.string(), v.number())),
+  /** Tell the Owner when the balance falls below this. */
+  lowBalance: v.number(),
+  /** Automatic top-up, off unless the Owner authorized it with the exact wording shown. */
+  autoTopUp: v.object({
+    enabled: v.boolean(),
+    threshold: v.number(),
+    amount: v.number(),
+    monthlyMax: v.number(),
+    authorizedAt: v.optional(v.number()),
+    authorizedBy: v.optional(v.id("members")),
+    wording: v.optional(v.string()),
+  }),
+});
+
 export const billingTables = {
   billingAccounts: defineTable({
     companyId: v.id("companies"),
@@ -75,7 +96,18 @@ export const billingTables = {
     controls: spendingControlsValidator,
     /** The alert thresholds already sent for the current period. */
     alertsSent: v.object({ period: v.string(), percents: v.array(v.number()) }),
-    notices: v.array(v.object({ kind: v.union(v.literal("zero_balance"), v.literal("usage_alert"), v.literal("billing_unavailable"), v.literal("past_due"), v.literal("low_balance")), at: v.number(), text: v.string() })),
+    notices: v.array(v.object({ kind: v.union(v.literal("zero_balance"), v.literal("usage_alert"), v.literal("billing_unavailable"), v.literal("past_due"), v.literal("low_balance"), v.literal("messaging_low"), v.literal("messaging_empty"), v.literal("messaging_overdraft"), v.literal("messaging_topup_failed"), v.literal("messaging_held")), at: v.number(), text: v.string() })),
+    /** The messaging balance as Autumn last reported it, in units of $0.0001. Purchased and promotional funds are kept apart. */
+    messaging: v.optional(
+      v.object({
+        remaining: v.number(),
+        purchased: v.number(),
+        promotional: v.object({ remaining: v.number(), expiresAt: v.union(v.number(), v.null()) }),
+        at: v.number(),
+      }),
+    ),
+    /** The Owner's messaging spending controls. Amounts in units of $0.0001. */
+    messagingControls: v.optional(messagingControlsValidator),
     /** Balance changes other than usage, as Autumn's ledger lists them: monthly grants, top-ups, plan changes, adjustments. */
     ledger: v.optional(v.array(v.object({ id: v.string(), at: v.number(), kind: v.string(), label: v.string(), change: v.union(v.number(), v.null()), after: v.union(v.number(), v.null()) }))),
     /** Recent invoices as Autumn lists them. Amounts in cents. */
@@ -153,7 +185,7 @@ export const billingTables = {
   billingIntents: defineTable({
     companyId: v.id("companies"),
     env: envValidator,
-    kind: v.union(v.literal("plan_change"), v.literal("top_up"), v.literal("cancel"), v.literal("uncancel"), v.literal("portal"), v.literal("payment_method")),
+    kind: v.union(v.literal("plan_change"), v.literal("top_up"), v.literal("messaging_top_up"), v.literal("cancel"), v.literal("uncancel"), v.literal("portal"), v.literal("payment_method")),
     planId: v.optional(v.string()),
     quantity: v.optional(v.number()),
     memberId: v.id("members"),

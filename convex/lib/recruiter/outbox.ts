@@ -147,6 +147,8 @@ export async function queueApplicantMessage(ctx: MutationCtx, planned: PlannedAp
     replyTo: email ? (settings.replyTo ?? undefined) : undefined,
     applicationId: application._id,
     applicantId: applicant._id,
+    // Spending: every applicant message is Recruiter's work, sent on its own or after a person approved it.
+    agent: "recruiter",
     applicantLinkId: planned.link?._id,
     to: status === "not_sent" ? undefined : to,
     body: planned.body,

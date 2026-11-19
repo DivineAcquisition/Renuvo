@@ -4,7 +4,7 @@
  * "allowed fail-open", or an Idempotency-Key replay (409). Nothing reaches the network.
  */
 type PlanId = "operate" | "expand";
-type Lock = { customerId: string; credits: number; expiresAt: number; finalized: "confirm" | "release" | null; properties: Record<string, unknown> };
+type Lock = { customerId: string; credits: number; expiresAt: number; finalized: "confirm" | "release" | null; properties: Record<string, unknown>; feature?: string };
 type Customer = {
   id: string;
   plan: PlanId | null;
@@ -18,6 +18,8 @@ type Customer = {
   purchased: number;
   purchasedUsed: number;
   cardOnFile: boolean;
+  /** The messaging balance, in units of $0.0001: purchased and promotional grants, and what was used (refunds lower it). */
+  messaging: { purchased: number; promo: number; promoExpiresAt: number | null; used: number };
   invoices: { id: string; plan_ids: string[]; status: string; total: number; currency: string; created_at: number; hosted_invoice_url: string | null }[];
 };
 
@@ -41,14 +43,31 @@ export function fakeAutumn() {
     /** Balance history entries; null answers 404, as for a customer without history yet. */
     ledger: null as unknown[] | null,
     topUpPrice: 0.01,
+    /** Billing controls set per customer (automatic top-ups). */
+    billingControls: new Map<string, unknown>(),
   };
   const grantOf = (customer: Customer) => (customer.plan ? customer.grant : 0);
-  const held = (customerId: string) => [...state.locks.values()].filter((lock) => lock.customerId === customerId && lock.finalized === null && lock.expiresAt > Date.now()).reduce((sum, lock) => sum + lock.credits, 0);
+  const held = (customerId: string, feature = "selestial_credits") => [...state.locks.values()].filter((lock) => lock.customerId === customerId && (lock.feature ?? "selestial_credits") === feature && lock.finalized === null && lock.expiresAt > Date.now()).reduce((sum, lock) => sum + lock.credits, 0);
+  /** What can still be spent from the messaging balance: grants, less use, less open holds. It can be negative after an overflow. */
+  const messagingLeft = (customer: Customer) => customer.messaging.purchased + customer.messaging.promo - customer.messaging.used - held(customer.id, "messaging_balance");
+  const messagingBalance = (customer: Customer) => ({
+    feature_id: "messaging_balance",
+    granted: customer.messaging.purchased + customer.messaging.promo,
+    remaining: messagingLeft(customer),
+    usage: customer.messaging.used,
+    unlimited: false,
+    next_reset_at: null,
+    breakdown: [
+      // Promotional funds are spent first (they can expire), then purchased funds.
+      ...(customer.messaging.promo ? [{ plan_id: null, included_grant: customer.messaging.promo, prepaid_grant: 0, remaining: Math.max(0, customer.messaging.promo - customer.messaging.used), usage: Math.min(customer.messaging.used, customer.messaging.promo), reset: { interval: "one_off", resets_at: null }, expires_at: customer.messaging.promoExpiresAt }] : []),
+      ...(customer.messaging.purchased ? [{ plan_id: "messaging_top_up", included_grant: 0, prepaid_grant: customer.messaging.purchased, remaining: messagingLeft(customer) - Math.max(0, customer.messaging.promo - customer.messaging.used), usage: Math.max(0, customer.messaging.used - customer.messaging.promo), reset: { interval: "one_off", resets_at: null }, expires_at: null }] : []),
+    ],
+  });
   const remaining = (customer: Customer) => grantOf(customer) + customer.purchased - customer.usage - customer.purchasedUsed - held(customer.id);
   const customerFor = (id: string): Customer => {
     let customer = state.customers.get(id);
     if (!customer) {
-      customer = { id, plan: state.defaultPlan, pastDue: false, canceledAt: null, periodEnd: Date.now() + 20 * 86_400_000, scheduled: null, grant: state.defaultGrant, usage: 0, purchased: 0, purchasedUsed: 0, cardOnFile: true, invoices: [] };
+      customer = { id, plan: state.defaultPlan, pastDue: false, canceledAt: null, periodEnd: Date.now() + 20 * 86_400_000, scheduled: null, grant: state.defaultGrant, usage: 0, purchased: 0, purchasedUsed: 0, cardOnFile: true, invoices: [], messaging: { purchased: 0, promo: 0, promoExpiresAt: null, used: 0 } };
       state.customers.set(id, customer);
     }
     return customer;
@@ -83,7 +102,7 @@ export function fakeAutumn() {
       ...(customer.plan ? [{ plan_id: customer.plan, status: "active", past_due: customer.pastDue, canceled_at: customer.canceledAt, expires_at: customer.canceledAt ? customer.periodEnd : null, started_at: 1, current_period_start: customer.periodEnd - 30 * 86_400_000, current_period_end: customer.periodEnd }] : []),
       ...(customer.scheduled ? [{ plan_id: customer.scheduled, status: "scheduled", past_due: false, canceled_at: null, expires_at: null, started_at: customer.periodEnd, current_period_start: null, current_period_end: null }] : []),
     ],
-    balances: { selestial_credits: customer.plan || customer.purchased ? balance(customer) : null },
+    balances: { selestial_credits: customer.plan || customer.purchased ? balance(customer) : null, messaging_balance: messagingBalance(customer) },
     invoices: customer.invoices,
   });
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -117,6 +136,14 @@ export function fakeAutumn() {
         return json(200, view(customerFor(customerId)));
       case "/v1/balances.check": {
         const customer = customerFor(customerId);
+        if (body.feature_id === "messaging_balance") {
+          const want = Number(body.required_balance ?? 1);
+          const lock = body.lock as { lock_id: string; expires_at: number; overage_behavior?: string } | undefined;
+          if (failing && state.outage === "degraded") return json(202, { allowed: true, customer_id: customerId, balance: null });
+          const allowed = lock?.overage_behavior === "overflow" || messagingLeft(customer) >= want;
+          if (allowed && lock) state.locks.set(lock.lock_id, { customerId, credits: want, expiresAt: lock.expires_at, finalized: null, properties: (body.properties as Record<string, unknown>) ?? {}, feature: "messaging_balance" });
+          return json(200, { allowed, customer_id: customerId, balance: messagingBalance(customer) });
+        }
         const want = Number(body.required_balance ?? 1);
         const lock = body.lock as { lock_id: string; expires_at: number } | undefined;
         if (failing && state.outage === "degraded") return json(202, { allowed: true, customer_id: customerId, balance: null });
@@ -129,12 +156,26 @@ export function fakeAutumn() {
         const lock = state.locks.get(String(body.lock_id));
         if (!lock || lock.customerId !== customerId || lock.finalized !== null || lock.expiresAt <= Date.now()) return json(404, { code: "lock_not_found", message: "No such lock" });
         lock.finalized = body.action === "confirm" ? "confirm" : "release";
-        if (lock.finalized === "confirm") spend(customerFor(customerId), body.override_value === undefined ? lock.credits : Number(body.override_value));
+        if (lock.finalized === "confirm" && lock.feature === "messaging_balance") customerFor(customerId).messaging.used += body.override_value === undefined ? lock.credits : Number(body.override_value);
+        else if (lock.finalized === "confirm") spend(customerFor(customerId), body.override_value === undefined ? lock.credits : Number(body.override_value));
         return json(200, { success: true });
+      }
+      case "/v1/balances.track": {
+        if (failing && state.outage === "degraded") return json(202, { customer_id: customerId, balance: null });
+        const customer = customerFor(customerId);
+        if (body.feature_id === "messaging_balance") customer.messaging.used += Number(body.value);
+        else spend(customer, Number(body.value));
+        return json(200, { customer_id: customerId, balance: body.feature_id === "messaging_balance" ? messagingBalance(customer) : balance(customer) });
       }
       case "/v1/billing.preview_attach": {
         const customer = customerFor(customerId);
         const plan = body.plan_id as string;
+        if (plan === "messaging_top_up") {
+          // $1 per 10,000 units, exactly.
+          const quantity = Number((body.feature_quantities as { quantity: number }[])[0].quantity);
+          const total = quantity / 10_000;
+          return json(200, { currency: "usd", total, subtotal: total, line_items: [{ display_name: "Messaging funds", total }], plan_activates: "on_payment", incoming: [{ plan_id: plan, effective_at: null }] });
+        }
         if (plan === "credit_top_up") {
           const quantity = Number((body.feature_quantities as { quantity: number }[])[0].quantity);
           return json(200, { currency: "usd", total: quantity * state.topUpPrice, subtotal: quantity * state.topUpPrice, line_items: [{ display_name: "Credit top-up", total: quantity * state.topUpPrice }], plan_activates: "on_payment", incoming: [{ plan_id: plan, effective_at: null }] });
@@ -151,6 +192,12 @@ export function fakeAutumn() {
         if (plan === "credit_top_up") {
           customer.purchased += Number((body.feature_quantities as { quantity: number }[])[0].quantity);
           return json(200, { customer_id: customerId, payment_url: null });
+        }
+        if (plan === "messaging_top_up") {
+          const quantity = Number((body.feature_quantities as { quantity: number }[])[0].quantity);
+          customer.messaging.purchased += quantity;
+          customer.invoices.push({ id: `in_msg_${customer.invoices.length + 1}`, plan_ids: [plan], status: "paid", total: quantity / 10_000, currency: "usd", created_at: Date.now(), hosted_invoice_url: "https://invoice.stripe.test/msg" });
+          return json(200, { customer_id: customerId, payment_url: null, invoice: { status: "paid", total: quantity / 10_000, currency: "usd", hosted_invoice_url: "https://invoice.stripe.test/msg" } });
         }
         const target = plan as PlanId;
         if (body.plan_schedule === "end_of_cycle") customer.scheduled = target;
@@ -173,6 +220,9 @@ export function fakeAutumn() {
         }
         return json(200, { customer_id: customerId, payment_url: null });
       }
+      case "/v1/customers.update":
+        state.billingControls.set(customerId, body.billing_controls);
+        return json(200, { id: customerId });
       case "/v1/billing.open_customer_portal":
         return json(200, { customer_id: customerId, url: "https://billing.stripe.test/portal" });
       case "/v1/balances.list_ledger":
@@ -184,5 +234,5 @@ export function fakeAutumn() {
     }
   }) as typeof globalThis.fetch;
 
-  return { state, fetch, seed, customerFor, remaining, held };
+  return { state, fetch, seed, customerFor, remaining, held, messagingLeft };
 }

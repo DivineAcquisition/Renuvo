@@ -57,7 +57,11 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   // Plans and credits (convex/lib/billing/schema.ts).
   { table: "billingAccounts", index: "by_company_env" },
   { table: "aiExecutions", index: "by_company_created", omit: ["lockId"], why: "Autumn's internal reference for a credit hold." },
+  { table: "messagingCharges", index: "by_company_created", omit: ["lockId"], why: "Autumn's internal reference for a messaging hold." },
   { table: "billingIntents", index: "by_company_created", omit: ["url"], why: "A short-lived payment or portal address." },
+  { table: "agentAccessRequests", index: "by_company_last" },
+  { table: "messagingAttention", index: "by_company_at", omit: ["resolvedBy"], why: "Which Selestial staff member resolved it." },
+  { table: "messagingTopUps", index: "by_company_created", omit: ["intentId", "applied"], why: "Internal references to a purchase request and to payment events already applied." },
   { table: "sourceMessages", index: "by_company_received" },
   { table: "formSessions", index: "by_company_application" },
   { table: "applicantAttachments", index: "by_company_application", omit: ["storageId", "clientKey"], why: "Internal file references. The files themselves are not in the file." },

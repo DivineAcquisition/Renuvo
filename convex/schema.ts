@@ -4,11 +4,13 @@
  */
 import { defineSchema, defineTable } from "convex/server";
 
+import { agentAccessTables } from "./lib/agentAccess/schema";
 import { agreementTables } from "./lib/agreements/schema";
 import { cleanersSettingsValidator, cleanersTables, engagementValidator } from "./lib/cleaners/schema";
 import { googleTables } from "./lib/google/schema";
 import { aiTables } from "./lib/ai/schema";
 import { billingTables } from "./lib/billing/schema";
+import { messagingTables } from "./lib/messagingBilling/schema";
 import { bookingTables } from "./lib/booking/schema";
 import { chatTables } from "./lib/chat/schema";
 import { complianceTables } from "./lib/compliance/schema";
@@ -202,6 +204,7 @@ export default defineSchema({
 
   // ── Selestial staff (convex/lib/trust/staffSchema.ts) ─────────────────────────────────────────────
   ...staffTables,
+  ...agentAccessTables,
   // ── Messaging consent, the compliance profile, agreements (convex/lib/compliance/schema.ts) ──────
   ...complianceTables,
   ...trustTables,
@@ -737,6 +740,19 @@ export default defineSchema({
     about: v.optional(v.object({ table: v.string(), id: v.string(), label: v.string() })),
     /** A follow-up planned for later: held until then, and asked the sending policy again when it is due. */
     scheduledFor: v.optional(v.number()),
+    /** Messaging billing: the agent whose work it is (absent: a person or Selestial itself). */
+    agent: v.optional(v.string()),
+    /** SMS segments and encoding as sent; the provider's count once known. Email: recipients after removing duplicates. */
+    segments: v.optional(v.number()),
+    encoding: v.optional(v.union(v.literal("gsm7"), v.literal("ucs2"))),
+    recipients: v.optional(v.number()),
+    /** The route that actually carried it, written when it is handed over (the planned `provider` can change). */
+    sentVia: v.optional(v.string()),
+    /** Why a held message is waiting: quiet hours, or messaging funds and limits. Held for funds, it is checked again before it goes. */
+    holdReason: v.optional(v.union(v.literal("quiet_hours"), v.literal("messaging_balance"), v.literal("messaging_limit"), v.literal("billing_unavailable"))),
+    heldAt: v.optional(v.number()),
+    /** A delivery report that arrived before the send was settled; applied when it is. */
+    earlyReceipt: v.optional(v.object({ outcome: v.union(v.literal("delivered"), v.literal("failed"), v.literal("bounced")), problem: v.optional(v.string()), at: v.number() })),
     /** Booking messages: the session whose private link the message carries as "{link}". */
     bookingSessionId: v.optional(v.id("bookingSessions")),
     /** Where on the cleaner pages the link opens, for example "/delay". */
@@ -770,10 +786,31 @@ export default defineSchema({
     .index("by_company_opportunity", ["companyId", "opportunityId", "queuedAt"])
     .index("by_company_member", ["companyId", "memberId", "queuedAt"])
     .index("by_provider_message", ["provider", "providerMessageId"])
-    .index("by_status_attempted", ["status", "attemptedAt"]),
+    .index("by_status_attempted", ["status", "attemptedAt"])
+    .index("by_company_hold", ["companyId", "holdReason", "heldAt"]),
 
   /** A provider's delivery report, kept by its id so the same report delivered twice changes nothing twice. */
-  providerReceipts: defineTable({ provider: v.string(), eventId: v.string(), receivedAt: v.number() }).index("by_provider_event", ["provider", "eventId"]),
+  providerReceipts: defineTable({
+    provider: v.string(),
+    eventId: v.string(),
+    receivedAt: v.number(),
+    /**
+     * A delivery report that arrived before its send settled (the report beat the provider's own answer), kept
+     * so it is applied when the send settles instead of being lost: the outcome, and what the provider charged.
+     */
+    early: v.optional(
+      v.object({
+        providerMessageId: v.string(),
+        outcome: v.union(v.literal("delivered"), v.literal("failed"), v.literal("bounced"), v.literal("complained"), v.literal("suppressed"), v.literal("delayed")),
+        problem: v.optional(v.string()),
+        providerCost: v.optional(v.number()),
+        errorCode: v.optional(v.string()),
+        appliedAt: v.optional(v.number()),
+      }),
+    ),
+  })
+    .index("by_provider_event", ["provider", "eventId"])
+    .index("by_provider_early", ["provider", "early.providerMessageId"]),
 
   /**
    * A link that lets one cleaner do named things for one assignment without signing in. The token is
@@ -948,6 +985,7 @@ export default defineSchema({
   // ── The AI layer: usage, model settings, Creative Studio, generation allowances, search index ──
   ...aiTables,
   ...billingTables,
+  ...messagingTables,
   // Services & Pricing (convex/lib/services/schema.ts).
   ...servicesTables,
 

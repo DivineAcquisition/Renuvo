@@ -9,6 +9,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { SegmentEstimate } from "@/components/app/billing/segment-estimate";
 import { useCompany } from "@/components/app/company";
 import { useDetail } from "@/components/app/detail-panel";
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
@@ -408,9 +409,10 @@ function MessageForm({ profile, composer }: { profile: Profile; composer: Compos
         </Field>
       ) : null}
       {fromChat ? <p className="rounded-lg bg-info/[0.08] px-3 py-2 text-sm text-info-foreground">Drafted in Chat. Nothing has been sent: read it, check who it goes to, and edit it before sending.</p> : null}
-      <Field label="Message" hint={channel === "sms" ? `${body.length}/1600 · texts over 160 characters arrive in parts` : undefined}>
+      <Field label="Message">
         <TextArea rows={4} value={body} onChange={(event) => setBody(event.target.value)} maxLength={channel === "sms" ? 1600 : 10000} required />
       </Field>
+      {channel === "sms" ? <SegmentEstimate body={body} className="-mt-1.5" /> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="About (optional)">
           <SelectInput value={about} onChange={(event) => setAbout(event.target.value)}>

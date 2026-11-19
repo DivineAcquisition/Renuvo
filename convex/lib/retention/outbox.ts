@@ -138,6 +138,8 @@ export async function queueCareMessage(ctx: MutationCtx, planned: PlannedCareMes
     customerId: customer._id,
     jobId: planned.jobId,
     retentionActionId: planned.action._id,
+    // Spending: carrying out one of Retention's prepared actions is Retention's work, even after a person approved or edited it.
+    agent: "retention",
     draftedBy: planned.actor.kind === "agent" ? "agent" : "person",
     ...(planned.actor.kind === "member" ? { authorId: planned.actor.memberId } : {}),
     to: status === "not_sent" ? undefined : (to ?? undefined),

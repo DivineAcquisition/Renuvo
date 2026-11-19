@@ -61,10 +61,12 @@ export function telnyxProvider(fetcher: typeof fetch = fetch): MessagingProvider
         json = null;
       }
       if (response.ok) {
-        const data = (json as { data?: { id?: unknown; to?: { status?: unknown }[] } } | null)?.data;
+        const data = (json as { data?: { id?: unknown; parts?: unknown; to?: { status?: unknown }[] } } | null)?.data;
         if (typeof data?.id !== "string") return { ok: false, retryable: false, problem: "Telnyx answered without a message id, so it is not known whether the text went." };
         // Telnyx takes the message here. Whether the phone got it arrives later, by webhook.
-        return { ok: true, providerMessageId: data.id, delivered: data.to?.[0]?.status === "delivered" };
+        // `parts` is Telnyx's billable segment count for this text, after any smart encoding. It is what the text is charged on.
+        const parts = typeof data.parts === "number" && Number.isInteger(data.parts) && data.parts > 0 ? data.parts : undefined;
+        return { ok: true, providerMessageId: data.id, delivered: data.to?.[0]?.status === "delivered", ...(parts ? { parts } : {}) };
       }
       const code = (json as { errors?: { code?: unknown }[] } | null)?.errors?.[0]?.code;
       const known = typeof code === "string" ? ERRORS[code] : undefined;
@@ -104,8 +106,8 @@ export async function verifyTelnyx(input: { publicKey: string; signature: string
 }
 
 export type TelnyxEvent =
-  | { kind: "receipt"; eventId: string; providerMessageId: string; outcome: "delivered" | "failed"; problem: string | null }
-  | { kind: "inbound"; eventId: string; from: string; to: string; text: string; receivedAt: number }
+  | { kind: "receipt"; eventId: string; providerMessageId: string; outcome: "delivered" | "failed"; problem: string | null; costUnits: number | null; errorCode: string | null }
+  | { kind: "inbound"; eventId: string; from: string; to: string; text: string; receivedAt: number; providerMessageId: string | null; parts: number | null; media: number }
   | { kind: "ignored" };
 
 /** What a webhook says, in the shape the record takes. Events that change nothing here are ignored. */
@@ -118,14 +120,19 @@ export function telnyxEvent(body: string): TelnyxEvent {
   }
   const data = (parsed as { data?: { id?: unknown; event_type?: unknown; occurred_at?: unknown; payload?: Record<string, unknown> } }).data;
   if (!data || typeof data.id !== "string" || !data.payload) return { kind: "ignored" };
-  const payload = data.payload as { id?: unknown; text?: unknown; from?: { phone_number?: unknown }; to?: { phone_number?: unknown; status?: unknown }[]; errors?: { code?: unknown; title?: unknown }[] };
+  const payload = data.payload as { id?: unknown; text?: unknown; parts?: unknown; media?: unknown[]; cost?: { amount?: unknown; currency?: unknown } | null; from?: { phone_number?: unknown }; to?: { phone_number?: unknown; status?: unknown }[]; errors?: { code?: unknown; title?: unknown }[] };
+  // What Telnyx charged Selestial (USD, as a decimal string), kept in units of $0.0001 for internal margin tracking.
+  const costAmount = payload.cost && payload.cost.currency === "USD" ? Number(payload.cost.amount) : NaN;
+  const costUnits = Number.isFinite(costAmount) ? Math.round(costAmount * 10_000) : null;
+  const firstCode = payload.errors?.[0]?.code;
+  const errorCode = typeof firstCode === "string" ? firstCode.slice(0, 20) : null;
   if (data.event_type === "message.finalized") {
     const status = payload.to?.[0]?.status;
     if (typeof payload.id !== "string") return { kind: "ignored" };
-    if (status === "delivered") return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "delivered", problem: null };
+    if (status === "delivered") return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "delivered", problem: null, costUnits, errorCode };
     if (status === "delivery_failed" || status === "sending_failed") {
       const code = payload.errors?.[0]?.code;
-      return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "failed", problem: typeof code === "string" ? (ERRORS[code]?.problem ?? null) : null };
+      return { kind: "receipt", eventId: data.id, providerMessageId: payload.id, outcome: "failed", problem: typeof code === "string" ? (ERRORS[code]?.problem ?? null) : null, costUnits, errorCode };
     }
     // delivery_unconfirmed: the carrier never said. The message stays "sent", which already says that.
     return { kind: "ignored" };
@@ -135,7 +142,8 @@ export function telnyxEvent(body: string): TelnyxEvent {
     const to = payload.to?.[0]?.phone_number;
     if (typeof from !== "string" || typeof to !== "string") return { kind: "ignored" };
     const at = typeof data.occurred_at === "string" ? Date.parse(data.occurred_at) : NaN;
-    return { kind: "inbound", eventId: data.id, from, to, text: typeof payload.text === "string" ? payload.text : "", receivedAt: Number.isFinite(at) ? at : Date.now() };
+    const parts = typeof payload.parts === "number" && Number.isInteger(payload.parts) && payload.parts > 0 ? payload.parts : null;
+    return { kind: "inbound", eventId: data.id, from, to, text: typeof payload.text === "string" ? payload.text : "", receivedAt: Number.isFinite(at) ? at : Date.now(), providerMessageId: typeof payload.id === "string" ? payload.id : null, parts, media: Array.isArray(payload.media) ? payload.media.length : 0 };
   }
   return { kind: "ignored" };
 }

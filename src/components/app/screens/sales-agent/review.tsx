@@ -11,6 +11,7 @@ import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 
 import { eyebrow } from "@/components/app/agent";
+import { SegmentEstimate } from "@/components/app/billing/segment-estimate";
 import { useCompany } from "@/components/app/company";
 import { FormError, TextArea, useRun } from "@/components/app/form";
 import { Panel } from "@/components/app/shell";
@@ -129,7 +130,33 @@ function PendingItem({ item, canDecide, onOpen }: { item: Item; canDecide: boole
   );
 }
 
-function FirstBatch({ batchId, items, owner }: { batchId: Id<"salesBatches">; items: Item[]; owner: boolean }) {
+type BatchMessaging = Extract<Waiting["firstBatch"], { decided: false }>["messaging"];
+
+/** The bulk preview: who gets a message and who can't, segments, cost against the balance and the batch limit, and no AI credits. */
+function BatchCost({ preview }: { preview: NonNullable<BatchMessaging> }) {
+  return (
+    <div className={cn("rounded-xl border px-3.5 py-3 text-sm", preview.overLimit ? "border-destructive/40 bg-destructive/10" : preview.problem ? "border-warning/40 bg-warning/10" : "border-border bg-card")} role="status">
+      <p className={eyebrow}>Before you send</p>
+      <p className="mt-1 text-strong">{preview.words}</p>
+      {preview.problem ? <p className="mt-1 font-medium text-strong">{preview.problem}</p> : null}
+      {preview.excluded.length ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-medium text-brand-600">Who won&apos;t get one, and why ({preview.excluded.length})</summary>
+          <ul className="mt-1 grid gap-1 text-xs text-muted-foreground">
+            {preview.excluded.map((row) => (
+              <li key={row.name + row.why}>
+                <span className="font-medium text-strong">{row.name}</span>: {row.why}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <p className="mt-2 text-xs text-muted-foreground">Estimated for every message Sales prepared; setting some aside lowers it. The final charge uses the carrier&apos;s count.</p>
+    </div>
+  );
+}
+
+function FirstBatch({ batchId, items, owner, messaging }: { batchId: Id<"salesBatches">; items: Item[]; owner: boolean; messaging?: BatchMessaging }) {
   const { companyId } = useCompany();
   const decideBatch = useMutation(api.salesActions.decideBatch);
   const { busy, error, run } = useRun();
@@ -186,6 +213,7 @@ function FirstBatch({ batchId, items, owner }: { batchId: Id<"salesBatches">; it
                 </div>
               </div>
               <Preview item={item} body={bodies[item.actionId] ?? item.editable} onBody={(value) => setBodies((before) => ({ ...before, [item.actionId]: value }))} editing={editing === item.actionId} disabled={busy} />
+              {owner && item.recipient.channel === "sms" && state === "send" ? <SegmentEstimate body={(bodies[item.actionId] ?? item.editable).replace("{link}", "https://app.selestial.com/q/xxxxxxxxxxxxxxxxxxxxxxxx")} agent /> : null}
               {owner && item.body ? (
                 <div>
                   <Button size="xs" variant="outline" disabled={busy} onClick={() => setEditing(editing === item.actionId ? null : item.actionId)}>
@@ -198,6 +226,7 @@ function FirstBatch({ batchId, items, owner }: { batchId: Id<"salesBatches">; it
           );
         })}
       </ul>
+      {messaging ? <BatchCost preview={messaging} /> : null}
       <FormError message={error} />
       {owner ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -242,7 +271,7 @@ export function ReviewQueue({ onOpen, showEmpty }: { onOpen?: (id: string) => vo
   return (
     <Panel title={batch ? "Sales’s first messages, for your review" : `Waiting on your approval · ${waiting.pending.length}`}>
       <div className="grid gap-4">
-        {batch ? <FirstBatch batchId={batch.batchId!} items={batch.items} owner={!waiting.ownerOnlyBatch} /> : null}
+        {batch ? <FirstBatch batchId={batch.batchId!} items={batch.items} owner={!waiting.ownerOnlyBatch} messaging={batch.messaging} /> : null}
         {waiting.pending.length > 0 ? (
           <ul className="grid gap-3">
             {waiting.pending.map((item) => (

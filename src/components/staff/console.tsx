@@ -59,6 +59,8 @@ const NAV = [
   { href: "/staff/trust", label: "Trust records" },
   { href: "/staff/companies", label: "Companies" },
   { href: "/staff/texting", label: "Texting" },
+  { href: "/staff/messaging", label: "Messaging money" },
+  { href: "/staff/agent-requests", label: "Agent requests" },
   { href: "/staff/people", label: "Staff" },
   { href: "/staff/ai", label: "AI models" },
 ];
@@ -998,6 +1000,7 @@ export function TextingQueue() {
                       order {row.numberOrderId ?? "none"} · brand {row.brandId ?? "none"} · campaign {row.campaignId ?? "none"}
                     </p>
                   ) : null}
+                  {row.feesAuthorized ? <RegistrationFee requestId={row.requestId} /> : <p className="text-xs text-muted-foreground">The Owner did not authorize fees from the messaging balance for this request.</p>}
                   {row.status === "requested" ? (
                     rejecting === row.requestId ? (
                       <form
@@ -1036,6 +1039,195 @@ export function TextingQueue() {
                       </Button>
                     </div>
                   ) : null}
+                </div>
+              </Panel>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+const amountCents = (text: string) => (/^\d+(\.\d{1,2})?$/.test(text.trim()) ? Math.round(Number(text.trim()) * 100) : null);
+
+/** A carrier registration fee, entered at the amount the registry billed. Taken from the company's messaging balance under the Owner's authorization, once per key. */
+function RegistrationFee({ requestId }: { requestId: Id<"textingRequests"> }) {
+  const charge = useMutation(api.texting.chargeRegistrationFee);
+  const { busy, error, run } = useRun();
+  const [amount, setAmount] = useState("");
+  const [what, setWhat] = useState("");
+  const [done, setDone] = useState<string | null>(null);
+  const cents = amountCents(amount);
+  return (
+    <form
+      className="flex flex-wrap items-end gap-2 rounded-lg border border-border px-3 py-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!cents) return;
+        void run(async () => {
+          await charge({ requestId, cents, description: what, key: `${what.trim().toLowerCase()}:${cents}` });
+          setDone(`Charged ${dollars(cents)} for ${what.trim()}.`);
+          setAmount("");
+          setWhat("");
+        });
+      }}
+    >
+      <p className="w-full text-xs text-muted-foreground">Registration fee at actual cost, as the carrier registry billed it. The same fee entered twice is charged once.</p>
+      <TextInput value={what} onChange={(event) => setWhat(event.target.value)} placeholder="What it is, e.g. Campaign vetting" aria-label="What the fee is" required className="max-w-xs" />
+      <TextInput value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="15.00" aria-label="Amount in dollars" inputMode="decimal" required className="w-24" />
+      <Button type="submit" size="sm" variant="outline" loading={busy} disabled={!cents}>
+        Charge fee
+      </Button>
+      {done ? <span className="text-xs text-success-foreground">{done}</span> : null}
+      <FormError message={error} />
+    </form>
+  );
+}
+
+// ── Messaging money that needs a person ─────────────────────────────────────────────────────────
+
+const ATTENTION_LABEL: Record<string, string> = { overdraft_floor: "Balance at the overdraft floor", inbound_spike: "Burst of incoming texts" };
+
+/**
+ * Companies whose messaging money needs a Selestial person: a balance incoming texts took to the floor, or an
+ * unusual burst of incoming texts. Staff look for abuse, contact the Owner, credit the balance if it was not
+ * the company's doing, and close the item with what they did. A number is never released for a low balance.
+ */
+export function MessagingAttention() {
+  const rows = useQuery(api.messagingFunds.attention, {});
+  return (
+    <>
+      <PageHeader title="Messaging money" lead="Balances incoming texts took to the overdraft floor, and bursts of incoming texts that may be abuse. Incoming texts and opt-outs keep working for these companies; a number is never released for a low balance." />
+      {rows === undefined ? (
+        <Skeleton className="h-40 rounded-2xl" />
+      ) : rows.length === 0 ? (
+        <Panel>
+          <p className="py-6 text-center text-sm text-muted-foreground">Nothing needs a look.</p>
+        </Panel>
+      ) : (
+        <div className="grid gap-3">
+          {rows.map((row) => (
+            <AttentionItem key={row.id} row={row} />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+type AttentionRow = NonNullable<ReturnType<typeof useQuery<typeof api.messagingFunds.attention>>>[number];
+
+function AttentionItem({ row }: { row: AttentionRow }) {
+  const resolve = useMutation(api.messagingFunds.resolveAttention);
+  const credit = useMutation(api.messagingFunds.supportCredit);
+  const { busy, error, run } = useRun();
+  const [note, setNote] = useState("");
+  const [amount, setAmount] = useState("");
+  const cents = amountCents(amount);
+  const balance = row.balance === null ? "not known" : `${row.balance < 0 ? "-" : ""}$${(Math.abs(row.balance) / 10_000).toFixed(2)}`;
+  return (
+    <Panel>
+      <div className="grid gap-2 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p>
+            <span className="font-semibold text-strong">{row.company}</span>
+            <span className="text-muted-foreground"> · {new Date(row.at).toLocaleString()}</span>
+          </p>
+          <Badge variant={row.kind === "overdraft_floor" ? "error" : "warning"}>{ATTENTION_LABEL[row.kind] ?? row.kind}</Badge>
+        </div>
+        <p className="text-strong">{row.detail}</p>
+        <p className="text-xs text-muted-foreground">Balance now: {balance}</p>
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void run(async () => {
+              if (cents) await credit({ companyId: row.companyId, cents, reason: note, key: `attention:${row.id}` });
+              await resolve({ id: row.id, note: cents ? `${note} (credited ${dollars(cents)})` : note });
+            });
+          }}
+        >
+          <TextInput value={note} onChange={(event) => setNote(event.target.value)} placeholder="What was done, e.g. Spoke to the Owner; spam blocked" aria-label="What was done" required className="max-w-md" />
+          <TextInput value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Credit $ (optional)" aria-label="Credit in dollars, optional" inputMode="decimal" className="w-36" />
+          <Button type="submit" size="sm" variant="outline" loading={busy}>
+            {cents ? `Credit ${dollars(cents)} and close` : "Close"}
+          </Button>
+        </form>
+        <FormError message={error} />
+      </div>
+    </Panel>
+  );
+}
+
+// ── Early access to coming-soon agents ──────────────────────────────────────────────────────────────
+
+const AGENT_LABEL: Record<string, string> = { marketing: "Marketing", quality: "Quality", "customer-care": "Customer Care", "team-coordinator": "Team Coordinator" };
+const REQUEST_STATUS: Record<string, { label: string; variant: "info" | "success" | "outline" }> = {
+  requested: { label: "Asked", variant: "info" },
+  invited: { label: "Invited", variant: "success" },
+  declined: { label: "Not this time", variant: "outline" },
+};
+
+/** Companies asking to try an agent before it is released, with what they'd use it for. Staff choose who tries it first. */
+export function AgentRequests() {
+  const rows = useQuery(api.agentAccess.requests, {});
+  const answer = useMutation(api.agentAccess.answer);
+  const { busy, error, run } = useRun();
+  return (
+    <>
+      <PageHeader title="Agent requests" lead="Companies asking for early access to an agent that isn't released yet, and what they'd use it for. Marking a company invited records the decision; it doesn't turn the agent on." />
+      <FormError message={error} />
+      {rows === undefined ? (
+        <Skeleton className="h-40 rounded-2xl" />
+      ) : rows.length === 0 ? (
+        <Panel>
+          <p className="py-6 text-center text-sm text-muted-foreground">No requests yet.</p>
+        </Panel>
+      ) : (
+        <div className="grid gap-3">
+          {rows.map((row) => {
+            const status = REQUEST_STATUS[row.status] ?? { label: row.status, variant: "outline" as const };
+            return (
+              <Panel key={row.id}>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p>
+                      <span className="font-semibold text-strong">{row.company}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {AGENT_LABEL[row.agent] ?? row.agent} · {row.people} {row.people === 1 ? "person" : "people"} · {row.plan ? `on ${row.plan === "expand" ? "Expand" : "Operate"}` : "no plan"}
+                      </span>
+                    </p>
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                  </div>
+                  {row.uses.length ? <p className="text-strong">Would use it for: {row.uses.join(" · ")}</p> : null}
+                  {row.notes.map((note, index) => (
+                    <p key={index} className="rounded-lg bg-muted px-3 py-2 text-xs text-strong">
+                      {note}
+                    </p>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    First asked {new Date(row.firstAt).toLocaleDateString()} · last {new Date(row.lastAt).toLocaleDateString()}
+                    {row.staffNote ? ` · ${row.staffNote}` : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {row.status !== "invited" ? (
+                      <Button size="sm" variant="primary" loading={busy} onClick={() => void run(() => answer({ id: row.id, status: "invited" }))}>
+                        Invite to try it early
+                      </Button>
+                    ) : null}
+                    {row.status !== "declined" ? (
+                      <Button size="sm" variant="outline" loading={busy} onClick={() => void run(() => answer({ id: row.id, status: "declined" }))}>
+                        Not this time
+                      </Button>
+                    ) : null}
+                    {row.status !== "requested" ? (
+                      <Button size="sm" variant="ghost" loading={busy} onClick={() => void run(() => answer({ id: row.id, status: "requested" }))}>
+                        Undo
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </Panel>
             );

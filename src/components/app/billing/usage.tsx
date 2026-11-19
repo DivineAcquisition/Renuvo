@@ -758,7 +758,7 @@ function Communication({ data }: { data: Usage }) {
   );
   return (
     <Panel title="Texts, email and calls">
-      <p className="mb-3 text-sm text-muted-foreground">Measured separately from Selestial Credits, in their own units. They are never paid with credits, and their prices are not set yet.</p>
+      <p className="mb-3 text-sm text-muted-foreground">Texts and business email are paid from the messaging balance, never with AI credits. Sending a message that is already written uses no credits. Prices, funds and limits are on the Messaging tab.</p>
       <table className="w-full text-sm">
         <thead className="text-left text-xs text-muted-foreground">
           <tr>

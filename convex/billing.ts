@@ -222,7 +222,7 @@ export const storeAccount = internalMutation({
     const now = Date.now();
     let account = await accountFor(ctx, args.companyId, args.env);
     const ledger = args.ledger ? (JSON.parse(args.ledger) as Doc<"billingAccounts">["ledger"]) : undefined;
-    const fields = { plan: projection.plan, subscription: projection.subscription, credits: projection.credits, syncedAt: now, syncProblem: undefined, ...(invoices.length ? { invoices } : {}), ...(ledger ? { ledger } : {}) };
+    const fields = { plan: projection.plan, subscription: projection.subscription, credits: projection.credits, syncedAt: now, syncProblem: undefined, ...(projection.messaging ? { messaging: { ...projection.messaging, at: now } } : {}), ...(invoices.length ? { invoices } : {}), ...(ledger ? { ledger } : {}) };
     if (account) await ctx.db.patch(account._id, fields);
     else {
       const id = await ctx.db.insert("billingAccounts", { companyId: args.companyId, env: args.env, customerId: args.customerId, controls: DEFAULT_CONTROLS, alertsSent: { period: "", percents: [] }, notices: [], invoices, ...fields });
@@ -239,6 +239,8 @@ export const storeAccount = internalMutation({
     if (low !== undefined && projection.credits && projection.credits.remaining > 0 && projection.credits.remaining < low) await notify(ctx, account, "low_balance", `Fewer than ${low.toLocaleString("en-US")} credits are left. AI work pauses at zero; buy a top-up or wait for the monthly reset.`);
     if (projection.subscription.pastDue) await notify(ctx, account, "past_due", "The last payment for this plan did not go through. Update the payment method in Plan & Usage to keep the plan.");
     await usageAlerts(ctx, account);
+    // Funds arrived (a purchase paid on Stripe's page, an automatic top-up): messages that waited are checked again and sent.
+    if (projection.messaging && projection.messaging.remaining > 0) await ctx.scheduler.runAfter(0, internal.messagingBilling.releaseHeld, { companyId: args.companyId });
   },
 });
 
@@ -275,7 +277,7 @@ export const syncCompany = internalAction({
 
 /** An Autumn webhook, verified by the HTTP route. It only says "look again": the record is read back from Autumn. */
 export const webhookReceived = internalMutation({
-  args: { deliveryId: v.string(), type: v.string(), customerId: v.optional(v.string()) },
+  args: { deliveryId: v.string(), type: v.string(), customerId: v.optional(v.string()), featureId: v.optional(v.string()), quantity: v.optional(v.number()), invoiceId: v.optional(v.string()), invoiceUrl: v.optional(v.string()), reason: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const state = billingState();
     if (!state.connected) return;
@@ -292,6 +294,10 @@ export const webhookReceived = internalMutation({
       : null;
     await ctx.db.insert("billingWebhooks", { env: state.env, deliveryId: args.deliveryId.slice(0, 200), type: args.type.slice(0, 80), customerId: args.customerId?.slice(0, 200), companyId: account?.companyId, receivedAt: Date.now() });
     if (account) await ctx.scheduler.runAfter(0, internal.billing.syncCompany, { companyId: account.companyId });
+    // Automatic top-ups of the messaging balance: recorded for the Owner's history, or a failure they are told about.
+    if (account && args.featureId === AUTUMN.messaging && (args.type === "billing.auto_topup_succeeded" || args.type === "billing.auto_topup_failed")) {
+      await ctx.scheduler.runAfter(0, internal.messagingFunds.autoTopUpEvent, { companyId: account.companyId, succeeded: args.type === "billing.auto_topup_succeeded", quantity: args.quantity, invoiceId: args.invoiceId, invoiceUrl: args.invoiceUrl, reason: args.reason });
+    }
   },
 });
 
@@ -316,7 +322,7 @@ export const clearLegacyPlans = internalMutation({
 
 // ── The Owner's purchases and changes ────────────────────────────────────────────────────────────
 
-function connectedOrRefuse() {
+export function connectedOrRefuse() {
   const state = billingState();
   if (!state.connected) throw userError("Billing isn’t available yet.", "limit");
   return state;
@@ -333,7 +339,7 @@ export function topUpPacks(): number[] {
     .slice(0, 4);
 }
 
-async function startIntent(ctx: MutationCtx & { companyId: Id<"companies">; member: Doc<"members"> }, fields: { kind: Doc<"billingIntents">["kind"]; planId?: string; quantity?: number; stage: "previewing" | "submitting" }) {
+export async function startIntent(ctx: MutationCtx & { companyId: Id<"companies">; member: Doc<"members"> }, fields: { kind: Doc<"billingIntents">["kind"]; planId?: string; quantity?: number; stage: "previewing" | "submitting" }) {
   const state = connectedOrRefuse();
   if (!(await allow(ctx, `billing:${ctx.companyId}`, 20, 10 * MINUTE))) throw userError("That is a lot of billing requests in a few minutes. Wait a moment and try again.", "limit");
   const now = Date.now();
@@ -470,7 +476,8 @@ export const runIntent = internalAction({
 
     const target = intent.planId!;
     const downgrade = intent.kind === "plan_change" && plan === "expand" && target === "operate";
-    const body = attachBody({ customerId, planId: target, successUrl: returnUrl, quantity: intent.kind === "top_up" ? intent.quantity : undefined, schedule: intent.kind === "plan_change" ? (downgrade ? "end_of_cycle" : "immediate") : undefined });
+    const topUp = intent.kind === "top_up" || intent.kind === "messaging_top_up";
+    const body = attachBody({ customerId, planId: target, successUrl: returnUrl, quantity: topUp ? intent.quantity : undefined, featureId: intent.kind === "messaging_top_up" ? AUTUMN.messaging : undefined, schedule: intent.kind === "plan_change" ? (downgrade ? "end_of_cycle" : "immediate") : undefined });
 
     if (intent.stage === "previewing") {
       const answer = await previewAttach(body);
@@ -498,9 +505,11 @@ export const runIntent = internalAction({
       if (answer.data.payment_url) await answered("payment_needed", { url: answer.data.payment_url, problem: answer.data.required_action?.reason });
       else await answered("done");
       await syncAccount(ctx, intent.companyId);
+      if (intent.kind === "messaging_top_up") await ctx.runMutation(internal.messagingFunds.purchaseAnswered, { intentId: intent._id, paid: !answer.data.payment_url, url: answer.data.payment_url ?? answer.data.invoice?.hosted_invoice_url ?? undefined });
       return;
     }
     if (answer.kind === "replayed") return answered("done");
+    if (intent.kind === "messaging_top_up") await ctx.runMutation(internal.messagingFunds.purchaseAnswered, { intentId: intent._id, paid: false, problem: answer.kind === "unavailable" ? "Billing could not be reached. Nothing was charged." : "The purchase was refused. Nothing was charged." });
     return failed(answer as never);
   },
 });

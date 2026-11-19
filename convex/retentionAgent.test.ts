@@ -41,6 +41,10 @@ describe("first-service follow-through and recovery", () => {
     expect(ask).toMatchObject({ action: "retention.request_feedback", status: "pending" });
     expect((await s.approve(ask._id))?.ok).toBe(true);
     expect(textsTo().at(-1)).toContain("/c/care/");
+    // Approved by a person, it is still Retention's message for messaging spending and limits.
+    const careMessages = await s.t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((m) => m.retentionActionId !== undefined));
+    expect(careMessages.length).toBeGreaterThan(0);
+    expect(careMessages.every((m) => m.agent === "retention")).toBe(true);
     const feedbackToken = careLink();
 
     // Opening the page changes nothing.

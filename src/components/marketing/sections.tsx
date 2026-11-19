@@ -1,7 +1,11 @@
+import Image from "next/image";
+import Link from "next/link";
+
 import { ArrowRight, Hand, ListChecks, ScrollTextIcon, ShieldCheck, type LucideIcon } from "@/components/icons";
 import { AgentMark } from "@/components/marketing/agent-mark";
 import { AgentVisual } from "@/components/marketing/agent-visuals";
 import { SpotlightCard } from "@/components/marketing/saas-frame";
+import { AGENT_PAGE_IDS, AGENT_PAGES, agentPagePath } from "@/lib/marketing/agent-pages";
 import { AGENT_STATUS, AGENTS, CONTROL, INTEGRATIONS, PRICING, PROBLEM } from "@/lib/marketing/content";
 
 /** The four loose ends from the problem section, each beside the agent that will carry it. */
@@ -21,6 +25,7 @@ export function LooseEnds() {
 /** The four agents: what each keeps moving, how it helps, and where its work ends. */
 export function AgentsGrid() {
   return (
+    <>
     <div className="grid gap-4 lg:grid-cols-2">
       {AGENTS.map((agent) => (
         <SpotlightCard key={agent.id} className="p-6 sm:p-7">
@@ -49,10 +54,44 @@ export function AgentsGrid() {
                 <ArrowRight className="mt-0.5 size-4 shrink-0 text-brand-300" aria-hidden />
                 {agent.outcome}
               </p>
+              <Link href={agentPagePath(agent.id)} className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 underline-offset-4 hover:underline">
+                See how {agent.name} works
+                <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
             </div>
           </div>
         </SpotlightCard>
       ))}
+    </div>
+    <ComingNext />
+    </>
+  );
+}
+
+/** The four agents that come with Expand once released, each linking to its page. */
+function ComingNext() {
+  const soon = AGENT_PAGE_IDS.filter((id) => AGENT_PAGES[id].status === "coming_soon");
+  return (
+    <div className="mt-6 rounded-2xl border border-dashed border-border bg-card/60 p-5 sm:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm font-semibold text-strong">Coming next, in Expand</p>
+        <Link href="/agents" className="text-sm font-medium text-brand-600 underline-offset-4 hover:underline">
+          Meet the whole team
+        </Link>
+      </div>
+      <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {soon.map((id) => (
+          <li key={id}>
+            <Link href={agentPagePath(id)} className="group flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 hover:border-brand-500/40">
+              <Image src={`/agents/${id}.webp`} alt="" width={72} height={72} className="size-9 shrink-0 rounded-full object-cover ring-1 ring-border" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-strong">{AGENT_PAGES[id].name}</span>
+                <span className="block truncate text-xs text-muted-foreground">{AGENT_PAGES[id].headline}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -133,6 +133,73 @@ export function finalizeLock(input: { customerId: string; lockId: string; action
   );
 }
 
+// ── The messaging balance: lock, finalize, track ──────────────────────────────────────────────────
+
+/**
+ * Holds `amount` units of the messaging balance for one message. Outbound sends use "reject": no hold unless
+ * the whole estimate is there. Inbound uses "overflow", because an inbound text cannot be refused; Selestial
+ * bounds that exposure itself before asking (see lib/messagingBilling/inbound).
+ */
+export function lockMessaging(input: { customerId: string; lockId: string; amount: number; expiresAt: number; overflow?: boolean; properties: Record<string, string | number> }) {
+  return call<CheckData>(
+    "/v1/balances.check",
+    {
+      customer_id: input.customerId,
+      feature_id: AUTUMN.messaging,
+      required_balance: input.amount,
+      send_event: true,
+      properties: input.properties,
+      lock: { enabled: true, lock_id: input.lockId, expires_at: input.expiresAt, ...(input.overflow ? { overage_behavior: "overflow" } : {}) },
+    },
+    { idempotencyKey: `mlock:${input.lockId}`, degradable: true },
+  );
+}
+
+/** Confirms (for the final amount, never above the hold) or releases a messaging hold. A replay answers `replayed`. */
+export function finalizeMessaging(input: { customerId: string; lockId: string; action: "confirm" | "release"; amount?: number }) {
+  return call<{ success: boolean }>(
+    "/v1/balances.finalize",
+    { customer_id: input.customerId, lock_id: input.lockId, action: input.action, ...(input.action === "confirm" && input.amount !== undefined ? { override_value: input.amount } : {}) },
+    { idempotencyKey: `m${input.action}:${input.lockId}`, degradable: true },
+  );
+}
+
+/** Records usage directly: a negative value credits the balance back (a refund). Keyed so it happens once. */
+export function trackMessaging(input: { customerId: string; amount: number; key: string; properties: Record<string, string | number> }) {
+  return call<{ customer_id: string; balance: RawBalance | null }>(
+    "/v1/balances.track",
+    { customer_id: input.customerId, feature_id: AUTUMN.messaging, value: input.amount, properties: input.properties, async: false },
+    { idempotencyKey: `mtrack:${input.key}`, degradable: true },
+  );
+}
+
+/**
+ * Sets (or turns off) the automatic top-up of the messaging balance on Autumn's customer: when the balance
+ * falls below `threshold` units, Autumn buys `quantity` units at the messaging top-up price and charges the
+ * saved payment method, at most `perMonth` times a calendar month. Only called after the Owner authorized
+ * exactly these amounts.
+ */
+export function setMessagingAutoTopUp(input: { customerId: string; enabled: boolean; threshold: number; quantity: number; perMonth: number }, idempotencyKey: string) {
+  return call<{ id: string }>(
+    "/v1/customers.update",
+    {
+      customer_id: input.customerId,
+      billing_controls: {
+        auto_topups: [
+          {
+            feature_id: AUTUMN.messaging,
+            enabled: input.enabled,
+            threshold: input.threshold,
+            quantity: input.quantity,
+            purchase_limit: { interval: "month", interval_count: 1, limit: Math.max(1, input.perMonth) },
+          },
+        ],
+      },
+    },
+    { idempotencyKey },
+  );
+}
+
 // ── Plans, top-ups and the billing portal ────────────────────────────────────────────────────────
 
 export type AttachData = { customer_id: string; payment_url: string | null; required_action?: { code: string; reason?: string }; invoice?: { status: string; total: number; currency: string; hosted_invoice_url: string | null } };
@@ -154,13 +221,13 @@ export type PreviewData = {
  * The body for a plan change or a top-up. On every plan change, usage so far this cycle carries over to
  * the new plan's allowance, so switching plans can never hand out a fresh allowance.
  */
-export function attachBody(input: { customerId: string; planId: string; successUrl: string; quantity?: number; schedule?: "immediate" | "end_of_cycle" }) {
+export function attachBody(input: { customerId: string; planId: string; successUrl: string; quantity?: number; featureId?: string; schedule?: "immediate" | "end_of_cycle" }) {
   return {
     customer_id: input.customerId,
     plan_id: input.planId,
     success_url: input.successUrl,
     redirect_mode: "if_required",
-    ...(input.quantity !== undefined ? { feature_quantities: [{ feature_id: AUTUMN.credits, quantity: input.quantity }] } : { carry_over_usages: { enabled: true, feature_ids: [AUTUMN.credits] } }),
+    ...(input.quantity !== undefined ? { feature_quantities: [{ feature_id: input.featureId ?? AUTUMN.credits, quantity: input.quantity }] } : { carry_over_usages: { enabled: true, feature_ids: [AUTUMN.credits] } }),
     ...(input.schedule ? { plan_schedule: input.schedule } : {}),
   };
 }
