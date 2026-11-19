@@ -58,6 +58,12 @@ export type CreateVisitArgs = typeof createVisitArgsObject.type;
 /** Where a visit came from, when not the booking form: a plan and the day of its series. */
 export type VisitOrigin = { planId: Id<"servicePlans">; planDate: string; priceSource?: "plan" };
 
+/**
+ * A correction visit for a retention case. It is on the visit before Dispatch first looks at it, so
+ * Dispatch never offers it to a cleaner the customer asked not to have back.
+ */
+export type VisitRecovery = { caseId: Id<"retentionCases">; originalJobId?: Id<"jobs">; avoidCleanerIds?: Id<"cleaners">[] };
+
 function span(startsAt: number, endsAt: number) {
   const start = instant(startsAt, "The start time");
   const end = instant(endsAt, "The end time");
@@ -83,7 +89,7 @@ function deadlineFor(at: number, endsAt: number): number {
 }
 
 /** Books one visit: priced by the engine (or a person's or plan's price), checked against the company's rules, and handed to Dispatch. */
-export async function createVisit(ctx: Ctx, actor: Actor, args: CreateVisitArgs, origin?: VisitOrigin): Promise<Id<"jobs">> {
+export async function createVisit(ctx: Ctx, actor: Actor, args: CreateVisitArgs, origin?: VisitOrigin, recovery?: VisitRecovery): Promise<Id<"jobs">> {
     const customer = await owned(ctx, args.customerId);
     const settings = businessSettingsOf(ctx.company);
     // The one catalog is Services & Pricing. Until a company's Settings services are copied there, the old list still serves.
@@ -158,6 +164,7 @@ export async function createVisit(ctx: Ctx, actor: Actor, args: CreateVisitArgs,
       ...(args.hardDeadlineAt !== undefined ? { hardDeadlineAt: deadlineFor(args.hardDeadlineAt, args.endsAt) } : {}),
       ...(args.instructions?.trim() ? { instructions: text(args.instructions, "Instructions", 4000) } : {}),
       ...(origin ? { planId: origin.planId, planDate: origin.planDate } : {}),
+      ...(recovery ? { recovery: { caseId: recovery.caseId, originalJobId: recovery.originalJobId }, ...(recovery.avoidCleanerIds?.length ? { avoidCleanerIds: recovery.avoidCleanerIds } : {}) } : {}),
       createdAt: Date.now(),
     });
     if (catalog && priced) {

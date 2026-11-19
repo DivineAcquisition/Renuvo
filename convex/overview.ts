@@ -532,7 +532,8 @@ export const week = companyQuery({
         .withIndex("by_company_status_start", (q) => q.eq("companyId", ctx.companyId).eq("status", "completed").gte("startsAt", from).lt("startsAt", to))
         .take(1000);
     const [thisWeek, lastWeek] = [await completedBetween(thisFrom, tomorrowStart), await completedBetween(lastFrom, thisFrom)];
-    const revenue = (jobs: Doc<"jobs">[]) => jobs.reduce((sum, job) => sum + (job.priceCents ?? 0), 0);
+    // A correction visit's price is a pay basis, not revenue.
+    const revenue = (jobs: Doc<"jobs">[]) => jobs.reduce((sum, job) => sum + (job.recovery ? 0 : (job.priceCents ?? 0)), 0);
     const unpriced = thisWeek.filter((job) => job.priceCents === undefined).length;
     const upcoming = await visitsBetween(ctx, args.asOf, addLocalDays(tomorrowStart, 7, tz));
     const gaps = upcoming.filter((visit) => isUnstaffed(visit.state)).length;

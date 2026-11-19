@@ -76,4 +76,7 @@ crons.interval("sales follow-up reminders", { minutes: 30 }, internal.pipeline.s
 // The Sales agent: runs that never finished, overdue next steps, expired quotes, and reminders whose timer was lost.
 crons.interval("sales agent picks up what a missed trigger left", { minutes: 5 }, internal.salesAgent.sweep, {});
 
+// Retention: reconciles plans, visits, billing and agreements; reads back handoffs; closes questions nobody answered; retries unfinished work.
+crons.interval("retention reconciles and follows through", { minutes: 10 }, internal.retentionWork.sweep, {});
+
 export default crons;

@@ -65,6 +65,10 @@ export const ACTIONS: readonly ActionDef[] = [
   action("retention.remedy_within_limit", "retention", "Re-clean or credit inside the limit", "execute_and_report", { money: true }),
   action("retention.refund_above_limit", "retention", "Refund or compensation above the limit", "propose", { ceiling: "propose", money: true }),
   action("retention.cancel_on_request", "retention", "Cancel on the customer's request", "execute"),
+  action("retention.send_case_message", "retention", "Write to a customer about an open concern: acknowledge it, ask a question, explain the scope, or ask whether a correction worked", "execute_and_report"),
+  action("retention.apply_plan_change", "retention", "Carry out a customer's own request to skip, pause or resume their recurring service", "execute_and_report"),
+  action("retention.reactivation_offer", "retention", "Send a return offer to an eligible former customer", "propose", { ceiling: "execute_and_report" }),
+  action("retention.hand_off", "retention", "Hand work on a case to Dispatch, Sales, Quality or Finance", "execute", { outsider: false }),
   action("retention.draft_review_reply", "retention", "Draft replies to Google reviews (a person approves before anything is posted)", "execute", { outsider: false }),
 
   action("recruiter.acknowledge_and_collect", "recruiter", "Acknowledge, answer questions, request missing details", "execute"),
