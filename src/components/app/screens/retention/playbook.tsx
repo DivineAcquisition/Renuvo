@@ -41,6 +41,7 @@ function Rules({ data }: { data: Settings }) {
   const [quiet, setQuiet] = useState(String(s.quietDays));
   const [lead, setLead] = useState(String(s.renewalLeadDays));
   const [offered, setOffered] = useState<string[]>(s.selfService);
+  const [inbox, setInbox] = useState(s.readCareInbox);
   const [saved, setSaved] = useState(false);
   const edit = data.canEdit;
   return (
@@ -59,6 +60,17 @@ function Rules({ data }: { data: Settings }) {
       <label className="flex items-start gap-2 text-sm text-foreground">
         <input type="checkbox" className="mt-1" disabled={!edit} checked={first} onChange={(event) => setFirst(event.target.checked)} />
         <span>Ask for feedback after a customer&rsquo;s first completed and reviewed service. Later visits are asked only when a person chooses to.</span>
+      </label>
+      <label className="flex items-start gap-2 text-sm text-foreground">
+        <input type="checkbox" className="mt-1" disabled={!edit} checked={inbox} onChange={(event) => setInbox(event.target.checked)} />
+        <span>
+          Read customers&rsquo; email replies in the inbox connected for Care &amp; Retention.
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {data.careInbox
+              ? `Reads ${data.careInbox} from the moment this is turned on. Only mail from an address on a customer's record is opened. Nothing is sent, deleted or marked, and an email cannot change a rule or approve anything.`
+              : "No inbox is connected for Care & Retention yet, so there is nothing to read. Connect one in Settings, then turn this on."}
+          </span>
+        </span>
       </label>
       <div className="grid gap-3 sm:grid-cols-4">
         <Field label="Days a customer link stays open">
@@ -96,7 +108,7 @@ function Rules({ data }: { data: Settings }) {
               void run(async () => {
                 await save({
                   companyId,
-                  settings: { feedbackAfterFirstService: first, linkDays: Number(linkDays), recoveryDueHours: Number(due), quietDays: Number(quiet), renewalLeadDays: Number(lead), selfService: offered as never, ...(guarantee.trim() ? { guarantee: { text: guarantee, days: Number(days) } } : {}), ...(review.trim() ? { reviewUrl: review } : {}) },
+                  settings: { feedbackAfterFirstService: first, readCareInbox: inbox, linkDays: Number(linkDays), recoveryDueHours: Number(due), quietDays: Number(quiet), renewalLeadDays: Number(lead), selfService: offered as never, ...(guarantee.trim() ? { guarantee: { text: guarantee, days: Number(days) } } : {}), ...(review.trim() ? { reviewUrl: review } : {}) },
                   clear: [...(guarantee.trim() ? [] : (["guarantee"] as const)), ...(review.trim() ? [] : (["reviewUrl"] as const))],
                 });
                 setSaved(true);

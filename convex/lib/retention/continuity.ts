@@ -132,7 +132,7 @@ export function readText(text: string): TextReading {
  * customer said, never as a guess about why. A described problem opens a recovery case about their most
  * recent service. Anything else is left to the person reading the conversation.
  */
-export async function onCustomerText(ctx: MutationCtx, company: Doc<"companies">, customer: Doc<"customers">, text: string, at: number): Promise<{ did: string }> {
+export async function onCustomerText(ctx: MutationCtx, company: Doc<"companies">, customer: Doc<"customers">, text: string, at: number, via: "text" | "email" = "text"): Promise<{ did: string }> {
   const reading = readText(text);
   const tz = company.timezone;
   const day = localParts(at, tz).day;
@@ -146,11 +146,11 @@ export async function onCustomerText(ctx: MutationCtx, company: Doc<"companies">
   if (reading.serious || (reading.problem && recent)) {
     const property = recent ? await ctx.db.get(recent.propertyId) : null;
     const opened = await openRecovery(ctx, company, { customer, property, job: recent ?? null, words: text, areas: reading.areas, origin: "conversation", actor: SYSTEM });
-    return { did: opened.created ? "Opened a recovery case from the customer's text." : "Added the text to the open recovery case." };
+    return { did: opened.created ? `Opened a recovery case from the customer's ${via}.` : `Added the ${via} to the open recovery case.` };
   }
   if (reading.cancel || reading.reduce) {
     const kind = reading.cancel ? "cancel_request" : "reduce_request";
-    const row = await raiseSignal(ctx, { companyId: company._id, kind, key: `${kind}:text:${customer._id}:${day}`, basis: "customer_stated", customerId: customer._id, segment: await segmentFor(ctx, company._id, customer, null), what: `${customer.name} wrote: "${text.slice(0, 180)}"`, source: { table: "customers", id: customer._id, label: "Text from the customer", at }, occurredAt: at, missing: ["Which service or property they mean, and from when.", "Why. The text does not say, and Retention does not guess."], suggestedAction: reading.cancel ? "Confirm what they want to cancel and carry it out. Ask why once; do not argue." : "Ask what schedule would suit them and confirm its price.", priority: reading.cancel ? "high" : "normal" });
+    const row = await raiseSignal(ctx, { companyId: company._id, kind, key: `${kind}:${via}:${customer._id}:${day}`, basis: "customer_stated", customerId: customer._id, segment: await segmentFor(ctx, company._id, customer, null), what: `${customer.name} wrote: "${text.slice(0, 180)}"`, source: { table: "customers", id: customer._id, label: via === "email" ? "Email from the customer" : "Text from the customer", at }, occurredAt: at, missing: ["Which service or property they mean, and from when.", "Why. The message does not say, and Retention does not guess."], suggestedAction: reading.cancel ? "Confirm what they want to cancel and carry it out. Ask why once; do not argue." : "Ask what schedule would suit them and confirm its price.", priority: reading.cancel ? "high" : "normal" });
     return { did: row.created ? "Recorded what the customer asked for." : "Counted on the request already recorded." };
   }
   return { did: "Nothing for Retention to act on." };

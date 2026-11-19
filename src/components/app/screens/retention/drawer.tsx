@@ -99,8 +99,12 @@ function ActionCard({ action, detail, now, timezone }: { action: ActionRow; deta
   const decide = useMutation(api.approvals.decide);
   const submit = useMutation(api.retentionAgent.submit);
   const discard = useMutation(api.retentionAgent.discard);
+  const setPay = useMutation(api.retentionAgent.setCorrectionPay);
   const { busy, error, run } = useRun();
   const [body, setBody] = useState(action.message?.body ?? "");
+  const [pay, setPayText] = useState("");
+  // What the crew is paid for a correction is the Owner's decision each time; it is never filled in for them.
+  const needsPay = action.kind === "correction_visit" && action.status === "proposed" && action.visit?.payBasisCents === null;
   const [told, setTold] = useState<string | null>(null);
   const live = action.status === "proposed" || action.status === "awaiting_approval" || action.status === "underway";
   const mayApprove = detail.can.manage && (!action.permission.ownerOnly || detail.can.owner);
@@ -140,7 +144,7 @@ function ActionCard({ action, detail, now, timezone }: { action: ActionRow; deta
         {action.visit && action.kind === "correction_visit" ? (
           <div>
             <dt className="text-muted-foreground">Customer is charged</dt>
-            <dd className="font-medium text-strong">Nothing{action.visit.payBasisCents !== null ? `. Crew is paid from a basis of ${money(action.visit.payBasisCents)}` : ". No pay basis is set"}</dd>
+            <dd className="font-medium text-strong">Nothing{action.visit.payBasisCents !== null ? `. Crew pay is worked out from ${money(action.visit.payBasisCents)}, set by the Owner` : ". Crew pay is not set yet"}</dd>
           </div>
         ) : null}
         {action.money ? (
@@ -202,7 +206,37 @@ function ActionCard({ action, detail, now, timezone }: { action: ActionRow; deta
           <span className="ml-auto text-xs text-muted-foreground">Decide {until(action.approval.decideBy, now).text}</span>
         </div>
       ) : null}
-      {action.status === "proposed" && detail.can.manage ? (
+      {needsPay ? (
+        <div className="grid gap-3 border-t border-border pt-3">
+          {detail.can.owner ? (
+            <>
+              <Field
+                label="Crew pay for this visit is worked out from"
+                hint={`Used the way the price is on a paid visit: each cleaner's pay for the correction comes from this amount. The customer is charged nothing.${action.visit?.payHintCents ? ` For reference, the original price in proportion to the time is ${money(action.visit.payHintCents)}.` : ""}`}
+              >
+                <TextInput inputMode="decimal" placeholder="0.00" value={pay} onChange={(event) => setPayText(event.target.value)} />
+              </Field>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  loading={busy}
+                  disabled={centsFrom(pay) === null}
+                  onClick={() => void run(async () => setTold((await setPay({ companyId, actionId: action.actionId as Id<"retentionActions">, payBasisCents: centsFrom(pay) ?? 0 })).detail))}
+                >
+                  Set pay and book the visit
+                </Button>
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(() => discard({ companyId, actionId: action.actionId as Id<"retentionActions"> }))}>
+                  Set aside
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">The Owner sets what the crew is paid for each correction visit. It is booked once that is set.</p>
+          )}
+        </div>
+      ) : null}
+      {action.status === "proposed" && detail.can.manage && !needsPay ? (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
           <Button size="sm" variant="primary" loading={busy} onClick={() => void run(async () => setTold((await submit({ companyId, actionId: action.actionId as Id<"retentionActions">, ...(action.message && body !== action.message.body ? { body } : {}) })).detail))}>
             Submit
@@ -235,6 +269,7 @@ function ProposeRemedy({ detail, timezone }: { detail: Detail; timezone: string 
   const [body, setBody] = useState("");
   const [avoid, setAvoid] = useState("");
   const [ask, setAsk] = useState(false);
+  const [crewPay, setCrewPay] = useState("");
   const [told, setTold] = useState<string | null>(null);
   const caseId = detail.card.caseId as Id<"retentionCases">;
   const send = () =>
@@ -245,7 +280,7 @@ function ProposeRemedy({ detail, timezone }: { detail: Detail; timezone: string 
         caseId,
         kind,
         reason,
-        ...(kind === "correction_visit" ? { startsAt: startsAt ?? 0, minutes: Number(minutes), askCustomerFirst: ask } : {}),
+        ...(kind === "correction_visit" ? { startsAt: startsAt ?? 0, minutes: Number(minutes), askCustomerFirst: ask, ...(detail.can.owner && centsFrom(crewPay) !== null ? { payBasisCents: centsFrom(crewPay)! } : {}) } : {}),
         ...(kind === "credit" || kind === "refund" ? { amountCents: centsFrom(amount) ?? 0, ...(invoice ? { invoiceId: invoice as Id<"invoices"> } : {}) } : {}),
         ...(kind === "message" ? { body } : {}),
         ...(kind === "different_cleaner" && avoid ? { avoidCleanerIds: [avoid as Id<"cleaners">] } : {}),
@@ -280,6 +315,13 @@ function ProposeRemedy({ detail, timezone }: { detail: Detail; timezone: string 
                 <TextInput inputMode="numeric" value={minutes} onChange={(event) => setMinutes(event.target.value)} />
               </Field>
             </div>
+            {detail.can.owner ? (
+              <Field label="Crew pay is worked out from" hint="Your decision for this visit. Leave it empty to set it later; the visit is not booked until it is set.">
+                <TextInput inputMode="decimal" placeholder="0.00" value={crewPay} onChange={(event) => setCrewPay(event.target.value)} />
+              </Field>
+            ) : (
+              <p className="text-xs text-muted-foreground">The Owner sets what the crew is paid for a correction visit before it is booked.</p>
+            )}
             <label className="flex items-start gap-2 text-sm text-foreground">
               <input type="checkbox" className="mt-1" checked={ask} onChange={(event) => setAsk(event.target.checked)} />
               <span>Ask the customer first. They review it on a private page, and nothing is booked until they accept.</span>

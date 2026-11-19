@@ -18,6 +18,7 @@ export type RetentionSettings = {
   selfService: PlanChange[];
   recoveryDueHours: number;
   quietDays: number;
+  readCareInbox: boolean;
 };
 
 /** What a customer may do from their plan link unless the Owner says otherwise. Cancelling is always offered. */
@@ -32,6 +33,7 @@ export const RETENTION_DEFAULTS: RetentionSettings = {
   selfService: SELF_SERVICE_DEFAULT,
   recoveryDueHours: 48,
   quietDays: 7,
+  readCareInbox: false,
 };
 
 export function retentionSettings(company: Pick<Doc<"companies">, "retention">): RetentionSettings {
@@ -47,6 +49,7 @@ export function retentionSettings(company: Pick<Doc<"companies">, "retention">):
     selfService: offered.includes("end_service") ? offered : [...offered, "end_service"],
     recoveryDueHours: stored.recoveryDueHours ?? RETENTION_DEFAULTS.recoveryDueHours,
     quietDays: stored.quietDays ?? RETENTION_DEFAULTS.quietDays,
+    readCareInbox: stored.readCareInbox ?? RETENTION_DEFAULTS.readCareInbox,
   };
 }
 
@@ -74,5 +77,6 @@ export function checkedSettings(input: RetentionSettingsInput): RetentionSetting
   if (input.selfService !== undefined) out.selfService = PLAN_CHANGES.filter((change) => input.selfService!.includes(change) || change === "end_service");
   if (input.recoveryDueHours !== undefined) out.recoveryDueHours = whole(input.recoveryDueHours, 1, 24 * 14, "Hours to act on a service concern");
   if (input.quietDays !== undefined) out.quietDays = whole(input.quietDays, 1, 60, "Days to wait for a customer");
+  if (input.readCareInbox !== undefined) out.readCareInbox = input.readCareInbox;
   return out;
 }

@@ -13,6 +13,7 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { purposesOf } from "./lib/inbox/mailboxes";
 import { owned } from "./lib/access";
 import { localParts } from "./lib/availability";
 import { billingState } from "./lib/billing/access";
@@ -400,9 +401,18 @@ export const outcomes = companyQuery({
   handler: async (ctx, args) => measures(ctx, ctx.company, args.asOf, { money: isOwner(ctx.role) }),
 });
 
+/** The working inbox connected for Care & Retention, if there is one. */
+async function careInboxAddress(ctx: { db: QueryCtx["db"]; companyId: Id<"companies"> }): Promise<string | null> {
+  const rows = await ctx.db
+    .query("mailboxConnections")
+    .withIndex("by_company", (q) => q.eq("companyId", ctx.companyId))
+    .take(20);
+  return rows.find((row) => row.status === "connected" && purposesOf(row).includes("care"))?.address ?? null;
+}
+
 export const settings = companyQuery({
   args: {},
-  handler: async (ctx) => ({ settings: retentionSettings(ctx.company), set: { guarantee: ctx.company.retention?.guarantee !== undefined, reviewUrl: ctx.company.retention?.reviewUrl !== undefined }, changes: PLAN_CHANGES.filter((c) => c !== "pause_billing").map((c) => ({ id: c, words: CHANGE_WORDS[c] })), canEdit: isOwner(ctx.role), readiness: await readiness(ctx), missing: MISSING_DATA }),
+  handler: async (ctx) => ({ settings: retentionSettings(ctx.company), careInbox: await careInboxAddress(ctx), set: { guarantee: ctx.company.retention?.guarantee !== undefined, reviewUrl: ctx.company.retention?.reviewUrl !== undefined }, changes: PLAN_CHANGES.filter((c) => c !== "pause_billing").map((c) => ({ id: c, words: CHANGE_WORDS[c] })), canEdit: isOwner(ctx.role), readiness: await readiness(ctx), missing: MISSING_DATA }),
 });
 
 /** What a plan change would do, before anything is changed. Amounts due are shown to the Owner only. */

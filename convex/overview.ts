@@ -390,6 +390,13 @@ export const sidebar = companyQuery({
       .query("salesRuns")
       .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "running"))
       .take(20);
+    const careCases = async (status: "needs_attention" | "needs_context" | "action_underway" | "waiting_on_customer" | "monitoring") =>
+      ctx.db
+        .query("retentionCases")
+        .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", status))
+        .take(200);
+    const [careAttention, careContext, careUnderway, careWaiting, careMonitoring] = await Promise.all([careCases("needs_attention"), careCases("needs_context"), careCases("action_underway"), careCases("waiting_on_customer"), careCases("monitoring")]);
+    const careWithPerson = [...careAttention, ...careContext];
     return {
       /** Approvals and handed-over tasks waiting on this person. */
       decisions: approvals.length + tasks.length,
@@ -413,6 +420,19 @@ export const sidebar = companyQuery({
         running: salesRunning.length,
         /** Opportunities waiting on a customer's reply. */
         waiting: salesWork.counts.waiting,
+      },
+      retention: {
+        paused: ctx.company.pausedAgents.includes("retention"),
+        /** Safety, damage, theft or staff-conduct concerns nobody has taken yet. */
+        serious: careWithPerson.filter((row) => row.serious && !row.heldBy).length,
+        /** Customer cases whose next step is a person's. */
+        withYou: careWithPerson.length,
+        /** Open cases whose commitment to the customer has passed its deadline. */
+        overdue: [...careWithPerson, ...careUnderway].filter((row) => row.dueAt < args.asOf).length,
+        /** Cases with a step being carried out now: a visit booked, a handoff out. */
+        underway: careUnderway.length,
+        /** Cases waiting on the customer's answer or on the next service. */
+        waiting: careWaiting.length + careMonitoring.length,
       },
     };
   },

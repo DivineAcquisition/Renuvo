@@ -167,6 +167,11 @@ export const retentionSettingsValidator = v.object({
   recoveryDueHours: v.optional(v.number()),
   /** Days with no response before a customer question is closed as "no response". */
   quietDays: v.optional(v.number()),
+  /**
+   * Read customers' email in an inbox connected for Care & Retention. Off until the Owner turns it on.
+   * Only mail from an address on a customer's record is opened; nothing is sent, deleted or marked.
+   */
+  readCareInbox: v.optional(v.boolean()),
 });
 export type RetentionSettingsInput = typeof retentionSettingsValidator.type;
 
@@ -414,7 +419,7 @@ export const retentionTables = {
 
   retentionRuns: defineTable({
     companyId: v.id("companies"),
-    kind: v.union(v.literal("service_completed"), v.literal("reconcile"), v.literal("customer_text"), v.literal("diagnose")),
+    kind: v.union(v.literal("service_completed"), v.literal("reconcile"), v.literal("customer_text"), v.literal("customer_email"), v.literal("diagnose")),
     /** Names this one piece of work. A repeated event or webhook finds it and does nothing. */
     key: v.string(),
     status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("failed"), v.literal("skipped")),

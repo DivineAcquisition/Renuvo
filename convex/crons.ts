@@ -80,5 +80,7 @@ crons.interval("sales agent picks up what a missed trigger left", { minutes: 5 }
 
 // Retention: reconciles plans, visits, billing and agreements; reads back handoffs; closes questions nobody answered; retries unfinished work.
 crons.interval("retention reconciles and follows through", { minutes: 10 }, internal.retentionWork.sweep, {});
+// Only inboxes connected for Care & Retention, and only where the Owner turned reading on.
+crons.interval("retention reads customer replies in care inboxes", { minutes: 10 }, internal.retentionInbox.sweep, {});
 
 export default crons;

@@ -108,11 +108,11 @@ export const run = internalMutation({
       if (!job || job.status !== "completed") return finish(ctx, row, "skipped", "The visit is not completed.");
       return finish(ctx, row, "done", await serviceCompleted(ctx, company, job));
     }
-    if (row.kind === "customer_text") {
+    if (row.kind === "customer_text" || row.kind === "customer_email") {
       const customer = row.customerId ? await ctx.db.get(row.customerId) : null;
       if (!customer || !row.payload) return finish(ctx, row, "skipped", "There was nothing to read.");
-      const result = await onCustomerText(ctx, company, customer, row.payload, row.queuedAt);
-      // The text is not kept on the run after it is read: the conversation holds it.
+      const result = await onCustomerText(ctx, company, customer, row.payload, row.queuedAt, row.kind === "customer_email" ? "email" : "text");
+      // The words are not kept on the run after they are read: the conversation, the inbox or the case holds them.
       await ctx.db.patch(row._id, { payload: undefined });
       return finish(ctx, row, "done", result.did);
     }
