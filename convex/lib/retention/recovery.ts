@@ -16,6 +16,7 @@
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { localParts } from "../availability";
+import { dayName } from "../time";
 import { recordEvent, type Actor } from "../events";
 import { ACTION_WORDS, actionsOf, careChannel, correctionCost, correctionSlots, prepareAction, submitAction, whenWords } from "./actions";
 import { addEntry, areasIn, caseByKey, cleanAreas, closeCase, DAY, entriesOf, HOUR, moveCase, openCase, propertyName, RETENTION, seriousReason, sharedAreas, SYSTEM } from "./cases";
@@ -29,6 +30,8 @@ import type { Diagnosis } from "./schema";
 type Case = Doc<"retentionCases">;
 
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
+/** What went wrong, without the lead-in the approvals queue adds. */
+const plain = (detail: string) => detail.replace(/^Not carried out\. /, "").replace(/^The (text|email) was not sent: /, "");
 
 // ── Opening a recovery case ──────────────────────────────────────────────────────────────────────
 
@@ -92,7 +95,7 @@ export async function openRecovery(ctx: MutationCtx, company: Doc<"companies">, 
     property,
     jobId: job?._id,
     title: `${customer.name}: ${what} at ${where}`,
-    happened: `${customer.name} reported ${areas.length ? `a problem with ${what}` : "a concern"}${job ? ` after the ${job.serviceSnapshot?.name ?? job.serviceType} on ${localParts(job.startsAt, tz).day}` : ""}.`,
+    happened: `${customer.name} reported ${areas.length ? `a problem with ${what}` : "a concern"}${job ? ` after the ${job.serviceSnapshot?.name ?? job.serviceType} service on ${dayName(job.startsAt, tz)}` : ""}.`,
     doing: "Gathering the visit's record and preparing a first step.",
     origin: concern.origin,
     customerWords: concern.words,
@@ -186,7 +189,7 @@ export async function planRecovery(ctx: MutationCtx, company: Doc<"companies">, 
   const tz = company.timezone;
   const category = row.diagnosis.category;
   const what = row.areas.join(", ") || "the reported work";
-  const channel = careChannel(customer);
+  const channel = await careChannel(ctx, customer);
   let needs: string | undefined;
   let doing = row.doing;
 
@@ -226,7 +229,7 @@ export async function planRecovery(ctx: MutationCtx, company: Doc<"companies">, 
       if (routed.status === "awaiting_approval") {
         needs = needs ?? `Review the proposed correction visit for ${whenWords(slot.startsAt, tz)}.`;
         doing = "A correction visit is prepared and waiting for approval.";
-      } else if (routed.status === "blocked") needs = `${ACTION_WORDS.correction_visit} was not carried out: ${routed.detail}`;
+      } else if (routed.status === "blocked") needs = `${ACTION_WORDS.correction_visit} was not carried out: ${plain(routed.detail)}`;
     } else {
       // No open time is a real answer. Retention says so and asks Dispatch; it does not promise a visit.
       const action = await prepareAction(ctx, row, { kind: "dispatch_review", key: "find-slot-1", summary: `Find a time for a ${minutes}-minute correction visit at ${propertyName(property)}`, reason: `No open time was found in the next 7 days for a correction of ${what}. ${cost.basis}`, permission: "retention.hand_off", dueAt: row.dueAt, actor: RETENTION });
@@ -273,7 +276,7 @@ export async function planRecovery(ctx: MutationCtx, company: Doc<"companies">, 
       const routed = await submitAction(ctx, company, action._id, RETENTION);
       doing = routed.status === "awaiting_approval" ? "A question to the customer is drafted and waiting for approval." : "Asked the customer which part of the service the concern is about.";
       if (routed.status === "awaiting_approval") needs = needs ?? "Review the question drafted for the customer.";
-      else if (routed.status === "blocked") needs = `The question could not be sent: ${routed.detail}`;
+      else if (routed.status === "blocked") needs = `The question could not be sent: ${plain(routed.detail)}`;
     } else {
       await prepareAction(ctx, row, { kind: "inspection", key: "inspect-1", summary: `Inspect ${what} at ${propertyName(property)}`, reason: `${row.diagnosis.reasons.join(" ")} The record does not settle it, so someone needs to look.`, permission: "retention.hand_off", dueAt: row.dueAt, actor: RETENTION });
       needs = needs ?? "The record does not settle what happened. Decide: send someone to inspect, offer a correction anyway, or ask the customer a question.";
@@ -389,7 +392,7 @@ export async function correctionCompleted(ctx: MutationCtx, company: Doc<"compan
   }, SYSTEM);
   await addEntry(ctx, row, { kind: "verification", basis: "fact", text: `The correction visit was completed${job.completionReview?.decision === "closed" ? " and reviewed by a person" : ""}. That is the work done. Whether it addressed the problem is the customer's to say.`, source: { table: "jobs", id: job._id, label: "Correction visit", at: job.startsAt }, actor: SYSTEM });
   if (row.serious || row.heldBy) return;
-  const channel = careChannel(customer);
+  const channel = await careChannel(ctx, customer);
   if (!channel) {
     await moveCase(ctx, row, { status: "needs_attention", needs: "The correction is done, and there is no phone or email on file to ask the customer whether it worked. Ask them another way and record the answer." }, SYSTEM);
     return;
@@ -504,7 +507,7 @@ export async function followThrough(ctx: MutationCtx, company: Doc<"companies">,
     property,
     jobId: job._id,
     title: `${customer.name}: first service follow-through`,
-    happened: `${customer.name}'s first service (${job.serviceSnapshot?.name ?? job.serviceType}) was completed and reviewed on ${localParts(job.startsAt, tz).day}.`,
+    happened: `The first service for ${customer.name} (${job.serviceSnapshot?.name ?? job.serviceType}) was completed and reviewed on ${dayName(job.startsAt, tz)}.`,
     doing: "Checking what was agreed is on record and asking how it went.",
     origin: "service_completed",
     dueAt: Date.now() + settings.linkDays * DAY,
@@ -533,7 +536,7 @@ export async function followThrough(ctx: MutationCtx, company: Doc<"companies">,
   } else {
     await addEntry(ctx, row, { kind: "note", text: "This was a one-time service. Its completion is not a lost recurring customer, and no offer is made before feedback is in and clear of issues.", actor: SYSTEM });
   }
-  const channel = careChannel(customer);
+  const channel = await careChannel(ctx, customer);
   let needs = gaps.length ? gaps.join(" ") : undefined;
   let doing = "Asking how the first service went.";
   if (!channel) {
@@ -552,7 +555,7 @@ export async function followThrough(ctx: MutationCtx, company: Doc<"companies">,
     if (routed.status === "awaiting_approval") {
       needs = `${needs ? `${needs} ` : ""}Approve the feedback request.`;
       doing = "A feedback request is drafted and waiting for approval.";
-    } else if (routed.status === "blocked") needs = `${needs ? `${needs} ` : ""}The feedback request was not sent: ${routed.detail}`;
+    } else if (routed.status === "blocked") needs = `${needs ? `${needs} ` : ""}The feedback request was not sent: ${plain(routed.detail)}`;
   }
   row = (await ctx.db.get(row._id))!;
   if (row.status === "closed") return row;

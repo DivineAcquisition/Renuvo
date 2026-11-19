@@ -115,7 +115,7 @@ export async function runCaseTool(ctx: MutationCtx, company: Doc<"companies">, r
   if (tool === "draft_response") {
     if (row.status === "closed") return refused(tool, "This case is closed.");
     if (row.serious) return refused(tool, "This is a serious concern handled by a person, who writes to the customer themselves.");
-    const channel = careChannel(customer);
+    const channel = await careChannel(ctx, customer);
     if (!channel) return refused(tool, "There is no phone or email on file for this customer.");
     const actions = await actionsOf(ctx, row);
     const visit = actions.find((a) => a.kind === "correction_visit" && a.status === "underway" && a.visit?.startsAt);

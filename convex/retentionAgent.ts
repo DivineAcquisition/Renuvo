@@ -461,7 +461,7 @@ export const requestFeedback = managerMutation({
     if (job.status !== "completed") throw userError("Feedback is asked about a completed visit.");
     const customer = (await ctx.db.get(job.customerId))!;
     const property = await ctx.db.get(job.propertyId);
-    const channel = careChannel(customer);
+    const channel = await careChannel(ctx, customer);
     if (!channel) throw userError("There is no phone or email on file for this customer.");
     const opened = await openCaseRecord(ctx, { companyId: ctx.companyId, kind: "follow_through", key: `feedback:${job._id}`, status: "action_underway", customer, property, jobId: job._id, title: `${customer.name}: feedback on ${localParts(job.startsAt, ctx.company.timezone).day}`, happened: `A person asked for feedback on the ${job.serviceSnapshot?.name ?? job.serviceType} on ${localParts(job.startsAt, ctx.company.timezone).day}.`, doing: "Asking how the service went.", origin: "staff", dueAt: Date.now() + retentionSettings(ctx.company).linkDays * DAY, actor: byMember(ctx) });
     if (!opened.created) return { caseId: opened.row._id, status: "already" as const };
@@ -533,7 +533,7 @@ export const proposeRemedy = managerMutation({
       return { actionId: action._id, ...(await submitAction(ctx, ctx.company, action._id, actor)) };
     }
     if (args.kind === "scope_clarification" || args.kind === "message") {
-      const channel = careChannel(customer);
+      const channel = await careChannel(ctx, customer);
       if (!channel) throw userError("There is no phone or email on file for this customer.");
       const body = text(args.body ?? "", "The message", 1200);
       const action = await prepareAction(ctx, row, { kind: args.kind, key, summary: `${args.kind === "message" ? "Message" : "Scope explanation"} to ${customer.name}`, reason, permission: "retention.send_case_message", message: { channel, subject: channel === "email" ? "About your recent service" : undefined, body }, actor });
@@ -556,7 +556,7 @@ export const proposeRemedy = managerMutation({
 
 /** Sends the customer a private page to review a proposed remedy. Nothing is booked until they accept and it is approved. */
 async function offerToCustomer(ctx: MutationCtx & MemberAccess, row: Case, customer: Doc<"customers">, remedy: Doc<"retentionActions">, offer: string) {
-  const channel = careChannel(customer);
+  const channel = await careChannel(ctx, customer);
   if (!channel) throw userError("There is no phone or email on file for this customer.");
   const message = await prepareAction(ctx, row, { kind: "message", key: `offer:${remedy._id}`, summary: `Ask ${customer.name} whether the proposed remedy suits them`, reason: "The customer reviews the remedy before it is booked.", permission: "retention.send_case_message", message: { channel, subject: channel === "email" ? "How we would like to put it right" : undefined, body: `Hi ${customer.name.split(/\s+/)[0]}, about your recent service: ${offer}. You can review it and tell us yes or no here: {link} - ${ctx.company.name}`, linkPurpose: "remedy", aboutActionId: remedy._id }, actor: byMember(ctx) });
   const routed = await submitAction(ctx, ctx.company, message._id, byMember(ctx));

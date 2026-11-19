@@ -124,11 +124,11 @@ export async function previewPlanChange(ctx: Ctx, company: Doc<"companies">, pla
   const today = localParts(Date.now(), tz).day;
   const from = input.from && input.from >= today ? input.from : today;
   const until = input.until;
-  const line = (job: Doc<"jobs">) => ({ jobId: job._id, startsAt: job.startsAt, day: localParts(job.startsAt, tz).day, when: `${dayName(job.startsAt, tz)} ${localParts(job.startsAt, tz).day} at ${clock(job.startsAt, tz)}`, service: job.serviceSnapshot?.name ?? job.serviceType });
+  const line = (job: Doc<"jobs">) => ({ jobId: job._id, startsAt: job.startsAt, day: localParts(job.startsAt, tz).day, when: `${dayName(job.startsAt, tz)} at ${clock(job.startsAt, tz)}`, service: job.serviceSnapshot?.name ?? job.serviceType });
   const billing = await openBilling(ctx, company._id, plan.customerId);
   const owed = billing.invoices === 0 ? "There are no open invoices." : amounts ? `${billing.invoices} open ${billing.invoices === 1 ? "invoice" : "invoices"} (${money(billing.dueCents)}) ${billing.invoices === 1 ? "stays" : "stay"} due.` : `${billing.invoices} open ${billing.invoices === 1 ? "invoice stays" : "invoices stay"} due.`;
   const perVisit = plan.billing === "monthly_consolidated" ? "Visits are billed once a month, for the visits that were completed." : "Each visit is billed after it happens.";
-  const credits = "Selestial holds no prepaid cleaning credits or memberships for this customer, so none are affected.";
+  const credits = "No prepaid cleaning credits or memberships are held for this service, so none are affected.";
   const base = { change: input.change, title: CHANGE_WORDS[input.change], needsPerson: NEEDS_PERSON.includes(input.change), from: null as string | null, until: null as string | null };
   const none = (blocked: string): Preview => ({ ...base, blocked, visits: [], consequences: [], shown: [] });
   if (!plan.recurring) return none("This is a standing arrangement with no calendar. Its visits are booked one by one, so there is no series to change.");
@@ -179,7 +179,7 @@ export async function previewPlanChange(ctx: Ctx, company: Doc<"companies">, pla
       blocked: null,
       visits: visits.map(line),
       consequences: [
-        { topic: "bookings", text: visits.length ? `${visits.length} booked ${visits.length === 1 ? "visit is" : "visits are"} cancelled, listed here.` : "No visits are booked in this period, so none are cancelled." },
+        { topic: "bookings", text: visits.length ? `${visits.length} booked ${visits.length === 1 ? "visit is" : "visits are"} cancelled, listed below.` : "No visits are booked in this period, so none are cancelled." },
         { topic: "future", text: until ? `No visits are booked from ${from} until ${until}. Booking starts again on ${until}.` : `No visits are booked from ${from} until the service is resumed. It does not restart by itself.` },
         { topic: "billing", text: `Pausing service does not pause billing. Nothing new is billed while no visits happen, but invoices already issued are not paused or cancelled. ${owed}` },
         { topic: "credits", text: credits },
@@ -227,7 +227,7 @@ export async function previewPlanChange(ctx: Ctx, company: Doc<"companies">, pla
       blocked: null,
       visits: visits.map(line),
       consequences: [
-        { topic: "bookings", text: visits.length ? `${visits.length} booked ${visits.length === 1 ? "visit is" : "visits are"} cancelled, listed here.` : "No visits are booked, so none are cancelled." },
+        { topic: "bookings", text: visits.length ? `${visits.length} booked ${visits.length === 1 ? "visit is" : "visits are"} cancelled, listed below.` : "No visits are booked, so none are cancelled." },
         { topic: "future", text: `The service ends on ${from}. No more visits are booked.` },
         { topic: "billing", text: `Nothing is billed for visits that do not happen. Completed visits and invoices already issued are unchanged. ${owed}` },
         { topic: "credits", text: credits },

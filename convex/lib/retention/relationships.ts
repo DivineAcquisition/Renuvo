@@ -306,9 +306,11 @@ export async function reactivationCandidates(ctx: Ctx, company: Doc<"companies">
           : cancelled?.outcome?.note
             ? { words: cancelled.outcome.note.slice(0, 240), source: "Recorded when the service ended" }
             : null;
-    const channel = careChannel(customer);
+    const channel = await careChannel(ctx, customer, "return_offer");
     const reach = channel ? await canReach(ctx, customer, channel, "return_offer", RETENTION) : null;
-    const contact = { channel, ok: reach?.ok === true, words: !channel ? "No phone or email on file." : reach!.ok ? `May be contacted by ${channel === "sms" ? "text" : "email"}.` : reach!.words };
+    // Quiet hours delay a message; they do not make someone uncontactable.
+    const reachable = reach !== null && (reach.ok || reach.retryAt !== undefined);
+    const contact = { channel, ok: reachable, words: !channel ? "No phone or email on file." : reachable ? `May be contacted by ${channel === "sms" ? "text" : "email"}.` : reach && !reach.ok ? reach.words : "Cannot be contacted right now." };
     let eligible = true;
     let why = "Eligible. A person writes or reviews the message; nothing goes to a list.";
     if (declined) [eligible, why] = [false, "They asked not to be contacted."];

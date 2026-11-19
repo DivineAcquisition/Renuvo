@@ -58,7 +58,7 @@ export const ACTION_WORDS: Record<ActionKind, string> = {
 const MESSAGE_KINDS: readonly ActionKind[] = ["request_feedback", "message", "scope_clarification", "confirm_correction", "return_offer"];
 const HANDOFF_WORDS: Record<HandoffTo, string> = { dispatch: "Dispatch", sales: "Sales", finance: "Finance (the Owner)", quality: "Quality (a person)", owner: "The Owner" };
 
-export const whenWords = (at: number, timezone: string) => `${dayName(at, timezone)} ${localParts(at, timezone).day.slice(5).replace("-", "/")} at ${clock(at, timezone)}`;
+export const whenWords = (at: number, timezone: string) => `${dayName(at, timezone)} at ${clock(at, timezone)}`;
 
 export async function actionsOf(ctx: Ctx, row: Pick<Case, "_id" | "companyId">): Promise<Action[]> {
   return ctx.db

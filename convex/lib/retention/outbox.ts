@@ -26,14 +26,6 @@ import { careLinkState, careLinkUrl } from "./links";
 type Ctx = QueryCtx | MutationCtx;
 export type CarePurpose = "feedback_request" | "care_update" | "return_offer";
 
-/** The customer's preferred channel when it has a usable address, otherwise email, otherwise text. */
-export function careChannel(customer: Doc<"customers">): Channel | null {
-  const preferred = customer.communication?.preferredChannel;
-  if ((preferred === "sms" || preferred === "email") && addressFor(customer, preferred)) return preferred;
-  if (addressFor(customer, "email")) return "email";
-  return addressFor(customer, "sms") ? "sms" : null;
-}
-
 /** A return offer is marketing and needs that permission. Everything else is about a service the customer had. */
 export function careIntent(customer: Pick<Doc<"customers">, "_id">, purpose: CarePurpose, actor: Actor): SendIntent {
   const category: Category = purpose === "return_offer" ? "marketing" : "operational";
@@ -71,6 +63,23 @@ export async function canReach(ctx: Ctx, customer: Doc<"customers">, channel: Ch
   const answer = await checkSend(ctx, { companyId: customer.companyId, channel, to: address ?? "", now: Date.now(), ...careIntent(customer, purpose, actor) });
   if (!answer.ok) return { ...answer, words: answer.words.replace(/\bwork (emails|texts)\b/, "service $1"), address };
   return { ...answer, address };
+}
+
+/**
+ * The channel a message to this customer should use: their preferred one when it can actually reach
+ * them, otherwise the other one if that can. A channel the customer has not permitted is not chosen
+ * while another would work. With no usable address at all there is no channel.
+ */
+export async function careChannel(ctx: Ctx, customer: Doc<"customers">, purpose: CarePurpose = "care_update"): Promise<Channel | null> {
+  const preferred = customer.communication?.preferredChannel;
+  const order: Channel[] = preferred === "sms" ? ["sms", "email"] : preferred === "email" ? ["email", "sms"] : ["email", "sms"];
+  const usable = order.filter((channel) => addressFor(customer, channel));
+  for (const channel of usable) {
+    const answer = await canReach(ctx, customer, channel, purpose, { kind: "agent", agent: "retention" });
+    // "Not yet" (quiet hours) is still a channel that works.
+    if (answer.ok || answer.retryAt !== undefined) return channel;
+  }
+  return usable[0] ?? null;
 }
 
 export type PlannedCareMessage = {
