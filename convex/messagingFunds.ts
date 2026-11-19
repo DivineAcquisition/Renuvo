@@ -22,7 +22,7 @@ import { AUTUMN } from "./lib/billing/catalog";
 import { ownerMutation, staffMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
-import { controlsOf, refundCharge } from "./lib/messagingBilling/ledger";
+import { controlsOf, noticeOnce, refundCharge } from "./lib/messagingBilling/ledger";
 import { centsToUnits, UNITS_PER_CENT } from "./lib/messagingBilling/money";
 import { autoTopUpWording } from "./lib/messagingBilling/wording";
 
@@ -100,7 +100,8 @@ export const autoTopUpProblem = internalMutation({
     const controls = controlsOf(account);
     if (args.problem) {
       // Not set in Autumn: shown as off, so nobody believes a card will be charged when it won't be.
-      await ctx.db.patch(account._id, { messagingControls: { ...controls, autoTopUp: { ...controls.autoTopUp, enabled: false } }, notices: [{ kind: "messaging_topup_failed" as const, at: Date.now(), text: `Automatic top-up could not be turned on: ${args.problem} It is off.` }, ...account.notices].slice(0, 10) });
+      await ctx.db.patch(account._id, { messagingControls: { ...controls, autoTopUp: { ...controls.autoTopUp, enabled: false } } });
+      await noticeOnce(ctx, (await ctx.db.get(account._id))!, "messaging_topup_failed", `Automatic top-up could not be turned on: ${args.problem} It is off.`, { always: true });
     }
   },
 });
@@ -181,7 +182,7 @@ export const autoTopUpEvent = internalMutation({
     const now = Date.now();
     if (!args.succeeded) {
       const text = args.reason === "charge_failed" ? "An automatic top-up of the messaging balance was declined by the card. Update the payment method or add funds; outbound messages wait until then." : "An automatic top-up of the messaging balance didn't go through. Add funds to keep messages going out.";
-      await ctx.db.patch(account._id, { notices: [{ kind: "messaging_topup_failed" as const, at: now, text }, ...account.notices].slice(0, 10) });
+      await noticeOnce(ctx, account, "messaging_topup_failed", text, { always: true });
       await recordEvent(ctx, { companyId: args.companyId, type: "billing.messaging_auto_topup_failed", actor: { kind: "system" }, subject: { table: "billingAccounts", id: account._id }, data: { reason: args.reason ?? null } });
       return;
     }

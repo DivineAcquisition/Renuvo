@@ -10,7 +10,7 @@ import { internalAction, internalMutation, internalQuery, type ActionCtx } from 
 import { customerIdFor } from "./lib/billing/access";
 import { finalizeMessaging, lockMessaging, trackMessaging } from "./lib/billing/autumn";
 import { recordEvent } from "./lib/events";
-import { HOLD_MS, releaseCharge, reserveAnswered, STALE_HOLD_MS } from "./lib/messagingBilling/ledger";
+import { heldNotice, HOLD_MS, releaseCharge, reserveAnswered, STALE_HOLD_MS } from "./lib/messagingBilling/ledger";
 
 const MINUTE = 60_000;
 const BACKOFF = [1, 5, 15, 60, 180, 360].map((m) => m * MINUTE);
@@ -63,6 +63,7 @@ export const holdMessage = internalMutation({
     await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose, policy: args.reason } });
     // Billing unreachable is retried by itself; a missing balance waits for funds.
     if (args.reason === "billing_unavailable") await ctx.scheduler.runAfter(10 * MINUTE, internal.messaging.deliver, { messageId: message._id });
+    else await heldNotice(ctx, message.companyId, args.reason);
   },
 });
 

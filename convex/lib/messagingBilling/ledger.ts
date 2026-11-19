@@ -13,6 +13,7 @@ import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { internal } from "../../_generated/api";
 import { localParts } from "../availability";
 import { accountFor, billingState, verifiedPlan } from "../billing/access";
+import { AGENT_CATALOG } from "../billing/catalog";
 import type { AutumnEnv } from "../billing/autumn";
 import { recordEvent } from "../events";
 import { localDay } from "../chat/localDay";
@@ -82,6 +83,10 @@ const ACTIVITY: Partial<Record<Message["purpose"], string>> = {
   booking_request_received: "Online booking request received",
   booking_recovery: "Online booking reminder",
 };
+
+export function agentLabel(agent: string): string {
+  return agent in AGENT_CATALOG ? AGENT_CATALOG[agent as keyof typeof AGENT_CATALOG].name : "This agent";
+}
 
 export function activityOf(purpose: Message["purpose"]): string {
   return ACTIVITY[purpose] ?? purpose.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
@@ -174,11 +179,11 @@ export async function planOutbound(ctx: Ctx, message: Message, input: { body: st
   }
   const since = monthStart(company.timezone, now);
   if (controls.monthlyLimit !== undefined && (await outboundSpend(ctx, message.companyId, since)) + amount > controls.monthlyLimit) {
-    return { kind: "hold", reason: "messaging_limit", words: `This month's messaging limit (${formatUnits(controls.monthlyLimit)}) is reached. Raise it in Usage to send this message.` };
+    return { kind: "hold", reason: "messaging_limit", words: `This month's messaging limit (${formatUnits(controls.monthlyLimit)}) is reached. Raise it on the Messaging tab of Plan & Usage to send this message.` };
   }
   const agentLimit = input.agent ? controls.agentLimits?.[input.agent] : undefined;
   if (input.agent && agentLimit !== undefined && (await outboundSpend(ctx, message.companyId, since, input.agent)) + amount > agentLimit) {
-    return { kind: "hold", reason: "messaging_limit", words: `This agent's monthly messaging limit (${formatUnits(agentLimit)}) is reached. Raise it in Usage to send this message.` };
+    return { kind: "hold", reason: "messaging_limit", words: `${agentLabel(input.agent)}'s monthly messaging limit (${formatUnits(agentLimit)}) is reached. Raise it on the Messaging tab of Plan & Usage to send this message.` };
   }
 
   const attempt = existing ? Number(existing.lockId?.split("-").pop() ?? "0") + 1 : 1;
@@ -416,9 +421,28 @@ export async function balanceNotices(ctx: Ctx, account: Account) {
   }
 }
 
-async function noticeOnce(ctx: Ctx, account: Account, kind: Account["notices"][number]["kind"], text: string) {
+/**
+ * Posts a messaging notice on Plan & Usage and emails it to the Owner, at most once a day per kind (a failed
+ * top-up always). The email goes through Selestial's own email service and never touches the balance.
+ */
+export async function noticeOnce(ctx: Ctx, account: Account, kind: Account["notices"][number]["kind"], text: string, options: { always?: boolean } = {}) {
   const now = Date.now();
-  if (account.notices.some((row) => row.kind === kind && now - row.at < 24 * HOUR)) return;
+  if (!options.always && account.notices.some((row) => row.kind === kind && now - row.at < 24 * HOUR)) return;
   await ctx.db.patch(account._id, { notices: [{ kind, at: now, text }, ...account.notices].slice(0, 10) });
   await recordEvent(ctx, { companyId: account.companyId, type: `billing.${kind}`, actor: { kind: "system" }, subject: { table: "billingAccounts", id: account._id }, data: { env: account.env } });
+  await ctx.scheduler.runAfter(0, internal.messagingNotices.emailOwner, { companyId: account.companyId, kind, text, at: now });
+}
+
+const HELD_WORDS: Record<"messaging_balance" | "messaging_limit", string> = {
+  messaging_balance: "Messages are waiting to go out because the messaging balance is too low. They are kept as drafts and sent, after being checked again, once funds are added.",
+  messaging_limit: "Messages are waiting to go out because a messaging spending limit you set is reached. They are kept as drafts and sent, after being checked again, if you raise the limit.",
+};
+
+/** Work was held for funds or a limit: tell the Owner, once a day, so it is never silently stuck. */
+export async function heldNotice(ctx: Ctx, companyId: Id<"companies">, reason: "messaging_balance" | "messaging_limit" | "billing_unavailable") {
+  if (reason === "billing_unavailable") return;
+  const state = billingState();
+  if (!state.connected) return;
+  const account = await accountFor(ctx, companyId, state.env);
+  if (account) await noticeOnce(ctx, account, "messaging_held", HELD_WORDS[reason]);
 }

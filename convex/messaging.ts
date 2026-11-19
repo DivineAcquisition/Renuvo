@@ -31,7 +31,7 @@ import { cleanerMessageAtSend } from "./lib/cleaners/outbox";
 import { portalUrl } from "./lib/cleaners/portal";
 import { sendProblem, type ApplicantPurpose } from "./lib/recruiter/outbox";
 import { recruiterSettings } from "./lib/recruiter/settings";
-import { captureCharge, markPending, planOutbound, refundCharge, releaseCharge } from "./lib/messagingBilling/ledger";
+import { captureCharge, heldNotice, markPending, planOutbound, refundCharge, releaseCharge } from "./lib/messagingBilling/ledger";
 import { reserveCharge } from "./messagingBilling";
 
 const MAX_ATTEMPTS = 3;
@@ -201,6 +201,7 @@ export const claim = internalMutation({
       await ctx.db.patch(message._id, { status: "held", holdReason: billed.reason, heldAt: message.heldAt ?? Date.now(), problem: billed.words });
       await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose, policy: billed.reason } });
       if (billed.reason === "billing_unavailable") await ctx.scheduler.runAfter(10 * 60_000, internal.messaging.deliver, { messageId: message._id });
+      else await heldNotice(ctx, message.companyId, billed.reason);
       return null;
     }
     if (billed.kind === "reserve") body = billed.body;

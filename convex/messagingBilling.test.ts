@@ -13,6 +13,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { Actor } from "./lib/events";
 import { queueMessage } from "./lib/messaging/outbox";
+import { mockEmailOutbox } from "./lib/email/provider";
 import { mockOutbox } from "./lib/messaging/provider";
 import { HOLD_MS, OVERDRAFT_FLOOR, refundCharge } from "./lib/messagingBilling/ledger";
 
@@ -235,6 +236,27 @@ describe("Messaging billing", () => {
     expect(rows.find((c) => c._id === charge._id)).toMatchObject({ state: "refunded", refundedBy: first });
     expect(rows.find((c) => c._id === first)).toMatchObject({ kind: "refund", amount: -250, refundOf: charge._id, settlement: "tracked" });
     expect(left(s)).toBe(250_000);
+  });
+
+  it("emails the Owner once a day when work waits for funds, through Selestial's own email, never the balance", async () => {
+    process.env.EMAIL_PROVIDER = "mock";
+    mockEmailOutbox.length = 0;
+    const s = await billed(0);
+    await text(s, "w1");
+    await text(s, "w2", "Second reminder.", "Rosa");
+    await flush(s.t);
+    await s.t.finishAllScheduledFunctions(vi.runAllTimers);
+    const owners = await s.t.run(async (ctx) => (await ctx.db.query("members").collect()).filter((m) => m.role === "owner").map((m) => m.email));
+    const waiting = mockEmailOutbox.filter((row) => row.subject.startsWith("Messages are waiting to be sent"));
+    expect(waiting.map((row) => row.to).sort()).toEqual(owners.sort());
+    expect(waiting[0].text).toMatch(/kept as drafts/);
+    expect(waiting[0].text).toMatch(/never use the messaging balance/);
+    // No charge was made for it, and the balance is untouched.
+    expect((await charges(s)).filter((c) => c.kind === "email_out")).toHaveLength(0);
+    expect(left(s)).toBe(0);
+    const account = await s.t.run(async (ctx) => (await ctx.db.query("billingAccounts").first())!);
+    expect(account.notices.filter((n) => n.kind === "messaging_held")).toHaveLength(1);
+    delete process.env.EMAIL_PROVIDER;
   });
 
   it("charges nothing while metering is off for the deployment", async () => {

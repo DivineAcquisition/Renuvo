@@ -96,6 +96,7 @@ export async function queueCleanerMessage(ctx: MutationCtx, planned: PlannedClea
     cleanerId: planned.cleaner?._id,
     portalLinkId: planned.link?._id,
     followUpId: planned.followUpId,
+    ...(intent.agent ? { agent: intent.agent } : {}),
     to: to ?? undefined,
     body: planned.body,
     dedupeKey: planned.dedupeKey,
