@@ -202,7 +202,8 @@ export const bookingTables = {
     /** The furthest step reached. */
     step: stepIdValidator,
     mode: literals(["instant", "estimate_request", "walkthrough_request"] as const),
-    contact: v.optional(v.object({ firstName: v.string(), lastName: v.string(), email: v.string(), phone: v.string(), textOk: v.boolean() })),
+    /** textOk: the person checked the optional text box. textVersion: the version of the company's texting wording it showed. */
+    contact: v.optional(v.object({ firstName: v.string(), lastName: v.string(), email: v.string(), phone: v.string(), textOk: v.boolean(), textVersion: v.optional(v.number()) })),
     postalCode: v.optional(v.string()),
     inArea: v.optional(v.boolean()),
     /** The property facts prices use. Asked once and reused by every service. */

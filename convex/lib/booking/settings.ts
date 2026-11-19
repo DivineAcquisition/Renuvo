@@ -52,7 +52,8 @@ export async function bookingSettingsOf(ctx: QueryCtx, company: Doc<"companies">
 }
 
 const HANDLE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/;
-const RESERVED = new Set(["r", "resume", "unsubscribe", "embed", "preview", "admin", "app", "api", "manage", "test", "selestial"]);
+/** Addresses and page names that are routes of their own. "legal" and "texts" are a company's texting pages (convex/lib/texting/pages.ts). */
+export const RESERVED = new Set(["r", "resume", "unsubscribe", "embed", "preview", "admin", "app", "api", "manage", "test", "selestial", "legal", "texts"]);
 
 export function normalizeHandle(value: string): string {
   const handle = value.trim().toLowerCase();

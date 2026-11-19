@@ -20,6 +20,7 @@ import { bookingSettingsOf } from "./lib/booking/settings";
 import { messageForUnsubscribe } from "./lib/booking/unsubscribe";
 import { activeSuppressions, addSuppression, blockingSuppression, currentPermission, setPermission } from "./lib/compliance/permissions";
 import { plain } from "./lib/booking/definition";
+import { textConsentFor } from "./lib/texting/pages";
 import type { QueryCtx } from "./_generated/server";
 
 async function published(ctx: QueryCtx, handle: string, slug: string) {
@@ -60,6 +61,7 @@ export const page = publicQuery({
         logoUrl: settings.profile.logo ? await ctx.storage.getUrl(settings.profile.logo) : null,
         brandColor: settings.profile.brandColor,
         accentColor: settings.profile.accentColor,
+        texting: await textConsentFor(ctx, company._id, settings.handle),
       },
       definition: def,
       heroUrl: def.theme.heroImage ? await ctx.storage.getUrl(def.theme.heroImage) : null,

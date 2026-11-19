@@ -41,6 +41,8 @@ export function LocationStep() {
   const [last, setLast] = useState(view?.contact?.lastName ?? "");
   const [email, setEmail] = useState(view?.contact?.email ?? "");
   const [phone, setPhone] = useState(formatPhone(view?.contact?.phone?.replace(/^\+1/, "") ?? ""));
+  // Optional and unchecked: shown only when the company has published its texting wording, which a yes is recorded against.
+  const [textOk, setTextOk] = useState(view?.contact?.textOk === true && view?.contact?.textVersion === company.texting?.version);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingZip, setEditingZip] = useState(!view?.postalCode);
@@ -65,7 +67,7 @@ export function LocationStep() {
     if (!contactReady) return;
     setBusy(true);
     setError(null);
-    const saved = await actions.setContact({ firstName: first, lastName: last, email, phone, textOk: false });
+    const saved = await actions.setContact({ firstName: first, lastName: last, email, phone, textOk: textOk && !!company.texting, ...(textOk && company.texting ? { textVersion: company.texting.version } : {}) });
     if (!saved.ok) {
       setBusy(false);
       return setError(saved.why);
@@ -147,6 +149,22 @@ export function LocationStep() {
                 <Field id="bk-phone" label="Phone number" required error={error}>
                   <input id="bk-phone" type="tel" className="bk-input" autoComplete="tel" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} />
                 </Field>
+                {company.texting ? (
+                  <label className="flex items-start gap-3 rounded-[var(--bk-radius)] border border-[color:var(--bk-hairline)] p-3 text-left text-xs leading-5 text-[color:var(--bk-muted-text)]">
+                    <input type="checkbox" checked={textOk} onChange={(e) => setTextOk(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      <span className="block text-sm font-medium text-[color:var(--bk-text,inherit)]">Text messages (optional)</span>
+                      {company.texting.consent}{" "}
+                      <a href={company.texting.terms} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                        Texting Terms
+                      </a>{" "}
+                      ·{" "}
+                      <a href={company.texting.privacy} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                        Privacy Policy
+                      </a>
+                    </span>
+                  </label>
+                ) : null}
                 <button type="submit" disabled={!contactReady || busy} className="bk-btn h-12 w-full text-base @2xl:h-14 @2xl:text-lg">
                   {busy ? "Saving…" : outOfArea ? "Send my details" : "See my price"}
                 </button>

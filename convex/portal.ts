@@ -33,6 +33,7 @@ import { localParts } from "./lib/availability";
 import { addLocalDays, startOfLocalDay } from "./lib/time";
 import { syncHandoffRequirement } from "./lib/cleaners/handoff";
 import { conflictsOf } from "./lib/cleaners/attention";
+import { cleanerTextWording } from "./lib/texting/wording";
 
 type Ctx = (QueryCtx | MutationCtx) & PortalAccess;
 
@@ -240,7 +241,7 @@ export const confirmContact = portalMutation({
         category: "operational",
         status: "granted",
         source: "onboarding",
-        disclosureText: `I agree to receive texts from ${ctx.company.name} about my work: offers, schedules, reminders and onboarding. Message frequency varies. Reply STOP to opt out, HELP for help.`,
+        disclosureText: cleanerTextWording(ctx.company.name),
         evidence: "Given by the cleaner in their portal.",
         recordedBy: { kind: "recipient" },
         at: Date.now(),

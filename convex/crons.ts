@@ -57,6 +57,10 @@ crons.interval("creative studio follows up quiet generations", { minutes: 5 }, i
 crons.interval("billing settles and recovers AI work", { minutes: 5 }, internal.billing.sweep, {});
 crons.interval("messaging charges settle and recover", { minutes: 5 }, internal.messagingBilling.sweep, {});
 crons.interval("texting number monthly fees", { hours: 6 }, internal.texting.chargeNumbers, {});
+// Telnyx callbacks can be lost: a registration the carriers are working on is checked if it has been quiet for six hours.
+crons.interval("texting registrations reconcile", { minutes: 30 }, internal.texting.reconcile, {});
+// An approved registration can later be suspended by the carriers; texts stop until it is restored.
+crons.interval("texting registrations still approved", { hours: 24 }, internal.texting.checkAllActive, {});
 
 // Google: the job worker, calendar sync and watches, reviews, Local Services leads, conversions, drive times and Gmail watches.
 crons.interval("google works its queue", { minutes: 1 }, internal.googleWork.tick, {});

@@ -10,6 +10,8 @@ import type { QueryCtx } from "../../_generated/server";
 import { agentVerdict } from "../billing/access";
 import { readiness as complianceReadiness } from "../compliance/readiness";
 import { AGENT_PROFILES } from "../departments";
+import { readProfile } from "../compliance/profile";
+import { textingByAgent } from "../texting/readiness";
 
 export type AgentState = "ready_to_work" | "waiting_for_information" | "connection_needed" | "plan_needed" | "paused" | "not_available";
 export type Gap = { kind: "plan" | "connection" | "information"; words: string; next: string; href: string };
@@ -49,25 +51,34 @@ async function count(ctx: QueryCtx, company: Doc<"companies">) {
 export async function agentReadiness(ctx: QueryCtx, company: Doc<"companies">): Promise<AgentReadiness[]> {
   const have = await count(ctx, company);
   const sending = await complianceReadiness(ctx, company);
-  const canText = sending.operations.find((row) => row.key === "sms")?.state === "ready";
+  const smsReady = sending.operations.find((row) => row.key === "sms")?.state === "ready";
   const canEmail = sending.operations.find((row) => row.key === "email")?.state === "ready";
-  const sender: Gap = { kind: "connection", words: "No texting number or sending email address is set up, so nothing can be sent to anyone.", next: "Set up how messages are sent", href: "/app/settings/compliance#messaging" };
+  // Texting is per agent: an agent can text only what the company's registration covers for its audience.
+  const profile = await readProfile(ctx, company._id);
+  const request = await ctx.db
+    .query("textingRequests")
+    .withIndex("by_company_requested", (q) => q.eq("companyId", company._id))
+    .order("desc")
+    .first();
+  const texting = textingByAgent(profile.messaging, request);
+  const textsFor = (agent: AgentReadiness["agent"]) => smsReady && texting.some((row) => row.agent === agent && (row.state === "ready" || row.state === "partly"));
+  const sender: Gap = { kind: "connection", words: "No texting number or sending email address is set up, so nothing can be sent to anyone.", next: "Set up business texting", href: "/app/texting" };
 
   const needs: Record<AgentReadiness["agent"], Gap[]> = {
     sales: [
       ...(have.services ? [] : [{ kind: "information" as const, words: "No service is published yet, so Sales cannot give a firm price. It can still take quote requests.", next: "Prepare your first service", href: "/app/services" }]),
-      ...(canText || canEmail ? [] : [sender]),
+      ...(textsFor("sales") || canEmail ? [] : [sender]),
     ],
     dispatch: [
       ...(have.upcomingJobs ? [] : [{ kind: "information" as const, words: "There are no upcoming jobs to cover.", next: "Add a job", href: "/app/schedule" }]),
       ...(have.readyCleaners ? [] : [{ kind: "information" as const, words: "No cleaner is ready for assignments yet.", next: "Add your cleaners", href: "/app/cleaners" }]),
-      ...(canText ? [] : [{ ...sender, words: "No texting number is set up, so job offers cannot reach cleaners." }]),
+      ...(textsFor("dispatch") ? [] : [{ ...sender, words: smsReady ? "Your texting registration doesn't include texts to cleaners, so job offers can't reach them." : "No texting number is set up, so job offers cannot reach cleaners." }]),
     ],
     recruiter: [
       ...(have.needs ? [] : [{ kind: "information" as const, words: "No hiring need is open, so there is nothing to recruit for.", next: "Describe who you are hiring", href: "/app/agents/recruiter" }]),
-      ...(canEmail || canText ? [] : [sender]),
+      ...(canEmail || textsFor("recruiter") ? [] : [sender]),
     ],
-    retention: [...(canEmail || canText ? [] : [{ ...sender, words: "No texting number or email is set up, so feedback requests and case updates cannot reach customers." }])],
+    retention: [...(canEmail || textsFor("retention") ? [] : [{ ...sender, words: "No texting number or email is set up, so feedback requests and case updates cannot reach customers." }])],
   };
 
   return (["sales", "dispatch", "recruiter", "retention"] as const).map((agent) => {

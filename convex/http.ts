@@ -3,7 +3,7 @@
  * (convex/lib/builders.ts `providerWebhook`).
  *
  * POST /webhooks/resend         delivery reports, bounces and complaints for email, and email that arrived for the Sales agent. Needs RESEND_WEBHOOK_SECRET.
- * POST /webhooks/telnyx         delivery reports for texts, and texts coming in. Needs TELNYX_PUBLIC_KEY.
+ * POST /webhooks/telnyx         delivery reports for texts, texts coming in, and 10DLC registration updates. Needs TELNYX_PUBLIC_KEY.
  * POST /webhooks/autumn         plan, purchase and balance changes from Autumn. Needs AUTUMN_WEBHOOK_SECRET.
  * GET  /oauth/google/callback   where Google sends an Owner back after they allowed access: the company's
  *                               Google connection (convex/google.ts) or a Gmail hiring inbox, told apart by the state.
@@ -168,6 +168,8 @@ http.route({
       const event = telnyxEvent(body);
       if (event.kind === "receipt") {
         await ctx.runMutation(internal.messaging.receipt, { provider: "telnyx", eventId: event.eventId, providerMessageId: event.providerMessageId, outcome: event.outcome, problem: event.problem ?? undefined, ...(event.costUnits !== null ? { providerCost: event.costUnits } : {}), ...(event.errorCode ? { errorCode: event.errorCode } : {}) });
+      } else if (event.kind === "registration") {
+        await ctx.runMutation(internal.texting.registrationEvent, { eventId: event.eventId, type: event.type, ...(event.brandId ? { brandId: event.brandId } : {}), ...(event.campaignId ? { campaignId: event.campaignId } : {}), ...(event.phoneNumber ? { phoneNumber: event.phoneNumber } : {}) });
       } else if (event.kind === "inbound") {
         await ctx.runMutation(internal.inbound.telnyx, { eventId: event.eventId, to: event.to, from: event.from, body: event.text, receivedAt: event.receivedAt, ...(event.providerMessageId ? { providerMessageId: event.providerMessageId } : {}), ...(event.parts ? { parts: event.parts } : {}), media: event.media });
       }

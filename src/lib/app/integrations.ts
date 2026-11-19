@@ -79,7 +79,7 @@ export const INTEGRATIONS: readonly Integration[] = [
   { id: "facebook-reviews", name: "Facebook recommendations", category: "reviews", does: "Retention asks happy customers to recommend you on Facebook and drafts replies to new recommendations for your approval.", can: ["ask for recommendations", "draft replies"], agents: ["retention", "marketing"], status: planned(6) },
 
   // Texting
-  { id: "texting-number", name: "Business texting number", category: "communication", does: "Selestial gives your company its own local number and handles the carrier registration. You pick the area code.", can: ["send texts", "receive texts", "register with carriers"], agents: ["sales", "dispatch", "retention", "customer-care", "recruiter"], status: { kind: "available", href: "/app/settings/compliance", setUpWhere: "Settings › Compliance" }, note: "Provided by Selestial through Telnyx. No account of your own needed." },
+  { id: "texting-number", name: "Business texting number", category: "communication", does: "Selestial gives your company its own local number and handles the carrier registration. You pick the area code.", can: ["send texts", "receive texts", "register with carriers"], agents: ["sales", "dispatch", "retention", "customer-care", "recruiter"], status: { kind: "available", href: "/app/texting", setUpWhere: "Set up business texting" }, note: "Provided by Selestial through Telnyx. No account of your own needed." },
 
   // Accounting
   { id: "quickbooks-online", name: "QuickBooks Online", category: "accounting", does: "Customers, invoices, payments and processing fees sync to QuickBooks.", can: ["sync customers", "post invoices", "post payments", "post fees"], agents: [], status: planned(5) },

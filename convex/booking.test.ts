@@ -735,6 +735,34 @@ describe("requests and other kinds", () => {
     expect((await view(s.t, token)).status).toBe("requested");
   });
 
+  it("offers the company's published text wording as an optional box, and records a yes against exactly that version", async () => {
+    const commercial = homeSpec({ ...blankSpec("commercial"), name: "Office cleaning", summary: "Offices.", category: "commercial", pricing: { method: "custom_quote", fromCents: 25000, laborMinutes: null } });
+    const s = await setup({ kind: "commercial", spec: commercial });
+    await publish(s.as, s.companyId, s.experienceId);
+    const token = await begin(s);
+    // No published wording: no box, and a yes can't be recorded.
+    expect((await view(s.t, token)).company.texting).toBeNull();
+    expect(await refusal(s.t.mutation(api.bookingSessions.setContact, { token, firstName: "Dana", lastName: "Whitfield", email: "dana@example.com", phone: "(512) 555-0199", textOk: true, textVersion: 1 }))).toContain("wording just changed");
+    // The company publishes its sign-up wording (Set up business texting does this).
+    const member = await s.t.run(async (ctx) => (await ctx.db.query("members").collect())[0]);
+    const words = "Text me about my bookings from Alpha Cleaning at the number I provided. Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.";
+    const disclosureId = await s.t.run(async (ctx) => ctx.db.insert("consentDisclosures", { companyId: s.companyId, channel: "sms", category: "operational", text: words, version: 1, createdAt: Date.now(), createdBy: member._id }));
+    await s.t.run(async (ctx) => ctx.db.insert("textingPages", { companyId: s.companyId, kind: "signup", version: 1, body: words, smsDisclosureId: disclosureId, publishedAt: Date.now(), publishedBy: member._id }));
+    const shown = (await view(s.t, token)).company.texting;
+    expect(shown).toMatchObject({ consent: words, version: 1 });
+    expect(shown!.terms).toMatch(/\/b\/alpha-clean\/legal\/texting$/);
+    // A version the page no longer shows is refused rather than recorded.
+    expect(await refusal(s.t.mutation(api.bookingSessions.setContact, { token, firstName: "Dana", lastName: "Whitfield", email: "dana@example.com", phone: "(512) 555-0199", textOk: true, textVersion: 2 }))).toContain("wording just changed");
+    await s.t.mutation(api.bookingSessions.setContact, { token, firstName: "Dana", lastName: "Whitfield", email: "dana@example.com", phone: "(512) 555-0199", textOk: true, textVersion: 1 });
+    await s.t.mutation(api.bookingSessions.selectService, { token, serviceKey: s.serviceKey, addOns: [], answers: {} });
+    await s.t.mutation(api.bookingSessions.setDetails, { token, address: { line1: "500 Main St", city: "Austin", region: "TX", postalCode: "78701" }, answers: { facility_type: "Office", operating_hours: "8 to 6 weekdays" } });
+    await s.t.mutation(api.bookingSessions.sendRequest, { token });
+    const permissions = await s.t.run(async (ctx) => ctx.db.query("contactPermissions").collect());
+    const customerText = permissions.find((row) => row.channel === "sms" && row.recipient.kind === "customer");
+    expect(customerText).toMatchObject({ category: "operational", status: "granted", source: "web_form", disclosureId, recordedBy: { kind: "recipient" } });
+    expect(customerText!.evidence).toContain("texting wording version 1");
+  });
+
   it("books a short-term rental turnover with beds from the size step", async () => {
     const str = homeSpec({ ...blankSpec("short_term_rental"), name: "Turnover", summary: "Between guests.", category: "short_term_rental", pricing: { method: "fixed", amountCents: 9000, laborMinutes: 120 }, str: { enabled: true, linenSetsPerBed: 1, setsPerLoad: 2, laundry: { location: "on_site", loadCents: 1500, loadMinutes: 15, maxLoads: 4 }, restock: [], checkoutTime: "11:00", checkinTime: "16:00", deepCleanEveryTurnovers: null, conditionCharges: [] } });
     const s = await setup({ kind: "short_term_rental", spec: str });

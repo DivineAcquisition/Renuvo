@@ -11,7 +11,12 @@ import type { Answer, Answers, Question } from "./schema";
 
 export const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 
-export const SMS_CONSENT_WORDING = "You may text me at this number about this application. Message and data rates may apply. I can reply STOP at any time. This is optional.";
+/** The text permission an applicant gives, in the company's name, saying what carriers require of any opt-in. */
+export function smsConsentWording(company: string): string {
+  return `Text me about my application from ${company} at this number. Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out. This is optional.`;
+}
+/** The same wording where no company is in view (staff tools). An applicant always sees and agrees to their company's. */
+export const SMS_CONSENT_WORDING = smsConsentWording("the company");
 export const ATTEST_WORDING = "The information I have given is true and complete to the best of my knowledge.";
 
 export type FieldKind = "text" | "long_text" | "email" | "phone" | "number" | "yes_no" | "choice" | "multi";
@@ -24,12 +29,12 @@ export function questionField(question: Question): Field {
   return { key: `q.${question.key}`, label: question.label, kind: question.kind === "yes_no" ? "yes_no" : question.kind === "number" ? "number" : question.kind === "choice" ? "choice" : "long_text", required: question.required, options: question.options, section: "role" };
 }
 
-export function formFields(need: Pick<Doc<"hiringNeeds">, "coverageAreas" | "questions">): Field[] {
+export function formFields(need: Pick<Doc<"hiringNeeds">, "coverageAreas" | "questions">, company?: string): Field[] {
   const fields: Field[] = [
     { key: "fullName", label: "Full name", kind: "text", required: true, section: "you" },
     { key: "email", label: "Email address", kind: "email", required: true, section: "you" },
     { key: "phone", label: "Phone number", kind: "phone", required: false, section: "you" },
-    { key: "smsConsent", label: SMS_CONSENT_WORDING, kind: "yes_no", required: false, section: "you" },
+    { key: "smsConsent", label: company ? smsConsentWording(company) : SMS_CONSENT_WORDING, kind: "yes_no", required: false, section: "you" },
     { key: "city", label: "City or area you live in", kind: "text", required: false, help: "A general area is enough. We do not need your street address.", section: "you" },
     { key: "experienceYears", label: "Years of paid cleaning experience", kind: "number", required: true, section: "experience" },
     { key: "experienceSummary", label: "Tell us about your relevant experience", kind: "long_text", required: false, section: "experience" },

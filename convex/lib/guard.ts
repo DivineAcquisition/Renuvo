@@ -40,6 +40,8 @@ export const PUBLIC_QUERY_FILES = [
   "convex/bookingPublic.ts",
   // The unsubscribe page for a notification: only the category name and company the signed token names.
   "convex/notifications.ts",
+  // A company's published texting pages (privacy, texting terms, sign-up): only the page's own words and the company's public name.
+  "convex/textingPublic.ts",
 ] as const;
 
 /** A `publicQuery` anywhere except the reviewed files is a violation. */

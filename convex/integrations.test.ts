@@ -20,7 +20,7 @@ describe("Integrations", () => {
     // Every built integration on the page is one the server treats as built, and the reverse.
     const built = INTEGRATIONS.filter((row) => row.status.kind !== "planned").map((row) => row.id).sort();
     expect([...BUILT].sort()).toEqual(built);
-    for (const row of INTEGRATIONS) if (row.status.kind === "available") expect(row.status.href).toMatch(/^(\/app\/settings\/|\/app\/finance\/setup$|#google$|\/app\/setup\?step=records$)/);
+    for (const row of INTEGRATIONS) if (row.status.kind === "available") expect(row.status.href).toMatch(/^(\/app\/settings\/|\/app\/finance\/setup$|#google$|\/app\/setup\?step=records$|\/app\/texting$)/);
   });
 
   it("lets the Owner request a planned integration once, and nobody else", async () => {

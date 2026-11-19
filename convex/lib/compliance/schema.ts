@@ -74,7 +74,8 @@ export const REPLY_KINDS = ["stop", "help", "start"] as const;
 export type ReplyKind = (typeof REPLY_KINDS)[number];
 export const replyKindValidator = literals(REPLY_KINDS);
 
-export const REGISTRATION_STATUSES = ["not_started", "submitted", "approved", "rejected"] as const;
+/** suspended: it was approved, and the carriers have since suspended or expired it. Texts stop until it is restored. */
+export const REGISTRATION_STATUSES = ["not_started", "submitted", "approved", "rejected", "suspended"] as const;
 export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
 export const registrationStatusValidator = literals(REGISTRATION_STATUSES);
 
@@ -121,6 +122,12 @@ export const registrationValidator = v.object({
   /** An owner may record only not_started or submitted. Approved and rejected are set by Selestial staff. */
   updatedBy: v.union(v.literal("owner"), v.literal("staff")),
   note: v.optional(v.string()),
+  /**
+   * Who the approved registration covers: each audience and category of text it was filed for. Absent on
+   * registrations recorded before coverage existed, which keep sending exactly as they did.
+   */
+  coverage: v.optional(v.array(v.object({ audience: literals(RECIPIENT_KINDS), category: categoryValidator }))),
+  activities: v.optional(v.array(v.string())),
 });
 export type Registration = typeof registrationValidator.type;
 
@@ -142,13 +149,14 @@ export type MessagingSetup = typeof messagingSetupValidator.type;
  * Selestial staff approve, because buying the number and filing the registration are charged to
  * Selestial's Telnyx account. Each step's Telnyx reference is kept so a retry continues, never repeats.
  */
-export const TEXTING_REQUEST_STATUSES = ["requested", "approved", "provisioning", "waiting_on_carriers", "active", "failed", "rejected", "cancelled"] as const;
+export const TEXTING_REQUEST_STATUSES = ["requested", "approved", "provisioning", "waiting_on_carriers", "needs_you", "active", "interrupted", "failed", "rejected", "cancelled"] as const;
 export type TextingRequestStatus = (typeof TEXTING_REQUEST_STATUSES)[number];
 
 export const brandDetailsValidator = v.object({
   displayName: v.string(),
   companyName: v.string(),
-  ein: v.string(),
+  /** Older requests only. New requests keep the tax ID sealed on the request (taxIdSealed), never readable here. */
+  ein: v.optional(v.string()),
   phone: v.string(),
   street: v.string(),
   city: v.string(),
@@ -157,6 +165,22 @@ export const brandDetailsValidator = v.object({
   email: v.string(),
   website: v.string(),
   vertical: v.string(),
+  /** A sole proprietor's own name and mobile number. The mobile receives the carriers' one-time code. */
+  firstName: v.optional(v.string()),
+  lastName: v.optional(v.string()),
+  mobilePhone: v.optional(v.string()),
+  stockSymbol: v.optional(v.string()),
+  stockExchange: v.optional(v.string()),
+});
+
+/** One number a search found. `features` is what Telnyx says the number can do (sms, mms, voice). */
+export const numberResultValidator = v.object({
+  phoneNumber: v.string(),
+  locality: v.union(v.string(), v.null()),
+  region: v.union(v.string(), v.null()),
+  upfrontCents: v.union(v.number(), v.null()),
+  monthlyCents: v.union(v.number(), v.null()),
+  features: v.optional(v.array(v.string())),
 });
 
 export const complianceTables = {
@@ -188,16 +212,67 @@ export const complianceTables = {
     fees: v.optional(v.object({ authorizedAt: v.number(), authorizedBy: v.id("members"), wording: v.string() })),
     /** The last calendar month ("YYYY-MM") the monthly number fee was charged for. */
     feeMonth: v.optional(v.string()),
+    // ── Guided setup (convex/textingSetup.ts). Absent on requests made with the older form. ──
+    setupId: v.optional(v.id("textingSetups")),
+    /** The submission this request is working from (textingSubmissions.version). A correction raises it. */
+    submissionVersion: v.optional(v.number()),
+    entityType: v.optional(v.string()),
+    usecase: v.optional(v.string()),
+    subUsecases: v.optional(v.array(v.string())),
+    activities: v.optional(v.array(v.string())),
+    privacyLink: v.optional(v.string()),
+    termsLink: v.optional(v.string()),
+    signupLink: v.optional(v.string()),
+    samples: v.optional(v.array(v.string())),
+    drafts: v.optional(v.record(v.string(), v.string())),
+    taxIdSealed: v.optional(v.string()),
+    taxIdLast4: v.optional(v.string()),
+    /** The registration prices the owner authorized (convex/lib/texting/prices.ts). */
+    pricesVersion: v.optional(v.string()),
+    /** The customer_reference of the current number order, so a retry finds the order instead of buying again. */
+    orderReference: v.optional(v.string()),
+    numberOrderedAt: v.optional(v.number()),
+    /** When a call that creates something at Telnyx was last attempted. With no reference saved yet, the outcome is uncertain: look before trying again. */
+    orderAttemptAt: v.optional(v.number()),
+    brandAttemptAt: v.optional(v.number()),
+    campaignAttemptAt: v.optional(v.number()),
+    /** The submission version last filed with the carriers, and what was filed, to tell what a correction changed. */
+    filedVersion: v.optional(v.number()),
+    brandShape: v.optional(v.string()),
+    campaignShape: v.optional(v.string()),
+    /** One provisioning pass at a time: a pass holds this until it finishes or the time passes. */
+    leaseUntil: v.optional(v.number()),
+    leaseToken: v.optional(v.string()),
+    /** The referenceId of the current campaign filing, unique per filing. */
+    campaignReference: v.optional(v.string()),
+    brandVerifiedAt: v.optional(v.number()),
+    campaignFiledAt: v.optional(v.number()),
+    campaignApprovedAt: v.optional(v.number()),
+    /** A sole proprietor's one-time code: when it was sent, its reference, and when it was confirmed. */
+    otp: v.optional(v.object({ referenceId: v.optional(v.string()), sentAt: v.number(), verifiedAt: v.optional(v.number()), attempts: v.number() })),
+    /** What the owner must do, in plain words, while status is needs_you. Their earlier answers are kept. */
+    needs: v.optional(v.object({ kind: v.union(v.literal("correction"), v.literal("code"), v.literal("number")), words: v.string(), fields: v.array(v.string()), at: v.number() })),
+    /** How many corrected registrations have been filed. Each one is charged once (prices.resubmission). */
+    resubmissions: v.optional(v.number()),
+    registrationMonth: v.optional(v.string()),
+    /** Raw provider states for Selestial staff. Never shown to the owner. */
+    diagnostics: v.optional(v.object({ brand: v.optional(v.string()), campaign: v.optional(v.string()), assignment: v.optional(v.string()), order: v.optional(v.string()), at: v.number() })),
+    /** When anything about this request last changed, for "last update" on each milestone. */
+    updatedAt: v.optional(v.number()),
   })
     .index("by_company_requested", ["companyId", "requestedAt"])
-    .index("by_status_requested", ["status", "requestedAt"]),
+    .index("by_status_requested", ["status", "requestedAt"])
+    .index("by_brand", ["brandId"])
+    .index("by_campaign", ["campaignId"]),
 
   /** One search for numbers an Owner can pick from. Results are shown to that company only. */
   numberSearches: defineTable({
     companyId: v.id("companies"),
     areaCode: v.string(),
     status: v.union(v.literal("pending"), v.literal("done"), v.literal("failed")),
-    results: v.optional(v.array(v.object({ phoneNumber: v.string(), locality: v.union(v.string(), v.null()), region: v.union(v.string(), v.null()), upfrontCents: v.union(v.number(), v.null()), monthlyCents: v.union(v.number(), v.null()) }))),
+    results: v.optional(v.array(numberResultValidator)),
+    /** Set when the area code had no numbers and the results come from elsewhere in this state instead. */
+    nearbyRegion: v.optional(v.string()),
     problem: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_company_created", ["companyId", "createdAt"]),

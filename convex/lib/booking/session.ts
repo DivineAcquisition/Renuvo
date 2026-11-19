@@ -6,6 +6,7 @@
  * The public view never carries internal costs, margins, cleaner names, staffing, other customers, team
  * notes or anything from another company. Access answers are shown back only as "saved".
  */
+import { textConsentFor } from "../texting/pages";
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { verifiedPlan } from "../billing/access";
@@ -399,10 +400,11 @@ export async function view(ctx: Ctx, session: Doc<"bookingSessions">, company: D
       brandColor: L.settings.profile.brandColor,
       accentColor: L.settings.profile.accentColor,
       timezone: tz,
+      texting: await textConsentFor(ctx, company._id, L.settings.handle),
     },
     definition: L.def,
     heroUrl,
-    contact: session.contact ? { firstName: session.contact.firstName, lastName: session.contact.lastName, email: session.contact.email, phone: session.contact.phone, textOk: session.contact.textOk } : null,
+    contact: session.contact ? { firstName: session.contact.firstName, lastName: session.contact.lastName, email: session.contact.email, phone: session.contact.phone, textOk: session.contact.textOk, textVersion: session.contact.textVersion ?? null } : null,
     postalCode: session.postalCode ?? null,
     size: L.plan,
     home: session.home,

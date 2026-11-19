@@ -16,7 +16,7 @@ import { notFound, userError } from "./lib/errors";
 import { recordEvent, type Actor } from "./lib/events";
 import { recordTextConsent } from "./lib/recruiter/consent";
 import { firstName, isActive, setStage, settleTask, withdrawApplication } from "./lib/recruiter/applications";
-import { assertSubmittable, ATTEST_WORDING, cleanAnswers, completion, formFields, SMS_CONSENT_WORDING } from "./lib/recruiter/form";
+import { assertSubmittable, ATTEST_WORDING, cleanAnswers, completion, formFields, smsConsentWording } from "./lib/recruiter/form";
 import { bookSlot, cancelInterviewTime, liveInterview, openSlots } from "./lib/recruiter/interviews";
 import { answerOffer, liveOffer, payWords } from "./lib/recruiter/offers";
 import { answersValidator, type Answers, type Fact } from "./lib/recruiter/schema";
@@ -80,7 +80,7 @@ export const application = applicantQuery({
     const base = { company: ctx.company.name, role: need.title, state, firstName: firstName(ctx.applicant.name) };
     // Once the page is not open, it says why and shows nothing the applicant entered.
     if (state !== "open") return { ...base, form: null };
-    const fields = formFields(need);
+    const fields = formFields(need, ctx.company.name);
     const session = await sessionOf(ctx);
     const answers = { ...prefill(ctx), ...(session?.answers ?? {}) };
     return {
@@ -117,16 +117,16 @@ export const saveDraft = applicantMutation({
     const need = await openForm(ctx);
     const now = Date.now();
     const session = await sessionOf(ctx);
-    const answers = cleanAnswers(formFields(need), { ...(session?.answers ?? prefill(ctx)), ...args.answers });
+    const answers = cleanAnswers(formFields(need, ctx.company.name), { ...(session?.answers ?? prefill(ctx)), ...args.answers });
     if (session) await ctx.db.patch(session._id, { answers, savedAt: now });
     else await ctx.db.insert("formSessions", { companyId: ctx.companyId, applicationId: ctx.application._id, answers, startedAt: now, savedAt: now });
     if (ctx.application.stage === "invited") {
       await setStage(ctx, ctx.application, "application_started", asApplicant(ctx), { formStartedAt: now, nextAction: { what: "Finish and submit the application form", by: "applicant", dueAt: ctx.link.expiresAt } });
     }
     // Permission to text is the applicant's own tick against the exact wording, with the number they gave. Unticking removes it.
-    const consent = answers.smsConsent === true && typeof answers.phone === "string" ? { at: ctx.applicant.smsConsent?.phone === answers.phone ? ctx.applicant.smsConsent.at : now, wording: SMS_CONSENT_WORDING, phone: answers.phone } : undefined;
+    const consent = answers.smsConsent === true && typeof answers.phone === "string" ? { at: ctx.applicant.smsConsent?.phone === answers.phone ? ctx.applicant.smsConsent.at : now, wording: smsConsentWording(ctx.company.name), phone: answers.phone } : undefined;
     if (JSON.stringify(consent) !== JSON.stringify(ctx.applicant.smsConsent)) await ctx.db.patch(ctx.applicant._id, { smsConsent: consent });
-    await recordTextConsent(ctx, ctx.applicant, consent !== undefined, asApplicant(ctx));
+    await recordTextConsent(ctx, ctx.applicant, consent !== undefined, asApplicant(ctx), smsConsentWording(ctx.company.name));
     return { savedAt: now };
   },
 });
@@ -197,7 +197,7 @@ export const submit = applicantMutation({
   handler: async (ctx, args) => {
     const need = await openForm(ctx);
     if (!args.attested) throw userError("Please confirm that what you entered is true and complete.");
-    const fields = formFields(need);
+    const fields = formFields(need, ctx.company.name);
     const session = await sessionOf(ctx);
     const answers = cleanAnswers(fields, { ...(session?.answers ?? prefill(ctx)), ...args.answers });
     assertSubmittable(fields, answers);
@@ -214,8 +214,8 @@ export const submit = applicantMutation({
     const contact = email
       ? { ...ctx.application.contact, status: "direct" as const, address: email, bouncedAt: email === ctx.application.contact.address ? ctx.application.contact.bouncedAt : undefined, evidence: [...ctx.application.contact.evidence.filter((entry) => !(entry.address === email && entry.where === where)), { address: email, kind: "direct" as const, where }].slice(-30) }
       : ctx.application.contact;
-    await ctx.db.patch(ctx.applicant._id, { name: typeof answers.fullName === "string" ? answers.fullName : ctx.applicant.name, email: email ?? ctx.applicant.email, phone: phone ?? ctx.applicant.phone, location: typeof answers.city === "string" ? answers.city : ctx.applicant.location, smsConsent: answers.smsConsent === true && phone ? (ctx.applicant.smsConsent?.phone === phone ? ctx.applicant.smsConsent : { at: now, wording: SMS_CONSENT_WORDING, phone }) : undefined });
-    await recordTextConsent(ctx, ctx.applicant, answers.smsConsent === true && Boolean(phone), asApplicant(ctx));
+    await ctx.db.patch(ctx.applicant._id, { name: typeof answers.fullName === "string" ? answers.fullName : ctx.applicant.name, email: email ?? ctx.applicant.email, phone: phone ?? ctx.applicant.phone, location: typeof answers.city === "string" ? answers.city : ctx.applicant.location, smsConsent: answers.smsConsent === true && phone ? (ctx.applicant.smsConsent?.phone === phone ? ctx.applicant.smsConsent : { at: now, wording: smsConsentWording(ctx.company.name), phone }) : undefined });
+    await recordTextConsent(ctx, ctx.applicant, answers.smsConsent === true && Boolean(phone), asApplicant(ctx), smsConsentWording(ctx.company.name));
     const fresh = (await ctx.db.get(ctx.application._id))!;
     await setStage(ctx, fresh, "application_submitted", asApplicant(ctx), { facts, contact, formStartedAt: fresh.formStartedAt ?? now, submittedAt: now, questionSince: undefined, nextAction: { what: "Screen the application", by: "recruiter", dueAt: now + DAY } });
     await settleTask(ctx, fresh, "decision", "The applicant submitted the application.");

@@ -72,3 +72,20 @@ export async function unsubscribeFromBookingEmail(input: { token: string }): Pro
     return { ok: false, why: why(error) };
   }
 }
+
+/**
+ * Someone agrees to a company's texts on its sign-up page. The page version they saw is sent with it, so
+ * the permission is recorded against exactly that wording.
+ */
+export async function signUpForTexts(input: { handle: string; version: number; name: string; phone: string; texts: boolean; marketing: boolean }): Promise<{ ok: true; words: string } | { ok: false; why: string }> {
+  const c = client();
+  if (!c) return { ok: false, why: "Sign-up isn't available right now. Please contact the business directly." };
+  try {
+    const { key } = await visitor(c.secret);
+    const result = await c.client.mutation(api.textingPublic.signup, { secret: c.secret, handle: input.handle.slice(0, 60), version: input.version, name: input.name.slice(0, 120), phone: input.phone.slice(0, 40), texts: input.texts === true, marketing: input.marketing === true, visitorKey: key });
+    if ("refused" in result) return { ok: false, why: result.refused };
+    return { ok: true, words: result.words };
+  } catch (error) {
+    return { ok: false, why: why(error) };
+  }
+}

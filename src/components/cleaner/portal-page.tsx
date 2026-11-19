@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { cleanerTextWording } from "../../../convex/lib/texting/wording";
 import { ContactPortal } from "./contact-portal";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "./shell";
 import { fmt, useMinute, zoned } from "./time";
@@ -415,9 +416,7 @@ function StepCard({ step, view, token, onTab }: { step: Step; view: View; token:
           </label>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" checked={texts} onChange={(event) => setTexts(event.target.checked)} className="mt-0.5 size-5 accent-[#6838ef]" />
-            <span>
-              Text me about my work: offers, schedules, reminders and onboarding. <span className="text-muted-foreground">Message frequency varies. Reply STOP to opt out, HELP for help.</span>
-            </span>
+            <span>{cleanerTextWording(view.company)}</span>
           </label>
           <Problem message={problem} />
           <Action busy={busy} onPress={() => run(async () => ((await confirmContact({ token, phone, email, workTexts: texts })).status === "accepted" ? "Confirmed. Thank you." : "Sent. The office will check your new details."))}>

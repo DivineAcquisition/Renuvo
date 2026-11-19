@@ -31,9 +31,9 @@ function op(key: OperationKey, ready: string, notReady: string, blockers: Blocke
 }
 
 const SMS_NEXT: Record<string, Blocker> = {
-  sender_name: { key: "sender_name", words: "", next: "Enter the business name texts are sent as.", href: `${SETTINGS}#messaging` },
-  sms_number: { key: "sms_number", words: "", next: "Enter the company's texting number.", href: `${SETTINGS}#messaging` },
-  registration: { key: "registration", words: "", next: "Submit the carrier registration, then record it here. Selestial staff mark it approved once the provider confirms.", href: `${SETTINGS}#registration` },
+  sender_name: { key: "sender_name", words: "", next: "Set up business texting: it sets the name texts are sent as.", href: "/app/texting" },
+  sms_number: { key: "sms_number", words: "", next: "Set up business texting to get your own number.", href: "/app/texting" },
+  registration: { key: "registration", words: "", next: "Set up business texting: Selestial prepares and files your carrier registration.", href: "/app/texting" },
 };
 
 export async function readiness(ctx: Ctx, company: Doc<"companies">): Promise<Readiness> {

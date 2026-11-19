@@ -12,6 +12,7 @@ import { normalAddress, recipientRecord, recipientsAt } from "../compliance/reci
 import { CATEGORIES, CHANNELS, type Category, type Channel, type Origin, type Recipient, type ReplyKind } from "../compliance/schema";
 import { localParts } from "../availability";
 import { AGENT_PROFILES } from "../departments";
+import { covers } from "../texting/plan";
 import type { Agent } from "../statuses";
 import { clock } from "../time";
 
@@ -21,7 +22,7 @@ const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 const WEEK = 7 * DAY;
 
-export const POLICY_CODES = ["company_suspended", "agent_paused", "sender_not_ready", "no_address", "suppressed", "no_permission", "quiet_hours", "frequency"] as const;
+export const POLICY_CODES = ["company_suspended", "agent_paused", "sender_not_ready", "no_address", "not_registered", "suppressed", "no_permission", "quiet_hours", "frequency"] as const;
 export type PolicyCode = (typeof POLICY_CODES)[number];
 
 /** The general words for each code. An answer carries more exact words for the case at hand. */
@@ -30,6 +31,7 @@ export const POLICY_WORDS: Record<PolicyCode, string> = {
   agent_paused: "The agent is paused, so it sends nothing. A person can still send.",
   sender_not_ready: "The company's sending setup is not finished.",
   no_address: "There is no usable address for this person on this channel.",
+  not_registered: "The company's texting registration does not cover this kind of text to this person.",
   suppressed: "This address asked not to be contacted.",
   no_permission: "There is no recorded permission to send this kind of message to this person.",
   quiet_hours: "It is within the company's quiet hours. It can go when they end.",
@@ -59,6 +61,7 @@ const COUNTED: readonly Doc<"messages">["status"][] = ["queued", "held", "sendin
 
 const CATEGORY_WORDS: Record<Category, string> = { operational: "work", marketing: "marketing", recruiting: "recruiting" };
 const CHANNEL_WORDS: Record<Channel, string> = { sms: "texts", email: "emails" };
+const AUDIENCE_WORDS: Record<Recipient["kind"], string> = { customer: "customers", cleaner: "cleaners", applicant: "applicants" };
 
 function no(code: PolicyCode, words: string, retryAt?: number): PolicyAnswer {
   return retryAt === undefined ? { ok: false, code, words } : { ok: false, code, words, retryAt };
@@ -79,6 +82,8 @@ export function senderGaps(messaging: Awaited<ReturnType<typeof readProfile>>["m
         words:
           status === "rejected"
             ? "Texting is blocked: the carrier registration was rejected."
+            : status === "suspended"
+              ? "Texting is paused: the carriers suspended the registration. Selestial is looking into it."
             : status === "submitted"
               ? "Texting needs carrier registration approval. It was submitted and is waiting."
               : "Texting needs carrier registration approval. It has not been submitted.",
@@ -103,7 +108,8 @@ export function quietUntil(now: number, timezone: string, window: { start: strin
 
 /**
  * Whether this message may be sent now. In order: company suspended, agent paused, sender not ready,
- * no usable address, suppressed, no permission, quiet hours, weekly limit.
+ * no usable address, not covered by the texting registration, suppressed, no permission, quiet hours,
+ * weekly limit.
  *
  * A reply to a keyword (STOP, HELP, START) is the answer to the person's own text: it is not held by
  * the suppression that the STOP just made, it needs no permission because the person wrote first, and
@@ -123,6 +129,18 @@ export async function checkSend(ctx: Ctx, input: PolicyInput): Promise<PolicyAns
 
   const address = normalAddress(input.channel, input.to);
   if (!address) return no("no_address", input.channel === "sms" ? "There is no valid phone number to text." : "There is no valid email address to send to.");
+
+  // A text goes only if the registration was filed for this audience and this kind of text. A reply to
+  // STOP, HELP or START answers the person's own text and is always allowed on a registered number.
+  const coverage = profile.messaging.registration.coverage;
+  if (input.channel === "sms" && !input.reply && coverage) {
+    const kinds = input.recipient ? [input.recipient.kind] : [...new Set((await recipientsAt(ctx, input.companyId, "sms", address)).map((row) => row.kind))];
+    if (kinds.length === 0 && !covers(coverage, undefined, input.category)) {
+      return no("not_registered", `Your texting registration doesn't cover ${CATEGORY_WORDS[input.category]} texts. Add them in Set up business texting.`);
+    }
+    const missing = kinds.find((kind) => !covers(coverage, kind, input.category));
+    if (missing) return no("not_registered", `Your texting registration doesn't cover ${CATEGORY_WORDS[input.category]} texts to ${AUDIENCE_WORDS[missing]}. Add them in Set up business texting.`);
+  }
 
   if (!input.reply) {
     const suppression = blockingSuppression(await activeSuppressions(ctx, input.companyId, input.channel, address), input.category);

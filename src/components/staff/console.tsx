@@ -919,30 +919,32 @@ export function StaffPeople() {
 // ── Texting numbers and carrier registration ──────────────────────────────────────────────────────
 
 const TEXTING_STATUS: Record<string, { label: string; variant: "info" | "warning" | "error" | "success" | "outline" }> = {
-  requested: { label: "Waiting for approval", variant: "warning" },
+  requested: { label: "Waiting for Selestial review", variant: "warning" },
   approved: { label: "Approved · starting", variant: "info" },
-  provisioning: { label: "Setting up", variant: "info" },
-  waiting_on_carriers: { label: "Waiting on carriers", variant: "info" },
+  provisioning: { label: "Working", variant: "info" },
+  waiting_on_carriers: { label: "With the carriers", variant: "info" },
+  needs_you: { label: "Waiting on the owner", variant: "outline" },
   failed: { label: "Stopped", variant: "error" },
+  interrupted: { label: "Suspended by carriers", variant: "error" },
 };
 
-const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
-
 /**
- * Cleaning companies' requests for a texting number. Approving spends Selestial's Telnyx money (the
- * number, and the carriers' brand and campaign fees), so only an admin approves or runs one again.
+ * Selestial review: each company's texting registration and number, in its own name. Approving files the
+ * brand and campaign on Selestial's Telnyx account and later buys the number, so only an admin approves or
+ * runs one again. Raw provider states are shown here for staff only; owners see plain milestones.
  */
 export function TextingQueue() {
   const rows = useQuery(api.texting.queue, {});
   const approve = useMutation(api.texting.approve);
   const reject = useMutation(api.texting.reject);
+  const sendBack = useMutation(api.texting.sendBack);
   const retry = useMutation(api.texting.retry);
   const { busy, error, run } = useRun();
-  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [acting, setActing] = useState<{ id: string; kind: "reject" | "back" } | null>(null);
   const [note, setNote] = useState("");
   return (
     <>
-      <PageHeader title="Texting" lead="Requests for a texting number and its carrier registration, in each company's own name. Approving buys the number and files the brand and campaign on Selestial's Telnyx account." />
+      <PageHeader title="Texting" lead="Selestial review for business texting. Each company registers in its own name, with its own privacy policy and texting terms. Approving files the registration with the carriers; the number is bought only after they approve." />
       <FormError message={error} />
       {rows === undefined ? (
         <Skeleton className="h-40 rounded-2xl" />
@@ -961,18 +963,23 @@ export function TextingQueue() {
                     <p>
                       <span className="font-semibold text-strong">{row.company}</span>
                       <span className="text-muted-foreground"> · {row.phoneNumber}</span>
+                      {row.version > 1 ? <span className="text-muted-foreground"> · correction {row.version - 1}</span> : null}
                     </p>
                     <Badge variant={status.variant}>{status.label}</Badge>
                   </div>
+                  {!row.guided ? <p className="text-xs text-warning-foreground">From the older form. It can&apos;t be approved: ask the company to finish Set up business texting.</p> : null}
                   <dl className="grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
                     <div>
-                      Legal name: <span className="text-strong">{row.brand.companyName}</span>
+                      Kind: <span className="text-strong">{row.entityType}</span>
                     </div>
                     <div>
                       Texts sent as: <span className="text-strong">{row.brand.displayName}</span>
                     </div>
                     <div>
-                      EIN: <span className="text-strong">{row.brand.ein}</span>
+                      Legal name: <span className="text-strong">{row.brand.companyName}</span>
+                    </div>
+                    <div>
+                      EIN: <span className="text-strong">{row.taxIdLast4 ? `••-•••${row.taxIdLast4}` : "none (sole proprietor)"}</span>
                     </div>
                     <div>
                       Address:{" "}
@@ -984,56 +991,88 @@ export function TextingQueue() {
                       Website: <span className="text-strong">{row.brand.website}</span>
                     </div>
                     <div>
-                      Support: <span className="text-strong">{row.brand.email}</span>
+                      Support: <span className="text-strong">{row.brand.email} · {row.brand.phone}</span>
                     </div>
                     <div>
-                      Cost at request: <span className="text-strong">{row.upfrontCents !== null ? `${dollars(row.upfrontCents)} up front, ${dollars(row.monthlyCents ?? 0)} a month, plus carrier fees` : "not known"}</span>
+                      Registration: <span className="text-strong">{[row.usecase, ...row.subUsecases].filter(Boolean).join(" · ") || "not set"}</span>
+                    </div>
+                    <div className="sm:col-span-2">
+                      Activities: <span className="text-strong">{row.activities.join(", ") || "none"}</span>
                     </div>
                     <div>
                       Asked: <span className="text-strong">{new Date(row.requestedAt).toLocaleString()}</span>
                     </div>
                   </dl>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                    {(["privacy", "terms", "signup"] as const).map((kind) =>
+                      row.links[kind] ? (
+                        <a key={kind} href={row.links[kind]!} target="_blank" rel="noreferrer" className="text-brand-300 underline-offset-2 hover:underline">
+                          {kind === "signup" ? "Sign-up page" : kind === "terms" ? "Texting terms" : "Privacy policy"}
+                        </a>
+                      ) : null,
+                    )}
+                  </div>
                   <p className="rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed text-strong">Consent wording: {row.consentWording}</p>
+                  {row.samples.length ? (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground">Sample messages ({row.samples.length})</summary>
+                      <ul className="mt-1 grid gap-1">
+                        {row.samples.map((sample) => (
+                          <li key={sample} className="rounded bg-muted px-2 py-1 text-strong">
+                            {sample}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
                   {row.step ? <p className="text-strong">{row.step}</p> : null}
+                  {row.needs ? <p className="text-xs text-warning-foreground">Owner asked: {row.needs.words}</p> : null}
                   {row.problem ? <p className="text-destructive-foreground">{row.problem}</p> : null}
-                  {row.numberOrderId || row.brandId || row.campaignId ? (
+                  {row.numberOrderId || row.brandId || row.campaignId || row.diagnostics ? (
                     <p className="font-mono text-[11px] text-muted-foreground">
                       order {row.numberOrderId ?? "none"} · brand {row.brandId ?? "none"} · campaign {row.campaignId ?? "none"}
+                      {row.diagnostics ? ` · ${[row.diagnostics.brand, row.diagnostics.campaign, row.diagnostics.order, row.diagnostics.assignment].filter(Boolean).join(" · ")}` : ""}
                     </p>
                   ) : null}
-                  {row.feesAuthorized ? <RegistrationFee requestId={row.requestId} /> : <p className="text-xs text-muted-foreground">The Owner did not authorize fees from the messaging balance for this request.</p>}
+                  {row.feesAuthorized ? <RegistrationFee requestId={row.requestId} /> : <p className="text-xs text-muted-foreground">The owner did not authorize fees from the messaging balance for this request.</p>}
                   {row.status === "requested" ? (
-                    rejecting === row.requestId ? (
+                    acting?.id === row.requestId ? (
                       <form
                         className="flex flex-wrap items-center gap-2"
                         onSubmit={(event) => {
                           event.preventDefault();
                           void run(async () => {
-                            await reject({ requestId: row.requestId, note });
-                            setRejecting(null);
+                            if (acting.kind === "reject") await reject({ requestId: row.requestId, note });
+                            else await sendBack({ requestId: row.requestId, words: note });
+                            setActing(null);
                             setNote("");
                           });
                         }}
                       >
-                        <TextInput autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why, in words the company will read" aria-label="Why it is turned down" required className="max-w-md" />
-                        <Button type="submit" variant="destructive-outline" size="sm" loading={busy}>
-                          Turn down
+                        <TextInput autoFocus value={note} onChange={(event) => setNote(event.target.value)} placeholder={acting.kind === "reject" ? "Why, in words the owner will read" : "What to change, in words the owner will read"} aria-label={acting.kind === "reject" ? "Why it is turned down" : "What needs to change"} required className="max-w-md" />
+                        <Button type="submit" variant={acting.kind === "reject" ? "destructive-outline" : "primary"} size="sm" loading={busy}>
+                          {acting.kind === "reject" ? "Turn down" : "Send back"}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => setRejecting(null)}>
+                        <Button variant="ghost" size="sm" onClick={() => setActing(null)}>
                           Never mind
                         </Button>
                       </form>
                     ) : (
                       <div className="flex flex-wrap gap-2">
-                        <Button variant="primary" size="sm" loading={busy} onClick={() => void run(() => approve({ requestId: row.requestId }))}>
-                          Approve and buy the number
+                        <Button variant="primary" size="sm" loading={busy} disabled={!row.guided} onClick={() => void run(() => approve({ requestId: row.requestId }))}>
+                          Approve and file
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => setRejecting(row.requestId)}>
+                        {row.guided ? (
+                          <Button variant="outline" size="sm" onClick={() => setActing({ id: row.requestId, kind: "back" })}>
+                            Ask for a change
+                          </Button>
+                        ) : null}
+                        <Button variant="outline" size="sm" onClick={() => setActing({ id: row.requestId, kind: "reject" })}>
                           Turn down
                         </Button>
                       </div>
                     )
-                  ) : row.status === "failed" ? (
+                  ) : row.status === "failed" || row.status === "interrupted" ? (
                     <div>
                       <Button variant="outline" size="sm" loading={busy} onClick={() => void run(() => retry({ requestId: row.requestId }))}>
                         Run again from where it stopped
@@ -1050,6 +1089,7 @@ export function TextingQueue() {
   );
 }
 
+const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 const amountCents = (text: string) => (/^\d+(\.\d{1,2})?$/.test(text.trim()) ? Math.round(Number(text.trim()) * 100) : null);
 
 /** A carrier registration fee, entered at the amount the registry billed. Taken from the company's messaging balance under the Owner's authorization, once per key. */
