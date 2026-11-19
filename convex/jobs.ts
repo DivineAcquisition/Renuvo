@@ -17,6 +17,7 @@ import { coverJob } from "./lib/dispatch/workflow";
 import { userError } from "./lib/errors";
 import { cancelVisit, createVisit, createVisitArgs } from "./lib/jobs/visits";
 import { byMember, recordEvent } from "./lib/events";
+import { enqueueRun } from "./lib/retention/runs";
 import { businessSettingsOf, checkArea, checkHours } from "./lib/settings/business";
 import { ACTIVE_ASSIGNMENT, assertChange, JOB_CHANGES, jobStatusValidator, type JobStatus } from "./lib/statuses";
 import { liveTaskByKey, setTaskState } from "./lib/taskState";
@@ -206,6 +207,8 @@ async function change(ctx: MutationCtx & MemberAccess, job: Doc<"jobs">, to: Job
   assertChange(JOB_CHANGES, job.status, to, "job");
   await ctx.db.patch(job._id, { status: to });
   await recordEvent(ctx, { companyId: ctx.companyId, type: `job.${to}`, actor: byMember(ctx), subject: { table: "jobs", id: job._id }, data: { from: job.status, ...data } });
+  // A completed visit is Retention's to follow through: a first service, a correction, or the service after one.
+  if (to === "completed") await enqueueRun(ctx, { companyId: ctx.companyId, kind: "service_completed", key: `completed:${job._id}`, jobId: job._id });
 }
 
 /** A job starts only with an accepted cleaner. Scheduled alone never meant covered. */

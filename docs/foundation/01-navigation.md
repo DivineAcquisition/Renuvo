@@ -34,7 +34,7 @@ work inside them.
 |---|---|
 | Marketing | Generates customer interest. |
 | Sales | Turns inquiries into confirmed bookings. |
-| Retention | Maintains recurring relationships, follows up on risk, runs win-back and referral workflows. |
+| Retention | Notices when a customer relationship needs attention, coordinates the response, and verifies what happened afterward. |
 | Dispatch | Staffs jobs, manages scheduling and coverage, monitors service progress. |
 | Quality | Reviews service evidence, investigates issues, coordinates corrective work. |
 | Customer Care | Handles customer communications, setup, requests and scheduling changes. |
@@ -83,7 +83,7 @@ Names and order are the owner's. Playbook is always last. Chat is never a tab: i
 |---|---|
 | Marketing | Campaigns · Content & Creative · Promotions · Lead Sources · Performance · Playbook |
 | Sales | Pipeline · Quotes & Proposals · Follow-ups · Calls & Messages · Booking Forms · Playbook |
-| Retention | Recurring Customers · Customer Health · Feedback & Reviews · Recurring Offers · Win-back · Referrals · Playbook |
+| Retention | Needs Attention · Recovery · Continuity & Renewals · Re-engagement · Playbook (changed November 18, 2026, when Retention was built: see `docs/retention/00-architecture.md`) |
 | Dispatch | Dispatch Board · Schedule · Offers & Coverage · Live Jobs · Action Links · Playbook |
 | Quality | Completion Review · Checklists & Photos · Service Issues · Re-cleans · Playbook |
 | Customer Care | Conversations · Customer Setup · Service Requests · Rescheduling & Cancellations · Playbook |

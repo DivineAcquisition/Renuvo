@@ -52,6 +52,7 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
     let actor: Described["actor"];
     if (event.actor.kind === "member") actor = { kind: "member", label: (await doc(event.actor.memberId))?.name ?? "A team member", agent: null };
     else if (event.actor.kind === "agent") actor = { kind: "agent", label: AGENT_PROFILES[event.actor.agent].name, agent: event.actor.agent };
+    else if (event.actor.kind === "customer") actor = { kind: "system", label: `${(await doc(event.actor.customerId))?.name ?? "A customer"} (by link)`, agent: null };
     else if (event.actor.kind === "cleaner") actor = { kind: "system", label: `${await cleanerName(event.actor.cleanerId)} (by link)`, agent: null };
     else actor = { kind: "system", label: "Selestial", agent: null };
 
@@ -149,6 +150,30 @@ export async function describeEvents(ctx: QueryCtx, company: Doc<"companies">, e
           email_sent: `emailed the invitation to ${name}`,
           email_failed: `could not email the invitation to ${name}`,
         }[what] ?? null;
+    } else if (subject.table === "retentionCases") {
+      const row = (await get(subject.id, () => ctx.db.get(subject.id))) as Doc<"retentionCases"> | null;
+      const name = row && row.companyId === company._id ? `"${row.title}"` : "a retention case";
+      text =
+        {
+          opened: `opened ${name}${data.serious ? ", a concern a person handles" : ""}`,
+          needs_attention: `${name} needs a person`,
+          needs_context: `${name} needs more information`,
+          action_underway: `${name} is being worked on`,
+          waiting_on_customer: `${name} is waiting on the customer`,
+          monitoring: `${name} is being watched after its correction`,
+          closed: `closed ${name}`,
+          taken_over: `took over ${name} from Retention`,
+          handed_back: `handed ${name} back to Retention`,
+        }[what] ?? null;
+    } else if (subject.table === "retentionActions") {
+      text = { prepared: "prepared a step on a retention case" }[what] ?? null;
+      if (event.type === "retention.reported") text = `carried out a step on a retention case under its permission${data.ok === false ? ", and it did not go through" : ""}`;
+    } else if (subject.table === "retentionFeedback") {
+      text = { received: `received a customer's feedback${data.hasIssue ? ", with an issue described" : ""}` }[what] ?? null;
+    } else if (subject.table === "retentionSignals") {
+      text = { raised: "noticed something on a customer's record", cleared: "saw that an earlier mismatch is no longer on the record", dismissed: "dismissed a retention signal" }[what] ?? null;
+    } else if (subject.table === "retentionLinks") {
+      text = { issued: "made a private customer link", revoked: "closed a customer link", action: "recorded a change a customer made on their link" }[what] ?? null;
     } else if (subject.table === "salesOpportunities") {
       const opportunity = (await get(subject.id, () => ctx.db.get(subject.id))) as Doc<"salesOpportunities"> | null;
       const name = opportunity && opportunity.companyId === company._id ? ((opportunity.customerId ? (await doc(opportunity.customerId))?.name : null) ?? opportunity.title) : "a prospect";

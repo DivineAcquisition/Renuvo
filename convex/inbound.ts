@@ -21,6 +21,7 @@ import { normalAddress, recipientsAt, type RecipientRecord } from "./lib/complia
 import { CATEGORIES, categoryValidator, type Recipient } from "./lib/compliance/schema";
 import type { Actor } from "./lib/events";
 import { clientsAtPhone, fileClientText } from "./lib/clients/conversations";
+import { enqueueRun } from "./lib/retention/runs";
 import { queueReply } from "./lib/messaging/outbox";
 import { chargeInbound } from "./lib/messagingBilling/ledger";
 import { allow } from "./lib/rateLimit";
@@ -123,6 +124,12 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
       if (people.length > 0) await replyTask(ctx, companyId, from, people, args.body, args.receivedAt);
       const task = await liveTaskByKey(ctx, companyId, `inbound.reply:${from}`);
       await fileClientText(ctx, { companyId, from, excerpt: excerpt(args.body) ?? "", kind: "message", at: args.receivedAt, taskId: task?._id }, clients);
+      // A text from exactly one known client is also read by Retention for a stated wish to cancel or a described problem.
+      // It reads the same excerpt the conversation keeps, once per message, and a few an hour per number at most.
+      const read = excerpt(args.body);
+      if (clients.length === 1 && read && (await allow(ctx, `retention-text:${companyId}:${from}`, 6, HOUR))) {
+        await enqueueRun(ctx, { companyId, kind: "customer_text", key: `text:${clients[0].customerId}:${args.providerId ?? args.receivedAt}`, customerId: clients[0].customerId, payload: read });
+      }
       return { kind: "ignored", replied: false };
     };
     if (kind === "ignored") return ordinary();

@@ -157,6 +157,35 @@ export async function eraseCustomerRecords(ctx: Ctx, customer: Doc<"customers">)
   for (const message of inbound) await ctx.db.patch(message._id, { from: "erased", body: "(erased)" });
   steps.push({ step: "Contacts, notes and texts", state: "done", detail: `${contacts.length} contact${contacts.length === 1 ? "" : "s"} scrubbed, ${notes.length} internal note${notes.length === 1 ? "" : "s"} deleted, ${inbound.length} received text${inbound.length === 1 ? "" : "s"} blanked.` });
 
+  // Retention: what the customer wrote is blanked, their links are closed, and the cases keep only that they existed.
+  const cases = await ctx.db
+    .query("retentionCases")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const row of cases) {
+    await ctx.db.patch(row._id, { title: "Erased case", happened: "(erased)", customerWords: undefined, ...(row.status === "closed" ? {} : { status: "closed" as const, closedAt: Date.now(), needs: undefined, doing: "Closed.", outcome: { code: "unknown" as const, note: "The customer's data was erased.", by: { kind: "system" as const }, at: Date.now() } }) });
+    const entries = await ctx.db.query("retentionEntries").withIndex("by_company_case", (q) => q.eq("companyId", ctx.companyId).eq("caseId", row._id)).take(MAX_ROWS);
+    for (const entry of entries) await ctx.db.patch(entry._id, { text: "(erased)", quote: undefined });
+    const actions = await ctx.db.query("retentionActions").withIndex("by_company_case", (q) => q.eq("companyId", ctx.companyId).eq("caseId", row._id)).take(MAX_ROWS);
+    for (const action of actions) await ctx.db.patch(action._id, { summary: "(erased)", reason: "(erased)", message: undefined, ...(action.status === "proposed" || action.status === "awaiting_approval" || action.status === "underway" ? { status: "cancelled" as const } : {}) });
+  }
+  const feedback = await ctx.db
+    .query("retentionFeedback")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const row of feedback) await ctx.db.patch(row._id, { comment: undefined, ...(row.issue ? { issue: { ...row.issue, description: "(erased)" } } : {}) });
+  const careLinks = await ctx.db
+    .query("retentionLinks")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const link of careLinks) if (link.revokedAt === undefined) await ctx.db.patch(link._id, { revokedAt: Date.now(), revokeReason: "The customer's data was erased." });
+  const signals = await ctx.db
+    .query("retentionSignals")
+    .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))
+    .take(MAX_ROWS);
+  for (const signal of signals) await ctx.db.patch(signal._id, { what: "(erased)", status: signal.status === "open" || signal.status === "in_case" ? "cleared" : signal.status });
+  steps.push({ step: "Retention cases and feedback", state: "done", detail: `${cases.length} case${cases.length === 1 ? "" : "s"} and ${feedback.length} feedback record${feedback.length === 1 ? "" : "s"} blanked; ${careLinks.length} customer link${careLinks.length === 1 ? "" : "s"} closed.` });
+
   const properties = await ctx.db
     .query("properties")
     .withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id))

@@ -62,6 +62,8 @@ export const notified = internalMutation({
     for (const row of rows) {
       if (row.provider !== "gmail" || row.status !== "connected") continue;
       await ctx.scheduler.runAfter(0, internal.recruiterInbox.sync, { connectionId: row._id });
+      // Retention's own read of the same inbox does nothing unless it is a Care inbox with reading turned on.
+      await ctx.scheduler.runAfter(0, internal.retentionInbox.sync, { connectionId: row._id });
       started += 1;
     }
     return started;

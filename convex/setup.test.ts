@@ -113,12 +113,14 @@ describe("Company setup", () => {
     expect((await as.query(api.setup.state, { companyId })).facts).toEqual({});
   });
 
-  it("reports each agent as ready only when what it needs exists, and Retention as not available", async () => {
+  it("reports each agent as ready only when what it needs exists", async () => {
     const t = start();
     const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
     const agents = (await as.query(api.setup.state, { companyId })).agents;
     const of = (agent: string) => agents.find((row) => row.agent === agent)!;
-    expect(of("retention")).toMatchObject({ state: "not_available", gaps: [] });
+    // Retention is built: with no plan and no way to reach customers it says so, and is not called ready.
+    expect(of("retention").state).not.toBe("not_available");
+    expect(of("retention").gaps.map((gap) => gap.kind)).toEqual(expect.arrayContaining(["plan", "connection"]));
     // No plan, no service, no jobs, no cleaners, no sender: each is named, and none is called ready.
     expect(agents.filter((row) => row.state === "ready_to_work")).toEqual([]);
     expect(of("dispatch").gaps.map((gap) => gap.kind)).toEqual(expect.arrayContaining(["information", "connection"]));

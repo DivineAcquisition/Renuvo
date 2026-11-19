@@ -27,6 +27,7 @@ import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/setti
 import { salesSettingsValidator } from "./lib/sales/agentSchema";
 import { salesTables } from "./lib/sales/schema";
 import { setupTables } from "./lib/setup/schema";
+import { retentionSettingsValidator, retentionTables } from "./lib/retention/schema";
 import { servicesTables } from "./lib/services/schema";
 import { noticeEventValidator, noticeFactsValidator } from "./lib/notify/catalog";
 import { notifyTables } from "./lib/notify/schema";
@@ -90,6 +91,7 @@ export const aboutValidator = v.union(
   v.object({ table: v.literal("mailboxConnections"), id: v.id("mailboxConnections") }),
   v.object({ table: v.literal("bookingSessions"), id: v.id("bookingSessions") }),
   v.object({ table: v.literal("salesOpportunities"), id: v.id("salesOpportunities") }),
+  v.object({ table: v.literal("retentionCases"), id: v.id("retentionCases") }),
 );
 
 /**
@@ -133,6 +135,9 @@ export const proposalValidator = v.union(
   v.object({ kind: v.literal("sales_action"), actionId: v.id("salesActions") }),
   /** Let a quote the agent prepared go to the customer: this exact quote at this exact total. */
   v.object({ kind: v.literal("sales_quote"), quoteId: v.id("salesQuotes"), totalCents: v.number() }),
+  // Retention (convex/lib/retention/approvals.ts carries it out).
+  /** Carry out one action prepared on a retention case, exactly as prepared, if the case has not moved on since. */
+  v.object({ kind: v.literal("retention_action"), actionId: v.id("retentionActions"), stamp: v.string() }),
 );
 
 /** How Dispatch works for this company. Every value is the owner's, with a default in code. */
@@ -241,6 +246,8 @@ export default defineSchema({
     recruiter: v.optional(recruiterSettingsValidator),
     /** How the Cleaners workspace works for this company: follow-up rules and who decides personnel requests. */
     cleaners: v.optional(cleanersSettingsValidator),
+    /** How Retention works for this company: feedback, the guarantee in the company's words, links and renewals (convex/lib/retention/settings.ts). */
+    retention: v.optional(retentionSettingsValidator),
     /** The Sales Playbook: voice, what the agent handles, approved answers, follow-up timing, deposits and quote terms (convex/lib/sales/settings.ts). */
     sales: v.optional(salesSettingsValidator),
     /** Where the company works, when appointments may be, and its services (convex/lib/settings/business.ts). */
@@ -490,6 +497,13 @@ export default defineSchema({
     planDate: v.optional(v.string()),
     /** Cancelled because a person skipped it (a plan's visit), kept apart from a cancellation. */
     skipped: v.optional(v.boolean()),
+    /**
+     * A correction visit for a retention case: the visit it corrects, at no charge to the customer. Its
+     * price is the basis the crew is paid from and is never invoiced (convex/lib/retention/remedies.ts).
+     */
+    recovery: v.optional(v.object({ caseId: v.id("retentionCases"), originalJobId: v.optional(v.id("jobs")) })),
+    /** Cleaners a person agreed not to send to this visit, for example after a customer asked for someone else. Dispatch does not offer it to them. */
+    avoidCleanerIds: v.optional(v.array(v.id("cleaners"))),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
@@ -676,6 +690,10 @@ export default defineSchema({
       v.literal("sales_quote"),
       v.literal("sales_follow_up"),
       v.literal("sales_booking"),
+      // Retention, to customers (convex/lib/retention/outbox.ts): feedback, a case update with its private link, and a return offer.
+      v.literal("feedback_request"),
+      v.literal("care_update"),
+      v.literal("return_offer"),
       // Selestial, to a member of the company: a notification (convex/lib/notify).
       v.literal("member_notice"),
     ),
@@ -699,6 +717,8 @@ export default defineSchema({
      * record each names, so no token is ever at rest and a closed record sends nothing.
      */
     salesLinks: v.optional(v.array(v.object({ placeholder: v.string(), kind: v.union(v.literal("pay"), v.literal("proposal"), v.literal("sign"), v.literal("assess"), v.literal("quote")), id: v.string() }))),
+    /** Retention messages: the action the message carries out. Its link, if any, is made at the moment of sending. */
+    retentionActionId: v.optional(v.id("retentionActions")),
     /** A message in a Sales conversation: the opportunity it belongs to. */
     opportunityId: v.optional(v.id("salesOpportunities")),
     /** Finance messages: the customer and the invoice whose pay link the message carries as "{link}". */
@@ -940,8 +960,11 @@ export default defineSchema({
     jobId: v.optional(v.id("jobs")),
     assignmentId: v.optional(v.id("assignments")),
     applicationId: v.optional(v.id("applications")),
+    /** A Retention tool: the case it was run on. */
+    caseId: v.optional(v.id("retentionCases")),
     at: v.number(),
   })
+    .index("by_company_case", ["companyId", "caseId", "at"])
     .index("by_company_key", ["companyId", "idempotencyKey"])
     .index("by_company_application", ["companyId", "applicationId", "at"])
     .index("by_company_job", ["companyId", "jobId", "at"]),
@@ -973,6 +996,8 @@ export default defineSchema({
   ...salesTables,
   ...notifyTables,
   ...setupTables,
+  // ── Retention: signals, cases, actions, feedback and customer links (convex/lib/retention/schema.ts) ─
+  ...retentionTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

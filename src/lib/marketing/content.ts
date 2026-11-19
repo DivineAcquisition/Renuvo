@@ -32,7 +32,7 @@ export const HERO = {
   eyebrow: "The AI operating platform for cleaning companies",
   headline: "Your business shouldn’t wait on you for everything.",
   supporting:
-    "Meet your AI team for sales, recruiting, dispatch, and retention. Selestial moves the daily work forward—from answering a new inquiry to covering tomorrow’s schedule—within the standards you set. Sales, Recruiter and Dispatch are working today; Retention is on the way.",
+    "Meet your AI team for sales, recruiting, dispatch, and retention. Selestial moves the daily work forward—from answering a new inquiry to covering tomorrow’s schedule—within the standards you set. Sales, Recruiter, Dispatch and Retention are working today.",
   primaryCta: "Get early access",
   secondaryCta: "Meet your AI team",
   trust: "Four coordinated agents. Clear responsibilities. You stay in control.",
@@ -45,7 +45,7 @@ export const AGENT_STATUS: Record<AgentId, { live: boolean; label: string }> = {
   sales: { live: true, label: "Working today" },
   recruiter: { live: true, label: "Working today" },
   dispatch: { live: true, label: "Working today" },
-  retention: { live: false, label: "In development" },
+  retention: { live: true, label: "Working today" },
 };
 
 export const AGENTS: ReadonlyArray<{ id: AgentId; name: string; headline: string; body: string; outcome: string }> = [
@@ -94,7 +94,7 @@ export const HOME_SCREEN = {
     { agent: "sales", statuses: ["Following up on a quote", "Collecting cleaning details", "Checking capacity"] },
     { agent: "recruiter", statuses: ["Tracking onboarding", "Coordinating an interview", "Checking requirements"] },
     { agent: "dispatch", statuses: ["Requesting acceptance", "Confirming coverage", "Watching tomorrow"] },
-    { agent: "retention", statuses: ["In development"] },
+    { agent: "retention", statuses: ["Following up on a concern", "Checking a correction", "Preparing a renewal"] },
   ],
   items: [
     { state: "resolved", label: "Resolved", agent: "dispatch", body: "Tomorrow’s uncovered visit now has an accepted replacement." },
@@ -214,12 +214,13 @@ export const PRICING = {
         "Sales: inquiries by text and email, quotes customers accept online, follow-ups and bookings",
         "Booking pages for your website, priced from your own services",
         "Dispatch: offers, coverage, live jobs and cleaner text-message links",
+        "Retention: service concerns followed through to an outcome, recurring-plan changes customers can make themselves, renewals and re-engagement",
         "Recruiter: your hiring inbox, invitations, applications, interviews and offers",
         "Clients & Properties, Cleaners, Services & Pricing and Finance",
         "Company Chat, approvals, and agreements with AI-guided drafting",
         "A monthly allowance of Selestial Credits for AI work",
       ],
-      later: ["Retention, included when released"],
+      later: [],
     },
     {
       id: "expand",
@@ -234,7 +235,7 @@ export const PRICING = {
   allowanceNote: "Each plan includes a monthly allowance of Selestial Credits, and Expand includes twice Operate's. Your Usage page shows your allowance, what each piece of AI work costs, and what used it.",
   services: "Bespoke implementation, migration and custom development are scoped separately.",
   faqs: [
-    { q: "Which agents does each plan include?", a: "Operate includes Sales, Retention, Recruiter and Dispatch. Expand adds Marketing, Quality, Customer Care and Team Coordinator. Today Sales, Dispatch and Recruiter are working; the others are included in their plan when each is released, and no plan or purchase makes one available sooner." },
+    { q: "Which agents does each plan include?", a: "Operate includes Sales, Retention, Recruiter and Dispatch. Expand adds Marketing, Quality, Customer Care and Team Coordinator. Today Sales, Retention, Dispatch and Recruiter are working; the others are included in their plan when each is released, and no plan or purchase makes one available sooner." },
     { q: "What uses credits?", a: "Selestial Credits pay for defined AI work, such as one Company Chat answer, one hiring email read by AI, or one generated image. Each is charged once when it is completed. Viewing records, opening or answering a cleaner’s link, accepting a job, status changes and scheduled reminders use no credits." },
     { q: "What happens when credits run out?", a: "New AI work pauses and the Owner is told. Schedules, records, cleaner links, active jobs and everything that does not use AI keep working. Nothing is bought automatically; you can buy a top-up or wait for the monthly reset." },
     { q: "Do top-ups unlock agents?", a: "No. A top-up adds credits only. Agents and features come with the plan, and only once they are released." },

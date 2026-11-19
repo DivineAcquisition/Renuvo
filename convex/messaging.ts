@@ -14,6 +14,8 @@ import { readProfile } from "./lib/compliance/profile";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
 import { afterSalesMessage, salesClaim } from "./lib/sales/outbox";
 import { customerClaim } from "./lib/finance/outbox";
+import { afterCareMessage } from "./lib/retention/actions";
+import { careClaim } from "./lib/retention/outbox";
 import { bookingClaim } from "./lib/booking/messages";
 import { statementClaim } from "./lib/finance/cleanerOutbox";
 import { linkPath, linkState, siteOrigin, tokenFor } from "./lib/dispatch/links";
@@ -93,6 +95,7 @@ export const claim = internalMutation({
         const intent = await intentOf(ctx, message);
         await ctx.scheduler.runAfter(0, internal.dispatchOps.offerTextRefused, { messageId: message._id, byAgent: intent.agent !== undefined });
       }
+      if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "not_sent", problem: answer.words });
       return null;
     }
     let body = message.body;
@@ -184,6 +187,18 @@ export const claim = internalMutation({
       }
       body = booking.body;
       fromName = booking.fromName;
+    } else if (message.retentionActionId) {
+      // A Retention message: the case still open and Retention's to write in, and its private link made only now.
+      const care = await careClaim(ctx, message);
+      if ("problem" in care) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: care.problem });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await afterCareMessage(ctx, { ...message, status: "not_sent", problem: care.problem });
+        return null;
+      }
+      body = care.body;
+      fromName = care.fromName;
+      via = care.via;
     } else if (message.salesLinks) {
       // A Sales message to a customer: every record it links still open, and its links made only now.
       const sales = await salesClaim(ctx, message, (await intentOf(ctx, message)).agent !== undefined);
@@ -330,6 +345,7 @@ export const settle = internalMutation({
         await reconcileCharge(ctx, message._id, { providerCost: row.early.providerCost, errorCode: row.early.errorCode });
         await applyOutcome(ctx, (await ctx.db.get(message._id))!, row.early.outcome, row.early.problem);
       }
+      if (message.retentionActionId) await afterCareMessage(ctx, (await ctx.db.get(message._id))!);
       return null;
     }
     // The company's inbox stopped letting Selestial send as it tried: nothing went, so the message waits
@@ -352,6 +368,7 @@ export const settle = internalMutation({
     if (result.bounced) await suppressAfterProblem(ctx, message, "bounce", now);
     if (message.purpose === "member_notice") return null;
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
+    else if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "failed", problem: result.problem });
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem: result.problem });
     else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "failed", problem: result.problem });
     return null;
@@ -554,6 +571,7 @@ async function applyOutcome(ctx: MutationCtx, message: Doc<"messages">, outcome:
     if (bounced || suppressed) await suppressAfterProblem(ctx, message, bounced ? "bounce" : "provider", now);
     if (message.purpose === "member_notice") return bounced ? ("bounced" as const) : ("failed" as const);
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
+    else if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "failed", problem });
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem });
     else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "failed", problem });
     return bounced ? ("bounced" as const) : ("failed" as const);
@@ -579,6 +597,7 @@ export const sweepStuck = internalMutation({
       await logStep(ctx, message, { type: "message.unconfirmed", data: { purpose: message.purpose } });
       if (message.purpose === "member_notice") continue;
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
+      else if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "unconfirmed", problem });
       else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "unconfirmed", problem });
     else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "unconfirmed", problem });
     }

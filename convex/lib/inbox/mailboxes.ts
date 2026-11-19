@@ -23,7 +23,7 @@ type Ctx = QueryCtx | MutationCtx;
 export const PURPOSE_INFO: Record<InboxPurpose, { label: string; agent: Agent | null; agentName: string; does: string }> = {
   sales: { label: "Sales", agent: "sales", agentName: "Sales", does: "Quotes, proposals and replies to people asking about service go from this address, in the same thread." },
   hiring: { label: "Hiring", agent: "recruiter", agentName: "Recruiter", does: "Recruiter reads job-board and applicant mail here, and applicant email goes from this address." },
-  care: { label: "Care & Retention", agent: "retention", agentName: "Retention", does: "Booking confirmations, invoices and payment reminders go from this address." },
+  care: { label: "Care & Retention", agent: "retention", agentName: "Retention", does: "Booking confirmations, invoices, payment reminders and Retention's email to customers go from this address. If you turn it on in Retention's Playbook, Retention also reads replies here from addresses on your customer records." },
   operations: { label: "Operations", agent: "dispatch", agentName: "Dispatch", does: "Kept for operations mail. Dispatch texts cleaners, so nothing is sent from it yet." },
 };
 
