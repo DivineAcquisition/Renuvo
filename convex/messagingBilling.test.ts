@@ -7,9 +7,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dispatchTestEnv, flush, PHONES, setup } from "../tests/dispatchHarness";
-import { HOUR, NOW } from "../tests/harness";
+import { HOUR, NOW, refusal } from "../tests/harness";
 import { billing } from "../tests/setupBilling";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { Actor } from "./lib/events";
 import { queueMessage } from "./lib/messaging/outbox";
@@ -17,6 +17,7 @@ import { mockEmailOutbox } from "./lib/email/provider";
 import { mockOutbox } from "./lib/messaging/provider";
 import { HOLD_MS, OVERDRAFT_FLOOR, refundCharge } from "./lib/messagingBilling/ledger";
 
+const STAFF = { subject: "user_staff", email: "staff@selestial.example", emailVerified: true, name: "Staff" };
 const DISPATCH: Actor = { kind: "agent", agent: "dispatch" };
 /** 10:00 in Chicago, outside quiet hours. */
 const MORNING = NOW + 4 * HOUR;
@@ -220,6 +221,29 @@ describe("Messaging billing", () => {
     const account = await s.t.run(async (ctx) => ctx.db.query("billingAccounts").first());
     expect(account!.notices.map((n) => n.kind)).toContain("messaging_empty");
     expect(OVERDRAFT_FLOOR).toBe(-100_000);
+  });
+
+  it("opens one item for Selestial staff when incoming texts reach the overdraft floor, and staff close it with a credit", async () => {
+    const s = await billed(0);
+    billing.seed(s.companyId, { messaging: { purchased: 0, promo: 0, promoExpiresAt: null, used: 99_900 } });
+    await s.t.action(internal.billing.syncCompany, { companyId: s.companyId });
+    for (const n of [1, 2]) await s.t.mutation(internal.inbound.telnyx, { eventId: `evt-f${n}`, to: s.smsNumber, from: US.Lena, body: `Text ${n}`, receivedAt: Date.now(), providerMessageId: `in-f${n}`, parts: 1, media: 0 });
+    await flush(s.t);
+    const open = await s.t.run(async (ctx) => ctx.db.query("messagingAttention").collect());
+    expect(open).toEqual([expect.objectContaining({ kind: "overdraft_floor", resolvedAt: 0 })]);
+    // Only Selestial staff see and close it.
+    expect(await refusal(s.as.query(api.messagingFunds.attention, {}))).toBe("Not found.");
+    process.env.STAFF_BOOTSTRAP_EMAIL = STAFF.email;
+    const staff = s.t.withIdentity(STAFF);
+    const rows = await staff.query(api.messagingFunds.attention, {});
+    expect(rows).toEqual([expect.objectContaining({ company: expect.any(String), kind: "overdraft_floor", balance: expect.any(Number) })]);
+    expect(rows[0].balance).toBeLessThanOrEqual(OVERDRAFT_FLOOR);
+    await staff.mutation(api.messagingFunds.supportCredit, { companyId: s.companyId, cents: 1_000, reason: "Spam to the number; blocked with the carrier", key: `attention:${rows[0].id}` });
+    await staff.mutation(api.messagingFunds.resolveAttention, { id: rows[0].id, note: "Spam to the number; blocked with the carrier" });
+    await flush(s.t);
+    expect(await staff.query(api.messagingFunds.attention, {})).toEqual([]);
+    expect(left(s)).toBe(-99_900 - 300 + 100_000);
+    delete process.env.STAFF_BOOTSTRAP_EMAIL;
   });
 
   it("refunds a charge once, naming the original, and credits the balance back once", async () => {
