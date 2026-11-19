@@ -455,6 +455,7 @@ import type * as servicesImports from "../servicesImports.js";
 import type * as servicesResearch from "../servicesResearch.js";
 import type * as settings from "../settings.js";
 import type * as setup from "../setup.js";
+import type * as setupProgress from "../setupProgress.js";
 import type * as setupWebsite from "../setupWebsite.js";
 import type * as setupWork from "../setupWork.js";
 import type * as sign from "../sign.js";
@@ -921,6 +922,7 @@ declare const fullApi: ApiFromModules<{
   servicesResearch: typeof servicesResearch;
   settings: typeof settings;
   setup: typeof setup;
+  setupProgress: typeof setupProgress;
   setupWebsite: typeof setupWebsite;
   setupWork: typeof setupWork;
   sign: typeof sign;

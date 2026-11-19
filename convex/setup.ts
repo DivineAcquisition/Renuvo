@@ -93,7 +93,8 @@ export const begin = ownerMutation({
     if (existing) return null;
     const id = await startSetup(ctx, ctx.companyId);
     // They are already working in the product, so setup is something they visit, not a gate.
-    await ctx.db.patch(id, { status: "entered", milestones: { startedAt: Date.now(), enteredAt: Date.now() } });
+    const now = Date.now();
+    await ctx.db.patch(id, { status: "entered", optedIn: true, milestones: { startedAt: now, enteredAt: now } });
     return null;
   },
 });

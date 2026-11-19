@@ -2,7 +2,7 @@
 
 **"Tell us enough about your company. Watch Selestial prepare useful work. Review what matters. Start operating."**
 
-Status: Phase 1 merged (#110), Phase 2a merged (#116), Phases 2b and 3 in review (#118). Phase 4 built November 19, 2026. Each phase is marked here as it is built and verified.
+Status: Phase 1 merged (#110), Phase 2a merged (#116), Phases 2b to 5 in review (#118). Phase 5 built November 19, 2026; every phase is built. Each phase is marked here as it is built and verified.
 
 ## What was there before
 
@@ -44,7 +44,7 @@ Inspected on `main` at `2cbf867`.
 | 2b | Jobber connection (OAuth), Housecall Pro key import | Built |
 | 3 | First work per built agent, with prerequisite checks | Built |
 | 4 | Exact-action review, authority, safe execution, "Your first work" | Built |
-| 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Not started |
+| 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Built |
 
 ## Decisions made by the Owner (November 18)
 
@@ -60,6 +60,45 @@ Inspected on `main` at `2cbf867`.
 | BookingKoala | Spreadsheet only, until its API is documented. |
 | First batch | One review screen in setup across agents (Phase 4). |
 | Delivery | One PR per phase. |
+
+## Phase 5: verified
+
+- **Accessibility**: axe (WCAG 2.1 A and AA) on every setup step for a Sales-first path, at 390 and 1440 wide,
+  plus "Your first work", the Home checklist and Integrations. Every setup step now passes. Fixed: step labels
+  and links used a brand shade that is pale lilac on white (the light theme flips the brand scale; brand-300
+  is the readable violet in both themes), hint text on selected cards was 4.4:1, "Not given yet" was 2.8:1,
+  and the Schedule, Approvals and "Ask Selestial" header buttons had no name on phones, where their words
+  are hidden.
+  Not changed, outside setup: the sidebar's department tabs are 4.48:1 (a shared token pairing used across
+  the app). The preview's stand-in avatar also failed, but it is not what production renders.
+- **Phone layout**: permission rows put the choice on its own full-width line instead of squeezing the
+  action's name; the Integrations page no longer runs wider than a phone (cards now shrink to the screen).
+- **Recovery**: already in place from Phase 1 and checked again: a save from another tab is refused with
+  "Your setup was changed somewhere else… we have loaded the latest"; failed preparation keeps what was
+  done and offers to prepare again; a failed read keeps completed drafts.
+- **Invited staff**: never sent to setup; opening it says "Setup is the Owner's"; they can read "Your first
+  work" and the work cards but not start runs, set authority, or close the checklist.
+- **Existing companies**: never sent through setup. An Owner can choose it ("Go through setup"); it is now
+  marked `optedIn`, so the funnel counts these apart from new companies.
+- **Progressive setup inside the product**: a compact "Left from setup" checklist on Home for the Owner, at
+  most four open items read from records (decisions waiting, what blocks the priority, drafts still to
+  publish or open), gone for good when closed. Integrations lists Jobber and Housecall Pro as built, with
+  their real state, and links to setup's import step (`/app/setup?step=records` opens that step).
+- **Funnel measurement**: Staff › Setup funnel (`setupProgress.funnel`): of setups started in 7, 30 or 90
+  days, how many reached each milestone and the median time from start, with first priorities. Counts only,
+  no company names. An hourly sweep records the first decision and the first agent message as they happen,
+  at their real times, without making the Owner's next save stale.
+- **Gaps from earlier phases, closed**: an approved Sales message whose kind the Owner has since switched off
+  (or that is a person's decision) is not sent (`sendAction` re-reads authority; a pause still holds it).
+  Jobber and Housecall Pro no longer show as "planned".
+- **Gaps that remain, and why**: Jobber's field names are confirmed only by the first real connection after
+  the app is registered. Housecall Pro hasn't been run against a live account. There is no per-message
+  sending charge to show. The website reader resolves an address before fetching it, so a name that changes
+  what it points to in between is not fully excluded by this runtime.
+- **Tests**: `convex/setupProgress.test.ts` (4): milestones recorded later at their real times without a
+  stale save, the staff funnel (opted-in companies apart, no names, staff only), the Home checklist (Owner
+  only, closes for good), Jobber and Housecall Pro states on Integrations. Plus a Sales test: an approved
+  message of a kind switched off is not sent.
 
 ## Phase 4: verified
 
@@ -214,6 +253,5 @@ Built on what already exists rather than beside it.
 
 - Recurring schedules from an import are kept as notes on the client; turning them into recurring plans
   needs a published service.
-- Phase 5: accessibility, recovery states, invited users, existing companies and funnel measurement.
 - Help is written guidance per question. Chat inside setup is not wired.
 - Home has no "continue setup" entry yet; `/app/setup` is reachable directly (Phase 4).

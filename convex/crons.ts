@@ -7,6 +7,7 @@ const crons = cronJobs();
 // Deadlines are kept by the system, not by a page someone has open.
 crons.interval("expire unanswered offers", { minutes: 5 }, internal.assignments.expireDue, {});
 crons.interval("expire undecided approvals", { minutes: 15 }, internal.approvals.expireDue, {});
+crons.interval("setup records its later milestones", { hours: 1 }, internal.setupProgress.catchUp, {});
 
 // Dispatch looks over the coming days for visits that still have no cleaner.
 crons.interval("dispatch looks for uncovered visits", { minutes: 15 }, internal.dispatch.sweep, {});

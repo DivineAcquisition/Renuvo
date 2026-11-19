@@ -37,14 +37,14 @@ export function FirstWork() {
   return (
     <div className="mx-auto grid w-full max-w-3xl gap-5 px-4 py-6 sm:px-6 sm:py-10">
       <header className="grid gap-2">
-        <p className="text-xs font-medium tracking-wide text-brand-600 uppercase dark:text-brand-300">Your first work</p>
+        <p className="text-xs font-medium tracking-wide text-brand-300 uppercase">Your first work</p>
         <h1 className="font-heading text-2xl tracking-tight text-strong sm:text-3xl">{info ? info.title : "Your workspace is ready"}</h1>
         <p className="text-sm text-muted-foreground">Everything here is counted from your records right now.</p>
       </header>
 
       <section className="grid gap-3 rounded-2xl border border-brand-500/30 bg-brand-500/8 p-4 sm:p-5" aria-labelledby="next-heading">
         <h2 id="next-heading" className="flex items-center gap-2 text-sm font-semibold text-strong">
-          <Sparkles className="size-4 text-brand-600" aria-hidden />
+          <Sparkles className="size-4 text-brand-300" aria-hidden />
           Recommended next step
         </h2>
         <p className="text-lg font-medium text-strong">{work.next.words}</p>

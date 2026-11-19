@@ -65,6 +65,10 @@ export const setupTables = {
       firstActionAt: v.optional(v.number()),
       enteredAt: v.optional(v.number()),
     }),
+    /** Set for a company that was already working in Selestial and chose setup later (`setup.begin`). */
+    optedIn: v.optional(v.boolean()),
+    /** The Owner closed the setup checklist on Home. It stays closed; setup itself is still there. */
+    checklistDismissedAt: v.optional(v.number()),
     /** What setup prepared, so going through it again opens the same drafts instead of making new ones. */
     prepared: v.optional(v.object({ serviceId: v.optional(v.id("services")), agreementId: v.optional(v.id("agreements")), experienceId: v.optional(v.id("bookingExperiences")), hiringNeedId: v.optional(v.id("hiringNeeds")) })),
     updatedAt: v.number(),
