@@ -400,6 +400,7 @@ export async function chargeInbound(ctx: Ctx, input: { companyId: Id<"companies"
     .take(INBOUND_PER_HOUR_ALERT + 1);
   if (lastHour.filter((row) => row.direction === "in").length === INBOUND_PER_HOUR_ALERT + 1) {
     await recordEvent(ctx, { companyId: input.companyId, type: "billing.messaging_inbound_spike", actor: { kind: "system" }, subject: { table: "companies", id: input.companyId }, data: { perHour: INBOUND_PER_HOUR_ALERT } });
+    await raiseAttention(ctx, input.companyId, "inbound_spike", `More than ${INBOUND_PER_HOUR_ALERT} incoming texts in an hour. This may be abuse of the number; each one is charged and cannot be refused.`);
   }
   return chargeId;
 }
@@ -451,6 +452,16 @@ export async function postAdjustment(
   return chargeId;
 }
 
+/** Opens an item for Selestial staff, unless one of the same kind is already open for the company. */
+export async function raiseAttention(ctx: Ctx, companyId: Id<"companies">, kind: "overdraft_floor" | "inbound_spike", detail: string) {
+  const open = await ctx.db
+    .query("messagingAttention")
+    .withIndex("by_company_kind_resolved", (q) => q.eq("companyId", companyId).eq("kind", kind).eq("resolvedAt", 0))
+    .first();
+  if (open) return open._id;
+  return ctx.db.insert("messagingAttention", { companyId, kind, at: Date.now(), detail, resolvedAt: 0 });
+}
+
 /** Owner notices for the messaging balance: low, empty, overdrawn, and the staff escalation at the floor. */
 export async function balanceNotices(ctx: Ctx, account: Account) {
   if (!account.messaging) return;
@@ -459,6 +470,7 @@ export async function balanceNotices(ctx: Ctx, account: Account) {
   if (remaining <= OVERDRAFT_FLOOR) {
     await noticeOnce(ctx, account, "messaging_overdraft", `Incoming texts have taken the messaging balance to ${formatUnits(remaining)}. Selestial's team has been told. Incoming texts and opt-outs keep working; add funds to bring it back above zero.`);
     await recordEvent(ctx, { companyId: account.companyId, type: "billing.messaging_overdraft_escalation", actor: { kind: "system" }, subject: { table: "billingAccounts", id: account._id }, data: { remaining } });
+    await raiseAttention(ctx, account.companyId, "overdraft_floor", `Incoming texts took the messaging balance to ${formatUnits(remaining)}, at the ${formatUnits(OVERDRAFT_FLOOR)} floor. Incoming texts and opt-outs keep working; outbound is paused. Check for abuse and contact the Owner.`);
   } else if (remaining <= OVERDRAFT_WARN) {
     await noticeOnce(ctx, account, "messaging_overdraft", `Incoming texts have taken the messaging balance to ${formatUnits(remaining)}. Outbound messages are paused. Add funds to bring it back above zero.`);
   } else if (remaining <= 0) {

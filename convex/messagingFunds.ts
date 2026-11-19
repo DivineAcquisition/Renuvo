@@ -16,10 +16,10 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { connectedOrRefuse, startIntent } from "./billing";
-import { accountFor, customerIdFor } from "./lib/billing/access";
+import { accountFor, billingState, customerIdFor } from "./lib/billing/access";
 import { setMessagingAutoTopUp } from "./lib/billing/autumn";
 import { AUTUMN } from "./lib/billing/catalog";
-import { ownerMutation, staffMutation } from "./lib/builders";
+import { ownerMutation, staffMutation, staffQuery } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { controlsOf, noticeOnce, postAdjustment, refundCharge } from "./lib/messagingBilling/ledger";
@@ -295,3 +295,39 @@ export const paymentEventReceived = internalMutation({
 });
 
 
+
+// ── Selestial staff: what needs a look ─────────────────────────────────────────────────────────
+
+/** Open items: balances at the overdraft floor and bursts of incoming texts, oldest first, with the balance now. */
+export const attention = staffQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("messagingAttention")
+      .withIndex("by_resolved_at", (q) => q.eq("resolvedAt", 0))
+      .take(200);
+    const state = billingState();
+    return Promise.all(
+      rows.map(async (row) => {
+        const company = await ctx.db.get(row.companyId);
+        const account = state.connected ? await accountFor(ctx, row.companyId, state.env) : null;
+        return { id: row._id, companyId: row.companyId, company: company?.name ?? "A company", kind: row.kind, at: row.at, detail: row.detail, balance: account?.messaging?.remaining ?? null };
+      }),
+    );
+  },
+});
+
+/** Staff close an item with what they did. */
+export const resolveAttention = staffMutation({
+  args: { id: v.id("messagingAttention"), note: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row) throw userError("Not found.", "not_found");
+    if (row.resolvedAt !== 0) return null;
+    const note = args.note.trim();
+    if (note.length < 5) throw userError("Say what was done, so it can be audited.");
+    await ctx.db.patch(row._id, { resolvedAt: Date.now(), resolvedBy: ctx.staff._id, note: note.slice(0, 500) });
+    await recordEvent(ctx, { companyId: row.companyId, type: "billing.messaging_attention_resolved", actor: { kind: "system" }, subject: { table: "messagingAttention", id: row._id }, data: { kind: row.kind } });
+    return null;
+  },
+});

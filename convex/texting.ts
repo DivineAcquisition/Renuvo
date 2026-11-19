@@ -270,6 +270,7 @@ const view = (row: Doc<"textingRequests">) => ({
   step: row.step ?? null,
   problem: row.problem ?? null,
   activeAt: row.activeAt ?? null,
+  feesAuthorized: row.fees !== undefined,
 });
 
 /** The company's latest request and where it stands. */

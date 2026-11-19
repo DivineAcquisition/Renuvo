@@ -117,4 +117,23 @@ export const messagingTables = {
     .index("by_settlement_next", ["settlement", "nextSettleAt"])
     .index("by_state_updated", ["state", "updatedAt"])
     .index("by_refund_of", ["refundOf"]),
+
+  /**
+   * Something about a company's messaging money that a Selestial person must look at: a balance taken to
+   * the overdraft floor by incoming texts, or an unusual burst of incoming texts (possible abuse). One open
+   * item per company and kind; staff resolve it with a note.
+   */
+  messagingAttention: defineTable({
+    companyId: v.id("companies"),
+    kind: v.union(v.literal("overdraft_floor"), v.literal("inbound_spike")),
+    at: v.number(),
+    detail: v.string(),
+    /** 0 while open; when staff resolved it. */
+    resolvedAt: v.number(),
+    resolvedBy: v.optional(v.id("staff")),
+    note: v.optional(v.string()),
+  })
+    .index("by_resolved_at", ["resolvedAt", "at"])
+    .index("by_company_kind_resolved", ["companyId", "kind", "resolvedAt"])
+    .index("by_company_at", ["companyId", "at"]),
 };
