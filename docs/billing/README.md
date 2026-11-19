@@ -9,6 +9,9 @@ wallet of its own.
 The code is in `convex/lib/billing/` and `convex/billing.ts`. The Owner's screen is Settings → Plan & Usage
 (`src/components/app/settings/billing.tsx`).
 
+Messaging (texts and business email, paid from a prepaid messaging balance) is described in
+[03-messaging-billing.md](03-messaging-billing.md), with the phase 1 audit in [02-messaging-audit.md](02-messaging-audit.md).
+
 ## Status: what works and what is not configured
 
 | Area | State |
