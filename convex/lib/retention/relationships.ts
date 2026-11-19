@@ -291,7 +291,8 @@ export async function reactivationCandidates(ctx: Ctx, company: Doc<"companies">
       .withIndex("by_company_customer", (q) => q.eq("companyId", companyId).eq("customerId", customer._id))
       .order("desc")
       .take(60);
-    const open = cases.filter((row) => row.status !== "closed" && row.kind !== "reactivation");
+    // A concern or a plan request still open. A feedback request that is out is not an unresolved issue.
+    const open = cases.filter((row) => row.status !== "closed" && (row.kind === "recovery" || row.kind === "continuity"));
     const existing = cases.find((row) => row.kind === "reactivation" && (row.status !== "closed" || now - (row.closedAt ?? 0) < 90 * DAY)) ?? null;
     const cancelled = cases.find((row) => row.outcome?.code === "customer_cancelled");
     const declined = cases.some((row) => row.outcome?.code === "declined_contact");

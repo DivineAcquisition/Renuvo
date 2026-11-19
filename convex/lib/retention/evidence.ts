@@ -135,7 +135,7 @@ export async function gatherEvidence(ctx: Ctx, company: Doc<"companies">, row: P
       .take(50);
     for (const other of cases) {
       if (other._id === row._id || other.kind !== "recovery" || other.createdAt > row.createdAt) continue;
-      out.prior.push({ caseId: other._id, feedbackId: null, jobId: other.jobId ?? null, at: other.createdAt, areas: other.areas, shared: sharedAreas(other.areas, row.areas), outcome: other.outcome?.code ?? null, correctionCompleted: other.verification ? other.verification.correctionCompletedAt !== undefined : null });
+      out.prior.push({ caseId: other._id, feedbackId: null, jobId: other.jobId ?? null, at: other.createdAt, areas: other.areas, shared: sharedAreas(other.areas, row.areas), outcome: other.outcome?.code ?? null, correctionCompleted: other.verification?.correctionCompletedAt !== undefined });
     }
     const feedback = await ctx.db
       .query("retentionFeedback")

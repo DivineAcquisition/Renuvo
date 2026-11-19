@@ -29,7 +29,6 @@ const PERMISSION: Record<PlanChange, string> = {
   pause_billing: "retention.hand_off",
 };
 
-const DONE: Record<PlanChange, Outcome> = { skip_visit: "plan_adjusted", pause_service: "plan_adjusted", resume: "plan_resumed", end_service: "customer_cancelled", reschedule_visit: "plan_adjusted", change_cadence: "plan_adjusted", pause_billing: "plan_adjusted" };
 
 export type ChangeRequest = ChangeInput & {
   plan: PlanRef;
@@ -97,10 +96,7 @@ export async function requestPlanChange(ctx: MutationCtx, company: Doc<"companie
   // The office changing a plan in the workspace is a person acting: it is carried out under their own authority to do so.
   const routed = request.requestedBy === "staff" && request.actor.kind === "member" && !needsPerson ? await carryOutNow(ctx, company, action._id, request.actor) : await submitAction(ctx, company, action._id, request.requestedBy === "customer" ? RETENTION : request.actor);
   row = (await ctx.db.get(row._id))!;
-  if (routed.status === "done") {
-    await closeCase(ctx, row, DONE[request.change], request.requestedBy === "customer" ? SYSTEM : request.actor, routed.detail);
-    return { status: "done", words: routed.detail, caseId: row._id };
-  }
+  if (routed.status === "done") return { status: "done", words: routed.detail, caseId: row._id };
   if (routed.status === "awaiting_approval") {
     await moveCase(ctx, row, { status: "needs_attention", doing: "The request is recorded and waiting for approval.", needs: `${who} asked to ${title.toLowerCase()}. Approve the request to carry it out as previewed.` }, SYSTEM);
     return { status: "awaiting_approval", words: "Your request is recorded. Nothing has changed yet: the office confirms it first.", caseId: row._id };

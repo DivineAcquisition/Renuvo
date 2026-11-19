@@ -25,10 +25,10 @@ import { checkCapacity } from "../sales/capacity";
 import { businessSettingsOf } from "../settings/business";
 import { liveTaskByKey, openTask, setTaskState } from "../taskState";
 import { addLocalDays, clock, dayName, startOfLocalDay } from "../time";
-import { addEntry, DAY, HOUR, moveCase, permitFor, propertyName, RETENTION, SYSTEM } from "./cases";
+import { addEntry, closeCase, DAY, HOUR, moveCase, permitFor, propertyName, RETENTION, SYSTEM } from "./cases";
 import { issueCareLink } from "./links";
 import { careChannel, queueCareMessage, type CarePurpose } from "./outbox";
-import { applyPlanChange, NEEDS_PERSON } from "./planChanges";
+import { applyPlanChange, CHANGE_OUTCOME, NEEDS_PERSON } from "./planChanges";
 import { retentionSettings } from "./settings";
 import type { ActionKind, HandoffTo, LinkPurpose } from "./schema";
 
@@ -437,6 +437,8 @@ export async function carryOut(ctx: MutationCtx, company: Doc<"companies">, acti
     if (!result.ok) return fail(result.detail, result.retry ? "proposed" : "failed");
     await setAction(ctx, action, { status: "done", result: result.detail });
     await addEntry(ctx, row, { kind: "action", text: result.detail, actor: decidedBy });
+    // The request was the whole case: once the plan shows the change, it is closed as what happened.
+    if (row.kind === "continuity") await closeCase(ctx, (await ctx.db.get(row._id))!, CHANGE_OUTCOME[change.change], change.requestedBy === "customer" ? SYSTEM : decidedBy, result.detail);
     return { ok: true, detail: result.detail };
   }
   throw userError("This action cannot be carried out here.");

@@ -176,9 +176,15 @@ export const submitFeedback = salesLinkMutation({
   resolve,
   args: { rating: v.optional(v.number()), comment: v.optional(v.string()), issue: v.optional(issueArg), clientKey: v.string() },
   handler: async (ctx, args): Promise<Result> => {
+    const { link, company } = ctx.link;
+    // Feedback already given through this link is the answer, however the page is reloaded or the button tapped again.
+    const given = await ctx.db
+      .query("retentionFeedback")
+      .withIndex("by_company_link", (q) => q.eq("companyId", company._id).eq("linkId", link._id))
+      .first();
+    if (given) return { ok: true, words: "We already have your feedback. Thank you." };
     const refusal = await gate(ctx, ctx.link, "submit_feedback");
     if (refusal) return no(refusal);
-    const { link, company } = ctx.link;
     if (!KEY.test(args.clientKey)) return no("Reload the page and try again.");
     const job = link.jobId ? await ctx.db.get(link.jobId) : null;
     if (!job || job.companyId !== company._id) return no("This link is not about a service.");

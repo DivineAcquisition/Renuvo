@@ -41,6 +41,9 @@ export const CHANGE_WORDS: Record<PlanChange, string> = {
   end_service: "End service",
 };
 
+/** What a case about a plan change is closed as once the change is carried out. */
+export const CHANGE_OUTCOME: Record<PlanChange, "plan_adjusted" | "plan_resumed" | "customer_cancelled"> = { skip_visit: "plan_adjusted", pause_service: "plan_adjusted", resume: "plan_resumed", end_service: "customer_cancelled", reschedule_visit: "plan_adjusted", change_cadence: "plan_adjusted", pause_billing: "plan_adjusted" };
+
 /** Changes a person must decide, because a price, a crew's time or money already invoiced may change. */
 export const NEEDS_PERSON: readonly PlanChange[] = ["reschedule_visit", "change_cadence", "pause_billing"];
 

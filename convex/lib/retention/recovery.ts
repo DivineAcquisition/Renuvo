@@ -19,8 +19,9 @@ import { localParts } from "../availability";
 import { recordEvent, type Actor } from "../events";
 import { ACTION_WORDS, actionsOf, careChannel, correctionCost, correctionSlots, prepareAction, submitAction, whenWords } from "./actions";
 import { addEntry, areasIn, caseByKey, cleanAreas, closeCase, DAY, entriesOf, HOUR, moveCase, openCase, propertyName, RETENTION, seriousReason, sharedAreas, SYSTEM } from "./cases";
-import { DIAGNOSIS_WORDS, diagnoseByRule } from "./diagnose";
+import { DIAGNOSIS_WORDS, diagnoseByRule, retentionModel } from "./diagnose";
 import { gatherEvidence, statements, type Evidence } from "./evidence";
+import { enqueueRun } from "./runs";
 import { raiseSignal, attachSignal } from "./signals";
 import { retentionSettings } from "./settings";
 import type { Diagnosis } from "./schema";
@@ -122,6 +123,8 @@ export async function openRecovery(ctx: MutationCtx, company: Doc<"companies">, 
   }
   row = await assess(ctx, company, row);
   if (!row.serious) row = await planRecovery(ctx, company, row, { wantsDifferentCleaner: concern.wantsDifferentCleaner === true });
+  // When an AI reader is connected, it reads the customer's words once, with credits held first. The rules' reading stands until then, and if it cannot.
+  if (!row.serious && retentionModel()) await enqueueRun(ctx, { companyId: company._id, kind: "diagnose", key: `diagnose:${row._id}`, caseId: row._id });
   return { row, created: true };
 }
 
@@ -553,5 +556,7 @@ export async function followThrough(ctx: MutationCtx, company: Doc<"companies">,
   }
   row = (await ctx.db.get(row._id))!;
   if (row.status === "closed") return row;
-  return moveCase(ctx, row, { status: needs ? "needs_attention" : row.status === "waiting_on_customer" ? "waiting_on_customer" : "action_underway", doing: row.status === "waiting_on_customer" ? row.doing : doing, needs, clearNeeds: !needs }, RETENTION);
+  // A request that is out and waiting is not held up by a record-keeping gap: the gap is shown on the case for a person.
+  const waiting = row.status === "waiting_on_customer";
+  return moveCase(ctx, row, { status: waiting ? "waiting_on_customer" : needs ? "needs_attention" : "action_underway", doing: waiting ? row.doing : doing, needs, clearNeeds: !needs }, RETENTION);
 }
