@@ -892,3 +892,86 @@ describe("customer email in the Care inbox", () => {
     expect((await s.t.run(async (ctx) => (await ctx.db.get(s.connectionId))!)).status).toBe("expired");
   });
 });
+
+describe("a recurring plan offered after a good first service", () => {
+  /** A first service, the feedback request sent, and the customer's answer through their link. */
+  async function firstServiceFeedback(s: S, answer: { rating?: number; issue?: string }, offer: "execute" | "propose" | "off" | null = "execute", key = "clean-key-01") {
+    await s.trust();
+    if (offer) await s.as.mutation(api.permissions.set, { companyId: s.companyId, action: "retention.offer_recurring_plan", level: offer });
+    const jobId = await s.completed({ scope: SCOPE, checklist: [{ label: "Clean the shower", state: "done" as const }] });
+    const sent = await s.t.mutation(api.retentionCare.submitFeedback, { token: careLink(), ...(answer.rating !== undefined ? { rating: answer.rating } : {}), ...(answer.issue ? { issue: { description: answer.issue, areas: [], wantsDifferentCleaner: false } } : {}), clientKey: key });
+    expect(sent.ok).toBe(true);
+    await flush(s.t);
+    return jobId;
+  }
+  const offerCase = async (s: S) => (await s.cases()).find((c) => c.key.startsWith("recurring:")) ?? null;
+
+  it("hands Sales the offer with no price in it, and calls it a success only when a plan is on record", async () => {
+    const s = await retentionSetup();
+    const jobId = await firstServiceFeedback(s, { rating: 5 });
+    const row = (await offerCase(s))!;
+    expect(row).toMatchObject({ kind: "continuity", status: "action_underway", jobId, origin: "feedback" });
+    let detail = await s.detail(row._id);
+    const offer = detail.actions.find((a) => a.kind === "recurring_offer")!;
+    expect(offer).toMatchObject({ status: "underway", handoff: { to: "sales", status: "open" } });
+    expect(`${offer.summary} ${offer.reason}`).not.toMatch(/\$|%|discount of/i);
+    const task = await s.t.run(async (ctx) => (await ctx.db.query("tasks").collect()).find((t) => t.companyId === s.companyId && t.agent === "sales" && t.key?.startsWith("retention.handoff:"))!);
+    expect(task).toMatchObject({ status: "needs_decision" });
+    // Feedback again, or a second read, prepares nothing more.
+    await s.reconcile();
+    expect((await s.cases()).filter((c) => c.key.startsWith("recurring:"))).toHaveLength(1);
+    // Sales finishes. That is the offer made, not the plan started: the record is watched.
+    await s.as.mutation(api.tasks.complete, { companyId: s.companyId, taskId: task._id, outcome: "Offered biweekly service by phone. They will think about it." });
+    vi.setSystemTime(Date.now() + HOUR);
+    await s.reconcile();
+    detail = await s.detail(row._id);
+    expect(detail.card).toMatchObject({ status: "monitoring", outcome: null });
+    // A recurring plan appears on the record: now, and only now, it is closed as started.
+    await weeklyPlan(s);
+    vi.setSystemTime(Date.now() + HOUR);
+    await s.reconcile();
+    expect((await s.detail(row._id)).card.outcome).toMatchObject({ code: "recurring_started", verified: true });
+    const measure = (await s.as.query(api.retentionAgent.outcomes, { companyId: s.companyId, asOf: Date.now() })).measures.find((m) => m.key === "recurring_offers")!;
+    expect(measure).toMatchObject({ numerator: 1, denominator: 1 });
+  });
+
+  it("closes an offer nobody took up as exactly that", async () => {
+    const s = await retentionSetup();
+    await firstServiceFeedback(s, { rating: 4 });
+    const row = (await offerCase(s))!;
+    const task = await s.t.run(async (ctx) => (await ctx.db.query("tasks").collect()).find((t) => t.companyId === s.companyId && t.agent === "sales" && t.key?.startsWith("retention.handoff:"))!);
+    await s.as.mutation(api.tasks.complete, { companyId: s.companyId, taskId: task._id, outcome: "Offered by email." });
+    await s.reconcile();
+    vi.setSystemTime(Date.now() + 31 * DAY);
+    await s.reconcile();
+    const closed = (await s.detail(row._id)).card.outcome;
+    expect(closed).toMatchObject({ code: "offer_made_no_plan", verified: false });
+    expect(closed!.words).toContain("None has been started");
+  });
+
+  it("offers nothing after a described issue, a low rating, to a customer already on a plan, or when the Owner switched it off", async () => {
+    const issue = await retentionSetup();
+    await firstServiceFeedback(issue, { rating: 5, issue: "The shower was not cleaned." });
+    expect(await offerCase(issue)).toBeNull();
+
+    const low = await retentionSetup();
+    await firstServiceFeedback(low, { rating: 3 });
+    expect(await offerCase(low)).toBeNull();
+
+    const onPlan = await retentionSetup();
+    await weeklyPlan(onPlan);
+    await firstServiceFeedback(onPlan, { rating: 5 });
+    expect(await offerCase(onPlan)).toBeNull();
+
+    const off = await retentionSetup();
+    await firstServiceFeedback(off, { rating: 5 }, "off");
+    expect(await offerCase(off)).toBeNull();
+
+    // Ask me first, which is where it starts: prepared, and nothing reaches Sales until a person approves.
+    const ask = await retentionSetup();
+    await firstServiceFeedback(ask, { rating: 5 }, null);
+    expect(await offerCase(ask)).toMatchObject({ status: "needs_attention" });
+    expect((await ask.pending()).map((p) => p.action)).toContain("retention.offer_recurring_plan");
+    expect(await ask.t.run(async (ctx) => (await ctx.db.query("tasks").collect()).filter((t) => t.agent === "sales"))).toEqual([]);
+  });
+});

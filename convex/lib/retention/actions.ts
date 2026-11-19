@@ -52,6 +52,7 @@ export const ACTION_WORDS: Record<ActionKind, string> = {
   renewal_proposal: "Renewal proposal",
   service_review: "Service review",
   return_offer: "Return offer",
+  recurring_offer: "Recurring plan offer",
   dispatch_review: "Dispatch review",
 };
 
@@ -445,9 +446,18 @@ export async function carryOut(ctx: MutationCtx, company: Doc<"companies">, acti
     return { ok: true, detail: `${why} Handed to the Owner in Finance. The case stays open until it is recorded.` };
   }
 
-  if (action.kind === "inspection" || action.kind === "billing_review" || action.kind === "renewal_proposal" || action.kind === "dispatch_review") {
-    const to: HandoffTo = action.kind === "inspection" ? "quality" : action.kind === "billing_review" ? "finance" : action.kind === "renewal_proposal" ? "sales" : "dispatch";
-    const expected = action.kind === "inspection" ? "What the inspection found, recorded on the task." : action.kind === "billing_review" ? "The charge reviewed, and what was decided, recorded on the task." : action.kind === "renewal_proposal" ? "A renewal or scope-adjustment proposal sent, or a recorded decision not to." : "What Dispatch will do, recorded on the task.";
+  if (action.kind === "inspection" || action.kind === "billing_review" || action.kind === "renewal_proposal" || action.kind === "recurring_offer" || action.kind === "dispatch_review") {
+    const to: HandoffTo = action.kind === "inspection" ? "quality" : action.kind === "billing_review" ? "finance" : action.kind === "renewal_proposal" || action.kind === "recurring_offer" ? "sales" : "dispatch";
+    const expected =
+      action.kind === "inspection"
+        ? "What the inspection found, recorded on the task."
+        : action.kind === "billing_review"
+          ? "The charge reviewed, and what was decided, recorded on the task."
+          : action.kind === "renewal_proposal"
+            ? "A renewal or scope-adjustment proposal sent, or a recorded decision not to."
+            : action.kind === "recurring_offer"
+              ? "A recurring plan offered at the company's standard price and the customer's answer recorded, or a recorded decision not to offer one."
+              : "What Dispatch will do, recorded on the task.";
     const taskId = await openHandoff(ctx, row, action, { to, title: action.summary, question: `${action.summary}. ${action.reason}`, expected, dueAt: action.dueAt ?? Date.now() + 2 * DAY });
     await setAction(ctx, action, { status: "underway", handoff: { to, expected, taskId, status: "open" }, result: `Handed to ${HANDOFF_WORDS[to]}.` });
     await addEntry(ctx, row, { kind: "handoff", text: `Handed to ${HANDOFF_WORDS[to]}: ${action.summary}. Expected back: ${expected}`, source: { table: "tasks", id: taskId, label: "Task" }, actor: decidedBy });

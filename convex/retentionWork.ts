@@ -23,6 +23,7 @@ import { addEntry, closeCase, DAY, RETENTION, SYSTEM } from "./lib/retention/cas
 import { onCustomerText } from "./lib/retention/continuity";
 import { checkedReading, retentionModel } from "./lib/retention/diagnose";
 import { assess, closeQuiet, correctionCompleted, followThrough, noteNextService, planRecovery } from "./lib/retention/recovery";
+import { recurringOfferUpkeep } from "./lib/retention/growth";
 import { reconcile } from "./lib/retention/reconcile";
 import { prepareRenewal } from "./lib/retention/relationships";
 import { enqueueRun } from "./lib/retention/runs";
@@ -73,6 +74,8 @@ async function upkeep(ctx: MutationCtx, company: Doc<"companies">): Promise<stri
     .withIndex("by_company_status", (q) => q.eq("companyId", company._id).eq("status", "underway"))
     .take(300);
   for (const action of underway) if (await syncHandoff(ctx, action)) returned += 1;
+  // Before the quiet close, so an offer's own outcome is the one recorded.
+  const offers = await recurringOfferUpkeep(ctx, company, now);
   const quiet = await closeQuiet(ctx, company, now);
   const result = await reconcile(ctx, company);
   // An end of term coming up gets its case and its service review prepared once.
@@ -90,7 +93,7 @@ async function upkeep(ctx: MutationCtx, company: Doc<"companies">): Promise<stri
       renewals += 1;
     }
   }
-  return `${result.seen} signals on record, ${result.cleared} cleared, ${returned} handoffs returned, ${quiet} quiet cases closed, ${renewals} renewals prepared`;
+  return `${result.seen} signals on record, ${result.cleared} cleared, ${returned} handoffs returned, ${quiet} quiet cases closed, ${offers} recurring offers closed, ${renewals} renewals prepared`;
 }
 
 export const run = internalMutation({

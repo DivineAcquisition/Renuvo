@@ -83,6 +83,42 @@ There is no churn probability and no inactivity threshold.
    when a person marked the relationship former or their recurring service ended. Open issues, opt-outs
    and missing permission make them ineligible. One offer at a time, with no price or discount.
 
+A sixth, smaller flow earns the next service after a good first one (`lib/retention/growth.ts`): when a
+home customer with no recurring plan gives feedback, describes no issue and did not rate the service 3
+or lower, Retention prepares a recurring-plan offer and hands it to Sales under "Offer a recurring plan
+at the standard price" (Ask me first until the Owner changes it; Off prepares nothing). Retention names
+no price or discount. The case closes as "recurring plan started" only when a plan is on record, and as
+"offered, none started" thirty days after Sales finishes otherwise.
+
+## Customer email
+
+`convex/retentionInbox.ts` reads customers' replies in an inbox connected for Care & Retention. It is off
+until the Owner turns it on in the Playbook, and nothing received before that moment is read. Headers are
+listed; a message is opened only when its sender's address is on exactly one active customer's record.
+Only the customer's own new lines are read (`lib/retention/mail.ts` drops the quoted original, forwarded
+headers and signatures), by the same rules that read a customer's text. Automatic replies are skipped.
+Nothing is sent, deleted or marked. It keeps its own cursor on the connection, so an inbox shared with
+hiring is read by Recruiter and Retention independently.
+
+## What the people who run the company are told
+
+Through the shared notices (`convex/lib/notify`), by email, under each person's own settings:
+
+| Notice | When | Priority |
+| --- | --- | --- |
+| A serious concern needs a person | A case opens with a safety, damage, theft or staff-conduct concern | Critical: goes at any hour |
+| A case needs your decision | A case starts waiting on a person and no approval is already waiting (the approval has its own notice) | High |
+| A commitment is overdue | An open case passes its deadline; once per deadline | High |
+| A case closed | A recovery, plan-change, renewal, offer or return case closes with its outcome. Routine first-service follow-through is not sent | Normal |
+| Retention did this for you | A step carried out at Act and notify me | Normal |
+
+Each is written when it goes, from the record as it is then: a case someone already took, decided or
+closed sends nothing. The customer's own words are never put in the email. The person who did the thing
+is not told about it.
+
+The sidebar shows the same facts as badges: serious concerns nobody has taken, cases waiting on a person,
+overdue commitments, then "Working" or "Waiting on replies".
+
 ## Customer pages
 
 `/c/care/<token>` (`convex/retentionCare.ts`, `src/components/public/care-page.tsx`): give feedback,
@@ -97,6 +133,8 @@ minutes. Everyone is shown the same public review page, whatever they answered.
 | --- | --- |
 | Navigation | Needs Attention · Recovery · Continuity & Renewals · Re-engagement · Playbook, replacing the seven tabs recorded earlier. |
 | Correction visits | No charge to the customer. The visit's price is the basis the crew is paid from, so a share-paid cleaner is paid; Finance leaves it out of invoicing and revenue. |
+| Crew pay on a correction (November 19) | The Owner sets it each time. Retention prepares the visit and shows the original price in proportion to the time for reference, but fills nothing in. Nothing is booked, and nothing goes to Approvals, until the Owner sets the figure; setting it books the visit. A Manager cannot set it. |
+| What the Owner is told (November 19) | Serious concern, case needs a decision, commitment overdue, outcome recorded. |
 | Customer plan changes | Routed by the Owner's authority settings. A cancellation request is recorded at once either way. |
 | Feedback | After the first service only, unless a person asks. A rating routes nothing. |
 
@@ -105,7 +143,8 @@ minutes. Everyone is shown the same public review page, whatever they answered.
 - Memberships, prepaid packages and expiring cleaning credits do not exist in Selestial.
 - No reservation calendar is connected, so lost short-term rental turnovers cannot be known.
 - Texts and emails are not metered, so there is no messaging balance to check.
-- Email replies from existing customers are not received.
-- Sidebar badges for Retention.
+- Customer email is read only from a connected Care & Retention inbox with reading turned on. Without
+  one, replies go to the company's own mailbox and Selestial does not see them.
+- An email from an address on two customers' records, or on none, is left for a person.
 - The Claude reader (`RETENTION_MODEL=claude`) is written and not verified against the live API: no key
   was available. The published rate cards give `retention_assessment` no rate yet, so the rules read.

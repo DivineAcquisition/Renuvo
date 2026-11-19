@@ -65,6 +65,8 @@ export const OUTCOME_WORDS: Record<Outcome, string> = {
   contract_renewed: "Contract renewed.",
   contract_ended: "Contract ended.",
   reactivated: "Customer returned: a new service was completed.",
+  recurring_started: "Customer started a recurring plan after the offer.",
+  offer_made_no_plan: "A recurring plan was offered. None has been started.",
   declined_contact: "Customer asked not to be contacted.",
   handled_by_person: "Handled by a person.",
   no_action_needed: "Reviewed: nothing needed.",
@@ -72,7 +74,7 @@ export const OUTCOME_WORDS: Record<Outcome, string> = {
 };
 
 /** Outcomes that say the relationship continued in practice. Everything else is reported under its own name. */
-export const VERIFIED_OUTCOMES: readonly Outcome[] = ["customer_confirmed", "subsequent_service_completed", "feedback_no_issue", "plan_adjusted", "plan_resumed", "contract_renewed", "reactivated"];
+export const VERIFIED_OUTCOMES: readonly Outcome[] = ["customer_confirmed", "subsequent_service_completed", "feedback_no_issue", "plan_adjusted", "plan_resumed", "contract_renewed", "reactivated", "recurring_started"];
 
 /**
  * Safety, damage, theft and staff conduct always go to an authorized person (the permission catalog's

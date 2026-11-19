@@ -329,6 +329,7 @@ import type * as lib_retention_cases from "../lib/retention/cases.js";
 import type * as lib_retention_continuity from "../lib/retention/continuity.js";
 import type * as lib_retention_diagnose from "../lib/retention/diagnose.js";
 import type * as lib_retention_evidence from "../lib/retention/evidence.js";
+import type * as lib_retention_growth from "../lib/retention/growth.js";
 import type * as lib_retention_links from "../lib/retention/links.js";
 import type * as lib_retention_mail from "../lib/retention/mail.js";
 import type * as lib_retention_measures from "../lib/retention/measures.js";
@@ -788,6 +789,7 @@ declare const fullApi: ApiFromModules<{
   "lib/retention/continuity": typeof lib_retention_continuity;
   "lib/retention/diagnose": typeof lib_retention_diagnose;
   "lib/retention/evidence": typeof lib_retention_evidence;
+  "lib/retention/growth": typeof lib_retention_growth;
   "lib/retention/links": typeof lib_retention_links;
   "lib/retention/mail": typeof lib_retention_mail;
   "lib/retention/measures": typeof lib_retention_measures;

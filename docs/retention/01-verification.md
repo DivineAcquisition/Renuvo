@@ -27,7 +27,17 @@ Also covered: serious concerns go to a person with no remedy; spending limits; a
 carried out; a link is limited to its purpose; Retention paused does nothing and resumes; renewals from
 real agreement dates; measures with denominators; a customer's text cannot instruct the AI reader.
 
-The whole suite: 100 files, 1,100 tests passing (1,070 before this work, plus 30).
+Added November 19, 2026:
+
+| Scenario | What the test shows |
+| --- | --- |
+| Crew pay on a correction | The visit is prepared with no pay figure and is not booked or sent to Approvals. A Manager cannot set it, and submitting does not get round it. The Owner's figure books the visit at that figure. A visit whose time filled is still not booked. |
+| Owner notices | A serious concern is sent at once without the customer's words; a case waiting on a person is sent once and not when an approval already covers it; an overdue commitment is sent once per deadline; a closed case reports its outcome, not to the person who recorded it; a notice whose case was already dealt with is not sent. |
+| Sidebar badges | Serious first, then decisions, then overdue, then working. |
+| Customer email | Nothing is read until turned on, or from before then. A stranger's mail and an automatic reply are never opened. Quoted text is not read as the customer's. A described problem opens one case; an instruction in the email prepares nothing. Recruiter's cursor is untouched. An ended authorization marks the inbox expired. |
+| Recurring-plan offer | Handed to Sales with no price in it; "started" only when a plan is on record; "offered, none started" otherwise. Nothing after a described issue, a rating of 3 or lower, an existing plan, or with the permission Off. At Ask me first nothing reaches Sales before approval. |
+
+The whole suite count is in the pull request.
 
 ## Screens
 

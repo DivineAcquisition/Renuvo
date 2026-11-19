@@ -41,7 +41,7 @@ describe("the Overview", () => {
     expect(first.briefing[1]).toMatchObject({ certainty: "attention", link: { kind: "view", view: "schedule_tomorrow" } });
     expect(await as.query(api.overview.decisionCount, { companyId })).toBe(1);
     // The sidebar's badges come from the same record: one decision, and one visit nobody has been asked to take.
-    expect(await as.query(api.overview.sidebar, s.at())).toEqual({ decisions: 1, dispatch: { paused: false, withYou: 1, inProgress: 0, waiting: 0, unfilled: 1, unfilledWithinDay: 0, awaitingAnswer: 0 }, sales: { paused: false, withYou: 0, running: 0, waiting: 0 } });
+    expect(await as.query(api.overview.sidebar, s.at())).toEqual({ decisions: 1, dispatch: { paused: false, withYou: 1, inProgress: 0, waiting: 0, unfilled: 1, unfilledWithinDay: 0, awaitingAnswer: 0 }, sales: { paused: false, withYou: 0, running: 0, waiting: 0 }, retention: { paused: false, serious: 0, withYou: 0, overdue: 0, underway: 0, waiting: 0 } });
     const departments = (await as.query(api.overview.team, { companyId })).departments;
     expect(departments.map((row) => [row.id, row.agents.map((agent) => agent.agent)])).toEqual([
       ["growth", ["sales", "retention"]],

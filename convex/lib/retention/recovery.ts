@@ -18,6 +18,7 @@ import type { MutationCtx } from "../../_generated/server";
 import { localParts } from "../availability";
 import { dayName } from "../time";
 import { recordEvent, type Actor } from "../events";
+import { offerRecurring } from "./growth";
 import { ACTION_WORDS, actionsOf, careChannel, correctionCost, correctionSlots, prepareAction, submitAction, whenWords } from "./actions";
 import { addEntry, areasIn, caseByKey, cleanAreas, closeCase, DAY, entriesOf, HOUR, moveCase, openCase, propertyName, RETENTION, seriousReason, sharedAreas, SYSTEM } from "./cases";
 import { DIAGNOSIS_WORDS, diagnoseByRule, retentionModel } from "./diagnose";
@@ -357,6 +358,8 @@ export async function recordFeedback(ctx: MutationCtx, company: Doc<"companies">
     caseId = followThrough._id;
   }
   if (caseId) await ctx.db.patch(feedbackId, { caseId });
+  // A service the customer says went well is when a recurring plan is worth offering, through Sales.
+  if (!effective) await offerRecurring(ctx, company, { customer, property, job, rating, feedbackId });
   return { feedbackId, caseId, repeated: false };
 }
 

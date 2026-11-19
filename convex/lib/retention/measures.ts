@@ -196,6 +196,14 @@ export async function measures(ctx: QueryCtx, company: Doc<"companies">, now: nu
       : none("reactivation", "Former customers who returned", "Of return offers that have closed, how many were followed by a completed service.", period90, "No return offer has closed in this period."),
   );
 
+  // ── Recurring plans offered after a good first service ──
+  const recurringOffers = closed.filter((row) => row.key.startsWith("recurring:") && (row.outcome?.code === "recurring_started" || row.outcome?.code === "offer_made_no_plan"));
+  out.push(
+    recurringOffers.length
+      ? { key: "recurring_offers", label: "Recurring plans started after an offer", meaning: "Of recurring-plan offers handed to Sales that have closed, how many were followed by a recurring plan on record. An offer still with Sales, or still being watched, is not counted yet.", numerator: recurringOffers.filter((row) => row.outcome?.code === "recurring_started").length, denominator: recurringOffers.length, value: null, unit: "ratio", period: period90, breakdown: [{ label: "Offered, no plan started", count: recurringOffers.filter((row) => row.outcome?.code === "offer_made_no_plan").length }], empty: null }
+      : none("recurring_offers", "Recurring plans started after an offer", "Of recurring-plan offers handed to Sales that have closed, how many were followed by a recurring plan on record.", period90, "No recurring-plan offer has closed in this period."),
+  );
+
   // ── Recovery costs, and revenue after verified recoveries, for the Owner ──
   const actions = [];
   for (const status of ["done", "underway", "failed"] as const) actions.push(...(await ctx.db.query("retentionActions").withIndex("by_company_status", (q) => q.eq("companyId", companyId).eq("status", status).gte("updatedAt", now - WINDOW)).take(800)));

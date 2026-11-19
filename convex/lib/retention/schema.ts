@@ -85,6 +85,8 @@ export const OUTCOMES = [
   "contract_renewed",
   "contract_ended",
   "reactivated",
+  "recurring_started",
+  "offer_made_no_plan",
   "declined_contact",
   "handled_by_person",
   "no_action_needed",
@@ -107,6 +109,7 @@ export const ACTION_KINDS = [
   "renewal_proposal",
   "service_review",
   "return_offer",
+  "recurring_offer",
   "dispatch_review",
 ] as const;
 export type ActionKind = (typeof ACTION_KINDS)[number];
