@@ -26,6 +26,7 @@ import { createExperience } from "./bookingExperiences";
 import { createAgreement } from "./lib/agreements/store";
 import { experienceKindValidator } from "./lib/booking/definition";
 import { createDraft } from "./lib/services/workflow";
+import { wakeActivation } from "./lib/activation/wake";
 import { TEMPLATES } from "./lib/services/templates";
 
 const STALE = "Your setup was changed somewhere else, on another tab or device. Nothing was lost: we have loaded the latest, so check it and continue.";
@@ -151,6 +152,8 @@ export const save = ownerMutation({
       await recordEvent(ctx, { companyId: ctx.companyId, type: "company.updated", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId } });
     }
     for (const [key, value] of stated) await stateFact(ctx, ctx.companyId, ctx.member._id, key, value);
+    // A confirmed answer can unblock first agent work that was waiting for it (lib/activation/wake.ts).
+    if (stated.length) await wakeActivation(ctx, ctx.companyId);
 
     const now = Date.now();
     const skipped = args.skip && steps.some((step) => step.id === args.skip && step.optional) ? [...new Set([...setup.skipped, args.skip])] : setup.skipped;
@@ -277,7 +280,7 @@ export const prepareBooking = ownerMutation({
 });
 
 /**
- * Prepares a hiring brief from what setup knows (confirmed facts only). It is saved paused: it takes no
+ * Prepares a hiring brief from what setup knows (confirmed facts only). It is saved as a draft: it takes no
  * applications and nobody is contacted until the Owner reviews it and opens it. Pay is left for the Owner
  * to approve, as on any role.
  */
@@ -305,7 +308,7 @@ export const prepareHiringBrief = ownerMutation({
       engagement: arrangement.includes("contractors") && !arrangement.includes("employees") ? "contractor" : "employee",
       openings: 1,
     });
-    const needId = await ctx.db.insert("hiringNeeds", { companyId: ctx.companyId, ...brief, status: "paused", createdBy: ctx.member._id, createdAt: Date.now() });
+    const needId = await ctx.db.insert("hiringNeeds", { companyId: ctx.companyId, ...brief, status: "draft", createdBy: ctx.member._id, createdAt: Date.now() });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "hiring_need.prepared", actor: byMember(ctx), subject: { table: "hiringNeeds", id: needId } });
     await markPrepared(ctx, setup, { hiringNeedId: needId });
     return { needId, already: false };

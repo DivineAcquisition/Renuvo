@@ -36,6 +36,7 @@ const MAX_DECISIONS = 4;
  */
 export function OverviewView({
   data,
+  agentsWorking,
   view,
   onView,
   onOpen,
@@ -46,6 +47,8 @@ export function OverviewView({
   checklist,
 }: {
   data: OverviewData;
+  /** "Your agents are working": the Owner's first agent work, when there is any (activation). */
+  agentsWorking?: React.ReactNode;
   view: ScheduleView;
   onView: (view: ScheduleView) => void;
   onOpen: (ref: EventRef) => void;
@@ -67,6 +70,8 @@ export function OverviewView({
       )}
 
       {checklist}
+
+      {agentsWorking}
 
       {today ? (
         <IndicatorRow indicators={today.indicators} now={now} onSchedule={() => onLink({ kind: "view", view: "schedule_today" })} onDecisions={() => onLink({ kind: "view", view: "decisions" })} />

@@ -382,3 +382,46 @@ export function agentActedEmail(input: Recipient & { agent: AgentId; did: string
     footer: memberFooter({ ...input, because: `${agent} is set to act and notify you` }),
   });
 }
+
+// ── Activation: the first work the Owner started ─────────────────────────────────────────────────
+
+/**
+ * The first useful result, or the summary once the batch settles. Only what the records show: each
+ * output is a real record with its state, each blocker names the one thing that unblocks it. No customer
+ * or applicant details are put in the email; the button opens the work behind sign-in.
+ */
+export function activationEmail(input: Recipient & {
+  kind: "first" | "summary";
+  agent: AgentId;
+  focus: string;
+  outputs: { text: string; state: string }[];
+  waiting: string[];
+  blockers: string[];
+  failed: number;
+  button: { label: string; path: string };
+}): Email {
+  const agent = AGENT_FACES[input.agent].name;
+  const first = input.kind === "first";
+  const subject = first ? `Your first ${agent} ${input.outputs.length === 1 ? "result is" : "assets are"} ready` : input.blockers.length || input.failed ? "Your agents' first work: done, and what's left" : "Your agents finished their first work";
+  const done = input.outputs.length;
+  const preheader = first
+    ? `${agent} prepared ${count(done, "thing")} for ${oneLine(input.companyName)} from what you confirmed. Nothing was published or sent without your permission.`
+    : `${count(done, "result")} ready${input.waiting.length ? `, ${count(input.waiting.length, "decision")} for you` : ""}${input.blockers.length ? `, ${count(input.blockers.length, "thing")} blocked` : ""}.`;
+  return finish({
+    origin: input.origin,
+    subject,
+    preheader,
+    blocks: [
+      agentStatus({ agent, state: first ? "First result ready" : "First work settled", tone: input.failed ? "warning" : "success", avatarUrl: emailAssets(input.origin).agent(input.agent) }),
+      eyebrow(`${oneLine(input.focus)} · ${oneLine(input.companyName)}`),
+      title(first ? subject : "Here's where your agents' first work stands"),
+      lead(first ? `Selestial prepared this using the details you confirmed. Drafts stay drafts until you publish them, and nothing reaches a customer, applicant or cleaner except within the permissions you set.` : `Every result below is a record in your workspace that you can open and edit.`),
+      checklist({ heading: "Ready now", items: input.outputs.map((o) => ({ text: `${o.text} (${o.state})`, state: "done" as const })) }),
+      input.waiting.length ? checklist({ heading: "Waiting on your decision", items: input.waiting.map((text) => ({ text, state: "open" as const })) }) : { html: "", text: "" },
+      input.blockers.length ? alert({ tone: "warning", title: input.blockers.length === 1 ? "One thing is blocked" : `${input.blockers.length} things are blocked`, steps: input.blockers }) : { html: "", text: "" },
+      input.failed ? paragraph(`${count(input.failed, "task")} could not finish. The details and a retry are on Home.`) : { html: "", text: "" },
+      action({ label: input.button.label, url: appLink(input.origin, input.button.path) ?? "" }),
+    ],
+    footer: memberFooter({ ...input, because: "notices about what your agents did are on" }),
+  });
+}

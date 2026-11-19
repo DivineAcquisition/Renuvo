@@ -37,7 +37,7 @@ export function HiringNeedsScreen() {
       </>
     );
   }
-  const order = { open: 0, paused: 1, closed: 2 } as const;
+  const order = { draft: 0, open: 1, paused: 2, closed: 3 } as const;
   return (
     <>
       <PageHeader
@@ -84,8 +84,8 @@ function RoleCard({ need }: { need: Need }) {
         <ProgressRing done={filled} total={need.openings} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={need.status === "open" ? "success" : need.status === "paused" ? "warning" : "outline"} size="sm">
-          {need.status === "open" ? "Open" : need.status === "paused" ? "Paused" : "Closed"}
+        <Badge variant={need.status === "open" ? "success" : need.status === "paused" ? "warning" : need.status === "draft" ? "info" : "outline"} size="sm">
+          {need.status === "open" ? "Open" : need.status === "paused" ? "Paused" : need.status === "draft" ? "Draft, not published" : "Closed"}
         </Badge>
         {need.fromTaskId ? <Badge variant="info" size="sm">Requested by Dispatch</Badge> : null}
         {need.targetStartAt ? <span className="text-xs text-muted-foreground">Start by {new Date(need.targetStartAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span> : null}
@@ -117,7 +117,8 @@ function RoleCard({ need }: { need: Need }) {
         </Button>
         {role === "owner" ? (
           <SelectInput aria-label="Status" value={need.status} disabled={busy} onChange={(event) => void run(() => setStatus({ companyId, needId: need._id as Id<"hiringNeeds">, status: event.target.value as Need["status"] }))} className="h-8 w-auto">
-            <option value="open">Open</option>
+            {need.status === "draft" ? <option value="draft">Draft</option> : null}
+            <option value="open">{need.status === "draft" ? "Open to applicants" : "Open"}</option>
             <option value="paused">Paused</option>
             <option value="closed">Closed</option>
           </SelectInput>

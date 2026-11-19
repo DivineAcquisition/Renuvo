@@ -21,6 +21,7 @@ export function AppShell({
   banner,
   dock,
   assistant,
+  notices,
   panel,
   children,
 }: {
@@ -34,6 +35,8 @@ export function AppShell({
   dock?: React.ReactNode;
   /** "Ask Selestial" in the header. */
   assistant?: React.ReactNode;
+  /** The in-app notification inbox in the header. */
+  notices?: React.ReactNode;
   /** The chat panel, which stays open across pages. */
   panel?: React.ReactNode;
   children: React.ReactNode;
@@ -60,6 +63,7 @@ export function AppShell({
           <span className="truncate text-sm font-semibold text-strong lg:hidden">{company}</span>
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {assistant}
+            {notices}
             {schedule ? (
               <Link href={schedule} aria-label="Schedule" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
                 <ScheduleIcon className="size-4" aria-hidden />

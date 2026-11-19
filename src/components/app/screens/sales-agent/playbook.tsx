@@ -382,8 +382,50 @@ export function SalesPlaybookScreen() {
           </Panel>
         ) : null}
 
+        {playbook && playbook.settings.proposedAnswers.length > 0 ? <ProposedAnswers proposals={playbook.settings.proposedAnswers} canEdit={playbook.canEdit} /> : null}
+
         {playbook === undefined ? <Skeleton className="h-96 rounded-2xl" /> : <Editor key={playbook.settings.revision} playbook={playbook} justSaved={savedRevision === playbook.settings.revision} onSaved={setSavedRevision} />}
       </div>
     </>
+  );
+}
+
+/**
+ * Answers Selestial proposed from what the Owner confirmed (their first agent work). Sales uses none of
+ * them: each becomes an approved answer only when the Owner approves it here, as written or edited.
+ */
+function ProposedAnswers({ proposals, canEdit }: { proposals: Settings["proposedAnswers"]; canEdit: boolean }) {
+  const { companyId } = useCompany();
+  const decide = useMutation(api.salesInquiries.decideProposedAnswer);
+  const { busy, error, run } = useRun();
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  return (
+    <section id="proposed" className="scroll-mt-20">
+      <Panel title={`Proposed answers · ${proposals.length}`}>
+        <p className="mb-3 text-xs text-muted-foreground">Selestial wrote these from details you confirmed. Sales won&apos;t use any of them until you approve it. Edit the wording first if you like.</p>
+        <ul className="grid gap-2.5">
+          {proposals.map((row) => (
+            <li key={row.id} className="grid gap-2 rounded-xl border border-dashed border-brand-500/40 bg-brand-500/5 p-3.5">
+              <p className="text-xs font-medium text-muted-foreground">
+                {row.topic} · from: {row.basis.toLowerCase()}
+              </p>
+              <p className="text-sm font-medium text-strong">{row.question}</p>
+              <TextArea aria-label={`Answer to: ${row.question}`} value={edits[row.id] ?? row.answer} disabled={!canEdit || busy} onChange={(event) => setEdits((before) => ({ ...before, [row.id]: event.target.value }))} rows={2} />
+              {canEdit ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button size="xs" variant="primary" disabled={busy} onClick={() => run(() => decide({ companyId, id: row.id, decision: "approve", ...(edits[row.id] !== undefined ? { answer: edits[row.id] } : {}) }))}>
+                    Approve
+                  </Button>
+                  <Button size="xs" variant="ghost" disabled={busy} onClick={() => run(() => decide({ companyId, id: row.id, decision: "discard" }))}>
+                    Discard
+                  </Button>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <FormError message={error} />
+      </Panel>
+    </section>
   );
 }

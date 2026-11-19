@@ -4,11 +4,12 @@ import { SetupChecklist } from "@/components/app/setup/checklist";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
 import { useDetail } from "@/components/app/detail-panel";
 import { messageOf } from "@/components/app/form";
+import { AgentsWorking } from "@/components/app/activation/home";
 import { OverviewView } from "@/components/app/overview/overview-view";
 import type { ScheduleView } from "@/components/app/overview/schedule-table";
 import { useNow } from "@/components/app/use-now";
@@ -63,6 +64,11 @@ export function OverviewScreen() {
 
   return (
     <OverviewView
+      agentsWorking={
+        <Suspense fallback={null}>
+          <AgentsWorking />
+        </Suspense>
+      }
       data={{ firstName: user?.firstName ?? null, now, timezone, today, decisions, schedule, team: team?.departments, activity, week: week?.measures }}
       view={view}
       onView={setView}

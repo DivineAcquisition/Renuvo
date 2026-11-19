@@ -57,7 +57,7 @@ export type Priority = "critical" | "high" | "normal" | "digest";
 /** Who gets it, by role. "connector" adds the member who connected the thing it's about. */
 export type Audience = "owner" | "managers" | "everyone";
 
-export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "agent_acted", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect", "retention_serious", "retention_attention", "retention_outcome", "texting_progress", "texting_attention"] as const;
+export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "agent_acted", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect", "retention_serious", "retention_attention", "retention_outcome", "texting_progress", "texting_attention", "activation_result", "activation_summary"] as const;
 export type NoticeEvent = (typeof NOTICE_EVENTS)[number];
 export const noticeEventValidator = v.union(...NOTICE_EVENTS.map((e) => v.literal(e)));
 
@@ -88,6 +88,8 @@ export const EVENT_INFO: Record<NoticeEvent, EventInfo> = {
   retention_outcome: { category: "activity", priority: "normal", audience: "managers", owner: "selestial", when: "A recovery, plan-change, renewal or return case closes with its recorded outcome." },
   texting_progress: { category: "account", priority: "normal", audience: "owner", owner: "selestial", when: "Business texting: Selestial received the setup, the carriers approved it while the number is still connecting, or texting is ready." },
   texting_attention: { category: "account", priority: "high", audience: "owner", owner: "selestial", when: "Business texting needs the Owner (a correction, a confirmation code or another number), or the carriers paused it." },
+  activation_result: { category: "activity", priority: "normal", audience: "owner", owner: "selestial", when: "The first useful result of the agent work the Owner started is ready: a draft, a form, prepared follow-ups or a decision." },
+  activation_summary: { category: "activity", priority: "normal", audience: "owner", owner: "selestial", when: "The first batch of agent work the Owner started has settled: what was made, what waits on them, and anything blocked." },
 };
 
 /** The roles an audience reaches. */

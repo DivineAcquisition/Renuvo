@@ -8,6 +8,8 @@
  *   clearBlock      a person confirms their own address works again after a bounce
  *   unsubscribeInfo what the unsubscribe link in a notice would turn off (no sign-in; the token is the key)
  *   unsubscribe     turn it off, from the page's button, through Selestial's web server
+ *   inbox           this person's in-app notices (memberNotices), newest first, with unread count
+ *   markRead        mark one of their own notices read; markAllRead marks them all
  * Internal:
  *   notify          plan a notice for everyone it reaches (called by the code where things happen)
  *   hourly          the weekly summary on Monday morning, and approval reminders two hours before a deadline
@@ -17,7 +19,7 @@ import { v } from "convex/values";
 
 import { internalMutation } from "./_generated/server";
 import { companyMutation, companyQuery, publicQuery, serverMutation } from "./lib/builders";
-import { userError } from "./lib/errors";
+import { notFound, userError } from "./lib/errors";
 import { recordEvent } from "./lib/events";
 import { CATEGORY_INFO, EVENT_INFO, noticeCategoryValidator, noticeEventValidator, noticeFactsValidator } from "./lib/notify/catalog";
 import { noticeSuppression, preferenceView, preferencesOf, setEmail as storeEmail, SUPPRESSION_WORDS, type Via } from "./lib/notify/preferences";
@@ -170,5 +172,65 @@ export const hourly = internalMutation({
       for (const approval of due) reminders += (await notifyMembers(ctx, { companyId: company._id, event: "approval_expiring", ref: approval._id })).planned.length;
     }
     return { digests, reminders };
+  },
+});
+
+// ── The in-app inbox (memberNotices) ────────────────────────────────────────────────────────────────
+
+/** Tables an in-app notice may point at, each checked to still belong to this company before it is shown. */
+const NOTICE_TARGETS = new Set(["services", "bookingExperiences", "agreements", "companies", "salesActions", "hiringNeeds", "applications", "jobs", "tasks", "retentionCases", "retentionSignals", "activations", "activationTasks"]);
+
+/**
+ * This person's own notices, newest first. Another person's notices are never readable, even in the same
+ * company. A notice whose record is gone, or belongs elsewhere, is shown without its link.
+ */
+export const inbox = companyQuery({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("memberNotices")
+      .withIndex("by_member_created", (q) => q.eq("companyId", ctx.companyId).eq("memberId", ctx.member._id))
+      .order("desc")
+      .take(Math.min(Math.max(args.limit ?? 30, 1), 100));
+    const unread = await ctx.db
+      .query("memberNotices")
+      .withIndex("by_member_unread", (q) => q.eq("companyId", ctx.companyId).eq("memberId", ctx.member._id).eq("readAt", undefined))
+      .take(100);
+    const notices = [];
+    for (const row of rows) {
+      let target = row.target ?? null;
+      if (target) {
+        const id = NOTICE_TARGETS.has(target.table) ? ctx.db.normalizeId(target.table as "tasks", target.id) : null;
+        const doc = id ? await ctx.db.get(id) : null;
+        const company = (doc as { companyId?: string } | null)?.companyId ?? (target.table === "companies" ? target.id : null);
+        if (!doc || company !== ctx.companyId) target = null;
+      }
+      notices.push({ id: row._id, kind: row.kind, agent: row.agent ?? null, headline: row.headline, summary: row.summary, href: target?.href ?? (row.activationId ? `/app?activation=${row.activationId}` : null), targetLabel: target?.label ?? null, activationId: row.activationId ?? null, taskId: row.taskId ?? null, read: row.readAt !== undefined, at: row.createdAt });
+    }
+    return { notices, unread: unread.length };
+  },
+});
+
+export const markRead = companyMutation({
+  args: { noticeId: v.id("memberNotices") },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.noticeId);
+    // Only one's own: another person's notice is "Not found." even inside the same company.
+    if (!row || row.companyId !== ctx.companyId || row.memberId !== ctx.member._id) notFound();
+    if (row.readAt === undefined) await ctx.db.patch(row._id, { readAt: Date.now() });
+    return null;
+  },
+});
+
+export const markAllRead = companyMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("memberNotices")
+      .withIndex("by_member_unread", (q) => q.eq("companyId", ctx.companyId).eq("memberId", ctx.member._id).eq("readAt", undefined))
+      .take(200);
+    const now = Date.now();
+    for (const row of rows) await ctx.db.patch(row._id, { readAt: now });
+    return { marked: rows.length };
   },
 });

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activation from "../activation.js";
 import type * as agentAccess from "../agentAccess.js";
 import type * as agreementFiles from "../agreementFiles.js";
 import type * as agreementRenewals from "../agreementRenewals.js";
@@ -89,6 +90,11 @@ import type * as invitations from "../invitations.js";
 import type * as jobs from "../jobs.js";
 import type * as knowledge from "../knowledge.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_activation_notices from "../lib/activation/notices.js";
+import type * as lib_activation_plan from "../lib/activation/plan.js";
+import type * as lib_activation_snapshot from "../lib/activation/snapshot.js";
+import type * as lib_activation_wake from "../lib/activation/wake.js";
+import type * as lib_activation_work from "../lib/activation/work.js";
 import type * as lib_agreements_access from "../lib/agreements/access.js";
 import type * as lib_agreements_agents from "../lib/agreements/agents.js";
 import type * as lib_agreements_catalog from "../lib/agreements/catalog.js";
@@ -419,6 +425,7 @@ import type * as lib_texting_pages from "../lib/texting/pages.js";
 import type * as lib_texting_plan from "../lib/texting/plan.js";
 import type * as lib_texting_prefill from "../lib/texting/prefill.js";
 import type * as lib_texting_prices from "../lib/texting/prices.js";
+import type * as lib_texting_readiness from "../lib/texting/readiness.js";
 import type * as lib_texting_wording from "../lib/texting/wording.js";
 import type * as lib_time from "../lib/time.js";
 import type * as lib_trust_changes from "../lib/trust/changes.js";
@@ -499,6 +506,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activation: typeof activation;
   agentAccess: typeof agentAccess;
   agreementFiles: typeof agreementFiles;
   agreementRenewals: typeof agreementRenewals;
@@ -580,6 +588,11 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   knowledge: typeof knowledge;
   "lib/access": typeof lib_access;
+  "lib/activation/notices": typeof lib_activation_notices;
+  "lib/activation/plan": typeof lib_activation_plan;
+  "lib/activation/snapshot": typeof lib_activation_snapshot;
+  "lib/activation/wake": typeof lib_activation_wake;
+  "lib/activation/work": typeof lib_activation_work;
   "lib/agreements/access": typeof lib_agreements_access;
   "lib/agreements/agents": typeof lib_agreements_agents;
   "lib/agreements/catalog": typeof lib_agreements_catalog;
@@ -910,6 +923,7 @@ declare const fullApi: ApiFromModules<{
   "lib/texting/plan": typeof lib_texting_plan;
   "lib/texting/prefill": typeof lib_texting_prefill;
   "lib/texting/prices": typeof lib_texting_prices;
+  "lib/texting/readiness": typeof lib_texting_readiness;
   "lib/texting/wording": typeof lib_texting_wording;
   "lib/time": typeof lib_time;
   "lib/trust/changes": typeof lib_trust_changes;

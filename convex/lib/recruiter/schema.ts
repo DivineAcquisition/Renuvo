@@ -82,7 +82,11 @@ export type ContactStatus = (typeof CONTACT_STATUSES)[number];
 export const contactStatusValidator = literals(CONTACT_STATUSES);
 export const USABLE_CONTACT: readonly ContactStatus[] = ["direct", "relay"];
 
-export const NEED_STATUSES = ["open", "paused", "closed"] as const;
+/**
+ * draft: prepared (for example by activation) and not published. Applicants are never matched to a draft,
+ * and nobody is invited for it, until the Owner opens it.
+ */
+export const NEED_STATUSES = ["draft", "open", "paused", "closed"] as const;
 export const needStatusValidator = literals(NEED_STATUSES);
 
 export const CRITERION_OUTCOMES = ["meets", "does_not_meet", "needs_clarification", "not_applicable"] as const;
