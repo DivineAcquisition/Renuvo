@@ -148,7 +148,6 @@ none". Text composers show "This message uses 2 SMS segments. Estimated cost: $0
 
 **Not built:**
 - Outbound picture messages: the texting sender only sends plain text. Inbound picture messages are charged.
-- Retention has no sending code yet, so its limit has nothing to apply to.
 - The batch limit covers the Sales first review only. Recruiter urgent outreach is one approval per
   applicant and crew offers are capped by open places; every message still meets the balance, monthly and
   agent limits.
