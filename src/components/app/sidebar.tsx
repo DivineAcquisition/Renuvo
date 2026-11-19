@@ -137,6 +137,11 @@ function NavBadge({ badge }: { badge: Badge }) {
   );
 }
 
+/** An agent that is not released yet: its name opens a page about what it will do and how to ask for it sooner. */
+function ComingSoon() {
+  return <span className="shrink-0 rounded-full border border-brand-500/40 bg-brand-500/10 px-1.5 py-0.5 text-[10px] leading-none font-semibold whitespace-nowrap text-brand-300">Coming soon</span>;
+}
+
 function NotBuilt({ quiet }: { quiet?: boolean }) {
   return quiet ? <span className="sr-only"> (not built yet)</span> : <span className="shrink-0 rounded-full border border-dashed border-border px-1.5 py-0.5 text-[10px] leading-none font-medium whitespace-nowrap text-muted-foreground">Not built yet</span>;
 }
@@ -178,8 +183,10 @@ function ItemRow({ item, active, badge, onNavigate }: { item: NavItem; active: b
  */
 function AgentRow({ agent, open, active, facts, onToggle, onNavigate }: { agent: AgentNav; open: boolean; active: { agent: AgentId | null; tab: string | null }; facts?: SidebarFacts; onToggle: () => void; onNavigate?: () => void }) {
   const panel = useId();
-  const overview = hrefFor(agent.overview);
   const built = agent.workflow === "built";
+  // An agent that is not released opens its coming-soon page, at the path its overview will have.
+  const notice = agent.overview.availability.status === "planned" && agent.overview.availability.notice === true;
+  const overview = hrefFor(agent.overview) ?? (notice ? agent.overview.path : null);
   const here = active.agent === agent.id;
   const badge = agentBadge(agent.id, facts);
   const name = (
@@ -192,14 +199,14 @@ function AgentRow({ agent, open, active, facts, onToggle, onNavigate }: { agent:
     <li>
       <div className={cn("flex items-center gap-1 rounded-lg", here && active.tab === null && current)}>
         {overview ? (
-          <Link href={overview} onClick={onNavigate} aria-current={here && active.tab === null ? "page" : undefined} className={cn(row, "min-w-0 flex-1", here ? "text-strong" : linked)}>
+          <Link href={overview} onClick={onNavigate} aria-current={here && active.tab === null ? "page" : undefined} aria-label={built ? undefined : `${agent.label}, coming soon`} className={cn(row, "min-w-0 flex-1", here ? "text-strong" : linked)}>
             {name}
           </Link>
         ) : (
           // No overview page exists for this agent yet, so its name is not a link. It does not toggle the tabs either.
           <span className={cn(row, "min-w-0 flex-1", built ? "text-strong" : "text-muted-foreground/80")}>{name}</span>
         )}
-        {built ? badge ? <NavBadge badge={badge} /> : null : <NotBuilt />}
+        {built ? badge ? <NavBadge badge={badge} /> : null : <ComingSoon />}
         <button
           type="button"
           onClick={onToggle}
@@ -217,6 +224,16 @@ function AgentRow({ agent, open, active, facts, onToggle, onNavigate }: { agent:
             const href = hrefFor(tab);
             const on = here && active.tab === tab.id;
             const tabMark = tabBadge(agent.id, tab.id, facts);
+            if (href === null && !built && notice) {
+              // A tab of an agent that is not released opens the agent's coming-soon page.
+              return (
+                <li key={tab.id}>
+                  <Link href={agent.overview.path} onClick={onNavigate} aria-label={`${tab.label}, coming soon with ${agent.label}`} className="flex min-h-8 items-center gap-2 rounded-md px-2 py-1 text-[13px] text-muted-foreground/80 hover:bg-muted hover:text-strong">
+                    <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  </Link>
+                </li>
+              );
+            }
             if (href === null) {
               return (
                 <li key={tab.id}>

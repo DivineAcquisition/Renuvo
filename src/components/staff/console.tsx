@@ -60,6 +60,7 @@ const NAV = [
   { href: "/staff/companies", label: "Companies" },
   { href: "/staff/texting", label: "Texting" },
   { href: "/staff/messaging", label: "Messaging money" },
+  { href: "/staff/agent-requests", label: "Agent requests" },
   { href: "/staff/people", label: "Staff" },
   { href: "/staff/ai", label: "AI models" },
 ];
@@ -1156,5 +1157,83 @@ function AttentionItem({ row }: { row: AttentionRow }) {
         <FormError message={error} />
       </div>
     </Panel>
+  );
+}
+
+// ── Early access to coming-soon agents ──────────────────────────────────────────────────────────────
+
+const AGENT_LABEL: Record<string, string> = { marketing: "Marketing", quality: "Quality", "customer-care": "Customer Care", "team-coordinator": "Team Coordinator" };
+const REQUEST_STATUS: Record<string, { label: string; variant: "info" | "success" | "outline" }> = {
+  requested: { label: "Asked", variant: "info" },
+  invited: { label: "Invited", variant: "success" },
+  declined: { label: "Not this time", variant: "outline" },
+};
+
+/** Companies asking to try an agent before it is released, with what they'd use it for. Staff choose who tries it first. */
+export function AgentRequests() {
+  const rows = useQuery(api.agentAccess.requests, {});
+  const answer = useMutation(api.agentAccess.answer);
+  const { busy, error, run } = useRun();
+  return (
+    <>
+      <PageHeader title="Agent requests" lead="Companies asking for early access to an agent that isn't released yet, and what they'd use it for. Marking a company invited records the decision; it doesn't turn the agent on." />
+      <FormError message={error} />
+      {rows === undefined ? (
+        <Skeleton className="h-40 rounded-2xl" />
+      ) : rows.length === 0 ? (
+        <Panel>
+          <p className="py-6 text-center text-sm text-muted-foreground">No requests yet.</p>
+        </Panel>
+      ) : (
+        <div className="grid gap-3">
+          {rows.map((row) => {
+            const status = REQUEST_STATUS[row.status] ?? { label: row.status, variant: "outline" as const };
+            return (
+              <Panel key={row.id}>
+                <div className="grid gap-2 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p>
+                      <span className="font-semibold text-strong">{row.company}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {AGENT_LABEL[row.agent] ?? row.agent} · {row.people} {row.people === 1 ? "person" : "people"} · {row.plan ? `on ${row.plan === "expand" ? "Expand" : "Operate"}` : "no plan"}
+                      </span>
+                    </p>
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                  </div>
+                  {row.uses.length ? <p className="text-strong">Would use it for: {row.uses.join(" · ")}</p> : null}
+                  {row.notes.map((note, index) => (
+                    <p key={index} className="rounded-lg bg-muted px-3 py-2 text-xs text-strong">
+                      {note}
+                    </p>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    First asked {new Date(row.firstAt).toLocaleDateString()} · last {new Date(row.lastAt).toLocaleDateString()}
+                    {row.staffNote ? ` · ${row.staffNote}` : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {row.status !== "invited" ? (
+                      <Button size="sm" variant="primary" loading={busy} onClick={() => void run(() => answer({ id: row.id, status: "invited" }))}>
+                        Invite to try it early
+                      </Button>
+                    ) : null}
+                    {row.status !== "declined" ? (
+                      <Button size="sm" variant="outline" loading={busy} onClick={() => void run(() => answer({ id: row.id, status: "declined" }))}>
+                        Not this time
+                      </Button>
+                    ) : null}
+                    {row.status !== "requested" ? (
+                      <Button size="sm" variant="ghost" loading={busy} onClick={() => void run(() => answer({ id: row.id, status: "requested" }))}>
+                        Undo
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </Panel>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }

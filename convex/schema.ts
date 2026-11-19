@@ -4,6 +4,7 @@
  */
 import { defineSchema, defineTable } from "convex/server";
 
+import { agentAccessTables } from "./lib/agentAccess/schema";
 import { agreementTables } from "./lib/agreements/schema";
 import { cleanersSettingsValidator, cleanersTables, engagementValidator } from "./lib/cleaners/schema";
 import { googleTables } from "./lib/google/schema";
@@ -203,6 +204,7 @@ export default defineSchema({
 
   // ── Selestial staff (convex/lib/trust/staffSchema.ts) ─────────────────────────────────────────────
   ...staffTables,
+  ...agentAccessTables,
   // ── Messaging consent, the compliance profile, agreements (convex/lib/compliance/schema.ts) ──────
   ...complianceTables,
   ...trustTables,
