@@ -17,7 +17,10 @@ import { userError } from "./lib/errors";
 import { appOrigin, returnOrigin } from "./lib/invitations";
 import { byMember, recordEvent } from "./lib/events";
 import { authorizationUrl, googleApp } from "./lib/recruiter/gmail";
-import { sourceValidator } from "./lib/recruiter/schema";
+import { inboxPurposeValidator, sourceValidator } from "./lib/recruiter/schema";
+import { inboxBroke, resumeWaiting } from "./lib/inbox/events";
+import { purposesOf, PURPOSE_INFO } from "./lib/inbox/mailboxes";
+import { notifyMembers } from "./lib/notify/route";
 import { DAY } from "./lib/recruiter/settings";
 import { hashToken, randomToken, secretsConfigured } from "./lib/recruiter/secrets";
 import { optionalText } from "./lib/text";
@@ -29,9 +32,13 @@ export function googleRedirectUri(): string | null {
   return site ? `${site}/oauth/google/callback` : null;
 }
 
-/** Where the Owner lands after Google: the Recruiting settings, saying how it went. */
-export function afterConnect(outcome: "connected" | "failed" | "expired", origin?: string | null): string {
-  return `${returnOrigin(origin) ?? appOrigin() ?? ""}/app/settings/recruiting?mailbox=${outcome}`;
+/**
+ * Where the Owner lands after Google, saying how it went: Recruiting settings for a hiring inbox
+ * connected there, Connected apps for an inbox connected with purposes.
+ */
+export function afterConnect(outcome: "connected" | "failed" | "expired", origin?: string | null, shared = false): string {
+  const base = returnOrigin(origin) ?? appOrigin() ?? "";
+  return shared ? `${base}/app/settings/integrations?tool=gmail&result=${outcome}` : `${base}/app/settings/recruiting?mailbox=${outcome}`;
 }
 
 /** Starts connecting a Gmail mailbox. Answers with the Google address to send the Owner to. */
@@ -85,7 +92,7 @@ export const takeState = internalMutation({
     const member = await ctx.db.get(row.memberId);
     // Only someone who is still this company's Owner can finish connecting its mailbox.
     if (!member || member.companyId !== row.companyId || member.status !== "active" || member.role !== "owner") return null;
-    return { stateId: row._id, companyId: row.companyId, memberId: row.memberId, folder: row.folder, sources: row.sources, processFrom: row.processFrom, canSend: row.canSend, returnOrigin: row.returnOrigin ?? null };
+    return { stateId: row._id, companyId: row.companyId, memberId: row.memberId, folder: row.folder, sources: row.sources, processFrom: row.processFrom, canSend: row.canSend, returnOrigin: row.returnOrigin ?? null, purposes: row.purposes ?? null };
   },
 });
 
@@ -100,6 +107,8 @@ export const completeConnect = internalMutation({
     processFrom: v.number(),
     canSend: v.boolean(),
     scopes: v.array(v.string()),
+    /** Set when connected from Connected apps. Absent keeps an existing inbox's purposes as they are. */
+    purposes: v.optional(v.union(v.array(inboxPurposeValidator), v.null())),
   },
   handler: async (ctx, args): Promise<Id<"mailboxConnections">> => {
     const address = args.address.trim().toLowerCase();
@@ -109,7 +118,19 @@ export const completeConnect = internalMutation({
         .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
         .take(20)
     ).find((row) => row.provider === "gmail" && row.address === address);
-    const fields = { status: "connected" as const, problem: undefined, failures: 0, folder: args.folder, sources: args.sources, canSend: args.canSend && args.scopes.includes("https://www.googleapis.com/auth/gmail.send") };
+    const fields = {
+      status: "connected" as const,
+      problem: undefined,
+      failures: 0,
+      folder: args.folder,
+      sources: args.sources,
+      canSend: args.canSend && args.scopes.includes("https://www.googleapis.com/auth/gmail.send"),
+      ...(args.purposes ? { purposes: args.purposes } : {}),
+      disconnectedAt: undefined,
+      disconnectedBy: undefined,
+      grant: undefined,
+    };
+    const fresh = !existing || existing.status === "disconnected";
     const connectionId = existing
       ? (await ctx.db.patch(existing._id, fields), existing._id)
       : await ctx.db.insert("mailboxConnections", { companyId: args.companyId, provider: "gmail", address, processFrom: args.processFrom, createdBy: args.memberId, createdAt: Date.now(), ...fields });
@@ -117,6 +138,13 @@ export const completeConnect = internalMutation({
     // Replies go to the connected inbox unless the Owner already chose another address.
     if (company && !company.recruiter?.replyTo) await ctx.db.patch(company._id, { recruiter: { ...(company.recruiter ?? {}), replyTo: address } });
     await recordEvent(ctx, { companyId: args.companyId, type: "mailbox.connected", actor: { kind: "member", memberId: args.memberId }, subject: { table: "mailboxConnections", id: connectionId }, data: { provider: "gmail", historical: args.processFrom < Date.now() - 60_000, canSend: fields.canSend } });
+    // Messages that waited for this inbox go now; the Owner hears about a newly connected inbox.
+    await resumeWaiting(ctx, args.companyId);
+    if (fresh) {
+      const member = await ctx.db.get(args.memberId);
+      const row = (await ctx.db.get(connectionId))!;
+      await notifyMembers(ctx, { companyId: args.companyId, event: "security_change", key: `inbox-connected:${connectionId}:${Date.now()}`, facts: { kind: "inbox_connected", address, purposes: purposesOf(row).map((p) => PURPOSE_INFO[p].label).join(", "), byName: member?.name ?? "Someone in your company", at: Date.now() } });
+    }
     return connectionId;
   },
 });
@@ -132,6 +160,8 @@ export const storeCredential = internalMutation({
     }
     await ctx.db.insert("mailboxCredentials", { ...args, createdAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.recruiterInbox.sync, { connectionId: args.connectionId });
+    // Push notifications start at once, not at the next daily renewal (it does nothing without a Pub/Sub topic).
+    await ctx.scheduler.runAfter(0, internal.recruiterGmailWatch.ensure, { connectionId: args.connectionId });
     return null;
   },
 });
@@ -169,8 +199,10 @@ export const sendRefused = internalMutation({
   handler: async (ctx, args) => {
     const connection = await ctx.db.get(args.connectionId);
     if (!connection) return null;
-    await ctx.db.patch(connection._id, { status: "expired", problem: "The mailbox's authorization has ended. Reconnect the hiring inbox." });
+    const wasWorking = connection.status === "connected";
+    await ctx.db.patch(connection._id, { status: "expired", problem: "The mailbox's authorization has ended. Reconnect it." });
     await recordEvent(ctx, { companyId: connection.companyId, type: "mailbox.sync_failed", actor: { kind: "system" }, subject: { table: "mailboxConnections", id: connection._id }, data: { kind: "auth", failures: connection.failures + 1 } });
+    if (wasWorking) await inboxBroke(ctx, (await ctx.db.get(connection._id))!);
     return null;
   },
 });

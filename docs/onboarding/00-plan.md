@@ -78,8 +78,9 @@ Inspected on `main` at `2cbf867`.
   - Dispatch: visits in the next 14 days short of people, who could cover each (Dispatch's own ranking,
     shown as a proposal; no offer is made), and cleaners without weekly hours. It does not use Dispatch's
     coverage sweep, which can send offers at higher authority.
-  - Retention (not built): clients whose last completed visit is over 45 days old with nothing booked, and
-    open concerns. A list for the owner; nothing is drafted or sent.
+  - Retention (built on main in #119): clients whose last completed visit is over 45 days old with nothing
+    booked, open concerns, and Retention's own open cases, pointing at its pages. Setup drafts and sends
+    nothing; Retention follows up from its own page within the Owner's permissions.
 - **States**: the work's own state (preparing, ready for review, waiting, failed) sits beside the agent's
   readiness, which it never replaces. An agent not on the plan or paused by the Owner gets no review, only
   the reason.

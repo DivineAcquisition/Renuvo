@@ -7,7 +7,7 @@
  * and a newer run simply becomes the one shown.
  *
  * An agent the plan doesn't include, or that the Owner paused, gets no review: its card says why instead.
- * Retention is not built; its review is a list for the owner, and nothing is drafted to be sent.
+ * Setup prepares and never sends: no review drafts a message, for Retention or anyone else.
  */
 import { v } from "convex/values";
 
@@ -101,7 +101,7 @@ export const prepare = internalMutation({
       } else if (row.agent === "sales") outcome = await salesWork(ctx, company, readiness, now);
       else if (row.agent === "recruiter") outcome = await recruiterWork(ctx, company, readiness);
       else if (row.agent === "dispatch") outcome = await dispatchWork(ctx, company, readiness, now);
-      else outcome = await retentionWork(ctx, company, now);
+      else outcome = await retentionWork(ctx, company, readiness, now);
     } catch (error) {
       console.error("setup work failed", row.agent, error instanceof Error ? error.message : "unknown");
       await ctx.db.patch(row._id, { status: "failed", problem: "This couldn't be prepared. Nothing was changed; try again.", finishedAt: now });

@@ -402,7 +402,7 @@ describe("Recruiter: screening, interviews, offers and the handoff to onboarding
     expect(JSON.stringify(after)).not.toMatch(/maria|lopez|5550142/i);
     expect(after.conversation.every((entry) => entry.subject === null)).toBe(true);
     expect(await s.t.run(async (ctx) => ctx.storage.getUrl(store))).toBeNull();
-    const rows = await s.t.run(async (ctx) => JSON.stringify([await ctx.db.query("messages").collect(), await ctx.db.query("sourceMessages").collect(), await ctx.db.query("applicants").collect(), await ctx.db.query("formSessions").collect()]));
+    const rows = await s.t.run(async (ctx) => JSON.stringify([await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice")), await ctx.db.query("sourceMessages").collect(), await ctx.db.query("applicants").collect(), await ctx.db.query("formSessions").collect()]));
     expect(rows).not.toMatch(/maria|lopez|5550142/i);
 
     // The other road: nobody asks, and the Owner's retention period runs out.

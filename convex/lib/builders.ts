@@ -113,11 +113,12 @@ export function ownerMutation<V extends AnyValidators, R>(def: MutationDef<V, R>
   });
 }
 
-export type SignedIn = { userId: string; email: string; emailVerified: boolean; name: string };
+export type SignedIn = { userId: string; issuer: string; email: string; emailVerified: boolean; name: string };
 
 function signedIn(identity: UserIdentity): SignedIn {
   return {
     userId: identity.subject,
+    issuer: identity.issuer,
     email: identity.email?.trim().toLowerCase() ?? "",
     emailVerified: identity.emailVerified === true,
     name: identity.name?.trim() || identity.email?.trim() || "Member",
@@ -161,7 +162,11 @@ export async function staffFor(ctx: QueryCtx, who: SignedIn): Promise<Doc<"staff
     .withIndex("by_email", (q) => q.eq("email", who.email))
     .take(5);
   const row = rows.find((item) => item.status === "active");
-  if (row) return row.userId && row.userId !== who.userId ? null : row;
+  if (row) {
+    if (!row.userId || row.userId === who.userId) return row;
+    // Bound to another sign-in: the same person only when the sign-in service itself changed.
+    return who.emailVerified && row.userIssuer !== who.issuer ? row : null;
+  }
   const bootstrap = process.env.STAFF_BOOTSTRAP_EMAIL?.trim().toLowerCase();
   if (!bootstrap || bootstrap !== who.email) return null;
   const anyAdmin = await ctx.db.query("staff").take(50);
@@ -172,14 +177,14 @@ async function requireStaff(ctx: MutationCtx | QueryCtx, who: SignedIn, writable
   const found = await staffFor(ctx, who);
   if (!found) notFound();
   if (found !== "bootstrap") {
-    if (writable && !found.userId) await (ctx as MutationCtx).db.patch(found._id, { userId: who.userId });
+    if (writable && found.userId !== who.userId) await (ctx as MutationCtx).db.patch(found._id, { userId: who.userId, userIssuer: who.issuer });
     return found;
   }
   if (!writable) {
     // A read before the first write: answer as an admin that has not been saved yet.
-    return { _id: "bootstrap" as Id<"staff">, _creationTime: 0, email: who.email, name: who.name, role: "admin", status: "active", addedAt: 0, addedBy: "bootstrap", userId: who.userId };
+    return { _id: "bootstrap" as Id<"staff">, _creationTime: 0, email: who.email, name: who.name, role: "admin", status: "active", addedAt: 0, addedBy: "bootstrap", userId: who.userId, userIssuer: who.issuer };
   }
-  const id = await (ctx as MutationCtx).db.insert("staff", { userId: who.userId, email: who.email, name: who.name, role: "admin", status: "active", addedAt: Date.now(), addedBy: "bootstrap" });
+  const id = await (ctx as MutationCtx).db.insert("staff", { userId: who.userId, userIssuer: who.issuer, email: who.email, name: who.name, role: "admin", status: "active", addedAt: Date.now(), addedBy: "bootstrap" });
   return (await ctx.db.get(id))!;
 }
 
@@ -512,6 +517,25 @@ export function oauthCallback(def: { handler: (ctx: ActionCtx, params: URLSearch
     const params = new URL(request.url).searchParams;
     const location = await def.handler(ctx, params);
     return new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  });
+}
+
+/**
+ * The address in a notice's List-Unsubscribe header (RFC 8058). A mail program's own Unsubscribe button
+ * POSTs here with the signed token in the address, and only a POST changes anything. A GET (a person or a
+ * link scanner opening the address) is sent to the app's page, which asks before doing anything. The
+ * token is the only authorization, checked by `post`; the answer is the same whatever it found.
+ */
+export function oneClickUnsubscribe(def: { post: (ctx: ActionCtx, token: string) => Promise<void>; page: (token: string) => string | null }): PublicHttpAction {
+  return httpAction(async (ctx, request) => {
+    const token = new URL(request.url).searchParams.get("t") ?? "";
+    if (!token || token.length > 200) return new Response(null, { status: 400 });
+    if (request.method === "POST") {
+      await def.post(ctx, token);
+      return new Response(null, { status: 200, headers: { "Cache-Control": "no-store" } });
+    }
+    const page = def.page(token);
+    return page ? new Response(null, { status: 302, headers: { Location: page, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } }) : new Response("Not found.", { status: 404 });
   });
 }
 

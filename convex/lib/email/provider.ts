@@ -5,6 +5,7 @@
  * A provider's answer is turned into plain words here. Its raw response and the API key never leave
  * this file: they are not returned, not logged and not stored.
  */
+import { isVerifiedFrom } from "./senders";
 export type EmailInput = {
   to: string;
   subject: string;
@@ -17,7 +18,29 @@ export type EmailInput = {
   replyTo?: string;
   /** Another address on EMAIL_FROM's verified domain to send from, for example a no-reply address. */
   fromAddress?: string;
+  /**
+   * A whole From header built by the sender registry (convex/lib/email/senders.ts). It is sent only if
+   * its address is on one of this deployment's sending domains; otherwise nothing is sent.
+   */
+  from?: string;
+  /** Extra headers, such as List-Unsubscribe. Names and values are checked; nothing can add a line. */
+  headers?: Record<string, string>;
 };
+
+const HEADER_NAME = /^[A-Za-z][A-Za-z0-9-]{1,40}$/;
+/** Headers a caller may set. Everything that decides who a message is from or to is the provider's job. */
+const ALLOWED_HEADERS = new Set(["list-unsubscribe", "list-unsubscribe-post", "x-entity-ref-id", "in-reply-to", "references"]);
+
+/** The extra headers that are safe to send, or null when any of them isn't. */
+export function cleanHeaders(headers: Record<string, string> | undefined): Record<string, string> | null {
+  if (!headers) return {};
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (!HEADER_NAME.test(name) || !ALLOWED_HEADERS.has(name.toLowerCase()) || /[\r\n]/.test(value) || value.length > 900) return null;
+    out[name] = value;
+  }
+  return out;
+}
 
 /** EMAIL_FROM with another display name on the same address. A name cannot break the header. */
 export function senderWithName(from: string, name: string | undefined, fromAddress?: string): string {
@@ -51,6 +74,10 @@ export const mockEmailOutbox: (EmailInput & { result: "accepted" | "failed" | "t
 export const mockEmailProvider: EmailProvider = {
   name: "mock",
   async send(input) {
+    if ((input.from !== undefined && !isVerifiedFrom(input.from)) || !cleanHeaders(input.headers)) {
+      mockEmailOutbox.push({ ...input, result: "failed" });
+      return { ok: false, retryable: false, problem: "This email's sender or headers aren't allowed, so it wasn't sent." };
+    }
     if (input.to.endsWith("@throw.test")) {
       mockEmailOutbox.push({ ...input, result: "threw" });
       throw new Error("mock: connection lost");
@@ -82,12 +109,24 @@ function resendProvider(apiKey: string, from: string): EmailProvider {
   return {
     name: "resend",
     async send(input) {
+      // A From from the registry goes only if it's on one of this deployment's own sending domains.
+      if (input.from !== undefined && !isVerifiedFrom(input.from)) return { ok: false, retryable: false, problem: "This email's sender isn't one of Selestial's verified sending addresses, so it wasn't sent." };
+      const headers = cleanHeaders(input.headers);
+      if (!headers) return { ok: false, retryable: false, problem: "This email had a header that isn't allowed, so it wasn't sent." };
       let response: Response;
       try {
         response = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": input.idempotencyKey },
-          body: JSON.stringify({ from: senderWithName(from, input.fromName, input.fromAddress), to: [input.to], subject: input.subject, html: input.html, text: input.text, ...(input.replyTo ? { reply_to: input.replyTo } : {}) }),
+          body: JSON.stringify({
+            from: input.from ?? senderWithName(from, input.fromName, input.fromAddress),
+            to: [input.to],
+            subject: input.subject,
+            html: input.html,
+            text: input.text,
+            ...(input.replyTo ? { reply_to: input.replyTo } : {}),
+            ...(Object.keys(headers).length ? { headers } : {}),
+          }),
         });
       } catch {
         // The same idempotency key goes with every try, so trying again cannot send the message twice.

@@ -79,7 +79,9 @@ describe("which host a path belongs to", () => {
     expect(roleOfPath("/sitemap.xml")).toBe("public");
     expect(roleOfPath("/legal/privacy")).toBe("public");
     for (const path of ["/app", "/staff", "/staff/requests", "/app/approvals", "/app/agents/dispatch/schedule", "/login", "/signup", "/forgot-password", "/reset-password", "/auth/callback", "/auth/check-email", "/invite/abc.def", "/sign-in", "/sign-in/factor-one", "/sign-up"]) expect(roleOfPath(path)).toBe("app");
-    for (const path of ["/c", "/c/offer/abc", "/c/job/abc/photos"]) expect(roleOfPath(path)).toBe("link");
+    for (const path of ["/c", "/c/offer/abc", "/c/job/abc/photos", "/n/unsubscribe"]) expect(roleOfPath(path)).toBe("link");
+    // A marketing page that only starts with the same letter stays public.
+    expect(roleOfPath("/news")).toBe("public");
     for (const path of ["/robots.txt", "/icon.svg", "/favicon.ico", "/.well-known/security.txt", "/__clerk/v1/client"]) expect(roleOfPath(path)).toBe("shared");
   });
 

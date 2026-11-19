@@ -251,10 +251,10 @@ describe("billing", () => {
       billing.seed(s.companyId, { plan: "expand", grant: 2000, purchased: 5000 });
       await sync(s.t, s.companyId);
       const company = await s.t.run(async (ctx) => (await ctx.db.get(s.companyId))!);
-      for (const agent of ["quality", "marketing", "customer-care", "team-coordinator", "retention"] as const) expect(agentVerdict(company, agent)).toMatchObject({ ok: false, block: "not_released" });
-      for (const agent of ["dispatch", "recruiter", "sales"] as const) expect(agentVerdict(company, agent)).toEqual({ ok: true });
+      for (const agent of ["quality", "marketing", "customer-care", "team-coordinator"] as const) expect(agentVerdict(company, agent)).toMatchObject({ ok: false, block: "not_released" });
+      for (const agent of ["dispatch", "recruiter", "sales", "retention"] as const) expect(agentVerdict(company, agent)).toEqual({ ok: true });
       const view = await s.as.query(api.billing.planAndUsage, { companyId: s.companyId });
-      expect(view.catalog.agents.filter((row) => row.here).map((row) => row.agent)).toEqual(["sales", "recruiter", "dispatch"]);
+      expect(view.catalog.agents.filter((row) => row.here).map((row) => row.agent)).toEqual(["sales", "retention", "recruiter", "dispatch"]);
     });
 
     it("keeps Creative Studio to Expand, decided on Autumn's record", async () => {

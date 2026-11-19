@@ -24,6 +24,8 @@ crons.interval("finance works out team earnings", { minutes: 15 }, internal.team
 
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});
+// The Monday summary at 7 AM company time, and reminders two hours before a proposal's deadline.
+crons.interval("notices: weekly summary and approval reminders", { hours: 1 }, internal.notifications.hourly, {});
 
 // A company's data export can be downloaded for a day; then its file is deleted.
 crons.interval("expire company data exports", { minutes: 15 }, internal.dataRights.expireExports, {});
@@ -75,5 +77,10 @@ crons.interval("proposals past their expiry", { hours: 1 }, internal.proposals.s
 crons.interval("sales follow-up reminders", { minutes: 30 }, internal.pipeline.sweep, {});
 // The Sales agent: runs that never finished, overdue next steps, expired quotes, and reminders whose timer was lost.
 crons.interval("sales agent picks up what a missed trigger left", { minutes: 5 }, internal.salesAgent.sweep, {});
+
+// Retention: reconciles plans, visits, billing and agreements; reads back handoffs; closes questions nobody answered; retries unfinished work.
+crons.interval("retention reconciles and follows through", { minutes: 10 }, internal.retentionWork.sweep, {});
+// Only inboxes connected for Care & Retention, and only where the Owner turned reading on.
+crons.interval("retention reads customer replies in care inboxes", { minutes: 10 }, internal.retentionInbox.sweep, {});
 
 export default crons;

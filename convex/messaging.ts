@@ -14,14 +14,20 @@ import { readProfile } from "./lib/compliance/profile";
 import { afterMessageFailed } from "./lib/dispatch/delivery";
 import { afterSalesMessage, salesClaim } from "./lib/sales/outbox";
 import { customerClaim } from "./lib/finance/outbox";
+import { afterCareMessage } from "./lib/retention/actions";
+import { careClaim } from "./lib/retention/outbox";
 import { bookingClaim } from "./lib/booking/messages";
 import { statementClaim } from "./lib/finance/cleanerOutbox";
 import { linkPath, linkState, siteOrigin, tokenFor } from "./lib/dispatch/links";
 import { recordEvent } from "./lib/events";
 import type { SendIntent } from "./lib/messaging/outbox";
 import { checkSend } from "./lib/messaging/policy";
-import { emailProvider } from "./lib/messaging/email";
-import { accessToken, googleApp, rawMessage, sendFromGmail } from "./lib/recruiter/gmail";
+import { emailProvider, noticeEmailProvider } from "./lib/messaging/email";
+import { companyEmail } from "./lib/messaging/companyMail";
+import { composeNotice } from "./lib/notify/compose";
+import { suppressAfterProblem } from "./lib/notify/delivery";
+import { accessToken, googleApp, rawMessage, replySubject, sendFromGmail, threadReplyHeaders } from "./lib/recruiter/gmail";
+import { inboxPurposeOf, routeFor, threadFor, WAITING_FOR_INBOX } from "./lib/inbox/mailboxes";
 import { MailboxAuthError } from "./lib/recruiter/mailbox";
 import { unseal } from "./lib/recruiter/secrets";
 import { messagingProvider } from "./lib/messaging/provider";
@@ -33,6 +39,15 @@ import { sendProblem, type ApplicantPurpose } from "./lib/recruiter/outbox";
 import { recruiterSettings } from "./lib/recruiter/settings";
 
 const MAX_ATTEMPTS = 3;
+
+/**
+ * The event for a message's step, except for Selestial's own notices to members, which stay out of the
+ * company's activity log (their row and the person's Recent notices record them).
+ */
+async function logStep(ctx: MutationCtx, message: Doc<"messages">, event: Omit<Parameters<typeof recordEvent>[1], "companyId" | "subject" | "actor"> & { actor?: Parameters<typeof recordEvent>[1]["actor"] }) {
+  if (message.purpose === "member_notice") return;
+  await recordEvent(ctx, { companyId: message.companyId, actor: event.actor ?? { kind: "system" }, subject: { table: "messages", id: message._id }, type: event.type, data: event.data });
+}
 const ROUTINE_CLEANER: readonly Doc<"messages">["purpose"][] = ["portal_invitation", "onboarding_reminder", "availability_check", "idle_check_in", "verification_code"];
 const STUCK_AFTER = 5 * 60 * 1000;
 
@@ -58,24 +73,27 @@ export const claim = internalMutation({
   handler: async (ctx, args) => {
     const message = await ctx.db.get(args.messageId);
     if (!message || (message.status !== "queued" && message.status !== "held") || !message.to) return null;
+    // A notice to a member of the company is Selestial's own mail: its checks are the member's, not a contact's.
+    if (message.purpose === "member_notice") return claimNotice(ctx, message);
     // The policy is asked again now: a STOP, a withdrawn permission, a suspension or a pause that came
     // after the message was planned stops it here. A refusal is final; only "not yet" holds it again.
     // Messages to applicants are asked this too, and then also pass the Recruiter's own gate below.
     const answer = await checkSend(ctx, { companyId: message.companyId, channel: message.channel ?? "sms", to: message.to, now: Date.now(), messageId: message._id, ...(await intentOf(ctx, message)) });
     if (!answer.ok) {
-      const subject = { table: "messages" as const, id: message._id };
-      if (answer.retryAt !== undefined) {
+      // A sign-in code is only useful now, and its code travels only in this call: it is never held for later.
+      if (answer.retryAt !== undefined && message.purpose !== "verification_code") {
         await ctx.db.patch(message._id, { status: "held", problem: answer.words });
         await ctx.scheduler.runAt(answer.retryAt, internal.messaging.deliver, { messageId: message._id });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.held", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code, retryAt: answer.retryAt } });
+        await logStep(ctx, message, { type: "message.held", data: { purpose: message.purpose, policy: answer.code, retryAt: answer.retryAt } });
         return null;
       }
       await ctx.db.patch(message._id, { status: "not_sent", problem: answer.words, refusal: answer.code });
-      await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject, data: { purpose: message.purpose, policy: answer.code } });
+      await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose, policy: answer.code } });
       if (message.assignmentId && (message.purpose === "offer" || message.purpose === "backup_offer")) {
         const intent = await intentOf(ctx, message);
         await ctx.scheduler.runAfter(0, internal.dispatchOps.offerTextRefused, { messageId: message._id, byAgent: intent.agent !== undefined });
       }
+      if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "not_sent", problem: answer.words });
       return null;
     }
     let body = message.body;
@@ -85,7 +103,7 @@ export const claim = internalMutation({
       // A text is never sent with a link that is already closed.
       if (!link || !token || linkState(link, Date.now()) !== "active") {
         await ctx.db.patch(message._id, { status: "not_sent", problem: "The link was closed before the text went out." });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
         return null;
       }
       body = body.replace("{link}", `${siteOrigin()}${linkPath(link.purpose, token, message.linkPath ?? "")}`);
@@ -97,13 +115,20 @@ export const claim = internalMutation({
       const checked = await cleanerMessageAtSend(ctx, message, (token) => portalUrl(token));
       if (!checked.ok) {
         await ctx.db.patch(message._id, { status: "not_sent", problem: checked.problem });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
         return null;
       }
       body = checked.body;
     }
-    // A sign-in code travels only in the scheduled call, never in the stored message.
-    if (args.code && message.purpose === "verification_code") body = body.replace("{code}", args.code);
+    // A sign-in code travels only in the scheduled call, never in the stored message. Without it, nothing goes.
+    if (message.purpose === "verification_code") {
+      if (!args.code) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: "The sign-in code wasn't available when this was due to go, so nothing was sent. Ask for a new code." });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
+        return null;
+      }
+      body = body.replace("{code}", args.code);
+    }
     if (!message.applicationId && (message.channel ?? "sms") === "email") {
       const company = await ctx.db.get(message.companyId);
       fromName = (await readProfile(ctx, message.companyId)).messaging.senderName ?? company?.name ?? "";
@@ -121,30 +146,18 @@ export const claim = internalMutation({
       if (!problem && message.applicantLinkId && (!link || !token || applicantLinkState(link, Date.now()) !== "active")) problem = "The link was closed before the message went out.";
       if (problem) {
         await ctx.db.patch(message._id, { status: "not_sent", problem });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
         return null;
       }
       if (link && token) body = body.replace("{link}", `${siteOrigin()}${applicantLinkPath(link.purpose, token)}`);
       fromName = recruiterSettings(company!).fromName;
-      // A company that connected its own mailbox and allowed sending: the email goes from its own address.
-      if ((message.channel ?? "sms") === "email") {
-        const own = (
-          await ctx.db
-            .query("mailboxConnections")
-            .withIndex("by_company", (q) => q.eq("companyId", message.companyId))
-            .take(20)
-        ).find((row) => row.provider === "gmail" && row.canSend && row.status === "connected");
-        if (own) {
-          via = { connectionId: own._id, address: own.address };
-          await ctx.db.patch(message._id, { provider: "gmail" });
-        }
-      }
+      // Whether it goes from the company's own inbox is decided below, with every other message's.
     }
     if (message.purpose === "earnings_statement") {
       const statement = await statementClaim(ctx, message);
       if ("problem" in statement) {
         await ctx.db.patch(message._id, { status: "not_sent", problem: statement.problem });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
         return null;
       }
       body = statement.body;
@@ -155,7 +168,7 @@ export const claim = internalMutation({
       const customer = await customerClaim(ctx, message);
       if ("problem" in customer) {
         await ctx.db.patch(message._id, { status: "not_sent", problem: customer.problem });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
         return null;
       }
       body = customer.body;
@@ -167,17 +180,29 @@ export const claim = internalMutation({
       const booking = await bookingClaim(ctx, message);
       if ("problem" in booking) {
         await ctx.db.patch(message._id, { status: "not_sent", problem: booking.problem });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
         return null;
       }
       body = booking.body;
       fromName = booking.fromName;
+    } else if (message.retentionActionId) {
+      // A Retention message: the case still open and Retention's to write in, and its private link made only now.
+      const care = await careClaim(ctx, message);
+      if ("problem" in care) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: care.problem });
+        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await afterCareMessage(ctx, { ...message, status: "not_sent", problem: care.problem });
+        return null;
+      }
+      body = care.body;
+      fromName = care.fromName;
+      via = care.via;
     } else if (message.salesLinks) {
       // A Sales message to a customer: every record it links still open, and its links made only now.
       const sales = await salesClaim(ctx, message, (await intentOf(ctx, message)).agent !== undefined);
       if ("problem" in sales) {
         await ctx.db.patch(message._id, { status: "not_sent", problem: sales.problem });
-        await recordEvent(ctx, { companyId: message.companyId, type: "message.not_sent", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
         if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "not_sent", problem: sales.problem });
         return null;
       }
@@ -185,17 +210,82 @@ export const claim = internalMutation({
       fromName = sales.fromName;
       via = sales.via;
     }
+    const channel = message.channel ?? ("sms" as const);
+    // Which way it goes: the company's own inbox for this purpose, waiting for that inbox, or Selestial's
+    // shared sender (convex/lib/inbox/mailboxes.ts). One way only, decided here for every message.
+    let threadId: string | null = null;
+    const inboxPurpose = inboxPurposeOf(message);
+    if (inboxPurpose) {
+      const route = await routeFor(ctx, message.companyId, inboxPurpose);
+      if (route.kind === "wait") {
+        await ctx.db.patch(message._id, { status: "held", problem: route.words, refusal: WAITING_FOR_INBOX });
+        await logStep(ctx, message, { type: "message.held", data: { purpose: message.purpose, policy: WAITING_FOR_INBOX } });
+        return null;
+      }
+      via = route.kind === "gmail" ? { connectionId: route.connectionId, address: route.address } : null;
+      if (via) threadId = await threadFor(ctx, message, via.connectionId);
+    }
+    // Email through Selestial's shared sender goes as "{Company} via Selestial", in the company's frame.
+    let email: { from: string; html: string; text: string; headers: Record<string, string> } | null = null;
+    if (channel === "email" && !via) {
+      const framed = await companyEmail(ctx, message, { fromName, text: body });
+      if (!framed.ok) {
+        await ctx.db.patch(message._id, { status: "not_sent", problem: framed.problem });
+        await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose } });
+        return null;
+      }
+      email = { from: framed.from, html: framed.html, text: framed.text, headers: {} };
+    }
     const attempt = message.attempts + 1;
-    await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now() });
+    // The provider is the one this send really uses, so its delivery reports find the message.
+    const provider = channel === "email" ? (via ? "gmail" : (emailProvider()?.name ?? message.provider)) : message.provider;
+    await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: Date.now(), provider });
     // A text goes from the company's own number. The send policy has already checked it is set and approved.
-    const from = (message.channel ?? "sms") === "sms" ? ((await readProfile(ctx, message.companyId)).messaging.smsNumber ?? "") : "";
-    return { to: message.to, from, body, attempt, channel: message.channel ?? ("sms" as const), subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName, via };
+    const from = channel === "sms" ? ((await readProfile(ctx, message.companyId)).messaging.smsNumber ?? "") : "";
+    return { to: message.to, from, body, attempt, channel, subject: message.subject ?? "", replyTo: message.replyTo ?? "", fromName, via, email, threadId, notice: false };
   },
 });
 
+/**
+ * Takes a notice to a member for sending: written now from the records (convex/lib/notify/compose.ts),
+ * or held until morning, or not sent with the reason on the row.
+ */
+async function claimNotice(ctx: MutationCtx, message: Doc<"messages">) {
+  const now = Date.now();
+  const composed = await composeNotice(ctx, message, now);
+  if (!composed.ok) {
+    if (composed.retryAt !== undefined) {
+      await ctx.db.patch(message._id, { status: "held", problem: composed.problem });
+      await ctx.scheduler.runAt(composed.retryAt, internal.messaging.deliver, { messageId: message._id });
+      await logStep(ctx, message, { type: "message.held", data: { purpose: message.purpose, event: message.notice?.event ?? null, retryAt: composed.retryAt } });
+      return null;
+    }
+    await ctx.db.patch(message._id, { status: "not_sent", problem: composed.problem, ...(composed.refusal ? { refusal: composed.refusal } : {}) });
+    await logStep(ctx, message, { type: "message.not_sent", data: { purpose: message.purpose, event: message.notice?.event ?? null } });
+    return null;
+  }
+  const attempt = message.attempts + 1;
+  // What went is kept on the row: the subject and the plain words. The HTML is rebuilt from the same records.
+  await ctx.db.patch(message._id, { status: "sending", attempts: attempt, attemptedAt: now, subject: composed.email.subject, body: composed.email.text, provider: emailProvider()?.name ?? message.provider, problem: undefined });
+  return {
+    to: message.to!,
+    from: "",
+    body: composed.email.text,
+    attempt,
+    channel: "email" as const,
+    subject: composed.email.subject,
+    replyTo: composed.replyTo ?? "",
+    fromName: "",
+    via: null,
+    email: { from: composed.from, html: composed.email.html, text: composed.email.text, headers: composed.headers },
+    threadId: null,
+    notice: true,
+  };
+}
+
 const resultValidator = v.union(
   v.object({ ok: v.literal(true), providerMessageId: v.string(), delivered: v.boolean() }),
-  v.object({ ok: v.literal(false), retryable: v.boolean(), problem: v.string(), bounced: v.optional(v.boolean()) }),
+  v.object({ ok: v.literal(false), retryable: v.boolean(), problem: v.string(), bounced: v.optional(v.boolean()), waitForInbox: v.optional(v.boolean()) }),
 );
 
 export const settle = internalMutation({
@@ -205,23 +295,33 @@ export const settle = internalMutation({
     // Only a send that is in flight can be settled, so a late or repeated answer changes nothing.
     if (!message || message.status !== "sending") return null;
     const now = Date.now();
-    const subject = { table: "messages" as const, id: message._id };
     const result = args.result;
     if (result.ok) {
       await ctx.db.patch(message._id, { status: result.delivered ? "delivered" : "sent", providerMessageId: result.providerMessageId, sentAt: now, ...(result.delivered ? { deliveredAt: now } : {}), problem: undefined });
-      await recordEvent(ctx, { companyId: message.companyId, type: "message.sent", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempt: message.attempts } });
-      if (result.delivered) await recordEvent(ctx, { companyId: message.companyId, type: "message.delivered", actor: { kind: "system" }, subject, data: { purpose: message.purpose } });
+      await logStep(ctx, message, { type: "message.sent", data: { purpose: message.purpose, attempt: message.attempts } });
+      if (result.delivered) await logStep(ctx, message, { type: "message.delivered", data: { purpose: message.purpose } });
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "accepted");
+      if (message.retentionActionId) await afterCareMessage(ctx, (await ctx.db.get(message._id))!);
       return null;
     }
-    if (result.retryable && message.attempts < MAX_ATTEMPTS) {
+    // The company's inbox stopped letting Selestial send as it tried: nothing went, so the message waits
+    // for the inbox to be reconnected rather than failing or going another way.
+    if (result.waitForInbox) {
+      await ctx.db.patch(message._id, { status: "held", problem: result.problem, refusal: WAITING_FOR_INBOX });
+      await logStep(ctx, message, { type: "message.held", data: { purpose: message.purpose, policy: WAITING_FOR_INBOX } });
+      return null;
+    }
+    if (result.retryable && message.attempts < MAX_ATTEMPTS && message.purpose !== "verification_code") {
       await ctx.db.patch(message._id, { status: "queued", problem: result.problem });
       await ctx.scheduler.runAfter(message.attempts * 30_000, internal.messaging.deliver, { messageId: message._id });
       return null;
     }
     await ctx.db.patch(message._id, { status: "failed", failedAt: now, problem: result.problem, ...(result.bounced ? { bouncedAt: now } : {}) });
-    await recordEvent(ctx, { companyId: message.companyId, type: result.bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
+    await logStep(ctx, message, { type: result.bounced ? "message.bounced" : "message.failed", data: { purpose: message.purpose, attempts: message.attempts } });
+    if (result.bounced) await suppressAfterProblem(ctx, message, "bounce", now);
+    if (message.purpose === "member_notice") return null;
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
+    else if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "failed", problem: result.problem });
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem: result.problem });
     else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "failed", problem: result.problem });
     return null;
@@ -237,8 +337,8 @@ async function sendThroughMailbox(
   ctx: ActionCtx,
   messageId: Id<"messages">,
   via: { connectionId: Id<"mailboxConnections">; address: string },
-  claimed: { to: string; body: string; subject: string; replyTo: string; fromName: string },
-): Promise<{ ok: true; providerMessageId: string; delivered: boolean } | { ok: false; retryable: boolean; problem: string }> {
+  claimed: { to: string; body: string; subject: string; replyTo: string; fromName: string; threadId: string | null },
+): Promise<{ ok: true; providerMessageId: string; delivered: boolean } | { ok: false; retryable: boolean; problem: string; waitForInbox?: boolean }> {
   const app = googleApp();
   const credential = await ctx.runQuery(internal.recruiterMailbox.credentialFor, { connectionId: via.connectionId });
   const refreshToken = credential ? await unseal(credential.sealedRefreshToken, via.connectionId) : null;
@@ -249,13 +349,28 @@ async function sendThroughMailbox(
   } catch (error) {
     if (error instanceof MailboxAuthError) {
       await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
-      return { ok: false, retryable: false, problem: "The company's mailbox no longer lets Selestial send. Reconnect it." };
+      return { ok: false, retryable: false, problem: `${via.address} no longer lets Selestial send. It's waiting until the inbox is reconnected.`, waitForInbox: true };
     }
     return { ok: false, retryable: true, problem: "Google did not answer." };
   }
-  const raw = rawMessage({ from: via.address, fromName: claimed.fromName, to: claimed.to, replyTo: claimed.replyTo || undefined, subject: claimed.subject, text: claimed.body, messageId });
-  const result = await sendFromGmail({ token, raw });
-  if (!result.ok && result.problem.startsWith("The company's mailbox no longer")) await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+  // A reply joins the person's own thread: Gmail needs the thread id and a matching subject, their mail
+  // program needs In-Reply-To and References. A thread that can't be found means a new conversation.
+  let reply: Awaited<ReturnType<typeof threadReplyHeaders>> = null;
+  if (claimed.threadId) {
+    try {
+      reply = await threadReplyHeaders({ token, threadId: claimed.threadId });
+    } catch {
+      await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+      return { ok: false, retryable: false, problem: `${via.address} no longer lets Selestial send. It's waiting until the inbox is reconnected.`, waitForInbox: true };
+    }
+  }
+  const subject = reply?.subject ? replySubject(reply.subject) : claimed.subject;
+  const raw = rawMessage({ from: via.address, fromName: claimed.fromName, to: claimed.to, replyTo: claimed.replyTo || undefined, subject, text: claimed.body, messageId, inReplyTo: reply?.inReplyTo, references: reply?.references });
+  const result = await sendFromGmail({ token, raw, threadId: reply ? claimed.threadId! : undefined });
+  if (!result.ok && result.problem.startsWith("The company's mailbox no longer")) {
+    await ctx.runMutation(internal.recruiterMailbox.sendRefused, { connectionId: via.connectionId });
+    return { ok: false, retryable: false, problem: `${via.address} no longer lets Selestial send. It's waiting until the inbox is reconnected.`, waitForInbox: true };
+  }
   return result;
 }
 
@@ -270,13 +385,14 @@ export const deliver = internalAction({
       return null;
     }
     if (claimed.channel === "email") {
-      const email = emailProvider();
+      const email = claimed.notice ? noticeEmailProvider() : emailProvider();
       if (!email) {
         await ctx.runMutation(internal.messaging.settle, { messageId: args.messageId, result: { ok: false, retryable: false, problem: "Email is not connected." } });
         return null;
       }
       // As with a text: if this throws, the message stays "sending" and the sweep marks it unconfirmed. It is not sent again.
-      const sent = await email.send({ to: claimed.to, fromName: claimed.fromName, replyTo: claimed.replyTo, subject: claimed.subject, text: claimed.body, idempotencyKey: args.messageId, attempt: claimed.attempt });
+      const framed = claimed.email;
+      const sent = await email.send({ to: claimed.to, fromName: claimed.fromName, replyTo: claimed.replyTo, subject: claimed.subject, text: framed?.text ?? claimed.body, idempotencyKey: args.messageId, attempt: claimed.attempt, ...(framed ? { from: framed.from, html: framed.html, headers: framed.headers } : {}) });
       await ctx.runMutation(internal.messaging.settle, { messageId: args.messageId, result: sent });
       return null;
     }
@@ -294,10 +410,20 @@ export const deliver = internalAction({
 
 /**
  * A delivery report from the provider. The same report arriving twice changes nothing the second time.
- * This is what a webhook will call once a provider is connected.
+ *
+ * Each outcome is kept apart: delivered; bounced (the address doesn't work); complained (it works, the
+ * person called it spam); suppressed (the provider refused because of an earlier bounce or complaint);
+ * failed (it didn't go, for a reason that says nothing about the address); delayed (still trying).
+ * A complaint can come after "delivered", so it is accepted then too, and the delivery stands.
  */
 export const receipt = internalMutation({
-  args: { provider: v.string(), eventId: v.string(), providerMessageId: v.string(), outcome: v.union(v.literal("delivered"), v.literal("failed"), v.literal("bounced")), problem: v.optional(v.string()) },
+  args: {
+    provider: v.string(),
+    eventId: v.string(),
+    providerMessageId: v.string(),
+    outcome: v.union(v.literal("delivered"), v.literal("failed"), v.literal("bounced"), v.literal("complained"), v.literal("suppressed"), v.literal("delayed")),
+    problem: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const seen = await ctx.db
       .query("providerReceipts")
@@ -309,22 +435,50 @@ export const receipt = internalMutation({
       .query("messages")
       .withIndex("by_provider_message", (q) => q.eq("provider", args.provider).eq("providerMessageId", args.providerMessageId))
       .first();
-    if (!message || (message.status !== "sent" && message.status !== "unconfirmed")) return "ignored" as const;
+    if (!message) return "ignored" as const;
     const now = Date.now();
-    const subject = { table: "messages" as const, id: message._id };
+    const open = message.status === "sent" || message.status === "unconfirmed";
+
+    if (args.outcome === "complained") {
+      if (message.status !== "sent" && message.status !== "delivered" && message.status !== "unconfirmed") return "ignored" as const;
+      if (message.complainedAt !== undefined) return "ignored" as const;
+      // The message did arrive; the person doesn't want this mail. Nothing more goes to the address without a person.
+      await ctx.db.patch(message._id, { complainedAt: now, ...(message.status !== "delivered" ? { status: "delivered" as const, deliveredAt: now } : {}) });
+      await logStep(ctx, message, { type: "message.complained", data: { purpose: message.purpose } });
+      await suppressAfterProblem(ctx, message, "complaint", now);
+      return "complained" as const;
+    }
+    if (args.outcome === "delayed") {
+      if (!open) return "ignored" as const;
+      await logStep(ctx, message, { type: "message.delayed", data: { purpose: message.purpose } });
+      return "delayed" as const;
+    }
+    if (!open) return "ignored" as const;
     if (args.outcome === "delivered") {
       await ctx.db.patch(message._id, { status: "delivered", deliveredAt: now });
-      await recordEvent(ctx, { companyId: message.companyId, type: "message.delivered", actor: { kind: "system" }, subject, data: { purpose: message.purpose } });
+      await logStep(ctx, message, { type: "message.delivered", data: { purpose: message.purpose } });
       return "delivered" as const;
     }
     const bounced = args.outcome === "bounced";
-    const problem = args.problem ?? (bounced ? "The address rejected the message." : message.channel === "email" ? "The email service reported that the message was not delivered." : "The carrier reported that the text was not delivered.");
+    const suppressed = args.outcome === "suppressed";
+    const problem =
+      args.problem ??
+      (bounced
+        ? "The address rejected the message."
+        : suppressed
+          ? "The email service didn't send it, because this address bounced or reported spam before."
+          : message.channel === "email"
+            ? "The email service reported that the message was not delivered."
+            : "The carrier reported that the text was not delivered.");
     await ctx.db.patch(message._id, { status: "failed", failedAt: now, problem, ...(bounced ? { bouncedAt: now } : {}) });
-    await recordEvent(ctx, { companyId: message.companyId, type: bounced ? "message.bounced" : "message.failed", actor: { kind: "system" }, subject, data: { purpose: message.purpose, attempts: message.attempts } });
+    await logStep(ctx, message, { type: bounced ? "message.bounced" : suppressed ? "message.suppressed" : "message.failed", data: { purpose: message.purpose, attempts: message.attempts } });
+    if (bounced || suppressed) await suppressAfterProblem(ctx, message, bounced ? "bounce" : "provider", now);
+    if (message.purpose === "member_notice") return bounced ? ("bounced" as const) : ("failed" as const);
     if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
+    else if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "failed", problem });
     else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "failed", problem });
     else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "failed", problem });
-    return "failed" as const;
+    return bounced ? ("bounced" as const) : ("failed" as const);
   },
 });
 
@@ -339,8 +493,10 @@ export const sweepStuck = internalMutation({
     for (const message of stuck) {
       const problem = "The send was started and never finished, so it is not known whether the message went. It was not sent again.";
       await ctx.db.patch(message._id, { status: "unconfirmed", problem });
-      await recordEvent(ctx, { companyId: message.companyId, type: "message.unconfirmed", actor: { kind: "system" }, subject: { table: "messages", id: message._id }, data: { purpose: message.purpose } });
+      await logStep(ctx, message, { type: "message.unconfirmed", data: { purpose: message.purpose } });
+      if (message.purpose === "member_notice") continue;
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "failed");
+      else if (message.retentionActionId) await afterCareMessage(ctx, { ...message, status: "unconfirmed", problem });
       else if (!message.invoiceId && !message.bookingSessionId && !message.salesLinks && message.purpose !== "earnings_statement") await afterMessageFailed(ctx, { ...message, status: "unconfirmed", problem });
     else if (message.opportunityId) await afterSalesMessage(ctx, { ...message, status: "unconfirmed", problem });
     }

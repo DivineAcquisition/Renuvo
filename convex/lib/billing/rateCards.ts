@@ -65,8 +65,8 @@ export const TASKS: Record<Task, { label: string; unit: string; available: boole
   },
   retention_assessment: {
     label: "Retention assessment",
-    unit: "One assessment of one customer's relationship.",
-    available: false,
+    unit: "One reading of one customer's own words about a service, for a retention case.",
+    available: true,
   },
   agreement_draft: {
     label: "Agreement draft",

@@ -68,7 +68,8 @@ export const summary = ownerQuery({
     let notInvoiced = 0;
     let notInvoicedCount = 0;
     for (const job of jobs) {
-      if (job.status === "cancelled" || job.skipped) continue;
+      // A correction visit is never billed: it is left out of what is owed and what is estimated.
+      if (job.status === "cancelled" || job.skipped || job.recovery) continue;
       const invoice = await ctx.db
         .query("invoices")
         .withIndex("by_company_job", (q) => q.eq("companyId", ctx.companyId).eq("jobId", job._id))

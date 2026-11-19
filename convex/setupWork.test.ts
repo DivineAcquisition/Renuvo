@@ -66,9 +66,9 @@ describe("agent first work in setup", () => {
     expect(work.recruiter.work).toMatchObject({ status: "waiting", result: { next: { words: "Prepare a hiring brief" } } });
     expect(work.dispatch.work).toMatchObject({ status: "waiting", result: { counts: { upcoming: 0, short: 0 } } });
     expect(work.retention.work).toMatchObject({ status: "waiting", result: { summary: "No completed visits yet, so there is no service history to review." } });
-    // Readiness is shown beside the work, not replaced by it: Retention is still not available.
-    expect(work.retention.readiness.state).toBe("not_available");
-    expect(work.retention.work!.result!.uncertain[0]).toMatch(/nothing is drafted or sent/);
+    // Readiness is shown beside the work, not replaced by it.
+    expect(work.retention.readiness.state).not.toBe("ready_to_work");
+    expect(work.retention.work!.result!.uncertain.join(" ")).toMatch(/Nothing is drafted or sent from setup/);
   });
 
   it("only the Owner starts it, and one company never sees another's work", async () => {
@@ -113,7 +113,7 @@ describe("agent first work in setup", () => {
     });
     const before = await contactCounts(t);
     const work = await prepareAll(t, as, companyId, "retention");
-    expect(work.retention.work).toMatchObject({ status: "ready_for_review", result: { counts: { withHistory: 2, lapsed: 1 } } });
+    expect(work.retention.work).toMatchObject({ status: "ready_for_review", result: { counts: { withHistory: 2, lapsed: 1, cases: 0 }, next: { href: "/app/agents/retention/re-engagement" } } });
     expect(work.retention.work!.result!.items).toEqual([{ label: "Dana Whitfield", detail: "Last visit 70 days ago; nothing booked.", href: `/app/clients/${lapsed.customerId}` }]);
     expect(await contactCounts(t)).toEqual(before);
   });

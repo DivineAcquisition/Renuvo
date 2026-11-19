@@ -8,6 +8,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { agentValidator } from "./statuses";
+import { NOTICE_EVENT_TYPES, noticesForEvent } from "./notify/fromEvents";
 
 export const actorValidator = v.union(
   v.object({ kind: v.literal("member"), memberId: v.id("members") }),
@@ -21,6 +22,8 @@ export const actorValidator = v.union(
   v.object({ kind: v.literal("cleaner_portal"), cleanerId: v.id("cleaners"), linkId: v.id("portalLinks") }),
   /** A subcontractor company's authorized contact acting through their portal link. */
   v.object({ kind: v.literal("subcontractor_contact"), subcontractorId: v.id("subcontractors"), linkId: v.id("portalLinks") }),
+  /** A customer acting through a Retention link. The link is the authorization; the customer id says who it was issued to. */
+  v.object({ kind: v.literal("customer"), customerId: v.id("customers"), linkId: v.id("retentionLinks") }),
 );
 export type Actor = typeof actorValidator.type;
 
@@ -121,6 +124,13 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("proposals"), id: v.id("proposals") }),
   v.object({ table: v.literal("assessments"), id: v.id("assessments") }),
   v.object({ table: v.literal("serviceSetups"), id: v.id("serviceSetups") }),
+  // Retention (convex/lib/retention/schema.ts).
+  v.object({ table: v.literal("retentionCases"), id: v.id("retentionCases") }),
+  v.object({ table: v.literal("retentionSignals"), id: v.id("retentionSignals") }),
+  v.object({ table: v.literal("retentionActions"), id: v.id("retentionActions") }),
+  v.object({ table: v.literal("retentionFeedback"), id: v.id("retentionFeedback") }),
+  v.object({ table: v.literal("retentionLinks"), id: v.id("retentionLinks") }),
+  v.object({ table: v.literal("servicePlans"), id: v.id("servicePlans") }),
 );
 export type Subject = typeof subjectValidator.type;
 
@@ -135,7 +145,7 @@ export async function recordEvent(
   ctx: MutationCtx,
   event: { companyId: Id<"companies">; type: string; actor: Actor; subject: Subject; data?: EventData },
 ): Promise<Id<"events">> {
-  return ctx.db.insert("events", {
+  const id = await ctx.db.insert("events", {
     companyId: event.companyId,
     type: event.type,
     actor: event.actor,
@@ -144,4 +154,7 @@ export async function recordEvent(
     data: event.data,
     at: Date.now(),
   });
+  // A few events tell the people who run the company by email (convex/lib/notify/fromEvents.ts).
+  if (NOTICE_EVENT_TYPES.has(event.type)) await noticesForEvent(ctx, { id, companyId: event.companyId, type: event.type, actor: event.actor, subject: event.subject, data: event.data as Record<string, unknown> | undefined });
+  return id;
 }

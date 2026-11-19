@@ -7,8 +7,8 @@
  * Recruiter the hiring brief (prepared separately, paused until the Owner opens it) and applications waiting.
  * Dispatch  upcoming visits short of people, who could cover them (a proposal: no offer is sent), and who
  *           has no weekly hours.
- * Retention clients whose last visit was a while ago with nothing booked, and open concerns. Retention is not
- *           built, so this is a review for the owner to act on; nothing is drafted to be sent.
+ * Retention clients whose last visit was a while ago with nothing booked, open concerns and Retention's own
+ *           open cases. Setup prepares and never sends (the Owner's decision): nothing is drafted here.
  */
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { QueryCtx } from "../../_generated/server";
@@ -252,7 +252,7 @@ export async function dispatchWork(ctx: QueryCtx, company: Doc<"companies">, rea
 
 // ── Retention ───────────────────────────────────────────────────────────────────────────────────
 
-export async function retentionWork(ctx: QueryCtx, company: Doc<"companies">, now: number): Promise<WorkOutcome> {
+export async function retentionWork(ctx: QueryCtx, company: Doc<"companies">, readiness: AgentReadiness | undefined, now: number): Promise<WorkOutcome> {
   const completed = await ctx.db
     .query("jobs")
     .withIndex("by_company_status_start", (q) => q.eq("companyId", company._id).eq("status", "completed").lt("startsAt", now))
@@ -272,6 +272,15 @@ export async function retentionWork(ctx: QueryCtx, company: Doc<"companies">, no
   }
   lapsed.sort((a, b) => b.at - a.at);
   const issues = (await companyAttention(ctx, company._id)).issues;
+  let cases = 0;
+  for (const status of ["needs_context", "needs_attention", "action_underway", "waiting_on_customer"] as const) {
+    cases += (
+      await ctx.db
+        .query("retentionCases")
+        .withIndex("by_company_status", (q) => q.eq("companyId", company._id).eq("status", status))
+        .take(200)
+    ).length;
+  }
 
   const items = [];
   for (const { customerId, at } of lapsed.slice(0, 5)) {
@@ -279,17 +288,23 @@ export async function retentionWork(ctx: QueryCtx, company: Doc<"companies">, no
     items.push({ label: customer?.name ?? "A client", detail: `Last visit ${daysAgo(at, now)}; nothing booked.`, href: `/app/clients/${customerId}` });
   }
   return {
-    status: lapsed.length || issues.size ? "ready_for_review" : "waiting",
+    status: lapsed.length || issues.size || cases ? "ready_for_review" : "waiting",
     result: {
       title: last.size ? "Your clients' service history, reviewed" : "Service history, checked",
       summary: last.size
         ? `${plural(last.size, "client")} with completed visits. ${lapsed.length} ${lapsed.length === 1 ? "hasn't" : "haven't"} had a visit in ${LAPSED_DAYS} days and ${lapsed.length === 1 ? "has" : "have"} nothing booked. ${plural(issues.size, "client")} with an open concern.`
         : "No completed visits yet, so there is no service history to review.",
-      used: [`${plural(completed.length, "completed visit")}`, issues.size ? `${plural(issues.size, "open concern")}` : "No open concerns"],
-      uncertain: ["Retention isn't available yet: nothing is drafted or sent. This is a list for you to act on.", "Past contact details are not permission to message anyone."],
+      used: [`${plural(completed.length, "completed visit")}`, issues.size ? `${plural(issues.size, "open concern")}` : "No open concerns", `${plural(cases, "open Retention case")}`],
+      uncertain: [...gapsOf(readiness), "Nothing is drafted or sent from setup. Retention follows up from its own page, within the permissions you set.", "Past contact details are not permission to message anyone."],
       items,
-      next: lapsed.length ? { words: `Look at ${plural(lapsed.length, "client")} who may be ready to book again`, href: "/app/clients" } : issues.size ? { words: `Look at ${plural(issues.size, "open concern")}`, href: "/app/clients" } : { words: "Nothing to do here yet", href: "/app/clients" },
-      counts: { withHistory: last.size, lapsed: lapsed.length, concerns: issues.size },
+      next: cases
+        ? { words: `Look at ${plural(cases, "open Retention case")}`, href: "/app/agents/retention/needs-attention" }
+        : lapsed.length
+          ? { words: `Look at ${plural(lapsed.length, "client")} who may be ready to book again`, href: "/app/agents/retention/re-engagement" }
+          : issues.size
+            ? { words: `Look at ${plural(issues.size, "open concern")}`, href: "/app/clients" }
+            : { words: "Open Retention", href: "/app/agents/retention" },
+      counts: { withHistory: last.size, lapsed: lapsed.length, concerns: issues.size, cases },
     },
   };
 }

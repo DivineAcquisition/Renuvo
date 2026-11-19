@@ -120,6 +120,14 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "servicePlans", index: "by_company_customer" },
   { table: "clientNotes", index: "by_company_customer" },
   { table: "inboundMessages", index: "by_company_customer" },
+  // Retention (convex/lib/retention/schema.ts): signals, cases and their history, actions, feedback, and background runs.
+  { table: "retentionSignals", index: "by_company_status" },
+  { table: "retentionCases", index: "by_company_status" },
+  { table: "retentionEntries", index: "by_company_case" },
+  { table: "retentionActions", index: "by_company_case" },
+  { table: "retentionFeedback", index: "by_company_customer" },
+  { table: "retentionLinks", index: "by_company_customer", omit: ["publicId"], why: "Half of a customer link." },
+  { table: "retentionRuns", index: "by_company_kind", omit: ["payload"], why: "A customer's text held only until it is read; the conversation keeps it." },
   { table: "pricingProfiles", index: "by_company" },
   { table: "serviceQuotes", index: "by_company_created" },
   { table: "serviceImports", index: "by_company_created" },
@@ -185,6 +193,8 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "bookingImages", index: "by_company" },
   { table: "bookingAcceptances", index: "by_company_session", omit: ["ipHash"], why: "A one-way hash kept only as signing evidence." },
   { table: "bookingEvents", index: "by_company_experience_at" },
+  // Notifications to members (convex/lib/notify/schema.ts): each person's choices. The notices themselves are messages.
+  { table: "notificationPreferences", index: "by_company_member" },
 ];
 
 /** Company tables kept out of the export, and why. */

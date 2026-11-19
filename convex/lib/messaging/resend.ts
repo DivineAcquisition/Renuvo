@@ -48,9 +48,20 @@ export async function verifyWebhook(input: { secret: string; id: string | null; 
   });
 }
 
-export type WebhookOutcome = { providerMessageId: string; outcome: "delivered" | "failed" | "bounced" } | null;
+export type WebhookOutcome = { providerMessageId: string; outcome: "delivered" | "failed" | "bounced" | "complained" | "suppressed" | "delayed" } | null;
 
-/** What a Resend event means for a message, or null for one that changes nothing. */
+const OUTCOMES: Record<string, NonNullable<WebhookOutcome>["outcome"]> = {
+  "email.delivered": "delivered",
+  "email.bounced": "bounced",
+  // The person marked it as spam. Kept apart from a bounce: the address works; they don't want this mail.
+  "email.complained": "complained",
+  "email.failed": "failed",
+  // Resend refused to send because the address is on its own suppression list.
+  "email.suppressed": "suppressed",
+  "email.delivery_delayed": "delayed",
+};
+
+/** What a Resend event means for a message, or null for one that changes nothing (sent, opened, clicked). */
 export function webhookOutcome(body: string): WebhookOutcome {
   let event: { type?: unknown; data?: { email_id?: unknown } };
   try {
@@ -60,12 +71,8 @@ export function webhookOutcome(body: string): WebhookOutcome {
   }
   const id = event.data?.email_id;
   if (typeof id !== "string" || !id) return null;
-  if (event.type === "email.delivered") return { providerMessageId: id, outcome: "delivered" };
-  if (event.type === "email.bounced") return { providerMessageId: id, outcome: "bounced" };
-  // A complaint means the person does not want this mail. It is treated like a bounce: nothing more goes to that address without a person.
-  if (event.type === "email.complained") return { providerMessageId: id, outcome: "bounced" };
-  if (event.type === "email.failed") return { providerMessageId: id, outcome: "failed" };
-  return null;
+  const outcome = typeof event.type === "string" ? OUTCOMES[event.type] : undefined;
+  return outcome ? { providerMessageId: id, outcome } : null;
 }
 
 /** The id of an email that arrived at the receiving domain, from the service's notice, or null for any other event. The notice carries no body. */

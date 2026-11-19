@@ -17,6 +17,7 @@ import { afterPlanDecision } from "./plans";
 import { afterProposalDecision } from "./proposals";
 import { afterRecruiterDecision, afterRecruiterExpiry, isRecruiterProposal } from "./lib/recruiter/approvals";
 import { afterFollowUpDecision, afterFollowUpExpiry } from "./lib/cleaners/followUps";
+import { afterRetentionDecision, afterRetentionExpiry, isRetentionProposal, ownerOnly } from "./lib/retention/approvals";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { approvalStatusValidator } from "./lib/statuses";
@@ -73,6 +74,7 @@ export const decide = managerMutation({
     // Prices are the Owner's: a changed price, a recurring price change and custom proposal rates wait for them.
     const kind = approval.proposal?.kind;
     if ((kind === "sales_price_override" || kind === "plan_change" || kind === "proposal_rates") && !isOwner(ctx.role)) throw userError("Only the Owner decides price changes.");
+    if (kind === "retention_action" && ownerOnly(approval) && args.decision === "approved" && !isOwner(ctx.role)) throw userError("Only the Owner approves refunds and compensation above the limit.");
     const note = optionalText(args.note, "The note", 2000);
     if (args.decision === "changed" && !note) throw userError("Say what to change.");
     const decided = { status: args.decision, decidedBy: ctx.member._id, decidedAt: Date.now(), note };
@@ -88,6 +90,7 @@ export const decide = managerMutation({
     }
     if (isRecruiterProposal(approval)) return { carriedOut: await afterRecruiterDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
     if (isAgentProposal(approval)) return { carriedOut: await afterAgentDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
+    if (isRetentionProposal(approval)) return { carriedOut: await afterRetentionDecision(ctx, decidedApproval, args.decision, byMember(ctx)) };
     if (kind === "sales_payment_link" || kind === "sales_price_override" || kind === "plan_change" || kind === "proposal_rates") {
       const carriedOut = kind === "plan_change" ? await afterPlanDecision(ctx, decidedApproval, args.decision) : kind === "proposal_rates" ? await afterProposalDecision(ctx, decidedApproval, args.decision) : await afterSalesDecision(ctx, decidedApproval, args.decision);
       await ctx.db.patch(approval._id, { carriedOut });
@@ -112,6 +115,7 @@ export const expireDue = internalMutation({
       else if (isRecruiterProposal(approval)) await afterRecruiterExpiry(ctx, { ...approval, status: "expired" });
       else if (approval.proposal?.kind === "sales_payment_link") await afterSalesExpiry(ctx, approval);
       else if (isAgentProposal(approval)) await afterAgentExpiry(ctx, { ...approval, status: "expired" });
+      else if (isRetentionProposal(approval)) await afterRetentionExpiry(ctx, { ...approval, status: "expired" });
       else await afterExpiry(ctx, { ...approval, status: "expired" });
     }
     return due.length;

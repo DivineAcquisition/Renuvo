@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { agentBadge, agentBadges, approvalsBadge, tabBadge, type SidebarFacts } from "./badges";
 
-const quiet: SidebarFacts = { decisions: 0, dispatch: { paused: false, withYou: 0, inProgress: 0, waiting: 0, unfilled: 0, unfilledWithinDay: 0, awaitingAnswer: 0 }, sales: { paused: false, withYou: 0, running: 0, waiting: 0 } };
-const facts = (dispatch: Partial<SidebarFacts["dispatch"]>, decisions = 0): SidebarFacts => ({ decisions, dispatch: { ...quiet.dispatch, ...dispatch }, sales: quiet.sales });
+const quiet: SidebarFacts = { decisions: 0, dispatch: { paused: false, withYou: 0, inProgress: 0, waiting: 0, unfilled: 0, unfilledWithinDay: 0, awaitingAnswer: 0 }, sales: { paused: false, withYou: 0, running: 0, waiting: 0 }, retention: { paused: false, serious: 0, withYou: 0, overdue: 0, underway: 0, waiting: 0 } };
+const facts = (dispatch: Partial<SidebarFacts["dispatch"]>, decisions = 0): SidebarFacts => ({ decisions, dispatch: { ...quiet.dispatch, ...dispatch }, sales: quiet.sales, retention: quiet.retention });
 const sales = (values: Partial<SidebarFacts["sales"]>): SidebarFacts => ({ ...quiet, sales: { ...quiet.sales, ...values } });
+const care = (values: Partial<SidebarFacts["retention"]>): SidebarFacts => ({ ...quiet, retention: { ...quiet.retention, ...values } });
 
 describe("sidebar badges", () => {
   it("shows nothing when there is nothing to act on, and nothing before the record has loaded", () => {
@@ -16,7 +17,7 @@ describe("sidebar badges", () => {
 
   it("never gives an unbuilt agent a badge", () => {
     const busy = facts({ withYou: 3, unfilled: 2, unfilledWithinDay: 2, inProgress: 4 }, 5);
-    for (const agent of ["marketing", "retention", "quality", "customer-care", "recruiter", "team-coordinator"] as const) {
+    for (const agent of ["marketing", "quality", "customer-care", "recruiter", "team-coordinator"] as const) {
       expect(agentBadges(agent, busy)).toEqual([]);
       expect(tabBadge(agent, "playbook", busy)).toBeNull();
     }
@@ -30,6 +31,18 @@ describe("sidebar badges", () => {
     expect(agentBadge("sales", sales({ paused: true, running: 1 }))).toEqual({ kind: "attention", label: "Paused" });
     expect(tabBadge("sales", "pipeline", sales({ withYou: 2 }))).toEqual({ kind: "decision", label: "2 for you", count: 2 });
     expect(tabBadge("sales", "playbook", sales({ withYou: 2 }))).toBeNull();
+  });
+
+  it("badges Retention with a serious concern first, then a decision, then an overdue commitment", () => {
+    expect(agentBadge("retention", quiet)).toBeNull();
+    expect(agentBadge("retention", care({ waiting: 2 }))).toEqual({ kind: "working", label: "Waiting on replies" });
+    expect(agentBadge("retention", care({ underway: 1, waiting: 2 }))).toEqual({ kind: "working", label: "Working" });
+    expect(agentBadge("retention", care({ underway: 1, overdue: 1 }))).toEqual({ kind: "attention", label: "1 overdue", count: 1 });
+    expect(agentBadge("retention", care({ withYou: 3, overdue: 1, underway: 1 }))).toEqual({ kind: "decision", label: "3 for you", count: 3 });
+    expect(agentBadge("retention", care({ serious: 1, withYou: 3 }))).toEqual({ kind: "urgent", label: "1 serious", count: 1 });
+    expect(agentBadge("retention", care({ paused: true, underway: 2 }))).toEqual({ kind: "attention", label: "Paused" });
+    expect(tabBadge("retention", "needs-attention", care({ withYou: 2 }))).toEqual({ kind: "decision", label: "2 for you", count: 2 });
+    expect(tabBadge("retention", "recovery", care({ withYou: 2 }))).toBeNull();
   });
 
   it("puts an unfilled visit and a needed decision ahead of working", () => {

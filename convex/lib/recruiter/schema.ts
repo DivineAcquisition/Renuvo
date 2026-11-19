@@ -60,6 +60,14 @@ export const SOURCES = ["indeed", "ziprecruiter", "direct", "manual", "other"] a
 export type Source = (typeof SOURCES)[number];
 export const sourceValidator = literals(SOURCES);
 
+/**
+ * What a connected inbox is for (docs/email/00-architecture.md §2). A connection with no purposes was
+ * made before purposes existed, from Recruiting settings; it keeps working exactly as it did.
+ */
+export const INBOX_PURPOSES = ["sales", "hiring", "care", "operations"] as const;
+export type InboxPurpose = (typeof INBOX_PURPOSES)[number];
+export const inboxPurposeValidator = literals(INBOX_PURPOSES);
+
 export const CLASSIFICATIONS = ["new_application", "applicant_reply", "duplicate_notification", "status_update", "suggested_candidate", "promotion", "unrelated"] as const;
 export type Classification = (typeof CLASSIFICATIONS)[number];
 export const classificationValidator = literals(CLASSIFICATIONS);
@@ -324,9 +332,27 @@ export const recruiterTables = {
     canSend: v.optional(v.boolean()),
     /** When Gmail's push notifications to Selestial's Pub/Sub topic lapse. Renewed daily. */
     watchExpiresAt: v.optional(v.number()),
+    /** What the Owner connected it for. Absent: a hiring inbox connected before purposes existed. */
+    purposes: v.optional(v.array(inboxPurposeValidator)),
+    /** One read at a time: a run holds this until it finishes, or until it lapses after a crash. */
+    syncLeaseUntil: v.optional(v.number()),
+    /**
+     * Retention's own place in an inbox connected for Care & Retention (convex/retentionInbox.ts): where
+     * its last page ended, the moment the Owner turned reading on (nothing earlier is read), and its lease.
+     */
+    careCursor: v.optional(v.string()),
+    careFrom: v.optional(v.number()),
+    careLeaseUntil: v.optional(v.number()),
+    careSyncAt: v.optional(v.number()),
+    /** Disconnected by a person, and what happened to Google's grant. */
+    disconnectedAt: v.optional(v.number()),
+    disconnectedBy: v.optional(v.id("members")),
+    grant: v.optional(v.union(v.literal("revoked"), v.literal("kept_shared"), v.literal("revoke_failed"))),
     createdBy: v.id("members"),
     createdAt: v.number(),
-  }).index("by_company", ["companyId"]),
+  })
+    .index("by_company", ["companyId"])
+    .index("by_address", ["address"]),
 
   /**
    * A mailbox's refresh token, encrypted (lib/recruiter/secrets.ts) and bound to its connection. No query
@@ -353,6 +379,8 @@ export const recruiterTables = {
     canSend: v.boolean(),
     /** The app address the Owner started from, already checked (returnOrigin). */
     returnOrigin: v.optional(v.string()),
+    /** Started from Connected apps with purposes, rather than from Recruiting settings. */
+    purposes: v.optional(v.array(inboxPurposeValidator)),
     expiresAt: v.number(),
     usedAt: v.optional(v.number()),
   }).index("by_stateHash", ["stateHash"]),

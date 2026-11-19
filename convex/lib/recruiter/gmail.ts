@@ -95,13 +95,27 @@ async function call<T>(fetcher: Fetch, token: string, path: string, init: Reques
   } catch {
     throw new MailboxProviderError("gmail: no answer");
   }
-  if (response.status === 401 || response.status === 403) throw new MailboxAuthError("gmail: not authorized");
+  if (response.status === 401) throw new MailboxAuthError("gmail: not authorized");
+  if (response.status === 403) {
+    // A 403 is either a permission that's gone (reconnect) or Gmail asking Selestial to slow down (try later).
+    if (await rateLimited(response)) throw new MailboxProviderError("gmail: rate limited");
+    throw new MailboxAuthError("gmail: not authorized");
+  }
   if (response.status === 404) throw new NotFound();
   if (!response.ok) throw new MailboxProviderError(`gmail: ${response.status}`);
   return (await response.json()) as T;
 }
 
 class NotFound extends Error {}
+
+const RATE_REASONS = new Set(["rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded", "quotaExceeded"]);
+
+/** Whether a 403 from Google is a rate or quota limit rather than a missing permission. */
+export async function rateLimited(response: Response): Promise<boolean> {
+  const body = (await response.clone().json().catch(() => null)) as { error?: { errors?: { reason?: string }[]; status?: string; details?: { reason?: string }[] } } | null;
+  const reasons = [...(body?.error?.errors ?? []).map((e) => e.reason), ...(body?.error?.details ?? []).map((d) => d.reason), body?.error?.status];
+  return reasons.some((reason) => reason !== undefined && (RATE_REASONS.has(reason) || reason === "RESOURCE_EXHAUSTED" || reason === "RATE_LIMIT_EXCEEDED"));
+}
 
 type Header = { name: string; value: string };
 type Part = { mimeType?: string; filename?: string; headers?: Header[]; body?: { data?: string; size?: number; attachmentId?: string }; parts?: Part[] };
@@ -261,15 +275,33 @@ function base64url(text: string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** The message as Gmail wants it: RFC 5322, base64url. Pure, so it can be checked in a test. */
-export function rawMessage(input: { from: string; fromName: string; to: string; replyTo?: string; subject: string; text: string; messageId: string }): string {
+/** A Message-ID as it appears in a header, or nothing when it isn't one. */
+function messageIdHeader(value: string | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  return /^<[^<>\s]{3,250}>$/.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * The message as Gmail wants it: RFC 5322, base64url. Pure, so it can be checked in a test. A reply
+ * carries In-Reply-To and References, so it joins the conversation in the recipient's mail program too.
+ */
+export function rawMessage(input: { from: string; fromName: string; to: string; replyTo?: string; subject: string; text: string; messageId: string; inReplyTo?: string; references?: string }): string {
   const name = oneLine(input.fromName).replace(/["\\]/g, "");
+  const inReplyTo = messageIdHeader(input.inReplyTo);
+  const references = (input.references ?? "")
+    .split(/\s+/)
+    .map((id) => messageIdHeader(id))
+    .filter((id): id is string => id !== null)
+    .slice(-10);
+  if (inReplyTo && !references.includes(inReplyTo)) references.push(inReplyTo);
   const lines = [
     `From: "${encodeWord(name)}" <${oneLine(input.from)}>`,
     `To: <${oneLine(input.to)}>`,
     ...(input.replyTo && input.replyTo !== input.from ? [`Reply-To: <${oneLine(input.replyTo)}>`] : []),
     `Subject: ${encodeWord(input.subject)}`,
     `Message-ID: <${input.messageId.replace(/[^\w.-]/g, "")}@selestial.recruiter>`,
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`] : []),
+    ...(references.length ? [`References: ${references.join(" ")}`] : []),
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: 8bit",
@@ -279,19 +311,56 @@ export function rawMessage(input: { from: string; fromName: string; to: string; 
   return base64url(lines.join("\r\n"));
 }
 
+/** The headers a reply in this thread needs: the last message's Message-ID, its References and its subject. */
+export async function threadReplyHeaders(input: { token: string; threadId: string; fetch?: Fetch }): Promise<{ inReplyTo?: string; references?: string; subject?: string } | null> {
+  try {
+    const thread = await call<{ messages?: GmailMessage[] }>(input.fetch ?? fetch, input.token, `/threads/${encodeURIComponent(input.threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=Subject`);
+    const last = thread.messages?.[thread.messages.length - 1];
+    if (!last) return null;
+    const headers = last.payload?.headers;
+    return { inReplyTo: header(headers, "Message-ID"), references: header(headers, "References"), subject: header(headers, "Subject") };
+  } catch (error) {
+    // A thread that's gone, or any other trouble finding it: the message goes as a new conversation.
+    if (error instanceof MailboxAuthError) throw error;
+    return null;
+  }
+}
+
+/** "Re: " once, the way mail programs do, so Gmail keeps the reply in its thread. */
+export function replySubject(subject: string): string {
+  const clean = oneLine(subject);
+  return /^re:/i.test(clean) ? clean : `Re: ${clean}`;
+}
+
 export type GmailSendResult = { ok: true; providerMessageId: string; delivered: false } | { ok: false; retryable: boolean; problem: string };
 
-/** Sends one message from the connected mailbox. A dropped connection throws: nobody knows whether it went. */
-export async function sendFromGmail(input: { token: string; raw: string; fetch?: Fetch }): Promise<GmailSendResult> {
+/**
+ * Sends one message from the connected mailbox, in a thread when one is given. Gmail has no idempotency
+ * key, so anything that leaves it unknown whether the message went (a dropped connection, a server
+ * error) throws: the message is then marked unconfirmed and never sent again by itself. Only an answer
+ * that says it wasn't sent (rate limit, refused) comes back as a result.
+ */
+export async function sendFromGmail(input: { token: string; raw: string; threadId?: string; fetch?: Fetch }): Promise<GmailSendResult> {
   const fetcher = input.fetch ?? fetch;
-  const response = await fetcher(`${API}/messages/send`, { method: "POST", headers: { Authorization: `Bearer ${input.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ raw: input.raw }) });
+  const response = await fetcher(`${API}/messages/send`, { method: "POST", headers: { Authorization: `Bearer ${input.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ raw: input.raw, ...(input.threadId ? { threadId: input.threadId } : {}) }) });
   if (response.ok) {
     const body = (await response.json().catch(() => null)) as { id?: string } | null;
     return { ok: true, providerMessageId: body?.id ?? "unknown", delivered: false };
   }
+  if (response.status === 429 || (response.status === 403 && (await rateLimited(response)))) return { ok: false, retryable: true, problem: "Gmail asked Selestial to slow down. It will try again shortly." };
   if (response.status === 401 || response.status === 403) return { ok: false, retryable: false, problem: "The company's mailbox no longer lets Selestial send. Reconnect it." };
-  if (response.status === 429 || response.status >= 500) return { ok: false, retryable: true, problem: "Gmail is busy or unavailable." };
+  if (response.status >= 500) throw new MailboxProviderError(`gmail: ${response.status} on send`);
   return { ok: false, retryable: false, problem: "Gmail would not send this message." };
+}
+
+/**
+ * Ends Selestial's access at Google. Only called when nothing else of the company's uses the same
+ * Google grant (see convex/inboxes.ts): revoking one token ends every token of that grant.
+ */
+export async function revokeToken(token: string, fetcher: Fetch = fetch): Promise<boolean> {
+  const response = await fetcher("https://oauth2.googleapis.com/revoke", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ token }).toString() }).catch(() => null);
+  // 400 means Google no longer knows the token: already revoked, which is the outcome wanted.
+  return Boolean(response && (response.ok || response.status === 400));
 }
 
 /**
