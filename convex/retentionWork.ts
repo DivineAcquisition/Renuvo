@@ -13,7 +13,7 @@
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation, type MutationCtx } from "./_generated/server";
 import { finishExecution, openExecution } from "./lib/billing/executions";
 import { reserveExecution } from "./lib/billing/reserve";

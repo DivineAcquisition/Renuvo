@@ -169,7 +169,7 @@ export const cases = companyQuery({
     const cache = new Map<string, string>();
     if (args.view === "closed") {
       const closed = await ctx.db.query("retentionCases").withIndex("by_company_closed", (q) => q.eq("companyId", ctx.companyId).gte("closedAt", args.asOf - 90 * DAY)).order("desc").take(100);
-      return Promise.all(closed.map((row) => card(ctx, row, args.asOf, cache)));
+      return Promise.all(closed.map(async (row) => ({ ...(await card(ctx, row, args.asOf, cache)), checkInAt: null as number | null })));
     }
     const rows = (await openCases(ctx, ctx.companyId)).filter((row) =>
       args.view === "attention" ? row.status === "needs_attention" || row.status === "needs_context" : args.view === "recovery" ? row.kind === "recovery" || row.kind === "follow_through" : args.view === "continuity" ? row.kind === "continuity" : args.view === "renewals" ? row.kind === "renewal" : row.kind === "reactivation",

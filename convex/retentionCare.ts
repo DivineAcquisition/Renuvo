@@ -92,20 +92,26 @@ export const view = salesLinkQuery({
       // Everyone is shown the same public review page, whatever they answered.
       reviewUrl: settings.reviewUrl,
     };
+    type Feedback = { submitted: boolean; describedIssue: boolean; crewKnown: boolean };
+    type Remedy = { what: string; about: string; when: string | null; minutes: number | null; charge: string | null; open: boolean; answered: "accepted" | "declined" | "asked" | null; booked: boolean };
+    type Confirm = { about: string; answered: "resolved" | "not_resolved" | null; closed: boolean };
+    type Manage = { cadence: string; service: string; ended: boolean; visits: { jobId: Id<"jobs">; when: string; day: string }[]; changes: { id: (typeof PLAN_CHANGES)[number]; words: string; needsZip: boolean }[]; canAskForCleaner: boolean; requests: { title: string; status: string; at: number }[] };
+    // One shape for every kind of link: the part that does not apply is null.
+    const page = { ...base, feedback: null as Feedback | null, remedy: null as Remedy | null, confirm: null as Confirm | null, manage: null as Manage | null };
     if (link.purpose === "feedback" || link.purpose === "issue") {
       const given = await ctx.db
         .query("retentionFeedback")
         .withIndex("by_company_link", (q) => q.eq("companyId", company._id).eq("linkId", link._id))
         .first();
       const reported = link.purpose === "issue" && link.lastAction === "describe_issue";
-      return { ...base, feedback: { submitted: given !== null || reported, describedIssue: given?.issue !== undefined || reported, crewKnown: job !== null } };
+      return { ...page, feedback: { submitted: given !== null || reported, describedIssue: given?.issue !== undefined || reported, crewKnown: job !== null } };
     }
     if (link.purpose === "remedy") {
       const action = link.actionId ? await ctx.db.get(link.actionId) : null;
-      if (!action || !row) return { ...base, remedy: null };
-      const answered = link.lastAction === "accept_remedy" ? "accepted" : link.lastAction === "decline_remedy" ? "declined" : link.lastAction === "ask_about_remedy" ? "asked" : null;
+      if (!action || !row) return page;
+      const answered = link.lastAction === "accept_remedy" ? ("accepted" as const) : link.lastAction === "decline_remedy" ? ("declined" as const) : link.lastAction === "ask_about_remedy" ? ("asked" as const) : null;
       return {
-        ...base,
+        ...page,
         remedy: {
           what: ACTION_WORDS[action.kind],
           about: row.areas.join(", ") || "your recent service",
@@ -121,11 +127,11 @@ export const view = salesLinkQuery({
     }
     if (link.purpose === "confirm") {
       const answer = row?.verification?.customerAnswer?.answer ?? null;
-      return { ...base, confirm: { about: row?.areas.join(", ") || "your recent service", answered: answer, closed: row?.status === "closed" } };
+      return { ...page, confirm: { about: row?.areas.join(", ") || "your recent service", answered: answer, closed: row?.status === "closed" } };
     }
     // manage
     const plan = link.plan ? await loadPlan(ctx, company._id, link.plan) : null;
-    if (!plan || plan.customerId !== customer._id) return { ...base, manage: null };
+    if (!plan || plan.customerId !== customer._id) return page;
     const today = localParts(now, tz).day;
     const visits = (await upcomingVisits(ctx, plan, today)).slice(0, 8);
     const offered = manageable(company, plan).filter((change) => link.allowed.includes(change));
@@ -138,7 +144,7 @@ export const view = salesLinkQuery({
         .take(20)
     ).filter((c) => c.kind === "continuity" && c.plan?.id === link.plan!.id && c.origin === "customer_link");
     return {
-      ...base,
+      ...page,
       manage: {
         cadence: plan.cadence,
         service: plan.state === "ended" ? "Ended" : paused ? `Paused${plan.pausedUntil ? ` until ${plan.pausedUntil}` : ""}` : "Running",

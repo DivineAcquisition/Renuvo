@@ -8,16 +8,16 @@
  * are never put in front of it.
  */
 import type { Doc, Id } from "../../_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "../../_generated/server";
+import type { MutationCtx } from "../../_generated/server";
 import { localParts } from "../availability";
 import { type Actor } from "../events";
 import { carryOut, prepareAction, submitAction } from "./actions";
-import { addEntry, areasIn, caseByKey, closeCase, DAY, moveCase, openCase, propertyName, RETENTION, segmentFor, seriousReason, SYSTEM } from "./cases";
+import { addEntry, areasIn, caseByKey, DAY, moveCase, openCase, propertyName, RETENTION, segmentFor, seriousReason, SYSTEM } from "./cases";
 import { CHANGE_WORDS, loadPlan, NEEDS_PERSON, previewPlanChange, type ChangeInput, type PlanView } from "./planChanges";
 import { openRecovery } from "./recovery";
 import { attachSignal, raiseSignal } from "./signals";
 import { retentionSettings } from "./settings";
-import type { Outcome, PlanChange, PlanRef } from "./schema";
+import type { PlanChange, PlanRef } from "./schema";
 
 const PERMISSION: Record<PlanChange, string> = {
   skip_visit: "retention.apply_plan_change",

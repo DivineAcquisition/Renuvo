@@ -317,7 +317,7 @@ describe("recurring-service continuity", () => {
     const { url } = await s.as.mutation(api.retentionAgent.shareLink, { companyId: s.companyId, customerId: s.place.customerId, purpose: "manage", plan });
     const token = url.split("/c/care/")[1];
     const page = (await s.t.query(api.retentionCare.view, { token }))!;
-    expect(page.state === "active" && page.manage?.changes.map((c) => c.id)).toEqual(["skip_visit", "reschedule_visit", "change_cadence", "pause_service", "end_service"]);
+    expect("manage" in page && page.manage?.changes.map((c) => c.id)).toEqual(["skip_visit", "reschedule_visit", "change_cadence", "pause_service", "end_service"]);
     const preview = (await s.t.query(api.retentionCare.planPreview, { token, change: "end_service" }))!;
     expect(preview.visits).toHaveLength(2);
     // Opening and previewing changed nothing.
