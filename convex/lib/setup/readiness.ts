@@ -51,7 +51,7 @@ export async function agentReadiness(ctx: QueryCtx, company: Doc<"companies">): 
   const sending = await complianceReadiness(ctx, company);
   const canText = sending.operations.find((row) => row.key === "sms")?.state === "ready";
   const canEmail = sending.operations.find((row) => row.key === "email")?.state === "ready";
-  const sender: Gap = { kind: "connection", words: "No texting number or sending email address is set up, so nothing can be sent to anyone.", next: "Set up how messages are sent", href: "/app/settings/compliance#messaging" };
+  const sender: Gap = { kind: "connection", words: "No texting number or sending email address is set up, so nothing can be sent to anyone.", next: "Set up business texting", href: "/app/texting" };
 
   const needs: Record<AgentReadiness["agent"], Gap[]> = {
     sales: [

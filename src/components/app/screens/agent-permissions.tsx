@@ -156,7 +156,7 @@ function statusOf(agent: TeamAgent, paused: boolean, credits: Credits, live: Liv
   }
   if (paused) out.push({ label: "Paused", tone: "outline", detail: "It won't start anything new until you resume it. Its records stay open." });
   if (NEEDS_TEXTING.has(agent.agent) && live && live.live["texting-number"].state !== "connected") {
-    out.push({ label: "Setup needed", tone: "warning", detail: "Your business texting number isn't set up yet, so this agent can't text people.", link: { href: "/app/settings/compliance", label: "Set up texting" } });
+    out.push({ label: "Setup needed", tone: "warning", detail: "Your business texting number isn't set up yet, so this agent can't text people.", link: { href: "/app/texting", label: "Set up business texting" } });
   }
   if (credits && (credits.state === "empty" || credits.state === "no_plan")) {
     out.push({ label: credits.state === "empty" ? "Out of credits" : "No active plan", tone: "error", detail: credits.state === "empty" ? "AI work is paused until credits are added or the monthly reset. Its other work continues." : "AI work needs an active plan.", link: owner ? { href: "/app/settings/billing", label: "Plan & Usage" } : undefined });

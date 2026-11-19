@@ -8,11 +8,11 @@
  * @module
  */
 
+import type * as agentAccess from "../agentAccess.js";
 import type * as agreementFiles from "../agreementFiles.js";
 import type * as agreementRenewals from "../agreementRenewals.js";
 import type * as agreementSigning from "../agreementSigning.js";
 import type * as agreementTemplates from "../agreementTemplates.js";
-import type * as agentAccess from "../agentAccess.js";
 import type * as agreements from "../agreements.js";
 import type * as ai from "../ai.js";
 import type * as aiAdmin from "../aiAdmin.js";
@@ -89,7 +89,6 @@ import type * as invitations from "../invitations.js";
 import type * as jobs from "../jobs.js";
 import type * as knowledge from "../knowledge.js";
 import type * as lib_access from "../lib/access.js";
-import type * as lib_agentAccess_schema from "../lib/agentAccess/schema.js";
 import type * as lib_agreements_access from "../lib/agreements/access.js";
 import type * as lib_agreements_agents from "../lib/agreements/agents.js";
 import type * as lib_agreements_catalog from "../lib/agreements/catalog.js";
@@ -288,6 +287,7 @@ import type * as lib_messaging_provider from "../lib/messaging/provider.js";
 import type * as lib_messaging_resend from "../lib/messaging/resend.js";
 import type * as lib_messaging_telnyx from "../lib/messaging/telnyx.js";
 import type * as lib_messaging_telnyxAccount from "../lib/messaging/telnyxAccount.js";
+import type * as lib_messagingBilling_batch from "../lib/messagingBilling/batch.js";
 import type * as lib_messagingBilling_classify from "../lib/messagingBilling/classify.js";
 import type * as lib_messagingBilling_ledger from "../lib/messagingBilling/ledger.js";
 import type * as lib_messagingBilling_money from "../lib/messagingBilling/money.js";
@@ -411,6 +411,14 @@ import type * as lib_setup_work from "../lib/setup/work.js";
 import type * as lib_statuses from "../lib/statuses.js";
 import type * as lib_taskState from "../lib/taskState.js";
 import type * as lib_text from "../lib/text.js";
+import type * as lib_texting_activities from "../lib/texting/activities.js";
+import type * as lib_texting_checks from "../lib/texting/checks.js";
+import type * as lib_texting_drafts from "../lib/texting/drafts.js";
+import type * as lib_texting_milestones from "../lib/texting/milestones.js";
+import type * as lib_texting_pages from "../lib/texting/pages.js";
+import type * as lib_texting_plan from "../lib/texting/plan.js";
+import type * as lib_texting_prefill from "../lib/texting/prefill.js";
+import type * as lib_texting_prices from "../lib/texting/prices.js";
 import type * as lib_time from "../lib/time.js";
 import type * as lib_trust_changes from "../lib/trust/changes.js";
 import type * as lib_trust_checks from "../lib/trust/checks.js";
@@ -478,6 +486,8 @@ import type * as subcontractors from "../subcontractors.js";
 import type * as tasks from "../tasks.js";
 import type * as teamPay from "../teamPay.js";
 import type * as texting from "../texting.js";
+import type * as textingPublic from "../textingPublic.js";
+import type * as textingSetup from "../textingSetup.js";
 import type * as trust from "../trust.js";
 import type * as workforce from "../workforce.js";
 
@@ -488,11 +498,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agentAccess: typeof agentAccess;
   agreementFiles: typeof agreementFiles;
   agreementRenewals: typeof agreementRenewals;
   agreementSigning: typeof agreementSigning;
   agreementTemplates: typeof agreementTemplates;
-  agentAccess: typeof agentAccess;
   agreements: typeof agreements;
   ai: typeof ai;
   aiAdmin: typeof aiAdmin;
@@ -569,7 +579,6 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   knowledge: typeof knowledge;
   "lib/access": typeof lib_access;
-  "lib/agentAccess/schema": typeof lib_agentAccess_schema;
   "lib/agreements/access": typeof lib_agreements_access;
   "lib/agreements/agents": typeof lib_agreements_agents;
   "lib/agreements/catalog": typeof lib_agreements_catalog;
@@ -768,6 +777,7 @@ declare const fullApi: ApiFromModules<{
   "lib/messaging/resend": typeof lib_messaging_resend;
   "lib/messaging/telnyx": typeof lib_messaging_telnyx;
   "lib/messaging/telnyxAccount": typeof lib_messaging_telnyxAccount;
+  "lib/messagingBilling/batch": typeof lib_messagingBilling_batch;
   "lib/messagingBilling/classify": typeof lib_messagingBilling_classify;
   "lib/messagingBilling/ledger": typeof lib_messagingBilling_ledger;
   "lib/messagingBilling/money": typeof lib_messagingBilling_money;
@@ -891,6 +901,14 @@ declare const fullApi: ApiFromModules<{
   "lib/statuses": typeof lib_statuses;
   "lib/taskState": typeof lib_taskState;
   "lib/text": typeof lib_text;
+  "lib/texting/activities": typeof lib_texting_activities;
+  "lib/texting/checks": typeof lib_texting_checks;
+  "lib/texting/drafts": typeof lib_texting_drafts;
+  "lib/texting/milestones": typeof lib_texting_milestones;
+  "lib/texting/pages": typeof lib_texting_pages;
+  "lib/texting/plan": typeof lib_texting_plan;
+  "lib/texting/prefill": typeof lib_texting_prefill;
+  "lib/texting/prices": typeof lib_texting_prices;
   "lib/time": typeof lib_time;
   "lib/trust/changes": typeof lib_trust_changes;
   "lib/trust/checks": typeof lib_trust_checks;
@@ -958,6 +976,8 @@ declare const fullApi: ApiFromModules<{
   tasks: typeof tasks;
   teamPay: typeof teamPay;
   texting: typeof texting;
+  textingPublic: typeof textingPublic;
+  textingSetup: typeof textingSetup;
   trust: typeof trust;
   workforce: typeof workforce;
 }>;

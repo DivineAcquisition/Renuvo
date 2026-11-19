@@ -1,59 +1,61 @@
 /**
- * The carrier filing for a cleaning company's work texts, written from what Selestial actually sends
- * (convex/lib/dispatch/sms.ts) under the company's own name. Nothing here is a promise the product does
- * not keep: no marketing, consent is recorded before any text, and STOP, HELP and START are honoured.
+ * The carrier campaign for a cleaning company's texts, built only from what the company submitted through
+ * "Set up business texting": its chosen activities, its own samples, its own HELP, STOP and START replies,
+ * its own opt-in description, and its own privacy policy and texting terms. Selestial's own privacy policy
+ * and terms are never filed for a company: carriers require the policy of the business being registered.
  */
+import type { Doc } from "../../_generated/dataModel";
+import { describe } from "../texting/plan";
 import type { CampaignInput } from "./telnyxAccount";
 
-export const PLATFORM_PRIVACY = "https://www.selestial.io/privacy";
-export const PLATFORM_TERMS = "https://www.selestial.io/terms";
+const LINK = /https?:\/\/\S+/;
 
-/** The wording a cleaner agrees to, offered as the starting point. The Owner may change it within the rules below. */
-export function defaultConsentWording(company: string): string {
-  return `I agree to receive work texts from ${company} about job offers, confirmations, reminders and check-ins at the number I provided. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of working with us.`;
+/** What the campaign was filed with, as one string, to tell whether a correction needs a new campaign or an update. */
+export function campaignShape(row: Pick<Doc<"textingRequests">, "usecase" | "subUsecases" | "activities" | "privacyLink" | "termsLink" | "drafts">): string {
+  return JSON.stringify([row.usecase, row.subUsecases ?? [], [...(row.activities ?? [])].sort(), row.privacyLink, row.termsLink, row.drafts?.start_reply, row.drafts?.stop_reply]);
 }
 
-/** What carriers require any opt-in wording to say. Answers with what is missing, or an empty list. */
-export function consentGaps(wording: string, company: string): string[] {
-  const text = wording.toLowerCase();
-  const gaps: string[] = [];
-  if (!text.includes(company.toLowerCase())) gaps.push(`name the business (${company})`);
-  if (!/stop/.test(text)) gaps.push("say how to opt out (STOP)");
-  if (!/help/.test(text)) gaps.push("say how to get help (HELP)");
-  if (!/rates may apply/.test(text)) gaps.push('say "Msg & data rates may apply"');
-  if (!/frequency/.test(text)) gaps.push("say how often texts come (for example \"Msg frequency varies\")");
-  return gaps;
-}
-
-export function campaignFor(input: { brandId: string; company: string; supportEmail: string; consentWording: string; webhookURL: string | null }): Omit<CampaignInput, "brandId"> & { brandId: string } {
-  const name = input.company;
-  const link = "https://www.selestial.io/c/job/abc123";
+export function campaignFor(row: Doc<"textingRequests">, input: { brandId: string; reference: string; webhookURL: string | null }): CampaignInput {
+  const name = row.brand.displayName;
+  const drafts = row.drafts ?? {};
+  const samples = (row.samples ?? []).filter(Boolean).slice(0, 5);
+  const linkSample = samples.map((sample) => LINK.exec(sample)?.[0]).find(Boolean);
   return {
     brandId: input.brandId,
-    usecase: "ACCOUNT_NOTIFICATION",
-    description: `${name} sends work texts to cleaners on its team who have agreed to receive them: an offer of a cleaning job with its date, area, length and estimated pay, a confirmation when they accept, a reminder before the job, and a request to check in or send an ETA if they have not arrived. No marketing or promotional texts are sent.`,
-    messageFlow: `Cleaners agree to work texts when they join the ${name} team, during onboarding, in person or on ${name}'s onboarding form. The consent wording shown to them is kept on file and reads: "${input.consentWording}" Each consent is recorded with the date, the source and the wording shown, and no text is sent to a cleaner without one. Privacy policy: ${PLATFORM_PRIVACY} Terms: ${PLATFORM_TERMS}`,
-    sample1: `${name}: job offer. Standard clean, Tue, Mar 2, arrive 10:00 AM to 10:30 AM, about 3 hours. Austin 78701. Solo job. Est. pay $90.00. Answer by 12:00 PM Mon, Mar 1: https://www.selestial.io/c/offer/abc123`,
-    sample2: `${name}: you're confirmed for Tue, Mar 2, arrive 10:00 AM to 10:30 AM. Address, instructions, checklist and check-in are here: ${link}`,
-    sample3: `${name} reminder: your job is Tue, Mar 2 at 10:00 AM. Open it to check in when you arrive, or to tell us if you're running late: ${link}`,
-    sample4: `${name}: we don't have a check-in for your 10:00 AM job yet. Check in, send an ETA, or tell us you can't make it: ${link}/delay`,
-    helpMessage: `${name}: work texts about cleaning jobs. For help email ${input.supportEmail}. Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out.`,
-    optinMessage: `${name}: you will receive work texts about job offers, confirmations, reminders and check-ins. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.`,
-    optoutMessage: `${name}: you will no longer receive texts from ${name}. Reply START to resubscribe.`,
+    usecase: row.usecase ?? "ACCOUNT_NOTIFICATION",
+    ...(row.subUsecases?.length ? { subUsecases: row.subUsecases } : {}),
+    description: describe(name, row.activities ?? []),
+    messageFlow: drafts.opt_in_flow ?? "",
+    sample1: samples[0] ?? "",
+    ...(samples[1] ? { sample2: samples[1] } : {}),
+    ...(samples[2] ? { sample3: samples[2] } : {}),
+    ...(samples[3] ? { sample4: samples[3] } : {}),
+    ...(samples[4] ? { sample5: samples[4] } : {}),
+    helpMessage: drafts.help_reply ?? "",
+    optinMessage: drafts.start_reply ?? "",
+    optoutMessage: drafts.stop_reply ?? "",
     helpKeywords: "HELP,INFO",
     optinKeywords: "START,UNSTOP,YES",
     optoutKeywords: "STOP,STOPALL,UNSUBSCRIBE,CANCEL,END,QUIT",
     subscriberOptin: true,
     subscriberOptout: true,
     subscriberHelp: true,
-    embeddedLink: true,
+    embeddedLink: !!linkSample,
+    ...(linkSample ? { embeddedLinkSample: linkSample } : {}),
     embeddedPhone: false,
     numberPool: false,
     ageGated: false,
     directLending: false,
     termsAndConditions: true,
-    privacyPolicyLink: PLATFORM_PRIVACY,
-    termsAndConditionsLink: PLATFORM_TERMS,
+    privacyPolicyLink: row.privacyLink ?? "",
+    termsAndConditionsLink: row.termsLink ?? "",
+    referenceId: input.reference,
     ...(input.webhookURL ? { webhookURL: input.webhookURL } : {}),
   };
+}
+
+/** What a filed campaign may be corrected with, without filing a new one. */
+export function campaignCorrection(row: Doc<"textingRequests">, webhookURL: string | null) {
+  const full = campaignFor(row, { brandId: "", reference: "", webhookURL });
+  return { sample1: full.sample1, sample2: full.sample2, sample3: full.sample3, sample4: full.sample4, sample5: full.sample5, messageFlow: full.messageFlow, helpMessage: full.helpMessage, ...(webhookURL ? { webhookURL } : {}) };
 }

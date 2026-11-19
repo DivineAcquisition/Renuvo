@@ -108,7 +108,26 @@ export async function verifyTelnyx(input: { publicKey: string; signature: string
 export type TelnyxEvent =
   | { kind: "receipt"; eventId: string; providerMessageId: string; outcome: "delivered" | "failed"; problem: string | null; costUnits: number | null; errorCode: string | null }
   | { kind: "inbound"; eventId: string; from: string; to: string; text: string; receivedAt: number; providerMessageId: string | null; parts: number | null; media: number }
+  /** A 10DLC brand, campaign or number update. Only a hint: the registration's state is always read back from Telnyx. */
+  | { kind: "registration"; eventId: string; type: string; brandId: string | null; campaignId: string | null; phoneNumber: string | null }
   | { kind: "ignored" };
+
+const s = (value: unknown) => (typeof value === "string" && value.length > 0 && value.length < 200 ? value : null);
+
+/** A 10DLC callback, enveloped ({ data: { event_type, id, payload } }) or flat, as Telnyx documents both. */
+function registrationEvent(parsed: unknown): TelnyxEvent | null {
+  const root = parsed as { data?: { id?: unknown; event_type?: unknown; payload?: Record<string, unknown> } } & Record<string, unknown>;
+  const data = root.data;
+  const type = s(data?.event_type) ?? s(root.event_type) ?? s(root.eventType);
+  const payload = (data?.payload ?? root) as Record<string, unknown>;
+  const isRegistration = (type?.startsWith("10dlc.") ?? false) || (!data && (s(payload.brandId) !== null || s(payload.campaignId) !== null));
+  if (!isRegistration) return null;
+  const brandId = s(payload.brandId);
+  const campaignId = s(payload.campaignId);
+  const phoneNumber = s(payload.phoneNumber) ?? s(payload.phone_number);
+  const eventId = s(data?.id) ?? s(root.id) ?? `${type ?? "10dlc"}:${brandId ?? ""}:${campaignId ?? ""}:${phoneNumber ?? ""}:${s(payload.eventType) ?? s(payload.type) ?? ""}:${s(payload.status) ?? ""}`;
+  return { kind: "registration", eventId: eventId.slice(0, 200), type: type ?? "10dlc", brandId, campaignId, phoneNumber };
+}
 
 /** What a webhook says, in the shape the record takes. Events that change nothing here are ignored. */
 export function telnyxEvent(body: string): TelnyxEvent {
@@ -118,6 +137,8 @@ export function telnyxEvent(body: string): TelnyxEvent {
   } catch {
     return { kind: "ignored" };
   }
+  const registration = registrationEvent(parsed);
+  if (registration) return registration;
   const data = (parsed as { data?: { id?: unknown; event_type?: unknown; occurred_at?: unknown; payload?: Record<string, unknown> } }).data;
   if (!data || typeof data.id !== "string" || !data.payload) return { kind: "ignored" };
   const payload = data.payload as { id?: unknown; text?: unknown; parts?: unknown; media?: unknown[]; cost?: { amount?: unknown; currency?: unknown } | null; from?: { phone_number?: unknown }; to?: { phone_number?: unknown; status?: unknown }[]; errors?: { code?: unknown; title?: unknown }[] };

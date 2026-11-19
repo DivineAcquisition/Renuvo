@@ -47,6 +47,11 @@ const nextConfig: NextConfig = {
         source: "/b/:handle/:slug/embed",
         headers: [{ key: "Content-Security-Policy", value: "frame-ancestors *" }],
       },
+      // A company's texting sign-up may be embedded on its own website (?embed=1). It holds no session.
+      {
+        source: "/b/:handle/texts",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors *" }],
+      },
     ];
   },
 };

@@ -326,8 +326,8 @@ export function DraftCard({ draft, onOpenInvoice, compact }: { draft: Draft; onO
                   <ShieldCheck aria-hidden />
                   Record permission
                 </Button>
-              ) : draft.canSend.code === "sender_not_ready" ? (
-                <Link href="/app/settings/compliance" className="inline-flex h-7 items-center rounded-md border border-border bg-card px-2 text-xs font-medium text-strong hover:border-brand-500/50">
+              ) : draft.canSend.code === "sender_not_ready" || draft.canSend.code === "not_registered" ? (
+                <Link href={draft.canSend.code === "not_registered" ? "/app/texting" : "/app/settings/compliance"} className="inline-flex h-7 items-center rounded-md border border-border bg-card px-2 text-xs font-medium text-strong hover:border-brand-500/50">
                   Messaging setup
                 </Link>
               ) : null

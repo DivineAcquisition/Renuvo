@@ -78,6 +78,7 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("skillClaims"), id: v.id("skillClaims") }),
   // Company Chat (convex/lib/chat/schema.ts).
   v.object({ table: v.literal("chatArtifacts"), id: v.id("chatArtifacts") }),
+  v.object({ table: v.literal("textingRequests"), id: v.id("textingRequests") }),
   v.object({ table: v.literal("companyKnowledge"), id: v.id("companyKnowledge") }),
   // Creative Studio (convex/lib/ai/schema.ts).
   v.object({ table: v.literal("mediaAssets"), id: v.id("mediaAssets") }),
