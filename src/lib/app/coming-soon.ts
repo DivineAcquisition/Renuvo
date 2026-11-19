@@ -6,7 +6,9 @@
  */
 import type { AgentId } from "./navigation";
 
-export type MockKind = "photos" | "checklist" | "chat" | "calendar" | "bars" | "offer" | "list" | "week" | "progress";
+import type { MockKind } from "@/components/agents/scene";
+
+export type { MockKind };
 
 export type SceneStep = { title: string; detail: string };
 

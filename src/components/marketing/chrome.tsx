@@ -8,6 +8,7 @@ import { Button, type ButtonSize } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/constants";
 import { ASSESSMENT_PATH, FOOTER, NAV } from "@/lib/marketing/content";
 import { marketingNavLink, marketingPageGutter, marketingShell } from "@/lib/marketing/ui";
+import { AGENT_PAGE_IDS, AGENT_PAGES, agentPagePath } from "@/lib/marketing/agent-pages";
 import { cn } from "@/lib/utils";
 
 const ctaShape = "h-12! rounded-[8px]! before:rounded-[7px]!";
@@ -70,7 +71,12 @@ export function SiteHeader({ onHome = true }: { onHome?: boolean }) {
   );
 }
 
-/** The footer's two link groups. Every link here goes to a page that exists. */
+/** The footer's link groups. Every link here goes to a page that exists. */
+export const FOOTER_AGENTS = [
+  { href: "/agents", label: "All agents" },
+  ...AGENT_PAGE_IDS.map((id) => ({ href: agentPagePath(id), label: AGENT_PAGES[id].status === "live" ? AGENT_PAGES[id].name : `${AGENT_PAGES[id].name} (soon)` })),
+] as const;
+
 export const FOOTER_TRUST = [
   { href: "/security", label: "Security" },
   { href: "/security/subprocessors", label: "Subprocessors" },
@@ -96,13 +102,27 @@ const footerLink = "rounded text-sm text-muted-foreground transition-colors hove
 export function SiteFooter({ entity }: { entity?: { name: string; address: string | null } | null }) {
   return (
     <footer className={cn("border-t border-border py-12", marketingPageGutter)}>
-      <div className={cn(marketingShell, "grid gap-10 md:grid-cols-[1.2fr_1fr_1fr]")}>
+      <div className={cn(marketingShell, "grid gap-10 md:grid-cols-[1.2fr_1fr_1fr_1fr]")}>
         <div>
           <Logo />
           <p className="mt-3 text-sm text-strong">{FOOTER.tagline}</p>
           <p className="mt-2 text-sm text-muted-foreground">{FOOTER.roles.join(" · ")}</p>
           <p className="mt-6 max-w-sm text-xs leading-relaxed text-muted-foreground">{FOOTER.note}</p>
         </div>
+        <nav aria-labelledby="footer-agents">
+          <h2 id="footer-agents" className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
+            Agents
+          </h2>
+          <ul className="mt-3 grid gap-2">
+            {FOOTER_AGENTS.map((link) => (
+              <li key={link.href}>
+                <Link href={link.href} className={footerLink}>
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
         <nav aria-labelledby="footer-trust">
           <h2 id="footer-trust" className="text-xs font-semibold tracking-[0.14em] text-strong uppercase">
             Trust
