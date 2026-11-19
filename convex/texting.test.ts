@@ -524,6 +524,43 @@ describe("Set up business texting", () => {
     expect(milestones.find((row) => row.key === "ready")).toMatchObject({ state: "problem" });
   });
 
+  it("tells each agent exactly what it can text, answers HELP in the company's own words, and tells the owner at each moment", async () => {
+    const telnyx = fakeTelnyx();
+    vi.stubGlobal("fetch", telnyx.fetcher);
+    const t = start();
+    const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+    await prepare(t, as, companyId, { activities: ["inquiry_replies", "job_offers", "arrival_reminders"] });
+    expect((await as.query(api.texting.agentTexting, { companyId })).map((row) => [row.agent, row.state])).toEqual([
+      ["sales", "setup_needed"],
+      ["dispatch", "setup_needed"],
+      ["recruiter", "setup_needed"],
+      ["retention", "setup_needed"],
+    ]);
+    const { requestId } = await submit(as, companyId);
+    expect((await as.query(api.texting.agentTexting, { companyId }))[0].state).toBe("in_progress");
+    await t.withIdentity(ADMIN).mutation(api.texting.approve, { requestId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+    const agents = await as.query(api.texting.agentTexting, { companyId });
+    const of = (agent: string) => agents.find((row) => row.agent === agent)!;
+    expect(of("dispatch")).toMatchObject({ state: "ready", words: expect.stringContaining("to cleaners who agreed to texts") });
+    // Customer work texts are registered; promotions are not.
+    expect(of("retention")).toMatchObject({ state: "partly", words: expect.stringContaining("Promotional texting is not included in your current registration.") });
+    expect(of("retention").activities.find((row) => row.key === "promotions")).toMatchObject({ ready: false });
+    expect(of("recruiter").state).toBe("setup_needed");
+
+    // HELP is answered with the reply registered with the carriers.
+    const registered = (await t.run(async (ctx) => ctx.db.get(requestId)))!.drafts!.help_reply;
+    await t.mutation(internal.inbound.sms, { to: NUMBER, from: "+15125550177", body: "HELP", receivedAt: Date.now() });
+    const replies = await t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((row) => row.to === "+15125550177"));
+    expect(replies.map((row) => row.body)).toContain(registered);
+
+    // The owner heard at the moments that matter, and not at each internal step.
+    const notices = await t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((row) => row.purpose === "member_notice").map((row) => row.notice?.event));
+    expect(notices.filter((event) => event === "texting_progress")).toHaveLength(3);
+    expect(notices.filter((event) => event === "texting_attention")).toHaveLength(0);
+  });
+
   it("keeps each company's setup, searches and requests to itself", async () => {
     vi.stubGlobal("fetch", fakeTelnyx().fetcher);
     const t = start();

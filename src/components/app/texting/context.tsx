@@ -7,7 +7,7 @@
  */
 import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
 import { messageOf } from "@/components/app/form";
 
@@ -49,7 +49,9 @@ export function SetupProvider({ view, companyId, initialStep, onConflict, childr
   const revision = useRef(view.setup.revision);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   // The server's revision moves on with every save; never go backwards to an older one.
-  if (view.setup.revision > revision.current) revision.current = view.setup.revision;
+  useEffect(() => {
+    if (view.setup.revision > revision.current) revision.current = view.setup.revision;
+  }, [view.setup.revision]);
 
   const run = useCallback<Ctx["run"]>(
     (fn) => {

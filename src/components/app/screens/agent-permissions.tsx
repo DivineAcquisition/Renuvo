@@ -134,9 +134,10 @@ type Team = NonNullable<ReturnType<typeof useQuery<typeof api.overview.agents>>>
 type TeamAgent = Team["agents"][number];
 type Credits = ReturnType<typeof useQuery<typeof api.billing.creditIndicator>>;
 type Live = ReturnType<typeof useQuery<typeof api.integrations.overview>>;
+type Texting = ReturnType<typeof useQuery<typeof api.texting.agentTexting>>;
 
 /** Agents that send texts can't reach people until the business texting number is set up. */
-const NEEDS_TEXTING = new Set(["sales", "dispatch", "retention"]);
+const NEEDS_TEXTING = new Set(["sales", "dispatch", "retention", "recruiter"]);
 
 type Status = { label: string; tone: "success" | "warning" | "outline" | "info" | "error"; detail?: string; link?: { href: string; label: string } };
 
@@ -144,7 +145,7 @@ type Status = { label: string; tone: "success" | "warning" | "outline" | "info" 
  * Where an agent stands, with each reason kept separate: not on the plan, paused, setup missing, and
  * out of credits each mean something different and need a different next step.
  */
-function statusOf(agent: TeamAgent, paused: boolean, credits: Credits, live: Live, owner: boolean): Status[] {
+function statusOf(agent: TeamAgent, paused: boolean, credits: Credits, live: Live, owner: boolean, texting: Texting): Status[] {
   const out: Status[] = [];
   const access = (agent as TeamAgent & { access?: { ok: boolean; block?: string; message?: string } }).access;
   if (access && !access.ok) {
@@ -155,7 +156,12 @@ function statusOf(agent: TeamAgent, paused: boolean, credits: Credits, live: Liv
     );
   }
   if (paused) out.push({ label: "Paused", tone: "outline", detail: "It won't start anything new until you resume it. Its records stay open." });
-  if (NEEDS_TEXTING.has(agent.agent) && live && live.live["texting-number"].state !== "connected") {
+  // Texting, for this agent's own texts: what its registration covers, not one company-wide switch.
+  const texts = texting?.find((row) => row.agent === agent.agent);
+  if (NEEDS_TEXTING.has(agent.agent) && texts && texts.state !== "ready") {
+    const tone = texts.state === "paused" ? "error" : texts.state === "partly" || texts.state === "in_progress" ? "info" : "warning";
+    out.push({ label: `Texting: ${texts.label.toLowerCase()}`, tone, detail: texts.words, link: owner && texts.state !== "in_progress" ? { href: "/app/texting", label: texts.state === "paused" ? "See what's happening" : "Set up business texting" } : undefined });
+  } else if (NEEDS_TEXTING.has(agent.agent) && !texts && live && live.live["texting-number"].state !== "connected") {
     out.push({ label: "Setup needed", tone: "warning", detail: "Your business texting number isn't set up yet, so this agent can't text people.", link: { href: "/app/texting", label: "Set up business texting" } });
   }
   if (credits && (credits.state === "empty" || credits.state === "no_plan")) {
@@ -165,10 +171,10 @@ function statusOf(agent: TeamAgent, paused: boolean, credits: Credits, live: Liv
   return out;
 }
 
-function AgentCard({ agent, actions, paused, owner, credits, live, onTogglePause, busy }: { agent: TeamAgent; actions: Action[]; paused: boolean; owner: boolean; credits: Credits; live: Live; onTogglePause: () => void; busy: boolean }) {
+function AgentCard({ agent, actions, paused, owner, credits, live, texting, onTogglePause, busy }: { agent: TeamAgent; actions: Action[]; paused: boolean; owner: boolean; credits: Credits; live: Live; texting: Texting; onTogglePause: () => void; busy: boolean }) {
   const [open, setOpen] = useState(false);
   const panel = useId();
-  const statuses = statusOf(agent, paused, credits, live, owner);
+  const statuses = statusOf(agent, paused, credits, live, owner, texting);
   const automatic = actions.filter((action) => rank(action.level) >= rank("execute_and_report")).length;
   const asks = actions.filter((action) => action.level === "propose").length;
   return (
@@ -245,6 +251,7 @@ export function AgentPermissions() {
   const permissions = useQuery(api.permissions.list, { companyId });
   const credits = useQuery(api.billing.creditIndicator, { companyId });
   const live = useQuery(api.integrations.overview, { companyId });
+  const texting = useQuery(api.texting.agentTexting, { companyId });
   const setPaused = useMutation(api.companies.setPausedAgents);
   const { busy, error, run } = useRun();
   const owner = role === "owner";
@@ -282,6 +289,7 @@ export function AgentPermissions() {
               owner={owner}
               credits={credits}
               live={live}
+              texting={texting}
               busy={busy}
               onTogglePause={() => void run(() => setPaused({ companyId, agents: isPaused ? paused.filter((id) => id !== agent.agent) : [...paused, agent.agent] }))}
             />

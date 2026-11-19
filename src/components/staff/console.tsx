@@ -967,7 +967,7 @@ export function TextingQueue() {
                     </p>
                     <Badge variant={status.variant}>{status.label}</Badge>
                   </div>
-                  {!row.guided ? <p className="text-xs text-warning-foreground">From the older form. It can't be approved: ask the company to finish Set up business texting.</p> : null}
+                  {!row.guided ? <p className="text-xs text-warning-foreground">From the older form. It can&apos;t be approved: ask the company to finish Set up business texting.</p> : null}
                   <dl className="grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
                     <div>
                       Kind: <span className="text-strong">{row.entityType}</span>

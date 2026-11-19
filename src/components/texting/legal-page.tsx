@@ -47,14 +47,13 @@ export function PageFrame({ company, children }: { company: { name: string; logo
 
 export function LegalBody({ body, publishedAt }: { body: string; publishedAt: number }) {
   const blocks = body.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
-  let first = true;
+  const titleAt = blocks.findIndex((block) => block.startsWith("## "));
   return (
     <div className="space-y-4 text-[15px] leading-7">
       {blocks.map((block, i) => {
         if (block.startsWith("## ")) {
           const heading = block.slice(3);
-          if (first) {
-            first = false;
+          if (i === titleAt) {
             return (
               <h1 key={i} className="text-2xl font-semibold tracking-tight text-zinc-900">
                 {heading}

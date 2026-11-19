@@ -12,7 +12,7 @@
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
 import { FormError } from "@/components/app/form";
@@ -61,22 +61,26 @@ export function TextingWorkspace() {
   const { companyId, role } = useCompany();
   const open = useMutation(api.textingSetup.open);
   const view = useQuery(api.textingSetup.view, role === "owner" ? { companyId } : "skip");
-  const [opened, setOpened] = useState<"idle" | "opening" | "failed">("idle");
+  const [failed, setFailed] = useState(false);
+  const opening = useRef(false);
   const [generation, setGeneration] = useState(0);
 
+  // The first visit creates the saved setup; every later visit, from any entry point, opens the same one.
   useEffect(() => {
-    if (role !== "owner" || view !== null || opened !== "idle") return;
-    setOpened("opening");
+    if (role !== "owner" || view !== null || opening.current) return;
+    opening.current = true;
     open({ companyId }).then(
-      () => setOpened("idle"),
-      () => setOpened("failed"),
+      () => {
+        opening.current = false;
+      },
+      () => setFailed(true),
     );
-  }, [role, view, opened, open, companyId]);
+  }, [role, view, open, companyId]);
 
   if (role !== "owner") {
     return <Message title="Texting setup is the Owner's" body="Your company's Owner sets up business texting, because it registers the business and authorizes its charges. You'll see texting turn on in your agents' pages when it's ready." />;
   }
-  if (opened === "failed") return <Message title="Texting setup didn't open" body="Something went wrong opening your setup. Reload the page to try again." />;
+  if (failed) return <Message title="Texting setup didn't open" body="Something went wrong opening your setup. Reload the page to try again." />;
   if (!view) {
     return (
       <div className="grid gap-4" aria-busy="true" aria-label="Loading your texting setup">

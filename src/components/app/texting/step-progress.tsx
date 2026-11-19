@@ -5,7 +5,7 @@
  * when it last changed, what happens next, and whether the owner needs to do anything. No promised dates
  * and no countdowns. When the carriers ask for a change, everything already filled in is kept.
  */
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { FormError, messageOf, TextInput } from "@/components/app/form";
@@ -84,8 +84,45 @@ export function ProgressStep() {
           );
         })}
       </ol>
+      {ready || request.status === "interrupted" ? <AgentTexts /> : null}
       <Withdraw />
     </>
+  );
+}
+
+const AGENT_NAMES = { sales: "Sales", dispatch: "Dispatch", recruiter: "Recruiter", retention: "Retention" } as const;
+
+/** After activation: which activities each agent can text, so nothing is assumed from one switch. */
+function AgentTexts() {
+  const { companyId } = useSetup();
+  const rows = useQuery(api.texting.agentTexting, { companyId });
+  if (!rows) return null;
+  return (
+    <section className="grid gap-3 border-t border-border pt-5" aria-label="What your agents can send">
+      <h3 className="text-sm font-semibold text-strong">What your agents can send</h3>
+      <ul className="grid gap-2">
+        {rows.map((row) => (
+          <li key={row.agent} className="grid gap-1.5 rounded-xl border border-border px-3.5 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-semibold text-strong">{AGENT_NAMES[row.agent]}</span>
+              <Badge variant={row.state === "ready" ? "success" : row.state === "partly" ? "info" : row.state === "paused" ? "error" : "warning"}>{row.label}</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">{row.words}</p>
+            <ul className="flex flex-wrap gap-1.5" aria-label={`${AGENT_NAMES[row.agent]} activities`}>
+              {row.activities.map((activity) => (
+                <li key={activity.key}>
+                  <Badge variant={activity.ready ? "outline" : "warning"}>
+                    {activity.ready ? <CheckCircle2 aria-hidden /> : <CircleDashed aria-hidden />}
+                    {activity.label}
+                    <span className="sr-only">{activity.ready ? " (ready)" : " (not included)"}</span>
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

@@ -67,6 +67,7 @@ import { billingState } from "./lib/billing/access";
 import { allow } from "./lib/rateLimit";
 import { unseal } from "./lib/recruiter/secrets";
 import { coverageOf } from "./lib/texting/plan";
+import { textingByAgent } from "./lib/texting/readiness";
 import { registrationPrices, registrationPricesAt } from "./lib/texting/prices";
 import { optionalText, text } from "./lib/text";
 
@@ -929,6 +930,20 @@ export const status = companyQuery({
       .first();
     if (!row) return null;
     return { status: row.status, phoneNumber: row.status === "active" ? row.phoneNumber : null, step: row.step ?? null, needsOwner: row.status === "needs_you" };
+  },
+});
+
+/** What each agent can text right now, activity by activity. For agent pages and the setup's last step. */
+export const agentTexting = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const profile = await readProfile(ctx, ctx.companyId);
+    const row = await ctx.db
+      .query("textingRequests")
+      .withIndex("by_company_requested", (q) => q.eq("companyId", ctx.companyId))
+      .order("desc")
+      .first();
+    return textingByAgent(profile.messaging, row);
   },
 });
 

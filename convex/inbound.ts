@@ -137,6 +137,13 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
     const profile = await readProfile(ctx, companyId);
     const sender = profile.messaging.senderName ?? (await ctx.db.get(companyId))?.name ?? "this business";
     const people = await recipientsAt(ctx, companyId, "sms", from);
+    // The replies registered with the carriers, in the company's own words, when it set up texting through Selestial.
+    const latest = await ctx.db
+      .query("textingRequests")
+      .withIndex("by_company_requested", (q) => q.eq("companyId", companyId))
+      .order("desc")
+      .first();
+    const registered = latest && (latest.status === "active" || latest.status === "interrupted") ? latest.drafts : undefined;
     const at = args.receivedAt;
     const byRecipient = { kind: "recipient" as const };
 
@@ -150,7 +157,7 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
       // One confirmation per STOP that started a suppression. A second STOP while it stands gets no new answer.
       let replied = false;
       if (created) {
-        const message = await reply(ctx, companyId, from, `You will no longer receive texts from ${sender}. Reply START to resubscribe.`, "stop", `reply:stop:${suppression._id}`);
+        const message = await reply(ctx, companyId, from, registered?.stop_reply ?? `You will no longer receive texts from ${sender}. Reply START to resubscribe.`, "stop", `reply:stop:${suppression._id}`);
         replied = message !== null && message.status !== "not_sent";
       }
       return { kind, replied };
@@ -158,7 +165,7 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
 
     if (kind === "help") {
       const reach = [profile.identity.supportPhone ? `call ${profile.identity.supportPhone}` : null, profile.identity.supportEmail ? `email ${profile.identity.supportEmail}` : null].filter(Boolean).join(" or ");
-      const body = `${sender}: ${reach ? `for help, ${reach}.` : "for help, contact the business directly."} Reply STOP to stop texts.`;
+      const body = registered?.help_reply ?? `${sender}: ${reach ? `for help, ${reach}.` : "for help, contact the business directly."} Reply STOP to stop texts.`;
       await file("help");
       const message = await reply(ctx, companyId, from, body, "help", `reply:help:${from}:${at}`);
       return { kind, replied: message !== null && message.status !== "not_sent" };
@@ -178,7 +185,7 @@ async function handleSms(ctx: MutationCtx, args: { to: string; from: string; bod
         }
       }
       await file("opt_in");
-      const message = await reply(ctx, companyId, from, `You will receive texts from ${sender} again. Reply STOP to stop.`, "start", `reply:start:${stops[0]._id}`);
+      const message = await reply(ctx, companyId, from, registered?.start_reply ?? `You will receive texts from ${sender} again. Reply STOP to stop.`, "start", `reply:start:${stops[0]._id}`);
       return { kind, replied: message !== null && message.status !== "not_sent" };
     }
 
