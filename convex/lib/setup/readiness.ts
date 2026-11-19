@@ -67,7 +67,7 @@ export async function agentReadiness(ctx: QueryCtx, company: Doc<"companies">): 
       ...(have.needs ? [] : [{ kind: "information" as const, words: "No hiring need is open, so there is nothing to recruit for.", next: "Describe who you are hiring", href: "/app/agents/recruiter" }]),
       ...(canEmail || canText ? [] : [sender]),
     ],
-    retention: [],
+    retention: [...(canEmail || canText ? [] : [{ ...sender, words: "No texting number or email is set up, so feedback requests and case updates cannot reach customers." }])],
   };
 
   return (["sales", "dispatch", "recruiter", "retention"] as const).map((agent) => {

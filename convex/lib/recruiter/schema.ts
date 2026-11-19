@@ -336,6 +336,14 @@ export const recruiterTables = {
     purposes: v.optional(v.array(inboxPurposeValidator)),
     /** One read at a time: a run holds this until it finishes, or until it lapses after a crash. */
     syncLeaseUntil: v.optional(v.number()),
+    /**
+     * Retention's own place in an inbox connected for Care & Retention (convex/retentionInbox.ts): where
+     * its last page ended, the moment the Owner turned reading on (nothing earlier is read), and its lease.
+     */
+    careCursor: v.optional(v.string()),
+    careFrom: v.optional(v.number()),
+    careLeaseUntil: v.optional(v.number()),
+    careSyncAt: v.optional(v.number()),
     /** Disconnected by a person, and what happened to Google's grant. */
     disconnectedAt: v.optional(v.number()),
     disconnectedBy: v.optional(v.id("members")),

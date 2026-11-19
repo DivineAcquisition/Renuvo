@@ -44,9 +44,9 @@ export const AGENT_PROFILES: Record<Agent, { name: string; responsibility: strin
   },
   retention: {
     name: "Retention",
-    responsibility: "Feedback, service concerns and recurring service.",
-    completion: "Feedback addressed, service issues followed through, and an appropriate next service agreed.",
-    built: false,
+    responsibility: "Service concerns, recurring-service continuity, renewals and re-engagement.",
+    completion: "A concern followed through to an outcome the customer confirmed, or recorded as it actually is.",
+    built: true,
   },
 };
 

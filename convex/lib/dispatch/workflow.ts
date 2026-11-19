@@ -89,7 +89,8 @@ function skippedCleaners(approvals: Doc<"approvals">[]): Id<"cleaners">[] {
 /** Who Dispatch could ask for this job right now, best first, and who it cannot ask with the reason. */
 export async function candidatesFor(ctx: QueryCtx | MutationCtx, company: Doc<"companies">, job: Doc<"jobs">) {
   const assignments = await jobAssignments(ctx, job);
-  const history = await jobHistory(ctx, job, assignments, skippedCleaners(await jobApprovals(ctx, job)));
+  // A cleaner a person agreed not to send to this visit (job.avoidCleanerIds) is passed over like one a person skipped.
+  const history = await jobHistory(ctx, job, assignments, [...skippedCleaners(await jobApprovals(ctx, job)), ...(job.avoidCleanerIds ?? [])]);
   const { cleaners, facts } = await readyCleanerFacts(ctx, job, history);
   const ranked = rankCleaners(facts, await jobFacts(ctx, company, job), DISPATCH_RULES);
   return { ...ranked, cleaners, assignments, history };

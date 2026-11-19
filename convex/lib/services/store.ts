@@ -467,8 +467,8 @@ export function priceComparison(before: Spec | null, after: Spec): { label: stri
 
 /**
  * Dispatch and Recruiter read the record and check the service against it, in code. They report and may
- * suggest a structured edit; nothing is changed unless a person applies it. Sales and Retention are not
- * released, and say so.
+ * suggest a structured edit; nothing is changed unless a person applies it. Sales and Retention do not
+ * review services yet, and say so.
  */
 export async function specialistNotes(ctx: QueryCtx, company: Doc<"companies">, spec: Spec): Promise<AgentNote[]> {
   const notes: AgentNote[] = [];
@@ -535,7 +535,7 @@ export async function specialistNotes(ctx: QueryCtx, company: Doc<"companies">, 
     );
   }
   notes.push({ agent: "sales", status: "unavailable", title: "Sales has not reviewed this", detail: "Sales is not released yet, so nobody checked quoting friction. It will contribute when it is." });
-  notes.push({ agent: "retention", status: "unavailable", title: "Retention has not reviewed this", detail: "Retention is not released yet, so no recurring offer was checked against customer patterns." });
+  notes.push({ agent: "retention", status: "unavailable", title: "Retention has not reviewed this", detail: "Retention does not review services yet, so no recurring offer was checked against customer patterns." });
   return notes;
 }
 

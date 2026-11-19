@@ -34,6 +34,12 @@ export const NOTICE_EVENT_TYPES = new Set([
   // An agent acted on its own at "Execute and report" (Act and notify me).
   "dispatch.reported",
   "sales.reported",
+  "retention.reported",
+  // Customer cases (docs/retention/00-architecture.md §9).
+  "retention_case.opened",
+  "retention_case.needs_attention",
+  "retention_case.closed",
+  "retention_signal.raised",
 ]);
 
 type Recorded = { id: Id<"events">; companyId: Id<"companies">; type: string; actor: Actor; subject: { table: string; id: string }; data?: Record<string, unknown> };
@@ -98,12 +104,53 @@ export async function noticesForEvent(ctx: MutationCtx, event: Recorded): Promis
       await notifyMembers(ctx, { ...base, event: "credits_exhausted", key: new Date(at).toISOString().slice(0, 10) });
       return;
     }
+    case "retention_case.opened":
+    case "retention_case.needs_attention": {
+      const row = await ctx.db.get(event.subject.id as Id<"retentionCases">);
+      if (!row || row.companyId !== event.companyId) return;
+      const except = event.actor.kind === "member" ? [event.actor.memberId] : [];
+      if (event.type === "retention_case.opened" && row.serious) {
+        // Goes at once, to everyone who can take it, including whoever recorded it.
+        await notifyMembers(ctx, { ...base, event: "retention_serious", ref: row._id });
+        return;
+      }
+      if (row.status !== "needs_attention" || row.serious) return;
+      // A step waiting for approval already sent its own notice with the decision in it.
+      const actions = await ctx.db
+        .query("retentionActions")
+        .withIndex("by_company_case", (q) => q.eq("companyId", row.companyId).eq("caseId", row._id))
+        .take(100);
+      if (actions.some((a) => a.status === "awaiting_approval")) return;
+      await notifyMembers(ctx, { ...base, event: "retention_attention", ref: row._id, key: `decision:${event.id}`, facts: { kind: "decision" }, except });
+      return;
+    }
+    case "retention_signal.raised": {
+      if (event.data?.kind !== "commitment_overdue") return;
+      const signal = await ctx.db.get(event.subject.id as Id<"retentionSignals">);
+      if (!signal || signal.source.table !== "retentionCases") return;
+      const row = await ctx.db.get(signal.source.id as Id<"retentionCases">);
+      if (!row || row.companyId !== event.companyId || row.status === "closed") return;
+      // Once per deadline: a new promise that is missed again is a new notice.
+      await notifyMembers(ctx, { ...base, event: "retention_attention", ref: row._id, key: `overdue:${row.dueAt}`, facts: { kind: "overdue", dueAt: row.dueAt } });
+      return;
+    }
+    case "retention_case.closed": {
+      const row = await ctx.db.get(event.subject.id as Id<"retentionCases">);
+      if (!row || row.companyId !== event.companyId || !row.outcome) return;
+      // Routine follow-through after a visit closes quietly; its result is on the Retention pages.
+      if (row.kind === "follow_through") return;
+      await notifyMembers(ctx, { ...base, event: "retention_outcome", ref: row._id, facts: { outcome: row.outcome.code, at }, except: event.actor.kind === "member" ? [event.actor.memberId] : [] });
+      return;
+    }
     case "dispatch.reported":
-    case "sales.reported": {
+    case "sales.reported":
+    case "retention.reported": {
       if (event.actor.kind !== "agent") return;
       const data = event.data ?? {};
+      // A step that didn't go through moves its case to Needs attention, which sends its own notice.
+      if (data.ok === false) return;
       const facts: NoticeFacts = { agent: event.actor.agent, action: typeof data.action === "string" ? data.action : null, kind: typeof data.kind === "string" ? data.kind : null, at };
-      for (const key of ["jobId", "cleanerId", "opportunityId"] as const) if (typeof data[key] === "string") facts[key] = data[key] as string;
+      for (const key of ["jobId", "cleanerId", "opportunityId", "caseId"] as const) if (typeof data[key] === "string") facts[key] = data[key] as string;
       await notifyMembers(ctx, { ...base, event: "agent_acted", ref: event.id, facts });
       return;
     }

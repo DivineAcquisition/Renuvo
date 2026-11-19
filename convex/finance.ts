@@ -211,6 +211,8 @@ async function uninvoicedJobs(ctx: QueryCtx, companyId: Id<"companies">, now: nu
   const out: Doc<"jobs">[] = [];
   for (const job of jobs) {
     if (job.priceCents === undefined) continue;
+    // A correction visit is at no charge to the customer: its price is only the basis the crew is paid from.
+    if (job.recovery) continue;
     const invoices = await ctx.db
       .query("invoices")
       .withIndex("by_company_job", (q) => q.eq("companyId", companyId).eq("jobId", job._id))

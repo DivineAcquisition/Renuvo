@@ -8,7 +8,7 @@ import type { Doc } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { platformSender } from "../email/senders";
 import { agentActedEmail, agentApprovalEmail, alertEmail, dispatchEscalationEmail, inboxReconnectEmail, paymentFailureEmail, securityEmail, weeklyDigestEmail, welcomeEmail, type SecurityChange } from "../email/templates/platform";
-import { money, timeOf, type AgentId, type Email, type MemberRole } from "../email/templates/shared";
+import { money, timeOf, when, type AgentId, type Email, type MemberRole } from "../email/templates/shared";
 import { weeklyDigestData } from "./digest";
 import { actionDef } from "../permissionCatalog";
 import { readProfile } from "../compliance/profile";
@@ -20,6 +20,7 @@ import { emailOn, noticeSuppression, preferencesOf, SUPPRESSION_WORDS } from "./
 import { unsubscribable } from "./route";
 import { unsubscribeFor } from "./unsubscribe";
 import { waitingMessages } from "../inbox/events";
+import { OUTCOME_WORDS } from "../retention/cases";
 
 export type Composed =
   | { ok: true; email: Email; from: string; replyTo?: string; headers: Record<string, string> }
@@ -160,7 +161,98 @@ async function agentActed(ctx: MutationCtx, company: Doc<"companies">, facts: No
     about.push({ label: "Customer", value: customer?.name ?? null });
     path ??= "/app/agents/sales";
   }
+  const caseId = str(facts, "caseId") ? ctx.db.normalizeId("retentionCases", str(facts, "caseId")!) : null;
+  const careCase = caseId ? await ctx.db.get(caseId) : null;
+  if (careCase && careCase.companyId === company._id) {
+    const customer = await ctx.db.get(careCase.customerId);
+    about.push({ label: "Customer", value: customer?.name ?? null }, { label: "Case", value: careCase.title });
+    path ??= casePath(careCase);
+  }
   return agentActedEmail({ ...c, agent, did, at: num(facts, "at") ?? at, about, path });
+}
+
+const CASE_PAGE = { follow_through: "needs-attention", recovery: "recovery", continuity: "continuity-renewals", renewal: "continuity-renewals", reactivation: "re-engagement" } as const;
+/** Where a case opens: its own page once closed or underway, Needs attention while it waits on a person. */
+function casePath(row: Doc<"retentionCases">): string {
+  const page = row.status === "needs_attention" || row.status === "needs_context" ? "needs-attention" : CASE_PAGE[row.kind];
+  return `/app/agents/retention/${page}?case=${encodeURIComponent(row._id)}`;
+}
+
+/**
+ * A customer case that needs a person, or how one ended. Read now: a case someone already dealt with
+ * sends nothing. The customer's own words are never put in the email; the case holds them.
+ */
+async function retentionCase(ctx: MutationCtx, company: Doc<"companies">, event: "retention_serious" | "retention_attention" | "retention_outcome", ref: string | undefined, facts: NoticeFacts | undefined, c: Context): Promise<Built> {
+  const id = ref ? ctx.db.normalizeId("retentionCases", ref) : null;
+  const row = id ? await ctx.db.get(id) : null;
+  if (!row || row.companyId !== company._id) return { problem: "The case no longer exists." };
+  const customer = await ctx.db.get(row.customerId);
+  const who = customer?.name ?? "A customer";
+  const about = [
+    { label: "Customer", value: customer?.name ?? null },
+    { label: "Case", value: row.title },
+  ];
+  const button = { label: "Open the case", path: casePath(row) };
+  if (event === "retention_outcome") {
+    if (row.status !== "closed" || !row.outcome) return { problem: "The case was reopened before this notice went." };
+    return alertEmail({
+      ...c,
+      eyebrow: "Retention",
+      subject: `Case closed for ${who}: ${OUTCOME_WORDS[row.outcome.code].replace(/\.$/, "")}`,
+      heading: "A customer case closed",
+      body: OUTCOME_WORDS[row.outcome.code],
+      tone: "info",
+      note: "This is what the record shows. It is not a statement that the customer is satisfied unless they said so.",
+      facts: [...about, { label: "Closed", value: when(row.outcome.at, c.timezone) }],
+      button,
+      because: "notices about what your agents and customers did are on",
+    });
+  }
+  if (row.status === "closed") return { problem: "The case was closed before this notice went." };
+  if (event === "retention_serious") {
+    if (!row.serious) return { problem: "The case is no longer marked as a serious concern." };
+    if (row.heldBy || row.ownerId) return { problem: "A person took the case before this notice went." };
+    return alertEmail({
+      ...c,
+      eyebrow: "Retention",
+      subject: `A serious concern from ${who} needs a person now`,
+      heading: "A serious concern needs a person",
+      body: `${row.serious.reason} Selestial has stopped: it proposes no remedy and writes nothing to the customer about this.`,
+      tone: "danger",
+      note: "Someone authorized to handle safety, damage, theft or staff-conduct concerns should take the case and contact the customer directly.",
+      facts: about,
+      button: { label: "Take the case", path: button.path },
+      because: "urgent operations alerts are on",
+    });
+  }
+  if (str(facts, "kind") === "overdue") {
+    const dueAt = num(facts, "dueAt");
+    if (dueAt === null || row.dueAt !== dueAt || row.dueAt > Date.now()) return { problem: "The commitment was met or given a new deadline before this notice went." };
+    return alertEmail({
+      ...c,
+      eyebrow: "Retention",
+      subject: `A commitment to ${who} is overdue`,
+      heading: "A commitment to a customer is overdue",
+      body: `"${row.title}" was due ${when(row.dueAt, c.timezone)} and is still open.`,
+      tone: "warning",
+      facts: [...about, { label: "Where it stands", value: row.doing }, { label: "Waiting on", value: row.needs ?? null }],
+      button,
+      because: "urgent operations alerts are on",
+    });
+  }
+  if (row.status !== "needs_attention") return { problem: "The case stopped waiting on a person before this notice went." };
+  if (row.heldBy) return { problem: "A person took the case before this notice went." };
+  return alertEmail({
+    ...c,
+    eyebrow: "Retention",
+    subject: `${who}'s case needs your decision`,
+    heading: "A customer case needs a decision",
+    body: row.needs ?? "The case is waiting for a person to decide the next step.",
+    tone: "warning",
+    facts: [...about, { label: "Decide by", value: when(row.dueAt, c.timezone) }],
+    button,
+    because: "urgent operations alerts are on",
+  });
 }
 
 async function customerPaymentFailed(ctx: MutationCtx, ref: string | undefined, c: Context): Promise<Built> {
@@ -267,6 +359,10 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
       return inboxReconnect(ctx, notice.ref, facts, c);
     case "dispatch_escalation":
       return dispatchEscalation(ctx, notice.ref, notice.ref && message.dedupeKey.includes(":no_show:") ? "no_show" : "no_check_in", c);
+    case "retention_serious":
+    case "retention_attention":
+    case "retention_outcome":
+      return retentionCase(ctx, company, notice.event, notice.ref, facts, c);
     case "weekly_digest": {
       const weekStart = num(facts, "weekStart");
       if (weekStart === null) return { problem: "The notice didn't say which week it was for." };

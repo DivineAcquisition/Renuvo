@@ -8,7 +8,8 @@
  */
 import { siteOrigin } from "../dispatch/links";
 
-export type LinkKind = "proposal" | "sign" | "assess" | "quote";
+/** "care" is Retention's: feedback, an issue, a remedy, a confirmation or a plan (convex/lib/retention/links.ts). */
+export type LinkKind = "proposal" | "sign" | "assess" | "quote" | "care";
 
 const encoder = new TextEncoder();
 
@@ -60,7 +61,7 @@ export async function publicIdFor(kind: LinkKind, token: string): Promise<string
   return same(token.slice(dot + 1), await sign(kind, publicId, key)) ? publicId : null;
 }
 
-const PATHS: Record<LinkKind, string> = { proposal: "/c/proposal/", sign: "/c/sign/", assess: "/c/assess/", quote: "/c/quote/" };
+const PATHS: Record<LinkKind, string> = { proposal: "/c/proposal/", sign: "/c/sign/", assess: "/c/assess/", quote: "/c/quote/", care: "/c/care/" };
 
 export function linkUrl(kind: LinkKind, token: string): string {
   return `${siteOrigin()}${PATHS[kind]}${token}`;
