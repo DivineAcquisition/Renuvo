@@ -24,6 +24,9 @@ import { CATEGORY_CHOICES, SCALE_CHOICES, TOOL_CHOICES, WORKFORCE_CHOICES, type 
 import { connectionsFor, PRIORITY_INFO, QUESTIONS, STAGES, stepsFor, UNSURE } from "../../../../convex/lib/setup/path";
 import { ConnectedImport } from "./connectors";
 import { AgentWork } from "./work";
+import { BeforeStart } from "./review";
+
+const FIRST_WORK_PATH = "/app/first-work";
 import { ClientImport } from "./import";
 import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
@@ -244,7 +247,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   async function openWorkspace(confirmContext: boolean) {
     if (confirmContext && !(await go("review", { confirmContext: true }))) return;
     await enter({ companyId });
-    router.push(LANDING_PATH);
+    router.push(FIRST_WORK_PATH);
   }
 
   const summary = <Summary name={name} timezone={timezone} facts={facts} priority={priority} secondary={secondary} agents={view.agents} postalCodes={view.company.postalCodes} />;
@@ -537,6 +540,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     </Button>
                   ))}
                 </div>
+                <BeforeStart agent={info?.agent ?? null} canEdit={view.canEdit} />
                 <Why>Opening your workspace switches nothing on. Your team starts on review: nothing reaches a customer, an applicant or a cleaner until you approve it.</Why>
               </>
             ) : null}

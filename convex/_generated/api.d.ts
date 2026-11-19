@@ -393,6 +393,7 @@ import type * as lib_services_workflow from "../lib/services/workflow.js";
 import type * as lib_settings_business from "../lib/settings/business.js";
 import type * as lib_settings_connections from "../lib/settings/connections.js";
 import type * as lib_setup_facts from "../lib/setup/facts.js";
+import type * as lib_setup_firstWork from "../lib/setup/firstWork.js";
 import type * as lib_setup_path from "../lib/setup/path.js";
 import type * as lib_setup_readiness from "../lib/setup/readiness.js";
 import type * as lib_setup_website from "../lib/setup/website.js";
@@ -858,6 +859,7 @@ declare const fullApi: ApiFromModules<{
   "lib/settings/business": typeof lib_settings_business;
   "lib/settings/connections": typeof lib_settings_connections;
   "lib/setup/facts": typeof lib_setup_facts;
+  "lib/setup/firstWork": typeof lib_setup_firstWork;
   "lib/setup/path": typeof lib_setup_path;
   "lib/setup/readiness": typeof lib_setup_readiness;
   "lib/setup/website": typeof lib_setup_website;

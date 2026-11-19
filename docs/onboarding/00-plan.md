@@ -2,7 +2,7 @@
 
 **"Tell us enough about your company. Watch Selestial prepare useful work. Review what matters. Start operating."**
 
-Status: Phase 1 merged (#110), Phase 2a merged (#116), Phase 2b in review (#118). Phase 3 built November 19, 2026. Each phase is marked here as it is built and verified.
+Status: Phase 1 merged (#110), Phase 2a merged (#116), Phases 2b and 3 in review (#118). Phase 4 built November 19, 2026. Each phase is marked here as it is built and verified.
 
 ## What was there before
 
@@ -43,7 +43,7 @@ Inspected on `main` at `2cbf867`.
 | 2a | Website reader, client import, integration guidance, service, agreement and booking drafts | Merged (#116) |
 | 2b | Jobber connection (OAuth), Housecall Pro key import | Built |
 | 3 | First work per built agent, with prerequisite checks | Built |
-| 4 | Exact-action review, authority, safe execution, "Your first work" | Not started |
+| 4 | Exact-action review, authority, safe execution, "Your first work" | Built |
 | 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Not started |
 
 ## Decisions made by the Owner (November 18)
@@ -60,6 +60,38 @@ Inspected on `main` at `2cbf867`.
 | BookingKoala | Spreadsheet only, until its API is documented. |
 | First batch | One review screen in setup across agents (Phase 4). |
 | Delivery | One PR per phase. |
+
+## Phase 4: verified
+
+Built on what already exists rather than beside it.
+
+- **The first batch** (setup's last step, "Before anything goes out"): Sales's own first review batch
+  (`ReviewQueue`, `salesActions.decideBatch`). Each message shows its recipient, channel, exact words, quote
+  and what sending it does, and can be sent as written, edited, or set aside. Each is checked again as it
+  goes: still current, quote still the one on the deal, consent, do-not-contact, quiet hours and pause. Work
+  other agents hold waits in Approvals, which re-checks on approval (Dispatch: open place, pay, rules;
+  Retention: the evidence stamp). Setup links there with the real count.
+- **Authority, separately**: "How much may <agent> do on its own?" lists the priority agent's actions with the
+  existing `PermissionRow` ("Ask me first", "Act and notify me", "Act automatically"), never past an action's
+  ceiling; money needs limits first; person-only decisions aren't permissions at all. Approving the batch
+  changes none of it.
+- **"Your first work"** (`/app/first-work`, `setup.firstWork`): where setup now lands. It shows the priority,
+  what was prepared (setup's drafts and each agent's review that found something), what waits for a
+  decision (Sales's first batch and pending approvals), messages agents actually sent since setup began, what
+  still blocks the priority's agent, and one next step: decisions first, then the priority's own next step,
+  then its first blocker. Every count is read from records; nothing is estimated.
+- **Milestones**: entering the workspace now records the first decision on agent work and the first message
+  an agent sent, from the events and messages themselves. Both were declared in Phase 1 and never set.
+- **Cost**: nothing in the batch uses AI credits to send. Selestial has no per-message charge today, so none
+  is shown; Retention's own money estimates appear on its actions where it has them.
+- **Known gap, unchanged**: an approved Sales message does not re-read the agent's authority level at send
+  time (the person's approval is the authority); pause, consent and freshness are re-checked.
+- **Tests**: `convex/setupFirstWork.test.ts` (6): empty company, prepared drafts, decisions first in the next
+  step, only agent messages that actually went out counted, milestones from what happened (and none when
+  nothing happened), staff can read, company isolation.
+- **Rendered**: the review step at 390 wide and "Your first work" at 390 and 1440, no page errors. Found while
+  rendering: the blocker said "Prepare your first service" when setup had already drafted one; it now points
+  at reviewing and publishing that draft.
 
 ## Phase 3: verified
 
@@ -182,7 +214,6 @@ Inspected on `main` at `2cbf867`.
 
 - Recurring schedules from an import are kept as notes on the client; turning them into recurring plans
   needs a published service.
-- First-batch review, authority choice and "Your first work" (Phase 4). Sales reply drafts are prepared by
-  the Sales agent itself and reviewed in its first batch; setup points to them rather than creating them.
+- Phase 5: accessibility, recovery states, invited users, existing companies and funnel measurement.
 - Help is written guidance per question. Chat inside setup is not wired.
 - Home has no "continue setup" entry yet; `/app/setup` is reachable directly (Phase 4).

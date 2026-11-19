@@ -18,6 +18,7 @@ import { CATEGORY_CHOICES, FACTS, factsOf, isFactKey, stateFact } from "./lib/se
 import { checkedNeed } from "./hiringNeeds";
 import { progress, questionsFor, stepsFor, unanswered } from "./lib/setup/path";
 import { agentReadiness } from "./lib/setup/readiness";
+import { agentMessagesSince, firstDecisionAt, firstWork as firstWorkOf } from "./lib/setup/firstWork";
 import { factValueValidator, methodValidator, priorityValidator } from "./lib/setup/schema";
 import { businessSettingsOf } from "./lib/settings/business";
 import { text } from "./lib/text";
@@ -176,13 +177,26 @@ export const save = ownerMutation({
  * The owner opens the workspace. Setup stops being a gate from this moment and continues inside the
  * product. Nothing is switched on by this: every agent's authority stays exactly as it was.
  */
+/** "Your first work": what is prepared, waiting, started and still blocked, counted from records now. */
+export const firstWork = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const setup = await setupOf(ctx, ctx.companyId);
+    if (!setup) return null;
+    return { ...(await firstWorkOf(ctx, ctx.company, setup)), canDecide: ctx.role === "owner" || ctx.role === "manager" };
+  },
+});
+
 export const enter = ownerMutation({
   args: {},
   handler: async (ctx) => {
     const setup = await setupOf(ctx, ctx.companyId);
     if (!setup || setup.status === "entered") return null;
     const now = Date.now();
-    await ctx.db.patch(setup._id, { status: "entered", milestones: { ...setup.milestones, enteredAt: now }, revision: setup.revision + 1, updatedAt: now });
+    // The first decision and the first action are recorded as they happened, if they did, from the records.
+    const reviewedAt = setup.milestones.firstReviewedAt ?? (await firstDecisionAt(ctx, ctx.companyId, setup.milestones.startedAt)) ?? undefined;
+    const actedAt = setup.milestones.firstActionAt ?? (await agentMessagesSince(ctx, ctx.companyId, setup.milestones.startedAt))[0]?.queuedAt;
+    await ctx.db.patch(setup._id, { status: "entered", milestones: { ...setup.milestones, enteredAt: now, ...(reviewedAt !== undefined ? { firstReviewedAt: reviewedAt } : {}), ...(actedAt !== undefined ? { firstActionAt: actedAt } : {}) }, revision: setup.revision + 1, updatedAt: now });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "setup.workspace_entered", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { priority: setup.priority ?? "none", contextConfirmed: setup.milestones.contextConfirmedAt !== undefined } });
     return null;
   },
