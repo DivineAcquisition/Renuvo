@@ -24,6 +24,7 @@ import { createExperience } from "./bookingExperiences";
 import { createAgreement } from "./lib/agreements/store";
 import { experienceKindValidator } from "./lib/booking/definition";
 import { createDraft } from "./lib/services/workflow";
+import { wakeActivation } from "./lib/activation/wake";
 import { TEMPLATES } from "./lib/services/templates";
 
 const STALE = "Your setup was changed somewhere else, on another tab or device. Nothing was lost: we have loaded the latest, so check it and continue.";
@@ -148,6 +149,8 @@ export const save = ownerMutation({
       await recordEvent(ctx, { companyId: ctx.companyId, type: "company.updated", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId } });
     }
     for (const [key, value] of stated) await stateFact(ctx, ctx.companyId, ctx.member._id, key, value);
+    // A confirmed answer can unblock first agent work that was waiting for it (lib/activation/wake.ts).
+    if (stated.length) await wakeActivation(ctx, ctx.companyId);
 
     const now = Date.now();
     const skipped = args.skip && steps.some((step) => step.id === args.skip && step.optional) ? [...new Set([...setup.skipped, args.skip])] : setup.skipped;

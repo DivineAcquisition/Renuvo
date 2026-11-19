@@ -7,7 +7,7 @@
 import type { Doc } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import { platformSender } from "../email/senders";
-import { agentActedEmail, agentApprovalEmail, alertEmail, dispatchEscalationEmail, inboxReconnectEmail, paymentFailureEmail, securityEmail, weeklyDigestEmail, welcomeEmail, type SecurityChange } from "../email/templates/platform";
+import { activationEmail, agentActedEmail, agentApprovalEmail, alertEmail, dispatchEscalationEmail, inboxReconnectEmail, paymentFailureEmail, securityEmail, weeklyDigestEmail, welcomeEmail, type SecurityChange } from "../email/templates/platform";
 import { money, timeOf, when, type AgentId, type Email, type MemberRole } from "../email/templates/shared";
 import { weeklyDigestData } from "./digest";
 import { actionDef } from "../permissionCatalog";
@@ -322,6 +322,37 @@ async function dispatchEscalation(ctx: MutationCtx, ref: string | undefined, kin
   });
 }
 
+/**
+ * The first result, or the batch summary, read from the activation's tasks as they are now. Nothing is
+ * sent for a batch the Owner canceled, and a summary that would only repeat the first email is not sent.
+ */
+async function activation(ctx: MutationCtx, company: Doc<"companies">, kind: "first" | "summary", ref: string | undefined, c: Context): Promise<Built> {
+  const id = ref ? ctx.db.normalizeId("activations", ref) : null;
+  const row = id ? await ctx.db.get(id) : null;
+  if (!row || row.companyId !== company._id) return { problem: "The agent work no longer exists." };
+  if (row.status === "canceled") return { problem: "The agent work was canceled before this notice went." };
+  const tasks = await ctx.db
+    .query("activationTasks")
+    .withIndex("by_activation", (q) => q.eq("activationId", row._id))
+    .take(20);
+  const ready = tasks.filter((t) => t.outputs.length > 0 && (t.state === "completed" || t.state === "ready_for_review"));
+  if (!ready.length && kind === "first") return { problem: "No result was ready when this notice went." };
+  const outputs = ready.flatMap((t) => t.outputs.map((o) => ({ text: o.ref.label, state: o.state })));
+  const waiting = tasks.filter((t) => t.state === "ready_for_review").map((t) => t.statusLine);
+  const blockers = tasks.filter((t) => t.blocker && (t.state === "waiting_info" || t.state === "waiting_connection" || t.state === "paused")).map((t) => t.blocker!.words);
+  const failed = tasks.filter((t) => t.state === "failed").length;
+  if (kind === "summary") {
+    const firstAt = row.noticed.firstResultAt ?? null;
+    const newer = ready.filter((t) => firstAt === null || (t.finishedAt ?? 0) > firstAt + 60_000);
+    if (!newer.length && !blockers.length && !failed) return { problem: "The first result email already covered everything." };
+  }
+  const focusTasks = ready.filter((t) => t.priority === 1);
+  const lead = (focusTasks[0] ?? ready[0] ?? tasks[0])?.agent ?? "sales";
+  const FOCUS_WORDS: Record<string, string> = { sales: "Get more bookings", pricing: "Set up services and pricing", booking: "Get agreements and booking ready", recruiter: "Hire cleaners", dispatch: "Stop chasing cleaners", retention: "Keep more customers" };
+  const target = ready.length === 1 && ready[0].outputs.length === 1 ? { label: "Open it", path: ready[0].outputs[0].ref.href } : { label: "See your agents' work", path: `/app?activation=${row._id}` };
+  return activationEmail({ ...c, kind, agent: lead as AgentId, focus: FOCUS_WORDS[row.focus] ?? "Your first work", outputs: outputs.slice(0, 8), waiting: waiting.slice(0, 5), blockers: blockers.slice(0, 4), failed, button: target });
+}
+
 async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"companies">, member: Doc<"members">, c: Context): Promise<Built> {
   const notice = message.notice!;
   const facts = notice.facts;
@@ -363,6 +394,10 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
     case "retention_attention":
     case "retention_outcome":
       return retentionCase(ctx, company, notice.event, notice.ref, facts, c);
+    case "activation_result":
+      return activation(ctx, company, "first", notice.ref, c);
+    case "activation_summary":
+      return activation(ctx, company, "summary", notice.ref, c);
     case "weekly_digest": {
       const weekStart = num(facts, "weekStart");
       if (weekStart === null) return { problem: "The notice didn't say which week it was for." };

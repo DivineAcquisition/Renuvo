@@ -9,6 +9,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { agentValidator } from "./statuses";
 import { NOTICE_EVENT_TYPES, noticesForEvent } from "./notify/fromEvents";
+import { ACTIVATION_WAKE_TYPES, wakeActivation } from "./activation/wake";
 
 export const actorValidator = v.union(
   v.object({ kind: v.literal("member"), memberId: v.id("members") }),
@@ -156,5 +157,7 @@ export async function recordEvent(
   });
   // A few events tell the people who run the company by email (convex/lib/notify/fromEvents.ts).
   if (NOTICE_EVENT_TYPES.has(event.type)) await noticesForEvent(ctx, { id, companyId: event.companyId, type: event.type, actor: event.actor, subject: event.subject, data: event.data as Record<string, unknown> | undefined });
+  // A change that may unblock the Owner's first agent work (an inbox connected, records imported) re-checks it.
+  if (ACTIVATION_WAKE_TYPES.has(event.type)) await wakeActivation(ctx, event.companyId);
   return id;
 }

@@ -12,6 +12,8 @@ export type SalesSettings = {
   voice: { tone: (typeof TONES)[number]; signature: string | null };
   eligibility: { kinds: ServiceKind[]; textInquiries: boolean; commercialNeedsWalkthrough: boolean };
   answers: { id: string; topic: string; question: string; answer: string }[];
+  /** Proposed by Selestial, never used until the Owner approves each (salesInquiries.decideProposedAnswer). */
+  proposedAnswers: { id: string; topic: string; question: string; answer: string; basis: string; proposedAt: number }[];
   followUp: { missingInfoHours: number[]; quoteHours: number[]; bookingHours: number[] };
   discounts: { maxPercent: number; reasons: string[] };
   booking: { agreementRequired: boolean; deposit: DepositRule; holdMinutes: number; minimumNoticeHours: number };
@@ -21,7 +23,7 @@ export type SalesSettings = {
   revision: number;
 };
 
-export const SALES_DEFAULTS: Omit<SalesSettings, "firstBatchDecidedAt" | "revision"> = {
+export const SALES_DEFAULTS: Omit<SalesSettings, "firstBatchDecidedAt" | "revision" | "proposedAnswers"> = {
   voice: { tone: "warm", signature: null },
   eligibility: { kinds: ["residential", "short_term_rental", "commercial"], textInquiries: true, commercialNeedsWalkthrough: true },
   answers: [],
@@ -49,6 +51,7 @@ export function salesSettings(company: Pick<Doc<"companies">, "sales">): SalesSe
     voice: { tone: stored.voice?.tone ?? SALES_DEFAULTS.voice.tone, signature: stored.voice?.signature ?? null },
     eligibility: stored.eligibility ?? SALES_DEFAULTS.eligibility,
     answers: stored.answers ?? [],
+    proposedAnswers: stored.proposedAnswers ?? [],
     followUp: stored.followUp ?? SALES_DEFAULTS.followUp,
     discounts: stored.discounts ?? SALES_DEFAULTS.discounts,
     booking: stored.booking ?? SALES_DEFAULTS.booking,
@@ -97,6 +100,8 @@ export function normalizeSales(input: SalesSettingsInput, current: SalesSettings
     voice: { tone: voice.tone, ...(optionalText(voice.signature ?? undefined, "The signature", 120) ? { signature: optionalText(voice.signature ?? undefined, "The signature", 120) } : {}) },
     eligibility: { kinds: [...new Set(eligibility.kinds)], textInquiries: eligibility.textInquiries, commercialNeedsWalkthrough: eligibility.commercialNeedsWalkthrough },
     answers,
+    // Proposals are changed only by approving or discarding them, never by saving the Playbook.
+    ...(current.proposedAnswers.length ? { proposedAnswers: current.proposedAnswers } : {}),
     followUp: { missingInfoHours: hours(followUp.missingInfoHours, "Missing details"), quoteHours: hours(followUp.quoteHours, "Quote follow-ups"), bookingHours: hours(followUp.bookingHours, "Booking steps") },
     discounts: { maxPercent: discounts.maxPercent, reasons: discounts.reasons.map((reason) => text(reason, "A discount reason", 160)) },
     booking,

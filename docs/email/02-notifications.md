@@ -109,3 +109,12 @@ Where a suppression lands:
 ## Wired
 
 See docs/email/04-wiring.md for which recorded events send which notice, and what's not wired yet.
+
+## Activation notices
+
+`activation_result` (the first useful result, two minutes after it, so close results share one email) and
+`activation_summary` (once, when the batch settles) are category Activity, audience Owner. Both are written
+at send time from the activation's tasks, and both are dropped with a reason if the batch was canceled or
+the summary would only repeat the first email. The in-app inbox (`memberNotices`, header bell) is separate:
+one row per Owner or Manager with read state, and an email that fails never changes it or the task. See
+docs/onboarding/01-activation.md.

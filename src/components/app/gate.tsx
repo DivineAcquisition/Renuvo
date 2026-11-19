@@ -15,6 +15,7 @@ import { DetailProvider, useDetail } from "@/components/app/detail-panel";
 import { useRun } from "@/components/app/form";
 import { missingSetup, NotSetUp } from "@/components/app/not-set-up";
 import type { TeamDepartment } from "@/components/app/overview/team-at-work";
+import { NotificationBell } from "@/components/app/activation/bell";
 import { AppShell } from "@/components/app/shell";
 import { Notice, SubmitButton, TextField } from "@/components/auth/fields";
 import { AuthShell, useEvents, type TraceStep } from "@/components/auth/shell";
@@ -207,6 +208,7 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, children }: 
               sidebar={(close) => <LiveSidebar businesses={businesses} onSwitch={onSwitch} onNavigate={close} />}
               userSlot={<UserMenu />}
               assistant={<AskButton />}
+              notices={<NotificationBell />}
               panel={<ChatPanel />}
               dock={<Dock departments={team?.departments} />}
             >

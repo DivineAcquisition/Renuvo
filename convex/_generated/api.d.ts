@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as activation from "../activation.js";
 import type * as agreementFiles from "../agreementFiles.js";
 import type * as agreementRenewals from "../agreementRenewals.js";
 import type * as agreementSigning from "../agreementSigning.js";
@@ -87,6 +88,11 @@ import type * as invitations from "../invitations.js";
 import type * as jobs from "../jobs.js";
 import type * as knowledge from "../knowledge.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_activation_notices from "../lib/activation/notices.js";
+import type * as lib_activation_plan from "../lib/activation/plan.js";
+import type * as lib_activation_snapshot from "../lib/activation/snapshot.js";
+import type * as lib_activation_wake from "../lib/activation/wake.js";
+import type * as lib_activation_work from "../lib/activation/work.js";
 import type * as lib_agreements_access from "../lib/agreements/access.js";
 import type * as lib_agreements_agents from "../lib/agreements/agents.js";
 import type * as lib_agreements_catalog from "../lib/agreements/catalog.js";
@@ -339,7 +345,6 @@ import type * as lib_retention_reconcile from "../lib/retention/reconcile.js";
 import type * as lib_retention_recovery from "../lib/retention/recovery.js";
 import type * as lib_retention_relationships from "../lib/retention/relationships.js";
 import type * as lib_retention_runs from "../lib/retention/runs.js";
-import type * as lib_retention_schema from "../lib/retention/schema.js";
 import type * as lib_retention_settings from "../lib/retention/settings.js";
 import type * as lib_retention_signals from "../lib/retention/signals.js";
 import type * as lib_retention_tools from "../lib/retention/tools.js";
@@ -468,6 +473,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activation: typeof activation;
   agreementFiles: typeof agreementFiles;
   agreementRenewals: typeof agreementRenewals;
   agreementSigning: typeof agreementSigning;
@@ -547,6 +553,11 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   knowledge: typeof knowledge;
   "lib/access": typeof lib_access;
+  "lib/activation/notices": typeof lib_activation_notices;
+  "lib/activation/plan": typeof lib_activation_plan;
+  "lib/activation/snapshot": typeof lib_activation_snapshot;
+  "lib/activation/wake": typeof lib_activation_wake;
+  "lib/activation/work": typeof lib_activation_work;
   "lib/agreements/access": typeof lib_agreements_access;
   "lib/agreements/agents": typeof lib_agreements_agents;
   "lib/agreements/catalog": typeof lib_agreements_catalog;
@@ -799,7 +810,6 @@ declare const fullApi: ApiFromModules<{
   "lib/retention/recovery": typeof lib_retention_recovery;
   "lib/retention/relationships": typeof lib_retention_relationships;
   "lib/retention/runs": typeof lib_retention_runs;
-  "lib/retention/schema": typeof lib_retention_schema;
   "lib/retention/settings": typeof lib_retention_settings;
   "lib/retention/signals": typeof lib_retention_signals;
   "lib/retention/tools": typeof lib_retention_tools;

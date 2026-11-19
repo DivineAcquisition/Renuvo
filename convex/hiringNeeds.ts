@@ -10,7 +10,7 @@ import type { MutationCtx } from "./_generated/server";
 import { owned } from "./lib/access";
 import { companyQuery, ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
-import { byMember, recordEvent } from "./lib/events";
+import { byMember, recordEvent, type Actor } from "./lib/events";
 import { assertJobRelated } from "./lib/recruiter/fairness";
 import { formFields, SCREENABLE } from "./lib/recruiter/form";
 import { routeApplication } from "./lib/recruiter/invitations";
@@ -113,7 +113,7 @@ export const list = companyQuery({
   args: { status: v.optional(needStatusValidator) },
   handler: async (ctx, args) => {
     const out = [];
-    for (const status of args.status ? [args.status] : (["open", "paused", "closed"] as const)) {
+    for (const status of args.status ? [args.status] : (["draft", "open", "paused", "closed"] as const)) {
       const rows = await ctx.db
         .query("hiringNeeds")
         .withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", status))
@@ -145,6 +145,16 @@ export const get = companyQuery({
 export async function openNeed(ctx: MutationCtx, companyId: Id<"companies">, member: Doc<"members">, args: Parameters<typeof checkedNeed>[0] & { fromTaskId?: Id<"tasks"> }): Promise<Id<"hiringNeeds">> {
   const needId = await ctx.db.insert("hiringNeeds", { companyId, ...checkedNeed(args), status: "open", fromTaskId: args.fromTaskId, createdBy: member._id, createdAt: Date.now() });
   await recordEvent(ctx, { companyId, type: "hiring_need.opened", actor: { kind: "member", memberId: member._id }, subject: { table: "hiringNeeds", id: needId }, data: { fromDispatchRequest: Boolean(args.fromTaskId) } });
+  return needId;
+}
+
+/**
+ * Prepares a role as a draft, through the same checks as an opened one. A draft is not published: no
+ * applicant is matched to it and nobody is invited for it until the Owner opens it (setStatus "open").
+ */
+export async function draftNeed(ctx: MutationCtx, companyId: Id<"companies">, member: Doc<"members">, args: Parameters<typeof checkedNeed>[0], actor: Actor): Promise<Id<"hiringNeeds">> {
+  const needId = await ctx.db.insert("hiringNeeds", { companyId, ...checkedNeed(args), status: "draft", createdBy: member._id, createdAt: Date.now() });
+  await recordEvent(ctx, { companyId, type: "hiring_need.drafted", actor, subject: { table: "hiringNeeds", id: needId } });
   return needId;
 }
 
@@ -186,6 +196,8 @@ export const setStatus = ownerMutation({
   handler: async (ctx, args) => {
     const need = await owned(ctx, args.needId);
     if (need.status === args.status) return null;
+    // A draft is only ever made by preparation; a published role is never turned back into one.
+    if (args.status === "draft") throw userError("A role that has been opened can be paused or closed, not turned back into a draft.");
     await ctx.db.patch(need._id, { status: args.status });
     await recordEvent(ctx, { companyId: ctx.companyId, type: `hiring_need.${args.status === "open" ? "opened" : args.status}`, actor: byMember(ctx), subject: { table: "hiringNeeds", id: need._id }, data: { from: need.status } });
     if (args.status === "open") {

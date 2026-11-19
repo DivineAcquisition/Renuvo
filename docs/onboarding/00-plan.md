@@ -33,7 +33,7 @@ Inspected on `main` at `2cbf867`.
   setup does not write them.
 - **Readiness** is read from the record (`lib/setup/readiness.ts`): built, plan, paused, connection,
   information, in that order. Finishing setup makes no agent ready.
-- **Nothing is switched on.** Entering the workspace changes no permission.
+- **Nothing is switched on by entering.** "Save and exit" and entering the workspace change no permission and start no work. Only "Start my agents" (or "Start my first agent tasks" on Home) starts the reviewed batch, which runs within the permissions already set (01-activation.md).
 
 ## Phases
 
@@ -42,8 +42,8 @@ Inspected on `main` at `2cbf867`.
 | 1 | Resumable guided flow, priority, adaptive questions, shared facts, readiness, responsive screens | Built |
 | 2a | Website reader, client import, integration guidance, service, agreement and booking drafts | Built |
 | 2b | Jobber connection (OAuth), Housecall Pro key import | Not started |
-| 3 | First work per built agent, with prerequisite checks | Not started |
-| 4 | Exact-action review, authority, safe execution, "Your first work" | Not started |
+| 3 | First work per built agent, with prerequisite checks | Built (see 01-activation.md) |
+| 4 | Exact-action review, authority, safe execution, "Your first work" | Built (see 01-activation.md) |
 | 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Not started |
 
 ## Decisions made by the Owner (November 18)
@@ -115,6 +115,6 @@ Inspected on `main` at `2cbf867`.
 - Jobber and Housecall Pro connections (2b). Until then their exports work through the spreadsheet import.
 - Recurring schedules from an import are kept as notes on the client; turning them into recurring plans
   needs a published service.
-- Agent first work (Phase 3), first-batch review and "Your first work" (Phase 4).
+- Agent first work and "Your agents are working" are built: see 01-activation.md.
 - Help is written guidance per question. Chat inside setup is not wired.
-- Home has no "continue setup" entry yet; `/app/setup` is reachable directly (Phase 4).
+- Home has "Start my first agent tasks" for an Owner with no batch; `/app/setup` stays reachable directly.
