@@ -768,7 +768,27 @@ export default defineSchema({
     .index("by_company_hold", ["companyId", "holdReason", "heldAt"]),
 
   /** A provider's delivery report, kept by its id so the same report delivered twice changes nothing twice. */
-  providerReceipts: defineTable({ provider: v.string(), eventId: v.string(), receivedAt: v.number() }).index("by_provider_event", ["provider", "eventId"]),
+  providerReceipts: defineTable({
+    provider: v.string(),
+    eventId: v.string(),
+    receivedAt: v.number(),
+    /**
+     * A delivery report that arrived before its send settled (the report beat the provider's own answer), kept
+     * so it is applied when the send settles instead of being lost: the outcome, and what the provider charged.
+     */
+    early: v.optional(
+      v.object({
+        providerMessageId: v.string(),
+        outcome: v.union(v.literal("delivered"), v.literal("failed"), v.literal("bounced"), v.literal("complained"), v.literal("suppressed"), v.literal("delayed")),
+        problem: v.optional(v.string()),
+        providerCost: v.optional(v.number()),
+        errorCode: v.optional(v.string()),
+        appliedAt: v.optional(v.number()),
+      }),
+    ),
+  })
+    .index("by_provider_event", ["provider", "eventId"])
+    .index("by_provider_early", ["provider", "early.providerMessageId"]),
 
   /**
    * A link that lets one cleaner do named things for one assignment without signing in. The token is

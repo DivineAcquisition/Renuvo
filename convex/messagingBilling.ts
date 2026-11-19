@@ -67,6 +67,12 @@ export const holdMessage = internalMutation({
   },
 });
 
+/** Holds one charge's estimate in Autumn, as the sender does before asking the provider. */
+export const reserve = internalAction({
+  args: { chargeId: v.id("messagingCharges") },
+  handler: async (ctx, args): Promise<"reserved" | "denied" | "unavailable"> => reserveCharge(ctx, args.chargeId),
+});
+
 // ── Settlement ─────────────────────────────────────────────────────────────────────────────────
 
 export const settlementOf = internalQuery({

@@ -18,6 +18,8 @@ export type RateCard = {
   rates: Record<MessagingKind, number>;
   /** Per active dedicated US local number, per month. */
   numberMonthly: number;
+  /** A test card: never chosen by date, only when pinned with MESSAGING_RATE_CARD. Never offered to customers. */
+  fixture?: boolean;
 };
 
 export const RATE_CARDS: readonly RateCard[] = [
@@ -26,6 +28,14 @@ export const RATE_CARDS: readonly RateCard[] = [
     effectiveFrom: Date.UTC(2026, 10, 18),
     rates: { sms_out: 250, sms_in: 150, mms_out: 500, mms_in: 400, email_out: 20 },
     numberMonthly: 30_000,
+  },
+  {
+    // For tests of a price change while messages are in flight. Never in force by date.
+    version: "msg-fixture-higher",
+    effectiveFrom: Number.MAX_SAFE_INTEGER,
+    rates: { sms_out: 400, sms_in: 300, mms_out: 800, mms_in: 600, email_out: 40 },
+    numberMonthly: 40_000,
+    fixture: true,
   },
 ];
 
@@ -44,7 +54,7 @@ export function rateCardAt(at: number): RateCard {
     const card = RATE_CARDS.find((c) => c.version === pinned);
     if (card) return card;
   }
-  const live = RATE_CARDS.filter((c) => c.effectiveFrom <= at).sort((a, b) => b.effectiveFrom - a.effectiveFrom);
+  const live = RATE_CARDS.filter((c) => !c.fixture && c.effectiveFrom <= at).sort((a, b) => b.effectiveFrom - a.effectiveFrom);
   return live[0] ?? RATE_CARDS[0];
 }
 

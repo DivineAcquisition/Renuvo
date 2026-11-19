@@ -621,7 +621,7 @@ function RateCard({ card }: { card: Overview["rateCard"] }) {
             <h3 className="text-sm font-semibold text-strong">Not available</h3>
             <p className="mt-1 text-sm text-muted-foreground">{card.unavailable.join(". ")}. Messages to these are stopped before sending and never charged.</p>
           </div>
-          <p className="text-xs text-muted-foreground">Prices effective {day(card.effectiveFrom)}. A message is always charged at the price in effect when it was approved to send.</p>
+          <p className="text-xs text-muted-foreground">Prices effective {day(card.effectiveFrom)}. A message&apos;s price is fixed when its cost is set aside, just before it is sent; a price change never changes what a message already on its way costs. A message waiting for funds is priced when it goes.</p>
         </div>
       </div>
     </Panel>

@@ -318,6 +318,18 @@ export const settle = internalMutation({
       if (message.applicationId) await afterApplicantMessage(ctx, (await ctx.db.get(message._id))!, "accepted");
       // A delivery report that arrived before this settled is applied now instead of being lost.
       if (message.earlyReceipt && !result.delivered) await applyOutcome(ctx, (await ctx.db.get(message._id))!, message.earlyReceipt.outcome, message.earlyReceipt.problem);
+      const early = message.provider
+        ? await ctx.db
+            .query("providerReceipts")
+            .withIndex("by_provider_early", (q) => q.eq("provider", message.provider!).eq("early.providerMessageId", result.providerMessageId))
+            .take(10)
+        : [];
+      for (const row of early) {
+        if (!row.early || row.early.appliedAt !== undefined) continue;
+        await ctx.db.patch(row._id, { early: { ...row.early, appliedAt: now } });
+        await reconcileCharge(ctx, message._id, { providerCost: row.early.providerCost, errorCode: row.early.errorCode });
+        await applyOutcome(ctx, (await ctx.db.get(message._id))!, row.early.outcome, row.early.problem);
+      }
       return null;
     }
     // The company's inbox stopped letting Selestial send as it tried: nothing went, so the message waits
@@ -463,12 +475,17 @@ export const receipt = internalMutation({
       .withIndex("by_provider_event", (q) => q.eq("provider", args.provider).eq("eventId", args.eventId))
       .first();
     if (seen) return "duplicate" as const;
-    await ctx.db.insert("providerReceipts", { provider: args.provider, eventId: args.eventId, receivedAt: Date.now() });
+    const receiptId = await ctx.db.insert("providerReceipts", { provider: args.provider, eventId: args.eventId, receivedAt: Date.now() });
     const message = await ctx.db
       .query("messages")
       .withIndex("by_provider_message", (q) => q.eq("provider", args.provider).eq("providerMessageId", args.providerMessageId))
       .first();
-    if (!message) return "ignored" as const;
+    if (!message) {
+      // Out of order: the report beat the send's own answer, which is what records the provider's id. Kept, and
+      // applied when that send settles (a later retry of this report would be a duplicate and dropped).
+      await ctx.db.patch(receiptId, { early: { providerMessageId: args.providerMessageId, outcome: args.outcome, problem: args.problem, providerCost: args.providerCost, errorCode: args.errorCode } });
+      return "early" as const;
+    }
     // Reconciliation: what the provider charged Selestial, and no charge to the company for a text the provider did not charge for.
     await reconcileCharge(ctx, message._id, { providerCost: args.providerCost, errorCode: args.errorCode });
     if (message.status === "sending" && (args.outcome === "delivered" || args.outcome === "failed" || args.outcome === "bounced")) {
