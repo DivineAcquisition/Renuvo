@@ -22,6 +22,11 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import { CATEGORY_CHOICES, SCALE_CHOICES, TOOL_CHOICES, WORKFORCE_CHOICES, type Choice } from "../../../../convex/lib/setup/facts";
 import { connectionsFor, PRIORITY_INFO, QUESTIONS, STAGES, stepsFor, UNSURE } from "../../../../convex/lib/setup/path";
+import { ConnectedImport } from "./connectors";
+import { AgentWork } from "./work";
+import { BeforeStart } from "./review";
+
+const FIRST_WORK_PATH = "/app/first-work";
 import { ClientImport } from "./import";
 import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
@@ -88,7 +93,7 @@ function ChoiceCard({ choice, selected, onPress, multi }: { choice: Choice; sele
       onClick={onPress}
       className={cn(
         "flex min-h-14 items-start gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-500 motion-reduce:transition-none",
-        selected ? "border-brand-500 bg-brand-500/8" : "border-border bg-card hover:border-brand-500/40",
+        selected ? "border-brand-500 bg-brand-500/5" : "border-border bg-card hover:border-brand-500/40",
       )}
     >
       <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center border", multi ? "rounded-md" : "rounded-full", selected ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-background")} aria-hidden>
@@ -129,7 +134,7 @@ function Why({ children }: { children: React.ReactNode }) {
 function StepHeading({ eyebrow, title, lead }: { eyebrow: string; title: string; lead?: string }) {
   return (
     <header className="grid gap-1.5">
-      <p className="text-xs font-semibold tracking-wide text-brand-700 uppercase dark:text-brand-300">{eyebrow}</p>
+      <p className="text-xs font-semibold tracking-wide text-brand-300 uppercase">{eyebrow}</p>
       <h1 className="font-display text-2xl font-semibold text-balance text-strong sm:text-3xl">{title}</h1>
       {lead ? <p className="text-sm text-muted-foreground">{lead}</p> : null}
     </header>
@@ -161,7 +166,12 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   const enter = useMutation(api.setup.enter);
 
   const [revision, setRevision] = useState(setup.revision);
-  const [stepId, setStepId] = useState(setup.step);
+  // A link can open a step directly (Integrations links to "records"); otherwise setup resumes where it was.
+  const [stepId, setStepId] = useState(() => {
+    if (typeof window === "undefined") return setup.step;
+    const asked = new URLSearchParams(window.location.search).get("step");
+    return asked && setup.steps.some((row) => row.id === asked) ? asked : setup.step;
+  });
   const [methods, setMethods] = useState<Method[]>(setup.methods);
   const [priority, setPriority] = useState<Priority | null>(setup.priority);
   const [secondary, setSecondary] = useState<Priority[]>(setup.secondary);
@@ -242,7 +252,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   async function openWorkspace(confirmContext: boolean) {
     if (confirmContext && !(await go("review", { confirmContext: true }))) return;
     await enter({ companyId });
-    router.push(LANDING_PATH);
+    router.push(FIRST_WORK_PATH);
   }
 
   const summary = <Summary name={name} timezone={timezone} facts={facts} priority={priority} secondary={secondary} agents={view.agents} postalCodes={view.company.postalCodes} />;
@@ -293,7 +303,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                   {METHOD_CARDS.map((card) => {
                     const on = methods.includes(card.id);
                     return (
-                      <div key={card.id} className={cn("rounded-xl border transition-colors motion-reduce:transition-none", on ? "border-brand-500 bg-brand-500/8" : "border-border bg-card")}>
+                      <div key={card.id} className={cn("rounded-xl border transition-colors motion-reduce:transition-none", on ? "border-brand-500 bg-brand-500/5" : "border-border bg-card")}>
                         <button type="button" role="checkbox" aria-checked={on} onClick={() => setMethods(toggle(methods, card.id) as Method[])} className="flex w-full items-start gap-3 rounded-xl px-3.5 py-3 text-left focus-visible:outline-2 focus-visible:outline-brand-500">
                           <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg", on ? "bg-brand-500 text-white" : "bg-muted text-muted-foreground")} aria-hidden>
                             <card.icon className="size-5" />
@@ -410,7 +420,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     const first = priority === item.id;
                     const also = secondary.includes(item.id);
                     return (
-                      <div key={item.id} className={cn("flex flex-col rounded-xl border transition-colors motion-reduce:transition-none", first ? "border-brand-500 bg-brand-500/8" : also ? "border-brand-500/40 bg-card" : "border-border bg-card")}>
+                      <div key={item.id} className={cn("flex flex-col rounded-xl border transition-colors motion-reduce:transition-none", first ? "border-brand-500 bg-brand-500/5" : also ? "border-brand-500/40 bg-card" : "border-border bg-card")}>
                         <button
                           type="button"
                           role="radio"
@@ -441,7 +451,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                 </div>
                 {info ? (
                   <p className="flex gap-2 rounded-xl border border-brand-500/30 bg-brand-500/8 px-3.5 py-3 text-sm text-strong" role="status">
-                    <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
+                    <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-300" aria-hidden />
                     {info.first}
                   </p>
                 ) : null}
@@ -478,8 +488,9 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                   <h2 id="clients-heading" className="text-sm font-semibold text-strong">
                     Your clients
                   </h2>
+                  <ConnectedImport />
+                  <p className="text-xs text-muted-foreground">Or from a spreadsheet, including an export from Jobber, Housecall Pro or BookingKoala:</p>
                   <ClientImport />
-                  <p className="text-xs text-muted-foreground">Using Jobber or Housecall Pro? A direct connection is coming next. Until then, export your client list from it and choose the file here.</p>
                 </section>
                 {connectionsFor(priority ?? undefined, secondary).length ? (
                   <section className="grid gap-2" aria-labelledby="connect-heading">
@@ -492,7 +503,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                           <a href={connection.href} target="_blank" rel="noreferrer" className="flex h-full flex-col gap-0.5 rounded-xl border border-border px-3.5 py-3 text-sm hover:border-brand-500/40 focus-visible:outline-2 focus-visible:outline-brand-500">
                             <span className="font-medium text-strong">{connection.title}</span>
                             <span className="text-muted-foreground">{connection.does}</span>
-                            <span className="mt-1 text-xs font-medium text-brand-700 dark:text-brand-300">Set up in a new tab</span>
+                            <span className="mt-1 text-xs font-medium text-brand-300">Set up in a new tab</span>
                           </a>
                         </li>
                       ))}
@@ -508,37 +519,16 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                 <StepHeading eyebrow="Prepare your workspace" title="Your first drafts, and what your team needs" lead="Drafts are prepared for you to review; nothing is published or sent. Each agent's readiness is read from your company's record right now, not from whether setup is finished." />
                 {info ? (
                   <p className="flex gap-2 rounded-xl border border-brand-500/30 bg-brand-500/8 px-3.5 py-3 text-sm text-strong">
-                    <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-600" aria-hidden />
+                    <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-300" aria-hidden />
                     <span>
                       <span className="font-medium">Your first priority: {info.title.toLowerCase()}.</span> {info.first}
                     </span>
                   </p>
                 ) : null}
                 <PrepareDrafts priority={priority} secondary={secondary} categories={many(facts["services.categories"])} prepared={view.prepared} />
-                <h2 className="text-sm font-semibold text-strong">Where each part of your team stands</h2>
-                <ul className="grid gap-2.5">
-                  {[...view.agents].sort((a, b) => Number(b.agent === info?.agent) - Number(a.agent === info?.agent)).map((agent) => (
-                    <li key={agent.agent} className="rounded-xl border border-border p-3.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium text-strong">{agent.name}</p>
-                        <AgentBadge state={agent.state} />
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{agent.words}</p>
-                      {agent.gaps.length > 0 ? (
-                        <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
-                          {agent.gaps.map((gap) => (
-                            <li key={gap.words} className="flex gap-1.5">
-                              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-muted-foreground/60" aria-hidden />
-                              <span>
-                                <span className="font-medium text-strong">Next: {gap.next}.</span> {gap.words}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                <h2 className="text-sm font-semibold text-strong">Your team&apos;s first work</h2>
+                <p className="-mt-2 text-sm text-muted-foreground">Each agent reviews your own records and says what it found. Nobody is contacted and nothing is sent.</p>
+                <AgentWork first={info?.agent ?? null} canEdit={view.canEdit} hiringBrief={Boolean(view.prepared.hiringBrief)} />
                 <Why>You do not need to finish any of this now. Each next step is waiting on the page it belongs to once you open your workspace.</Why>
               </>
             ) : null}
@@ -555,6 +545,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     </Button>
                   ))}
                 </div>
+                <BeforeStart agent={info?.agent ?? null} canEdit={view.canEdit} />
                 <Why>Opening your workspace switches nothing on. Your team starts on review: nothing reaches a customer, an applicant or a cleaner until you approve it.</Why>
               </>
             ) : null}
@@ -573,7 +564,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
 
           <details className={cn("mt-4 rounded-2xl border border-border bg-card lg:hidden", step.id === "review" && "hidden")} open={previewOpen} onToggle={(event) => setPreviewOpen((event.target as HTMLDetailsElement).open)}>
             <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium text-strong">
-              <Sparkles className="size-4 text-brand-600" aria-hidden />
+              <Sparkles className="size-4 text-brand-300" aria-hidden />
               What Selestial knows so far
               <ChevronDown className={cn("ml-auto size-4 text-muted-foreground transition-transform motion-reduce:transition-none", previewOpen && "rotate-180")} aria-hidden />
             </summary>
@@ -584,7 +575,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
         <aside className={cn("hidden", step.id !== "review" && "lg:block")} aria-label="What Selestial knows so far">
           <div className="sticky top-6 rounded-2xl border border-border bg-card p-5">
             <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-strong">
-              <Sparkles className="size-4 text-brand-600" aria-hidden />
+              <Sparkles className="size-4 text-brand-300" aria-hidden />
               What Selestial knows so far
             </p>
             {summary}
@@ -634,11 +625,11 @@ function Suggestion({ found, current, onUse, words }: { found: View["facts"][str
   if (!offer || JSON.stringify(offer) === JSON.stringify(current)) return null;
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-xs text-strong">
-      <Globe className="size-3.5 text-brand-600" aria-hidden />
+      <Globe className="size-3.5 text-brand-300" aria-hidden />
       <span className="min-w-0">
         {found?.conflict ? "Your website says" : "Found on your website"}: <span className="font-medium">{show(offer)}</span>
       </span>
-      <button type="button" className="font-medium text-brand-700 underline underline-offset-4 dark:text-brand-300" onClick={() => onUse(offer)}>
+      <button type="button" className="font-medium text-brand-300 underline underline-offset-4" onClick={() => onUse(offer)}>
         Use this
       </button>
     </p>
@@ -672,7 +663,7 @@ function Summary({ name, timezone, facts, priority, secondary, agents, postalCod
         {rows.map(([label, value]) => (
           <div key={label} className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-2">
             <dt className="text-muted-foreground">{label}</dt>
-            <dd className={cn("min-w-0 break-words", value ? "text-strong" : "text-muted-foreground/70")}>{value || "Not given yet"}</dd>
+            <dd className={cn("min-w-0 break-words", value ? "text-strong" : "text-muted-foreground italic")}>{value || "Not given yet"}</dd>
           </div>
         ))}
       </dl>

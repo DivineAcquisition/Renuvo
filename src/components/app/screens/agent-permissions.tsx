@@ -52,7 +52,7 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
   return (
     <li className="py-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
-        <span className="min-w-0 flex-1 text-sm text-strong">
+        <span className="min-w-0 flex-1 basis-full text-sm text-strong sm:basis-auto">
           <span id={`${id}-label`}>{action.label}</span>
           {action.ceiling === "propose" ? <span className="block text-xs text-muted-foreground">Always needs your approval.</span> : null}
           {spends ? (
@@ -62,7 +62,7 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
           ) : null}
         </span>
         {canEdit ? (
-          <span className="flex items-center gap-2">
+          <span className="flex w-full items-center gap-2 sm:w-auto">
             {saved && !busy && !error ? (
               <span role="status" className="text-xs text-success">
                 Saved
@@ -70,7 +70,7 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
             ) : null}
             <SelectInput
               aria-labelledby={`${id}-label`}
-              className="w-auto min-w-48 py-1.5"
+              className="w-full py-1.5 sm:w-auto sm:min-w-48"
               disabled={busy}
               value={pending ?? action.level}
               onChange={(event) => {

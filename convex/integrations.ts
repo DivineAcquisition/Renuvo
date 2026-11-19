@@ -15,11 +15,26 @@ import { BUILT, isIntegrationId } from "./lib/integrations";
 import { googleApp } from "./lib/recruiter/gmail";
 import { enabledFeatures, type Feature } from "./lib/google/features";
 import { activeConnections } from "./lib/google/connection";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
+import { jobberApp, jobberRedirect } from "./lib/connectors/jobber";
 import { secretsConfigured } from "./lib/recruiter/secrets";
 import { stripeState } from "./lib/finance/stripeState";
 
 export type LiveState = "connected" | "in_progress" | "ready" | "not_set_up";
+
+/** Jobber or Housecall Pro: connected, being checked, ended (connect again), or ready to connect. */
+async function connectorCard(ctx: { db: QueryCtx["db"]; companyId: Id<"companies"> }, system: "jobber" | "housecall_pro", available: boolean): Promise<{ state: LiveState; detail: string | null }> {
+  const row = await ctx.db
+    .query("connectorConnections")
+    .withIndex("by_company_system", (q) => q.eq("companyId", ctx.companyId).eq("system", system))
+    .order("desc")
+    .first();
+  if (row?.status === "connected") return { state: "connected", detail: row.account ?? null };
+  if (row?.status === "checking") return { state: "in_progress", detail: null };
+  if (row?.status === "expired") return { state: "in_progress", detail: "Reconnect needed" };
+  return { state: available ? "ready" : "not_set_up", detail: null };
+}
 
 export const overview = companyQuery({
   args: {},
@@ -76,6 +91,8 @@ export const overview = companyQuery({
         "google-business-profile": googleCard("business_profile", ["business_location"]),
         "google-ads": googleCard("ads", ["ads_account"]),
         "google-local-services-ads": googleCard("ads", ["ads_account"]),
+        jobber: await connectorCard(ctx, "jobber", jobberApp() !== null && jobberRedirect() !== null && (await secretsConfigured())),
+        "housecall-pro": await connectorCard(ctx, "housecall_pro", await secretsConfigured()),
         "texting-number": { state: textingState, detail: texting?.status === "active" ? (texting.phoneNumber ?? null) : null },
       },
       requested: requests.map((row) => ({ integrationId: row.integrationId, requestedAt: row.requestedAt })),

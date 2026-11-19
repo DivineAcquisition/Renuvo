@@ -240,6 +240,7 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 /** Company setup: a full-screen guided start for the Owner, outside the sidebar. Reached at company creation and from Home. */
 export const SETUP_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/setup`, label: "Set up your company", purpose: "The Owner confirms the company's details, chooses what Selestial helps with first, and opens the workspace." },
+  { path: `${APP_ROOT}/first-work`, label: "Your first work", purpose: "Where setup lands: what is prepared, what waits for a decision, what agents sent, and one next step." },
 ];
 
 /** Pages inside Sales that are not tabs: the booking and proposal workspace and its entry point. */

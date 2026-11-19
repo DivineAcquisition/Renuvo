@@ -61,7 +61,7 @@ export function AppShell({
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {assistant}
             {schedule ? (
-              <Link href={schedule} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
+              <Link href={schedule} aria-label="Schedule" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
                 <ScheduleIcon className="size-4" aria-hidden />
                 <span className="hidden sm:inline">Schedule</span>
               </Link>
@@ -69,6 +69,7 @@ export function AppShell({
             {approvals ? (
               <Link
                 href={approvals}
+                aria-label={`Approvals, ${decisionCount ?? 0} waiting`}
                 className={cn(
                   "inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500",
                   decisionCount ? "border-warning/60 bg-warning/10 text-warning-foreground" : "border-border bg-card text-strong hover:border-brand-500/50",

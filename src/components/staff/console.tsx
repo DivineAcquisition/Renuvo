@@ -58,6 +58,7 @@ const NAV = [
   { href: "/staff", label: "Requests" },
   { href: "/staff/trust", label: "Trust records" },
   { href: "/staff/companies", label: "Companies" },
+  { href: "/staff/setup", label: "Setup funnel" },
   { href: "/staff/texting", label: "Texting" },
   { href: "/staff/messaging", label: "Messaging money" },
   { href: "/staff/agent-requests", label: "Agent requests" },

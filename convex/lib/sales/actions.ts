@@ -175,6 +175,15 @@ export async function sendAction(ctx: MutationCtx, company: Doc<"companies">, op
     return { ok: false, detail: `Not sent. ${stale}` };
   }
   if (action.kind === "escalation") return { ok: false, detail: "This is a question for a person, not a message." };
+  // A person's approval is the authority for this one message, but only for something Sales may do at all:
+  // an action the Owner has since switched off, or one that is a person's decision, is not sent. (A pause is
+  // checked by the send itself, which holds the message instead of dropping it.)
+  const authority = await authorityFor(ctx, company._id, action.permission);
+  if (authority.kind === "person_only" || authority.kind === "unknown" || (authority.kind === "level" && authority.level === "off")) {
+    const why = authority.kind === "level" ? "This kind of message is switched off in Sales's permissions." : "This is a decision for a person, not something Sales may send.";
+    await retire(ctx, action, why);
+    return { ok: false, detail: `Not sent. ${why}` };
+  }
   const customer = await ctx.db.get(opportunity.customerId);
   if (!customer) return { ok: false, detail: "Not sent. The customer record no longer exists." };
   const first = firstNameOf(customer.name);

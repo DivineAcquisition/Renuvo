@@ -29,7 +29,7 @@ export type PriorityInfo = {
 
 export const PRIORITY_INFO: PriorityInfo[] = [
   { id: "sales", title: "Turn more inquiries into bookings", agent: "sales", first: "Start with Sales. We'll prepare your inquiry process and show which leads are ready for follow-up." },
-  { id: "dispatch", title: "Keep jobs covered and organized", agent: "dispatch", first: "Start with Dispatch. We'll check your upcoming jobs for missing coverage and ask cleaners for the hours you don't have." },
+  { id: "dispatch", title: "Keep jobs covered and organized", agent: "dispatch", first: "Start with Dispatch. We'll check your upcoming jobs for missing coverage and show who could cover them and which cleaners haven't given you their hours." },
   { id: "recruiter", title: "Find and onboard cleaners", agent: "recruiter", first: "Start with Recruiter. We'll prepare your hiring brief and what you screen for, ready to review applicants." },
   {
     id: "retention",

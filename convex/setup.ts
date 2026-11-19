@@ -14,9 +14,11 @@ import { companyQuery, ownerMutation } from "./lib/builders";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
 import { isOwner } from "./lib/roles";
-import { FACTS, factsOf, isFactKey, stateFact } from "./lib/setup/facts";
+import { CATEGORY_CHOICES, FACTS, factsOf, isFactKey, stateFact } from "./lib/setup/facts";
+import { checkedNeed } from "./hiringNeeds";
 import { progress, questionsFor, stepsFor, unanswered } from "./lib/setup/path";
 import { agentReadiness } from "./lib/setup/readiness";
+import { agentMessagesSince, firstDecisionAt, firstWork as firstWorkOf } from "./lib/setup/firstWork";
 import { factValueValidator, methodValidator, priorityValidator } from "./lib/setup/schema";
 import { businessSettingsOf } from "./lib/settings/business";
 import { text } from "./lib/text";
@@ -69,7 +71,7 @@ export const state = companyQuery({
           contextConfirmed: setup.milestones.contextConfirmedAt !== undefined,
         }
       : null;
-    const prepared = setup?.prepared ? await preparedView(ctx, ctx.companyId, setup.prepared) : { service: null, agreement: null, booking: null };
+    const prepared = setup?.prepared ? await preparedView(ctx, ctx.companyId, setup.prepared) : { service: null, agreement: null, booking: null, hiringBrief: null };
     return {
       prepared,
       /** Only an Owner who has not yet entered the workspace is taken to setup. Nobody else, ever. */
@@ -91,7 +93,8 @@ export const begin = ownerMutation({
     if (existing) return null;
     const id = await startSetup(ctx, ctx.companyId);
     // They are already working in the product, so setup is something they visit, not a gate.
-    await ctx.db.patch(id, { status: "entered", milestones: { startedAt: Date.now(), enteredAt: Date.now() } });
+    const now = Date.now();
+    await ctx.db.patch(id, { status: "entered", optedIn: true, milestones: { startedAt: now, enteredAt: now } });
     return null;
   },
 });
@@ -175,13 +178,26 @@ export const save = ownerMutation({
  * The owner opens the workspace. Setup stops being a gate from this moment and continues inside the
  * product. Nothing is switched on by this: every agent's authority stays exactly as it was.
  */
+/** "Your first work": what is prepared, waiting, started and still blocked, counted from records now. */
+export const firstWork = companyQuery({
+  args: {},
+  handler: async (ctx) => {
+    const setup = await setupOf(ctx, ctx.companyId);
+    if (!setup) return null;
+    return { ...(await firstWorkOf(ctx, ctx.company, setup)), canDecide: ctx.role === "owner" || ctx.role === "manager" };
+  },
+});
+
 export const enter = ownerMutation({
   args: {},
   handler: async (ctx) => {
     const setup = await setupOf(ctx, ctx.companyId);
     if (!setup || setup.status === "entered") return null;
     const now = Date.now();
-    await ctx.db.patch(setup._id, { status: "entered", milestones: { ...setup.milestones, enteredAt: now }, revision: setup.revision + 1, updatedAt: now });
+    // The first decision and the first action are recorded as they happened, if they did, from the records.
+    const reviewedAt = setup.milestones.firstReviewedAt ?? (await firstDecisionAt(ctx, ctx.companyId, setup.milestones.startedAt)) ?? undefined;
+    const actedAt = setup.milestones.firstActionAt ?? (await agentMessagesSince(ctx, ctx.companyId, setup.milestones.startedAt))[0]?.queuedAt;
+    await ctx.db.patch(setup._id, { status: "entered", milestones: { ...setup.milestones, enteredAt: now, ...(reviewedAt !== undefined ? { firstReviewedAt: reviewedAt } : {}), ...(actedAt !== undefined ? { firstActionAt: actedAt } : {}) }, revision: setup.revision + 1, updatedAt: now });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "setup.workspace_entered", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { priority: setup.priority ?? "none", contextConfirmed: setup.milestones.contextConfirmedAt !== undefined } });
     return null;
   },
@@ -197,6 +213,7 @@ async function preparedView(ctx: QueryCtx, companyId: Id<"companies">, prepared:
   const service = prepared.serviceId ? await ctx.db.get(prepared.serviceId) : null;
   const agreement = prepared.agreementId ? await ctx.db.get(prepared.agreementId) : null;
   const booking = prepared.experienceId ? await ctx.db.get(prepared.experienceId) : null;
+  const need = prepared.hiringNeedId ? await ctx.db.get(prepared.hiringNeedId) : null;
   const live = await ctx.db
     .query("services")
     .withIndex("by_company_status", (q) => q.eq("companyId", companyId).eq("status", "active"))
@@ -205,6 +222,7 @@ async function preparedView(ctx: QueryCtx, companyId: Id<"companies">, prepared:
     service: service ? { id: service._id, name: service.name, status: service.status, href: `/app/services/${service._id}` } : null,
     agreement: agreement ? { id: agreement._id, title: agreement.title, workflow: agreement.workflow, href: `/app/agreements/${agreement._id}` } : null,
     booking: booking ? { id: booking._id, name: booking.name, status: booking.status, href: `/app/agents/sales/booking-forms/${booking._id}`, canTakeBookings: live.length > 0 } : null,
+    hiringBrief: need ? { id: need._id, title: need.title, status: need.status, href: "/app/agents/recruiter/hiring-needs" } : null,
   };
 }
 
@@ -255,5 +273,41 @@ export const prepareBooking = ownerMutation({
     const experienceId = await createExperience(ctx, args.kind);
     await markPrepared(ctx, setup, { experienceId });
     return { experienceId, already: false };
+  },
+});
+
+/**
+ * Prepares a hiring brief from what setup knows (confirmed facts only). It is saved paused: it takes no
+ * applications and nobody is contacted until the Owner reviews it and opens it. Pay is left for the Owner
+ * to approve, as on any role.
+ */
+export const prepareHiringBrief = ownerMutation({
+  args: {},
+  handler: async (ctx) => {
+    const setup = await ownSetup(ctx);
+    if (setup.prepared?.hiringNeedId && (await ctx.db.get(setup.prepared.hiringNeedId))) return { needId: setup.prepared.hiringNeedId, already: true };
+    const confirmed = (await factsOf(ctx, ctx.companyId)).filter((fact) => fact.state === "confirmed");
+    const value = (key: string) => confirmed.find((fact) => fact.key === key)?.value;
+    const list = (key: string) => {
+      const found = value(key);
+      return Array.isArray(found) ? found : typeof found === "string" && found ? [found] : [];
+    };
+    const categories = list("services.categories");
+    const arrangement = list("workforce.arrangement");
+    const location = typeof value("company.location") === "string" && value("company.location") ? (value("company.location") as string) : "To be confirmed";
+    const kinds = categories.map((c) => CATEGORY_CHOICES.find((choice) => choice.value === c)?.label.toLowerCase()).filter(Boolean);
+    const brief = checkedNeed({
+      title: categories.length === 1 && categories[0] === "commercial" ? "Commercial cleaner" : "Cleaner",
+      responsibilities: `Clean ${kinds.length ? kinds.join(", ") : "clients' homes and businesses"} for ${ctx.company.name}, following each visit's checklist and leaving every place ready for the client.`,
+      serviceTypes: categories,
+      location,
+      requiredAvailability: "To be confirmed: the days and hours you need covered.",
+      engagement: arrangement.includes("contractors") && !arrangement.includes("employees") ? "contractor" : "employee",
+      openings: 1,
+    });
+    const needId = await ctx.db.insert("hiringNeeds", { companyId: ctx.companyId, ...brief, status: "paused", createdBy: ctx.member._id, createdAt: Date.now() });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "hiring_need.prepared", actor: byMember(ctx), subject: { table: "hiringNeeds", id: needId } });
+    await markPrepared(ctx, setup, { hiringNeedId: needId });
+    return { needId, already: false };
   },
 });
