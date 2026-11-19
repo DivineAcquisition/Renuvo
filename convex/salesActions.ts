@@ -10,6 +10,7 @@ import { companyQuery, managerMutation, ownerMutation } from "./lib/builders";
 import { normalAddress } from "./lib/compliance/recipients";
 import { userError } from "./lib/errors";
 import { byMember, recordEvent } from "./lib/events";
+import { batchPreview, batchRefusal, type BatchItem } from "./lib/messagingBilling/batch";
 import { batchActions, decideAction, staleReason, syncBatchTask } from "./lib/sales/actions";
 import { view } from "./lib/sales/agentOpportunity";
 import { quotePer, quoteService, quoteTotal } from "./lib/sales/agentQuotes";
@@ -47,6 +48,25 @@ async function reviewItem(ctx: Ctx, action: Doc<"salesActions">) {
   };
 }
 
+/** A link in a message is about this long once it is filled in; the estimate counts it. */
+const LINK_STAND_IN = "https://app.selestial.com/q/xxxxxxxxxxxxxxxxxxxxxxxx";
+
+/** The batch preview's view of a Sales draft: to whom, on which channel, the words as they will go, and why it can't go if it can't. */
+async function batchItem(ctx: Ctx, action: Doc<"salesActions">, body: string | undefined, stale: string | null): Promise<BatchItem> {
+  const customer = await ctx.db.get(action.customerId);
+  const channel = action.channel ?? "sms";
+  return {
+    key: action._id,
+    name: customer?.name ?? "A prospect",
+    channel,
+    to: action.channel ? normalAddress(channel, channel === "email" ? customer?.email : customer?.phone) : null,
+    body: (body ?? action.body ?? "").replace("{link}", LINK_STAND_IN),
+    intent: { category: "operational", origin: "agent", agent: "sales", recipient: { kind: "customer", id: action.customerId } },
+    excluded: !action.channel || !(body ?? action.body) ? "Nothing to send: this step has no message." : stale,
+    agent: true,
+  };
+}
+
 /** Everything Sales has waiting on a person: the first batch if it has not been decided, and each draft on its own after that. */
 export const waiting = companyQuery({
   args: {},
@@ -66,8 +86,10 @@ export const waiting = companyQuery({
         .take(60);
       pending.push(...rows.filter((row) => row.batchId === undefined || row.batchId !== batch?._id));
     }
+    const reviewed = await Promise.all(batchItems.map((row) => reviewItem(ctx, row)));
+    const preview = settings.firstBatchDecidedAt === null && batchItems.length ? await batchPreview(ctx, ctx.companyId, await Promise.all(batchItems.map((row, i) => batchItem(ctx, row, undefined, reviewed[i].stale)))) : null;
     return {
-      firstBatch: settings.firstBatchDecidedAt === null ? { decided: false as const, batchId: batch?._id ?? null, items: await Promise.all(batchItems.map((row) => reviewItem(ctx, row))) } : { decided: true as const, at: settings.firstBatchDecidedAt },
+      firstBatch: settings.firstBatchDecidedAt === null ? { decided: false as const, batchId: batch?._id ?? null, items: reviewed, messaging: preview && ctx.role === "owner" ? publicPreview(preview) : null } : { decided: true as const, at: settings.firstBatchDecidedAt },
       pending: await Promise.all(pending.sort((a, b) => b.createdAt - a.createdAt).map((row) => reviewItem(ctx, row))),
       canDecide: ctx.role !== "office",
       ownerOnlyBatch: ctx.role !== "owner",
@@ -102,15 +124,24 @@ export const decideBatch = ownerMutation({
     if (args.items.length > 100) throw userError("Decide up to 100 at a time.");
     const waiting = (await batchActions(ctx, batch)).filter((row) => row.status === "prepared");
     const chosen = new Map(args.items.map((item) => [item.actionId as string, item]));
+    // Over the Owner's batch limit, nothing is sent: the Owner chooses fewer or raises the limit.
+    const toSend = waiting.filter((action) => chosen.get(action._id)?.decision === "send");
+    const preview = await batchPreview(ctx, ctx.companyId, await Promise.all(toSend.map((action) => batchItem(ctx, action, chosen.get(action._id)?.body, null))));
+    const refusal = batchRefusal(preview);
+    if (refusal) throw userError(refusal);
+    // What the preview said can't be sent is set aside with its reason, so the count matches what the Owner saw.
+    const cannot = new Map(preview.excluded.map((row) => [row.key, row.why]));
     const results: { actionId: string; ok: boolean; detail: string }[] = [];
     let sent = 0;
     let skipped = 0;
     for (const action of waiting) {
       const item = chosen.get(action._id);
       // Anything not named is set aside: nothing goes out that the Owner did not look at.
-      const outcome = await decideAction(ctx, ctx.company, action, ctx.member, item?.decision === "send" ? { kind: "send", body: item.body } : { kind: "skip", note: item ? undefined : "Not chosen in the first review." });
+      const why = cannot.get(action._id);
+      const outcome = await decideAction(ctx, ctx.company, action, ctx.member, item?.decision === "send" && !why ? { kind: "send", body: item.body } : { kind: "skip", note: why ?? (item ? undefined : "Not chosen in the first review.") });
       results.push({ actionId: action._id, ok: outcome.ok, detail: outcome.detail });
-      if (item?.decision === "send" && outcome.ok) sent += 1;
+      if (why) results[results.length - 1] = { actionId: action._id, ok: false, detail: `Not sent: ${why}` };
+      if (item?.decision === "send" && !why && outcome.ok) sent += 1;
       else skipped += 1;
     }
     const now = Date.now();
@@ -121,3 +152,22 @@ export const decideBatch = ownerMutation({
     return { results, sent, skipped };
   },
 });
+
+/** What the page shows about a batch's messaging: no addresses, only names, counts, money and reasons. */
+function publicPreview(preview: Awaited<ReturnType<typeof batchPreview>>) {
+  return {
+    words: preview.words,
+    problem: preview.problem,
+    eligible: preview.eligible.length,
+    total: preview.total,
+    excluded: preview.excluded.map((row) => ({ name: row.name, why: row.why })),
+    segments: preview.segments,
+    emails: preview.emails,
+    cost: preview.cost,
+    balance: preview.balance,
+    covered: preview.covered,
+    overLimit: preview.overLimit,
+    metering: preview.metering,
+    aiCredits: preview.aiCredits,
+  };
+}
