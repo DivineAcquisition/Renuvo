@@ -131,16 +131,16 @@ describe("agent first work in setup", () => {
     expect(work.sales.work!.result!.items.map((item) => item.detail)).toEqual(["A follow-up was due 2 days ago.", "No next step is set."]);
   });
 
-  it("prepares a hiring brief once, paused, from what the owner confirmed, and Recruiter then points at opening it", async () => {
+  it("prepares a hiring brief once, as a draft, from what the owner confirmed, and Recruiter then points at opening it", async () => {
     const { as, companyId } = await onPlan(t);
     const setup = (await as.query(api.setup.state, { companyId })).setup!;
     await as.mutation(api.setup.save, { companyId, expectedRevision: setup.revision, step: setup.step, facts: { "services.categories": ["commercial"], "workforce.arrangement": ["contractors"], "company.location": "Austin, TX" } });
     const first = await as.mutation(api.setup.prepareHiringBrief, { companyId });
     expect(await as.mutation(api.setup.prepareHiringBrief, { companyId })).toEqual({ needId: first.needId, already: true });
     const need = await t.run(async (ctx) => ctx.db.get(first.needId));
-    expect(need).toMatchObject({ status: "paused", title: "Commercial cleaner", engagement: "contractor", location: "Austin, TX", serviceTypes: ["commercial"], openings: 1 });
+    expect(need).toMatchObject({ status: "draft", title: "Commercial cleaner", engagement: "contractor", location: "Austin, TX", serviceTypes: ["commercial"], openings: 1 });
     expect(need!.compensation).toBeUndefined();
-    expect((await as.query(api.setup.state, { companyId }))!.prepared.hiringBrief).toMatchObject({ status: "paused", title: "Commercial cleaner" });
+    expect((await as.query(api.setup.state, { companyId }))!.prepared.hiringBrief).toMatchObject({ status: "draft", title: "Commercial cleaner" });
 
     const work = await prepareAll(t, as, companyId, "recruiter");
     expect(work.recruiter.work).toMatchObject({ status: "ready_for_review", result: { counts: { needs: 1, open: 0 }, next: { words: "Review the brief and open it when you're ready to hire" } } });

@@ -4,7 +4,7 @@
  * records hold right now, so every number on the screen is backed by a record.
  *
  * Sales     open inquiries, follow-ups that are due, replies waiting for review, and whether Sales can quote.
- * Recruiter the hiring brief (prepared separately, paused until the Owner opens it) and applications waiting.
+ * Recruiter the hiring brief (prepared separately as a draft until the Owner opens it) and applications waiting.
  * Dispatch  upcoming visits short of people, who could cover them (a proposal: no offer is sent), and who
  *           has no weekly hours.
  * Retention clients whose last visit was a while ago with nothing booked, open concerns and Retention's own
@@ -115,7 +115,7 @@ export async function salesWork(ctx: QueryCtx, company: Doc<"companies">, readin
 
 export async function recruiterWork(ctx: QueryCtx, company: Doc<"companies">, readiness: AgentReadiness | undefined): Promise<WorkOutcome> {
   const needs: Doc<"hiringNeeds">[] = [];
-  for (const status of ["open", "paused"] as const) {
+  for (const status of ["open", "paused", "draft"] as const) {
     needs.push(
       ...(await ctx.db
         .query("hiringNeeds")
@@ -140,7 +140,7 @@ export async function recruiterWork(ctx: QueryCtx, company: Doc<"companies">, re
 
   const items = needs.slice(0, 5).map((need) => ({
     label: need.title,
-    detail: need.status === "open" ? "Open: taking applications." : "Paused: a brief that isn't taking applications yet.",
+    detail: need.status === "open" ? "Open: taking applications." : need.status === "draft" ? "Draft: a brief that isn't published or taking applications yet." : "Paused: not taking applications.",
     href: "/app/agents/recruiter/hiring-needs",
   }));
   const uncertain = gapsOf(readiness);

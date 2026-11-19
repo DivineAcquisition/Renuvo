@@ -33,7 +33,7 @@ Inspected on `main` at `2cbf867`.
   setup does not write them.
 - **Readiness** is read from the record (`lib/setup/readiness.ts`): built, plan, paused, connection,
   information, in that order. Finishing setup makes no agent ready.
-- **Nothing is switched on.** Entering the workspace changes no permission.
+- **Nothing is switched on by entering.** Entering the workspace changes no permission and starts no work. Only "Start my agents" (or "Start my first agent tasks" on Home) starts the reviewed batch, within the permissions already set (01-activation.md).
 
 ## Phases
 
@@ -45,6 +45,7 @@ Inspected on `main` at `2cbf867`.
 | 3 | First work per built agent, with prerequisite checks | Built |
 | 4 | Exact-action review, authority, safe execution, "Your first work" | Built |
 | 5 | Accessibility, recovery, invited users, existing companies, funnel measurement | Built |
+| Activation | "Start my agents": durable background first work, real drafts, Home progress, in-app and email notices | Built (01-activation.md) |
 
 ## Decisions made by the Owner (November 18)
 

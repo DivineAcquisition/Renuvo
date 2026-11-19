@@ -186,6 +186,11 @@ export const salesSettingsValidator = v.object({
   eligibility: v.optional(v.object({ kinds: v.array(serviceKindValidator), textInquiries: v.boolean(), commercialNeedsWalkthrough: v.boolean() })),
   /** Answers the Owner approved for common questions and objections. The agent answers only from these and the service catalog. */
   answers: v.optional(v.array(v.object({ id: v.string(), topic: v.string(), question: v.string(), answer: v.string() }))),
+  /**
+   * Answers Selestial proposed from what the Owner confirmed (activation). Sales never uses one: each
+   * becomes an approved answer only when the Owner approves it, as written or edited.
+   */
+  proposedAnswers: v.optional(v.array(v.object({ id: v.string(), topic: v.string(), question: v.string(), answer: v.string(), basis: v.string(), proposedAt: v.number() }))),
   /** Hours after the last message before each reminder. The list's length is the most reminders sent. */
   followUp: v.optional(v.object({ missingInfoHours: v.array(v.number()), quoteHours: v.array(v.number()), bookingHours: v.array(v.number()) })),
   /** The most the agent may take off a quote without asking, as a percent of the cleaning amount. 0: never. */

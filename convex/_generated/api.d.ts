@@ -8,11 +8,12 @@
  * @module
  */
 
+import type * as activation from "../activation.js";
+import type * as agentAccess from "../agentAccess.js";
 import type * as agreementFiles from "../agreementFiles.js";
 import type * as agreementRenewals from "../agreementRenewals.js";
 import type * as agreementSigning from "../agreementSigning.js";
 import type * as agreementTemplates from "../agreementTemplates.js";
-import type * as agentAccess from "../agentAccess.js";
 import type * as agreements from "../agreements.js";
 import type * as ai from "../ai.js";
 import type * as aiAdmin from "../aiAdmin.js";
@@ -89,7 +90,11 @@ import type * as invitations from "../invitations.js";
 import type * as jobs from "../jobs.js";
 import type * as knowledge from "../knowledge.js";
 import type * as lib_access from "../lib/access.js";
-import type * as lib_agentAccess_schema from "../lib/agentAccess/schema.js";
+import type * as lib_activation_notices from "../lib/activation/notices.js";
+import type * as lib_activation_plan from "../lib/activation/plan.js";
+import type * as lib_activation_snapshot from "../lib/activation/snapshot.js";
+import type * as lib_activation_wake from "../lib/activation/wake.js";
+import type * as lib_activation_work from "../lib/activation/work.js";
 import type * as lib_agreements_access from "../lib/agreements/access.js";
 import type * as lib_agreements_agents from "../lib/agreements/agents.js";
 import type * as lib_agreements_catalog from "../lib/agreements/catalog.js";
@@ -288,6 +293,7 @@ import type * as lib_messaging_provider from "../lib/messaging/provider.js";
 import type * as lib_messaging_resend from "../lib/messaging/resend.js";
 import type * as lib_messaging_telnyx from "../lib/messaging/telnyx.js";
 import type * as lib_messaging_telnyxAccount from "../lib/messaging/telnyxAccount.js";
+import type * as lib_messagingBilling_batch from "../lib/messagingBilling/batch.js";
 import type * as lib_messagingBilling_classify from "../lib/messagingBilling/classify.js";
 import type * as lib_messagingBilling_ledger from "../lib/messagingBilling/ledger.js";
 import type * as lib_messagingBilling_money from "../lib/messagingBilling/money.js";
@@ -488,11 +494,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activation: typeof activation;
+  agentAccess: typeof agentAccess;
   agreementFiles: typeof agreementFiles;
   agreementRenewals: typeof agreementRenewals;
   agreementSigning: typeof agreementSigning;
   agreementTemplates: typeof agreementTemplates;
-  agentAccess: typeof agentAccess;
   agreements: typeof agreements;
   ai: typeof ai;
   aiAdmin: typeof aiAdmin;
@@ -569,7 +576,11 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   knowledge: typeof knowledge;
   "lib/access": typeof lib_access;
-  "lib/agentAccess/schema": typeof lib_agentAccess_schema;
+  "lib/activation/notices": typeof lib_activation_notices;
+  "lib/activation/plan": typeof lib_activation_plan;
+  "lib/activation/snapshot": typeof lib_activation_snapshot;
+  "lib/activation/wake": typeof lib_activation_wake;
+  "lib/activation/work": typeof lib_activation_work;
   "lib/agreements/access": typeof lib_agreements_access;
   "lib/agreements/agents": typeof lib_agreements_agents;
   "lib/agreements/catalog": typeof lib_agreements_catalog;
@@ -768,6 +779,7 @@ declare const fullApi: ApiFromModules<{
   "lib/messaging/resend": typeof lib_messaging_resend;
   "lib/messaging/telnyx": typeof lib_messaging_telnyx;
   "lib/messaging/telnyxAccount": typeof lib_messaging_telnyxAccount;
+  "lib/messagingBilling/batch": typeof lib_messagingBilling_batch;
   "lib/messagingBilling/classify": typeof lib_messagingBilling_classify;
   "lib/messagingBilling/ledger": typeof lib_messagingBilling_ledger;
   "lib/messagingBilling/money": typeof lib_messagingBilling_money;

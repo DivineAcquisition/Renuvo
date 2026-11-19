@@ -86,4 +86,8 @@ crons.interval("retention reconciles and follows through", { minutes: 10 }, inte
 // Only inboxes connected for Care & Retention, and only where the Owner turned reading on.
 crons.interval("retention reads customer replies in care inboxes", { minutes: 10 }, internal.retentionInbox.sweep, {});
 
+// Activation: steps whose worker never reported back are retried or failed, running batches get their next
+// tick, and blocked first work is checked again. Each step is re-checked before it runs; nothing runs twice.
+crons.interval("activation recovers and resumes first work", { minutes: 5 }, internal.activation.sweep, {});
+
 export default crons;

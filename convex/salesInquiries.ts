@@ -38,7 +38,7 @@ import { salesReaderName } from "./lib/sales/model";
 import { canReach, ownMailbox } from "./lib/sales/outbox";
 import { emailRepliesConfigured } from "./lib/sales/replyAddress";
 import { activeRun, enqueueRun } from "./lib/sales/runs";
-import { normalizeSales, salesSettings } from "./lib/sales/settings";
+import { LIMITS, normalizeSales, salesSettings } from "./lib/sales/settings";
 import { publishedCatalog } from "./lib/services/store";
 import { optionalText, text } from "./lib/text";
 
@@ -546,6 +546,31 @@ export const savePlaybook = ownerMutation({
     await ctx.db.patch(ctx.companyId, { sales: next });
     await recordEvent(ctx, { companyId: ctx.companyId, type: "sales.playbook_changed", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { revision: next.revision ?? 0 } });
     return { revision: next.revision ?? 0 };
+  },
+});
+
+/**
+ * The Owner decides one proposed answer: approve it (as written, or as they edited it) and Sales may use
+ * it from now on; or discard it. Nothing else in the Playbook changes.
+ */
+export const decideProposedAnswer = ownerMutation({
+  args: { id: v.string(), decision: v.union(v.literal("approve"), v.literal("discard")), question: v.optional(v.string()), answer: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const current = salesSettings(ctx.company);
+    const proposal = current.proposedAnswers.find((row) => row.id === args.id);
+    if (!proposal) throw userError("That proposed answer was already decided.");
+    const stored = ctx.company.sales ?? {};
+    const proposedAnswers = current.proposedAnswers.filter((row) => row.id !== args.id);
+    let answers = current.answers;
+    if (args.decision === "approve") {
+      if (answers.length >= LIMITS.answers) throw userError(`Keep it to ${LIMITS.answers} approved answers. Remove one first.`);
+      const id = `a${Date.now().toString(36)}`;
+      answers = [...answers, { id, topic: proposal.topic, question: text(args.question ?? proposal.question, "The question", 300), answer: text(args.answer ?? proposal.answer, "The answer", 1200) }];
+    }
+    const revision = current.revision + 1;
+    await ctx.db.patch(ctx.companyId, { sales: { ...stored, answers, proposedAnswers, revision } });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "sales.playbook_changed", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { revision, proposal: args.decision } });
+    return { revision };
   },
 });
 

@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
 import { Field, messageOf, TextInput } from "@/components/app/form";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, CircleHelp, Globe, Info, PenLine, Plug, Sparkles } from "@/components/icons";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, CircleHelp, Globe, Info, PenLine, Plug, Rocket, Sparkles } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,6 +27,7 @@ import { AgentWork } from "./work";
 import { BeforeStart } from "./review";
 
 const FIRST_WORK_PATH = "/app/first-work";
+import { ActivationReview } from "@/components/app/activation/review";
 import { ClientImport } from "./import";
 import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
@@ -164,6 +165,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   const startRead = useMutation(api.setupWebsite.start);
   const [useFound, setUseFound] = useState<string[]>([]);
   const enter = useMutation(api.setup.enter);
+  const startAgents = useMutation(api.activation.start);
 
   const [revision, setRevision] = useState(setup.revision);
   // A link can open a step directly (Integrations links to "records"); otherwise setup resumes where it was.
@@ -253,6 +255,22 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
     if (confirmContext && !(await go("review", { confirmContext: true }))) return;
     await enter({ companyId });
     router.push(FIRST_WORK_PATH);
+  }
+
+  /**
+   * The Owner starts the work shown on the review step. The server plans and runs it in the background, so
+   * leaving the page right after is fine; pressing it twice starts one batch. Save and exit never does this.
+   */
+  async function startMyAgents() {
+    if (!(await go("review", { confirmContext: true }))) return;
+    setState("saving");
+    try {
+      await startAgents({ companyId, source: "setup" });
+      router.push(`${LANDING_PATH}#agents-working`);
+    } catch (caught) {
+      setState("failed");
+      setError(messageOf(caught));
+    }
   }
 
   const summary = <Summary name={name} timezone={timezone} facts={facts} priority={priority} secondary={secondary} agents={view.agents} postalCodes={view.company.postalCodes} />;
@@ -546,7 +564,12 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                   ))}
                 </div>
                 <BeforeStart agent={info?.agent ?? null} canEdit={view.canEdit} />
-                <Why>Opening your workspace switches nothing on. Your team starts on review: nothing reaches a customer, an applicant or a cleaner until you approve it.</Why>
+                <div className="grid gap-1 border-t border-border pt-4">
+                  <h2 className="font-display text-lg font-semibold text-strong">What Selestial will start</h2>
+                  <p className="text-sm text-muted-foreground">Selestial will begin the work shown below. You can leave this page—we’ll notify you when results are ready.</p>
+                </div>
+                <ActivationReview focus={priority} secondary={secondary} />
+                <Why>Save and exit opens your workspace without starting anything, and switches nothing on. Starting your agents runs only the work above, within the permissions you set.</Why>
               </>
             ) : null}
 
@@ -605,10 +628,15 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
               <ArrowRight aria-hidden />
             </Button>
           ) : (
-            <Button variant="primary" size="lg" onClick={() => void openWorkspace(true)} disabled={state === "saving"} loading={state === "saving"}>
-              This is right. Open my workspace
-              <ArrowRight aria-hidden />
-            </Button>
+            <>
+              <Button variant="outline" size="lg" onClick={() => void openWorkspace(true)} disabled={state === "saving"}>
+                Save and exit
+              </Button>
+              <Button variant="primary" size="lg" onClick={() => void startMyAgents()} disabled={state === "saving" || !priority} loading={state === "saving"}>
+                <Rocket aria-hidden />
+                Start my agents
+              </Button>
+            </>
           )}
         </div>
       </footer>

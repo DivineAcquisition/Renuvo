@@ -28,6 +28,7 @@ import { businessSettingsValidator, serviceSnapshotValidator } from "./lib/setti
 import { salesSettingsValidator } from "./lib/sales/agentSchema";
 import { salesTables } from "./lib/sales/schema";
 import { setupTables } from "./lib/setup/schema";
+import { activationTables } from "./lib/activation/schema";
 import { connectorTables } from "./lib/connectors/schema";
 import { retentionSettingsValidator, retentionTables } from "./lib/retention/schema";
 import { servicesTables } from "./lib/services/schema";
@@ -1000,6 +1001,8 @@ export default defineSchema({
   ...salesTables,
   ...notifyTables,
   ...setupTables,
+  // ── Activation: the first batch of agent work an Owner starts, and the in-app notification inbox ──
+  ...activationTables,
   // ── Retention: signals, cases, actions, feedback and customer links (convex/lib/retention/schema.ts) ─
   ...retentionTables,
 

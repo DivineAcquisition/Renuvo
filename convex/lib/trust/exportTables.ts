@@ -78,6 +78,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "websiteReads", index: "by_company_started" },
   { table: "clientImportRuns", index: "by_company_key" },
   { table: "importedRecords", index: "by_company_source_external" },
+  // Activation: the first agent work an Owner started, and the in-app notices (convex/lib/activation/schema.ts).
+  { table: "activations", index: "by_company_started" },
+  { table: "activationTasks", index: "by_company_state" },
+  { table: "memberNotices", index: "by_company_dedupe" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
   { table: "chatActionSteps", index: "by_company_key" },
