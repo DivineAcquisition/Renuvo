@@ -94,6 +94,11 @@ export function SetupProvider({ view, companyId, initialStep, onConflict, childr
   return <SetupContext.Provider value={{ view, companyId, step, go, commit, run, saving, error, clearError: () => setError(null), locked: !view.editable }}>{children}</SetupContext.Provider>;
 }
 
+/** "AUSTIN" as "Austin": Telnyx sends place names in capitals. */
+export function placeName(value: string | null | undefined): string {
+  return (value ?? "").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /** "+15125550142" as "(512) 555-0142". */
 export function formatPhone(value: string | null | undefined): string {
   const digits = (value ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");

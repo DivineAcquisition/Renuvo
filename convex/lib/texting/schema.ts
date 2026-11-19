@@ -158,7 +158,9 @@ export const textingTables = {
     authorization: v.optional(v.object({ wording: v.string(), pricesVersion: v.string(), at: v.number(), by: v.id("members") })),
     submittedAt: v.number(),
     submittedBy: v.id("members"),
-  }).index("by_request_version", ["requestId", "version"]),
+  })
+    .index("by_request_version", ["requestId", "version"])
+    .index("by_company_submitted", ["companyId", "submittedAt"]),
 
   /** Telnyx 10DLC callbacks whose signature checked out, once each. A callback is a hint: status is always read back from Telnyx. */
   telnyxEvents: defineTable({

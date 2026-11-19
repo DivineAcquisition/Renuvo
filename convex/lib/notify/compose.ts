@@ -363,12 +363,51 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
     case "retention_attention":
     case "retention_outcome":
       return retentionCase(ctx, company, notice.event, notice.ref, facts, c);
+    case "texting_progress":
+    case "texting_attention":
+      return textingNotice(ctx, company, notice.ref, facts, c);
     case "weekly_digest": {
       const weekStart = num(facts, "weekStart");
       if (weekStart === null) return { problem: "The notice didn't say which week it was for." };
       return weeklyDigestEmail({ ...c, memberName: member.name, ...(await weeklyDigestData(ctx, company, member, weekStart)) });
     }
   }
+}
+
+/**
+ * A business texting moment, read from the request as it is now: a notice whose moment has passed (the
+ * owner already sent the correction, texting is ready again) sends nothing.
+ */
+async function textingNotice(ctx: MutationCtx, company: Doc<"companies">, ref: string | undefined, facts: NoticeFacts | undefined, c: Context): Promise<Built> {
+  const id = ref ? ctx.db.normalizeId("textingRequests", ref) : null;
+  const row = id ? await ctx.db.get(id) : null;
+  if (!row || row.companyId !== company._id) return { problem: "The texting request no longer exists." };
+  const kind = str(facts, "kind");
+  const number = row.phoneNumber.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
+  const base = { ...c, eyebrow: "Business texting", essential: true, because: "you're the Owner, and business texting is part of your account" };
+  const open = (step: string, label: string) => ({ label, path: `/app/texting?step=${step}` });
+  switch (kind) {
+    case "requested":
+    case "resubmitted":
+      if (row.status !== "requested") return { problem: "Selestial already acted on the request." };
+      return alertEmail({ ...base, tone: "info", subject: kind === "resubmitted" ? "Your corrected texting details are with Selestial" : "Selestial received your texting setup", heading: kind === "resubmitted" ? "We have your corrections" : "We have your texting setup", body: "A person at Selestial checks it first. Nothing is filed with the carriers or charged until it's approved. We'll email you when something needs you.", button: open("progress", "See where it stands") });
+    case "needs_you": {
+      if (row.status !== "needs_you" || !row.needs) return { problem: "Nothing needs the Owner any more." };
+      const title = row.needs.kind === "code" ? "Confirm it's you" : row.needs.kind === "number" ? "Choose another texting number" : "A change is needed for business texting";
+      const step = row.needs.kind === "number" ? "number" : row.needs.kind === "code" ? "progress" : row.needs.fields.length ? "business" : "permission";
+      return alertEmail({ ...base, tone: "warning", subject: title, heading: title, body: row.needs.words, note: row.needs.kind === "correction" ? "Everything you filled in is kept. Only what's asked needs changing." : null, button: open(step, row.needs.kind === "code" ? "Enter the code" : "Make the change") });
+    }
+    case "campaign_approved":
+      if (row.status === "active" || row.campaignApprovedAt === undefined) return { problem: "Texting is already ready, or approval was withdrawn." };
+      return alertEmail({ ...base, tone: "info", subject: "The carriers approved your texting registration", heading: "Approved. Your number is being connected", body: "The carriers approved how your business will text. Your number is being bought and connected now, which can take a few business days. Texts wait until it's done, and we'll email you when your agents can start.", button: open("progress", "See where it stands") });
+    case "active":
+      if (row.status !== "active") return { problem: "Texting isn't ready any more." };
+      return alertEmail({ ...base, tone: "info", subject: `Business texting is ready on ${number}`, heading: "Your business can text", body: `Texts now go out from ${number}, under your own registration. Your agents can send the kinds of texts you registered, to people who agreed to them.`, facts: [{ label: "Number", value: number }], button: open("progress", "See what your agents can send") });
+    case "interrupted":
+      if (row.status !== "interrupted") return { problem: "Texting is running again." };
+      return alertEmail({ ...base, tone: "danger", subject: "Business texting is paused", heading: "The carriers paused your texting", body: "Texts from your number are on hold. Selestial is looking into it with the carriers and will tell you if anything is needed from you. Nothing is sent while it's paused.", button: open("progress", "See what's happening") });
+  }
+  return { problem: "This texting notice is out of date." };
 }
 
 /** The notice as it should go now, or why it shouldn't. */

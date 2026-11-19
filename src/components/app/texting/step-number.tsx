@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { formatPhone, useSetup } from "./context";
+import { formatPhone, placeName, useSetup } from "./context";
 import { Note, Section, StepHeading } from "./parts";
 
 export function NumberStep() {
@@ -51,8 +51,8 @@ export function NumberStep() {
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-500 bg-brand-500/5 px-4 py-3">
           <Phone className="size-5 text-brand-300" aria-hidden />
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-semibold tracking-tight text-strong tabular-nums">{formatPhone(chosen.phoneNumber)}</p>
-            <p className="text-xs text-muted-foreground">{[chosen.locality, chosen.region].filter(Boolean).join(", ") || "United States"} · your choice</p>
+            <p className="text-lg font-semibold tracking-tight whitespace-nowrap text-strong tabular-nums">{formatPhone(chosen.phoneNumber)}</p>
+            <p className="text-xs text-muted-foreground">{[placeName(chosen.locality), chosen.region].filter(Boolean).join(", ") || "United States"} · your choice</p>
           </div>
           <Capabilities sms={chosen.sms} mms={chosen.mms} voice={chosen.voice} />
         </div>
@@ -111,7 +111,7 @@ export function NumberStep() {
                           <span className="text-base font-semibold text-strong tabular-nums">{formatPhone(row.phoneNumber)}</span>
                           {selected ? <Check className="size-4 text-brand-300" aria-label="Chosen" /> : null}
                         </span>
-                        <span className="text-xs text-muted-foreground">{[row.locality, row.region].filter(Boolean).join(", ") || "United States"}</span>
+                        <span className="text-xs text-muted-foreground">{[placeName(row.locality), row.region].filter(Boolean).join(", ") || "United States"}</span>
                         <span className="flex flex-wrap items-center justify-between gap-2">
                           <Capabilities sms={features.includes("sms")} mms={features.includes("mms")} voice={features.includes("voice")} />
                           <span className="text-xs font-medium text-strong">{monthly}</span>

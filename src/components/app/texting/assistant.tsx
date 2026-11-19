@@ -5,7 +5,7 @@
  * what this step still needs, and a live preview of what people will see. Nothing here is a promise.
  */
 import { ACTIVITIES_BY_KEY } from "./catalog";
-import { formatPhone, useSetup } from "./context";
+import { formatPhone, placeName, useSetup } from "./context";
 import { Bubble, Needs } from "./parts";
 
 const when = (at: number) => new Date(at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -25,8 +25,8 @@ export function Assistant() {
         </section>
       ) : null}
 
-      <section className="grid gap-2" aria-label="Preview">
-        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Preview</h3>
+      <section className="grid gap-2" aria-label={step === "review" ? "What it costs" : step === "progress" ? "What happens next" : "Preview"}>
+        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{step === "review" ? "What it costs" : step === "progress" ? "What happens next" : "Preview"}</h3>
         <Preview name={name} />
       </section>
 
@@ -104,7 +104,7 @@ function Preview({ name }: { name: string }) {
     return number ? (
       <div className="rounded-xl border border-border p-3">
         <p className="text-lg font-semibold tracking-tight text-strong tabular-nums">{formatPhone(number.phoneNumber)}</p>
-        <p className="text-xs text-muted-foreground">{[number.locality, number.region].filter(Boolean).join(", ")}</p>
+        <p className="text-xs text-muted-foreground">{[placeName(number.locality), number.region].filter(Boolean).join(", ")}</p>
         <p className="mt-1 text-xs text-muted-foreground">Not held yet. Checked again right before it&apos;s bought.</p>
       </div>
     ) : (

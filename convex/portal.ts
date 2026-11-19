@@ -7,6 +7,7 @@
  * What is never here: anyone else's details, internal notes, the reasons a requirement was waived, pay
  * without a code, or a job's address once that job is no longer theirs.
  */
+import { cleanerTextWording } from "./lib/texting/wording";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -240,7 +241,7 @@ export const confirmContact = portalMutation({
         category: "operational",
         status: "granted",
         source: "onboarding",
-        disclosureText: `I agree to receive texts from ${ctx.company.name} about my work: offers, schedules, reminders and onboarding. Message frequency varies. Reply STOP to opt out, HELP for help.`,
+        disclosureText: cleanerTextWording(ctx.company.name),
         evidence: "Given by the cleaner in their portal.",
         recordedBy: { kind: "recipient" },
         at: Date.now(),

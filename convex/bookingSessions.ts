@@ -28,6 +28,8 @@ import { recordEvent } from "./lib/events";
 import { stripeConfig } from "./lib/finance/stripe";
 import { liveTaskByKey, openTask } from "./lib/taskState";
 import { normalizePostalCode } from "./lib/settings/business";
+import { settingsRow } from "./lib/booking/settings";
+import { textConsentFor } from "./lib/texting/pages";
 import { email as checkedEmail } from "./lib/text";
 import { addLocalDays, startOfLocalDay } from "./lib/time";
 
@@ -169,16 +171,24 @@ export const setLocation = bookingMutation({
 });
 
 export const setContact = bookingMutation({
-  args: { firstName: v.string(), lastName: v.string(), email: v.string(), phone: v.string(), textOk: v.boolean() },
+  args: { firstName: v.string(), lastName: v.string(), email: v.string(), phone: v.string(), textOk: v.boolean(), textVersion: v.optional(v.number()) },
   handler: async (ctx, args) => {
     const digits = args.phone.replace(/\D/g, "");
     if (digits.length < 10 || digits.length > 15) throw userError("Enter a phone number we can reach you on.");
+    // A yes to texts counts only against the wording on screen, and only while it is still the published version.
+    let textVersion: number | undefined;
+    if (args.textOk) {
+      const wording = await textConsentFor(ctx, ctx.session.companyId, (await settingsRow(ctx, ctx.session.companyId))?.handle);
+      if (!wording || wording.version !== args.textVersion) throw userError("The text message wording just changed. Reload the page to see it, then try again.");
+      textVersion = wording.version;
+    }
     const contact = {
       firstName: plain(args.firstName, "First name", 60, false),
       lastName: plain(args.lastName, "Last name", 60, false),
       email: checkedEmail(args.email),
       phone: digits.length === 10 ? `+1${digits}` : `+${digits}`,
       textOk: args.textOk,
+      ...(textVersion !== undefined ? { textVersion } : {}),
     };
     await ctx.db.patch(ctx.session._id, { contact });
     await reached(ctx, ctx.session, "size", "location");

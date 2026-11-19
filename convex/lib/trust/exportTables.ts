@@ -34,7 +34,11 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "coverageRequests", index: "by_company_job" },
   { table: "checklistItems", index: "by_company_job" },
   { table: "checklistTemplates", index: "by_company_service_version" },
-  { table: "textingRequests", index: "by_company_requested" },
+  { table: "textingRequests", index: "by_company_requested", omit: ["taxIdSealed", "leaseToken", "leaseUntil"], why: "The EIN is kept sealed and is not in the file (its last four digits are); the other two are internal locks." },
+  // Business texting setup (convex/lib/texting/schema.ts): the owner's answers, published pages and each submission.
+  { table: "textingSetups", index: "by_company", omit: ["taxId"], why: "The EIN is kept sealed and is not in the file." },
+  { table: "textingPages", index: "by_company_kind_version" },
+  { table: "textingSubmissions", index: "by_company_submitted" },
   { table: "replyReadings", index: "by_company_received" },
   { table: "evidence", index: "by_company_job", omit: ["storageId", "clientKey"], why: "Internal file references. The photos themselves are not in the file." },
   { table: "jobReports", index: "by_company_job" },

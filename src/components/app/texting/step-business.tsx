@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 
 import { api } from "../../../../convex/_generated/api";
 import type { BusinessField } from "../../../../convex/lib/texting/schema";
-import { useSetup } from "./context";
+import { formatPhone, useSetup } from "./context";
 import { ChoiceCard, Note, Section, SourceChip, StepHeading } from "./parts";
 
 const ENTITY_ORDER = ["PRIVATE_PROFIT", "SOLE_PROPRIETOR", "NON_PROFIT", "PUBLIC_PROFIT"] as const;
@@ -23,7 +23,8 @@ const EXCHANGES = ["NASDAQ", "NYSE", "AMEX", "TSX", "LON"];
 export function BusinessStep() {
   const { view, commit, locked } = useSetup();
   const b = view.setup.business;
-  const [values, setValues] = useState<Partial<Record<BusinessField, string>>>(b);
+  // Phone numbers are kept in international form and shown the way people write them.
+  const [values, setValues] = useState<Partial<Record<BusinessField, string>>>(() => ({ ...b, ...(b.supportPhone ? { supportPhone: formatPhone(b.supportPhone) } : {}), ...(b.mobilePhone ? { mobilePhone: formatPhone(b.mobilePhone) } : {}) }));
   const problem = (field: string) => (view.issues.business.find((row) => row.field === field) && values[field as BusinessField] !== undefined && values[field as BusinessField] !== "" ? view.issues.business.find((row) => row.field === field)!.words : null);
   const entity = values.entityType;
   const sole = entity === "SOLE_PROPRIETOR";
@@ -32,7 +33,10 @@ export function BusinessStep() {
     value: values[name] ?? "",
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setValues((current) => ({ ...current, [name]: event.target.value })),
     onBlur: () => {
-      if ((values[name] ?? "") !== (b[name] ?? "")) void commit({ business: { [name]: values[name] ?? "" } });
+      const typed = values[name] ?? "";
+      const saved = b[name] ?? "";
+      const same = name === "supportPhone" || name === "mobilePhone" ? typed.replace(/\D/g, "").replace(/^1/, "") === saved.replace(/\D/g, "").replace(/^1/, "") : typed === saved;
+      if (!same) void commit({ business: { [name]: typed } });
     },
   });
   const choose = (name: BusinessField, value: string) => {

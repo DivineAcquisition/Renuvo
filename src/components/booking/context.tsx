@@ -16,7 +16,7 @@ export type BookingActions = {
   /** Live page only: starts a session with the ZIP code. */
   start: (postalCode: string) => Promise<Result>;
   setLocation: (postalCode: string) => Promise<Result & { inArea?: boolean }>;
-  setContact: (c: { firstName: string; lastName: string; email: string; phone: string; textOk: boolean }) => Promise<Result>;
+  setContact: (c: { firstName: string; lastName: string; email: string; phone: string; textOk: boolean; textVersion?: number }) => Promise<Result>;
   setHome: (facts: { sizeKey?: string; area?: number; bedrooms?: number; bathrooms?: number; halfBaths?: number; beds?: number }) => Promise<Result>;
   selectService: (sel: { serviceKey: string; condition?: string; schedule?: string; units?: number; addOns: { id: string; quantity: number }[]; answers: Record<string, string | number | boolean> }) => Promise<Result>;
   chooseTime: (startsAt: number) => Promise<Result>;
@@ -34,7 +34,7 @@ export type BookingActions = {
 
 export type BookingCtx = {
   def: Definition;
-  company: CompanyFace & { brandColor: string; accentColor: string };
+  company: CompanyFace & { brandColor: string; accentColor: string; texting?: { consent: string; version: number; terms: string; privacy: string } | null };
   heroUrl: string | null;
   token: string | null;
   view: SessionView | null;

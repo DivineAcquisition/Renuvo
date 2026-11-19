@@ -40,7 +40,7 @@ export async function grantApplicationEmail(ctx: MutationCtx, application: Doc<"
 }
 
 /** The applicant ticked, or unticked, permission to be texted on the form. */
-export async function recordTextConsent(ctx: MutationCtx, applicant: Doc<"applicants">, granted: boolean, actor: Actor): Promise<void> {
+export async function recordTextConsent(ctx: MutationCtx, applicant: Doc<"applicants">, granted: boolean, actor: Actor, wording = SMS_CONSENT_WORDING): Promise<void> {
   const recipient = asRecipient(applicant);
   const current = await currentPermission(ctx, applicant.companyId, recipient, "sms", "recruiting");
   if (granted && current?.status === "granted") return;
@@ -52,7 +52,7 @@ export async function recordTextConsent(ctx: MutationCtx, applicant: Doc<"applic
     category: "recruiting",
     status: granted ? "granted" : "withdrawn",
     source: "applicant_form",
-    ...(granted ? { disclosureText: SMS_CONSENT_WORDING } : {}),
+    ...(granted ? { disclosureText: wording } : {}),
     evidence: granted ? "Ticked the permission to text on the application form." : "Unticked the permission to text on the application form.",
     recordedBy: { kind: "recipient" },
     at: Date.now(),

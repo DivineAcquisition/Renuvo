@@ -93,7 +93,7 @@ export function TextingWorkspace() {
   const initial = (STEPS.some((step) => step.id === asked) ? asked : view.setup.step) as StepId;
   return (
     <SetupProvider key={generation} view={view} companyId={companyId} initialStep={initial} onConflict={() => setGeneration((n) => n + 1)}>
-      <Frame />
+      <TextingFrame />
     </SetupProvider>
   );
 }
@@ -107,7 +107,7 @@ function Message({ title, body }: { title: string; body: string }) {
   );
 }
 
-function Frame() {
+export function TextingFrame() {
   const { view, step, go, saving, error, locked } = useSetup();
   const router = useRouter();
   const index = STEPS.findIndex((row) => row.id === step);
@@ -116,7 +116,7 @@ function Frame() {
   const reachable = (id: StepId) => id !== "progress" || view.request !== null;
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-2xl">
           <h1 className="font-heading text-2xl tracking-tight text-strong">Set up business texting</h1>
@@ -129,14 +129,14 @@ function Frame() {
           <p className="text-xs text-muted-foreground" role="status" aria-live="polite">
             {saving === "saving" ? "Saving…" : saving === "failed" ? "Not saved" : "Saved"}
           </p>
-          <Button variant="outline" size="sm" onClick={() => router.push("/app")}>
+          <Button variant="outline" size="sm" onClick={() => router.push("/app")} className="hidden sm:inline-flex">
             Save and exit
           </Button>
         </div>
       </header>
 
       {/* Phone and tablet: compact progress. */}
-      <div className="xl:hidden">
+      <div className="min-w-0 xl:hidden">
         <p className="mb-1 text-xs text-muted-foreground">
           Step {index + 1} of {STEPS.length} · {STEPS[index].label}
         </p>
@@ -153,7 +153,7 @@ function Frame() {
         </nav>
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[11.5rem_minmax(0,1fr)_19rem] 2xl:grid-cols-[13rem_minmax(0,1fr)_21rem]">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-5 xl:grid-cols-[11.5rem_minmax(0,1fr)_19rem] 2xl:grid-cols-[13rem_minmax(0,1fr)_21rem]">
         <nav aria-label="Steps" className="sticky top-20 hidden xl:block">
           <ol className="grid gap-1">
             {STEPS.map((row, at) => {

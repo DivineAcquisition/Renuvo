@@ -37,8 +37,14 @@ export function customerTopics(activities: readonly string[]): string {
   return list(words);
 }
 
+/** "+15125550100" as "(512) 555-0100", the way people read a number in a text. */
+export function readablePhone(value: string | undefined): string {
+  const digits = (value ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : (value ?? "");
+}
+
 function contactLine(input: DraftInput): string {
-  const ways = [input.supportPhone ? `call ${input.supportPhone}` : "", input.supportEmail ? `email ${input.supportEmail}` : ""].filter(Boolean);
+  const ways = [input.supportPhone ? `call ${readablePhone(input.supportPhone)}` : "", input.supportEmail ? `email ${input.supportEmail}` : ""].filter(Boolean);
   return ways.length ? ways.join(" or ") : "contact us";
 }
 

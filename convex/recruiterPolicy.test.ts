@@ -56,7 +56,7 @@ describe("Recruiter on the shared sending policy", () => {
     const { token } = await invited(s);
     await s.t.mutation(api.applicantPages.saveDraft, { token, answers: { phone: "512-555-0142", smsConsent: true } });
     let rows = await s.t.run(async (ctx) => ctx.db.query("contactPermissions").collect());
-    expect(rows.find((row) => row.channel === "sms")).toMatchObject({ status: "granted", source: "applicant_form", recordedBy: { kind: "recipient" }, disclosureText: expect.stringContaining("You may text me at this number") });
+    expect(rows.find((row) => row.channel === "sms")).toMatchObject({ status: "granted", source: "applicant_form", recordedBy: { kind: "recipient" }, disclosureText: expect.stringContaining("Text me about my application from Alpha Cleaning at this number") });
     await s.t.mutation(api.applicantPages.saveDraft, { token, answers: { smsConsent: false } });
     rows = await s.t.run(async (ctx) => ctx.db.query("contactPermissions").collect());
     expect(rows.find((row) => row.channel === "sms")).toMatchObject({ status: "withdrawn", source: "applicant_form" });

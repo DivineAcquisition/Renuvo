@@ -40,6 +40,13 @@ export const NOTICE_EVENT_TYPES = new Set([
   "retention_case.needs_attention",
   "retention_case.closed",
   "retention_signal.raised",
+  // Business texting (convex/texting.ts): only the moments an Owner needs, never each internal step.
+  "texting.requested",
+  "texting.resubmitted",
+  "texting.needs_you",
+  "texting.campaign_approved",
+  "texting.active",
+  "texting.interrupted",
 ]);
 
 type Recorded = { id: Id<"events">; companyId: Id<"companies">; type: string; actor: Actor; subject: { table: string; id: string }; data?: Record<string, unknown> };
@@ -54,6 +61,22 @@ export async function noticesForEvent(ctx: MutationCtx, event: Recorded): Promis
   const base = { companyId: event.companyId, now: Date.now() };
   const at = Date.now();
   switch (event.type) {
+    case "texting.requested":
+    case "texting.resubmitted":
+    case "texting.needs_you":
+    case "texting.campaign_approved":
+    case "texting.active":
+    case "texting.interrupted": {
+      if (event.subject.table !== "textingRequests") return;
+      const kind = event.type.slice("texting.".length);
+      const attention = kind === "needs_you" || kind === "interrupted";
+      // One notice per moment: a request's version and its state say which; a repeat of the same moment sends nothing.
+      const row = await ctx.db.get(event.subject.id as Id<"textingRequests">);
+      if (!row) return;
+      const needs = typeof event.data?.kind === "string" ? event.data.kind : "";
+      await notifyMembers(ctx, { ...base, event: attention ? "texting_attention" : "texting_progress", ref: row._id, key: `${kind}:${needs}:v${row.submissionVersion ?? 1}:${kind === "needs_you" || kind === "active" || kind === "interrupted" ? at : ""}`, facts: { kind, needs, at } });
+      return;
+    }
     case "company.created": {
       // Only to the person who created it: the new Owner.
       if (event.actor.kind !== "member") return;

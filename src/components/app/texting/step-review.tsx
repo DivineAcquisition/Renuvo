@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 
 import { api } from "../../../../convex/_generated/api";
 import { ACTIVITIES_BY_KEY } from "./catalog";
-import { formatPhone, useSetup, type StepId } from "./context";
+import { formatPhone, placeName, useSetup, type StepId } from "./context";
 import { Needs, Note, Section, StepHeading } from "./parts";
 
 export function ReviewStep() {
@@ -53,7 +53,7 @@ export function ReviewStep() {
       </Summary>
 
       <Summary title="Your number" step="number">
-        <Row label="Number" value={view.setup.number ? `${formatPhone(view.setup.number.phoneNumber)}${view.setup.number.locality ? `, ${view.setup.number.locality}` : ""}` : undefined} />
+        <Row label="Number" value={view.setup.number ? `${formatPhone(view.setup.number.phoneNumber)}${view.setup.number.locality ? `, ${placeName(view.setup.number.locality)}` : ""}` : undefined} />
       </Summary>
 
       <Section title="What it costs" lead="Taken from your messaging balance. Selestial's prices; carriers' own fees are included.">

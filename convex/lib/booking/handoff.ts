@@ -16,6 +16,7 @@ import type { MutationCtx } from "../../_generated/server";
 import { sha256 } from "../agreements/hash";
 import { refreshClient, visitBooked } from "../clients/directory";
 import { setPermission } from "../compliance/permissions";
+import { signupVersion } from "../texting/pages";
 import { applyTemplate } from "../dispatch/templates";
 import { coverJob } from "../dispatch/workflow";
 import { recordEvent, type Actor } from "../events";
@@ -81,6 +82,24 @@ export async function ensureCustomer(ctx: MutationCtx, session: Doc<"bookingSess
       at: now,
       actor: SYSTEM,
     });
+    // They checked the optional text box beside the company's published texting wording: permission for
+    // texts about their requests and bookings, recorded against exactly that wording version.
+    const page = contact.textOk && contact.textVersion !== undefined ? await signupVersion(ctx, session.companyId, contact.textVersion) : null;
+    if (page?.smsDisclosureId) {
+      await setPermission(ctx, {
+        companyId: session.companyId,
+        recipient: { kind: "customer", id: customerId },
+        channel: "sms",
+        category: "operational",
+        status: "granted",
+        source: "web_form",
+        disclosureId: page.smsDisclosureId,
+        evidence: `Online booking ${sha256(`booking-reference:${session._id}`).slice(0, 8).toUpperCase()} (texting wording version ${page.version})`,
+        recordedBy: { kind: "recipient" },
+        at: now,
+        actor: SYSTEM,
+      });
+    }
   }
   await ctx.db.patch(session._id, { customerId });
   // Into Clients & Properties' directory, like a client added by a person.

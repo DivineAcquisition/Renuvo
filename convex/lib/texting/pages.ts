@@ -103,3 +103,27 @@ export async function publishPage(
   });
   return { page: (await ctx.db.get(id))!, changed: true };
 }
+
+/**
+ * The company's published texting wording for other forms (its booking page): the exact words, their
+ * version, and the policy links. Null when nothing is published, so no form shows a box that records nothing.
+ */
+export async function textConsentFor(ctx: QueryCtx, companyId: Id<"companies">, handle: string | undefined): Promise<{ consent: string; version: number; terms: string; privacy: string } | null> {
+  if (!handle) return null;
+  const page = await currentPage(ctx, companyId, "signup");
+  if (!page || !page.smsDisclosureId) return null;
+  const setup = await ctx.db
+    .query("textingSetups")
+    .withIndex("by_company", (q) => q.eq("companyId", companyId))
+    .unique();
+  const links = setup ? linksFor(setup, handle) : hostedLinks(handle);
+  return { consent: page.body, version: page.version, terms: links?.terms ?? hostedLinks(handle).terms, privacy: links?.privacy ?? hostedLinks(handle).privacy };
+}
+
+/** The sign-up page of exactly this version, to record a permission against the wording that was shown. */
+export async function signupVersion(ctx: QueryCtx, companyId: Id<"companies">, version: number): Promise<Doc<"textingPages"> | null> {
+  return ctx.db
+    .query("textingPages")
+    .withIndex("by_company_kind_version", (q) => q.eq("companyId", companyId).eq("kind", "signup").eq("version", version))
+    .unique();
+}

@@ -419,6 +419,7 @@ import type * as lib_texting_pages from "../lib/texting/pages.js";
 import type * as lib_texting_plan from "../lib/texting/plan.js";
 import type * as lib_texting_prefill from "../lib/texting/prefill.js";
 import type * as lib_texting_prices from "../lib/texting/prices.js";
+import type * as lib_texting_wording from "../lib/texting/wording.js";
 import type * as lib_time from "../lib/time.js";
 import type * as lib_trust_changes from "../lib/trust/changes.js";
 import type * as lib_trust_checks from "../lib/trust/checks.js";
@@ -909,6 +910,7 @@ declare const fullApi: ApiFromModules<{
   "lib/texting/plan": typeof lib_texting_plan;
   "lib/texting/prefill": typeof lib_texting_prefill;
   "lib/texting/prices": typeof lib_texting_prices;
+  "lib/texting/wording": typeof lib_texting_wording;
   "lib/time": typeof lib_time;
   "lib/trust/changes": typeof lib_trust_changes;
   "lib/trust/checks": typeof lib_trust_checks;
