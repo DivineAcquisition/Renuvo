@@ -29,10 +29,19 @@ export type DraftInput = {
 
 const list = (words: string[]) => (words.length <= 1 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`);
 
+/** Each customer activity as the customer would say it. */
+const CUSTOMER_TOPIC: Record<string, string> = {
+  inquiry_replies: "your inquiries",
+  estimate_follow_ups: "estimates",
+  booking_conversations: "bookings",
+  service_follow_ups: "how your cleanings went",
+  recurring_reminders: "upcoming cleanings",
+};
+
 /** What customers are told they will get, in words. Only the customer activities, and never promotions. */
 export function customerTopics(activities: readonly string[]): string {
   const rows = chosen(activities).filter((row) => row.audience === "customer" && row.category === "operational");
-  const words = rows.map((row) => row.label.toLowerCase());
+  const words = rows.map((row) => CUSTOMER_TOPIC[row.key] ?? row.label.toLowerCase());
   if (words.length === 0) words.push("your requests and bookings");
   return list(words);
 }

@@ -535,6 +535,10 @@ export const submit = ownerMutation({
     if (!links || !signup) problems.push("Publish your sign-up page.");
     if (setup.hosting !== "own_site" && (!(await currentPage(ctx, ctx.companyId, "privacy")) || !(await currentPage(ctx, ctx.companyId, "terms")))) problems.push("Publish your privacy policy and texting terms.");
     if (setup.hosting === "own_site" && (!links?.privacy || !links?.terms)) problems.push("Add the addresses of your own privacy policy and texting terms.");
+    // What carriers will read must be what the owner sees now: a changed draft is published before it's filed.
+    const published = { privacy: await currentPage(ctx, ctx.companyId, "privacy"), terms: await currentPage(ctx, ctx.companyId, "terms"), signup };
+    if (published.signup && (published.signup.body !== setup.drafts.sms_consent?.text || (published.signup.marketing ?? "") !== (setup.drafts.marketing_consent?.text ?? ""))) problems.push("Your sign-up wording changed since it was published. Publish your changes.");
+    if (setup.hosting !== "own_site" && ((published.privacy && published.privacy.body !== setup.drafts.privacy?.text) || (published.terms && published.terms.body !== setup.drafts.terms?.text))) problems.push("Your privacy policy or texting terms changed since they were published. Publish your changes.");
     for (const kind of ["privacy", "terms", "signup"] as const) {
       const check = setup.checks.find((row) => row.kind === kind && row.url === links?.[kind]);
       if (links && (!check || !check.ok)) problems.push(`Your ${kind === "signup" ? "sign-up page" : kind === "terms" ? "texting terms" : "privacy policy"} link must open before submitting. Check the links again.`);

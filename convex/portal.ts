@@ -7,7 +7,6 @@
  * What is never here: anyone else's details, internal notes, the reasons a requirement was waived, pay
  * without a code, or a job's address once that job is no longer theirs.
  */
-import { cleanerTextWording } from "./lib/texting/wording";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
@@ -34,6 +33,7 @@ import { localParts } from "./lib/availability";
 import { addLocalDays, startOfLocalDay } from "./lib/time";
 import { syncHandoffRequirement } from "./lib/cleaners/handoff";
 import { conflictsOf } from "./lib/cleaners/attention";
+import { cleanerTextWording } from "./lib/texting/wording";
 
 type Ctx = (QueryCtx | MutationCtx) & PortalAccess;
 

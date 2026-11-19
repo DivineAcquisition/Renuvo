@@ -415,7 +415,8 @@ describe("Set up business texting", () => {
     const t = start();
     const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
     await t.action(internal.billing.syncCompany, { companyId });
-    billing.seed(companyId, { messaging: { purchased: 1_000_000, promo: 0, promoExpiresAt: null, used: 0 } });
+    // A $1.00 balance: less than the fees. Texting still becomes ready; a low balance never releases the number.
+    billing.seed(companyId, { messaging: { purchased: 10_000, promo: 0, promoExpiresAt: null, used: 0 } });
     await t.action(internal.billing.syncCompany, { companyId });
     const admin = t.withIdentity(ADMIN);
     await prepare(t, as, companyId);
@@ -433,6 +434,14 @@ describe("Set up business texting", () => {
 
     fixed = true;
     await as.mutation(api.textingSetup.save, { companyId, revision: await revision(as, companyId), business: { legalName: "Alpha Cleaning Services LLC" } });
+    // The legal name is in the privacy policy and terms: they must be published again before the correction goes.
+    expect(await refusal(submit(as, companyId))).toContain("changed since they were published");
+    await as.mutation(api.textingSetup.publish, { companyId, revision: await revision(as, companyId) });
+    await settle(t);
+    expect((await t.run(async (ctx) => ctx.db.query("textingPages").collect())).filter((row) => row.kind === "privacy").map((row) => [row.version, row.retiredAt === undefined])).toEqual([
+      [1, false],
+      [2, true],
+    ]);
     await submit(as, companyId);
     expect((await t.run(async (ctx) => ctx.db.get(requestId)))).toMatchObject({ status: "requested", submissionVersion: 2 });
     await admin.mutation(api.texting.approve, { requestId });
@@ -454,6 +463,9 @@ describe("Set up business texting", () => {
     ]);
     await t.mutation(internal.texting.chargeNumbers, {});
     expect((await t.run(async (ctx) => ctx.db.query("messagingCharges").collect())).filter((row) => row.kind === "registration_fee" || row.kind === "number_monthly")).toHaveLength(4);
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(billing.messagingLeft(billing.customerFor(`company_${companyId}`))).toBe(10_000 - 190_000 - 150_000 - 30_000 - 100_000);
+    expect((await t.run(async (ctx) => ctx.db.get(requestId)))?.status).toBe("active");
   });
 
   it("confirms a sole proprietor with the carriers' one-time code", async () => {
@@ -559,6 +571,29 @@ describe("Set up business texting", () => {
     const notices = await t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((row) => row.purpose === "member_notice").map((row) => row.notice?.event));
     expect(notices.filter((event) => event === "texting_progress")).toHaveLength(3);
     expect(notices.filter((event) => event === "texting_attention")).toHaveLength(0);
+  });
+
+  it("keeps a STOP in force across agents and after the texting number changes", async () => {
+    vi.stubGlobal("fetch", fakeTelnyx().fetcher);
+    const t = start();
+    const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
+    await prepare(t, as, companyId);
+    const { requestId } = await submit(as, companyId);
+    await t.withIdentity(ADMIN).mutation(api.texting.approve, { requestId });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    const customerId = await t.run(async (ctx) => ctx.db.insert("customers", { companyId, name: "Pat", kind: "home", phone: "+15125550170", status: "active", createdAt: Date.now() }));
+    await as.mutation(api.consent.record, { companyId, recipient: { kind: "customer", id: customerId }, channel: "sms", category: "operational", status: "granted", source: "paper_form", evidence: "Signed form." });
+    const check = (agent: "sales" | "retention") => as.query(api.consent.check, { companyId, channel: "sms", to: "+15125550170", recipient: { kind: "customer", id: customerId }, category: "operational", origin: "agent", agent });
+    expect(await check("sales")).toMatchObject({ ok: true });
+    await t.mutation(internal.inbound.sms, { to: NUMBER, from: "+15125550170", body: "STOP", receivedAt: Date.now() });
+    expect(await check("sales")).toMatchObject({ ok: false, code: "suppressed" });
+    expect(await check("retention")).toMatchObject({ ok: false, code: "suppressed" });
+    // A new number doesn't start over: the STOP belongs to the person's number, for this business.
+    await t.run(async (ctx) => {
+      const profile = (await ctx.db.query("complianceProfiles").collect())[0];
+      await ctx.db.patch(profile._id, { messaging: { ...profile.messaging, smsNumber: "+15125550199" } });
+    });
+    expect(await check("sales")).toMatchObject({ ok: false, code: "suppressed" });
   });
 
   it("keeps each company's setup, searches and requests to itself", async () => {

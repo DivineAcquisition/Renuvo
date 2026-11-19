@@ -119,7 +119,15 @@ per-company spend limits and can be introduced later without touching registrati
 **Toll-free** is a separate verification flow, and number transfer (porting) is a separate journey.
 Neither is offered as an option in this flow.
 
-## 4. Fees (Telnyx's charges to Selestial, not shown to owners)
+## 4. Fees
+
+**Decision (owner, 2026-11-19): fixed retail fees.** Owners see Selestial's prices from
+`convex/lib/texting/prices.ts` (versioned, `reg-2026-11`), never Telnyx's: $19 setup when the
+registration is filed with the carriers, $15 each time a corrected registration is filed, and $10 a
+month while the registration is active, starting the day texting is ready. These sit beside the
+existing $3/month number fee and per-message rates on the messaging rate card.
+
+**Telnyx's charges to Selestial (not shown to owners)**
 
 From Telnyx's 10DLC fees article (TCR fees as of 2025-07-22): brand registration $4.50 once; campaign
 review $15 per submission, including resubmissions; campaign monthly $10 (standard and MIXED), $1.50 (Low

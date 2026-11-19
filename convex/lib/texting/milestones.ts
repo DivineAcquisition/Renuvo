@@ -60,7 +60,7 @@ export function milestones(row: Doc<"textingRequests">): Milestone[] {
 
   const bought = row.numberOrderedAt !== undefined || (legacy && row.brandId !== undefined);
   const purchase = bought
-    ? m("purchase", "done", row.numberOrderedAt, `Your number ${row.phoneNumber} is yours.`)
+    ? m("purchase", "done", row.numberOrderedAt, `Your number ${row.phoneNumber.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")} is yours.`)
     : needs?.kind === "number"
       ? m("purchase", "needs_you", needs.at, needs.words, true)
       : row.orderReference
