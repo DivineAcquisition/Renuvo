@@ -71,6 +71,12 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "hiringOffers", index: "by_company_application" },
   { table: "onboardingHandoffs", index: "by_company_status" },
   { table: "integrationRequests", index: "by_company_integration" },
+  // Company setup and the shared company context (convex/lib/setup/schema.ts).
+  { table: "companySetups", index: "by_company" },
+  { table: "companyFacts", index: "by_company_key" },
+  { table: "websiteReads", index: "by_company_started" },
+  { table: "clientImportRuns", index: "by_company_key" },
+  { table: "importedRecords", index: "by_company_source_external" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
   { table: "chatActionSteps", index: "by_company_key" },
@@ -180,6 +186,8 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "bookingImages", index: "by_company" },
   { table: "bookingAcceptances", index: "by_company_session", omit: ["ipHash"], why: "A one-way hash kept only as signing evidence." },
   { table: "bookingEvents", index: "by_company_experience_at" },
+  // Notifications to members (convex/lib/notify/schema.ts): each person's choices. The notices themselves are messages.
+  { table: "notificationPreferences", index: "by_company_member" },
 ];
 
 /** Company tables kept out of the export, and why. */

@@ -15,7 +15,7 @@ import type { Doc } from "../../_generated/dataModel";
 
 type Purpose = Doc<"messages">["purpose"];
 
-const INCLUDED: ReadonlySet<Purpose> = new Set<Purpose>(["compliance_reply", "verification_code", "operator_alert"]);
+const INCLUDED: ReadonlySet<Purpose> = new Set<Purpose>(["compliance_reply", "verification_code", "operator_alert", "member_notice"]);
 
 export type BillingClass = "included" | "metered";
 
@@ -27,4 +27,5 @@ export const INCLUDED_WORDS: Partial<Record<Purpose, string>> = {
   compliance_reply: "Answer to STOP, HELP or START (required, included)",
   verification_code: "Sign-in code (included)",
   operator_alert: "Alert to your team (included)",
+  member_notice: "Notice to your team from Selestial (included)",
 };

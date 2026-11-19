@@ -67,6 +67,8 @@ export function agentReleased(agent: AgentId): boolean {
 /** Platform features that differ by plan. Everything not listed here is in both plans. */
 export const PLAN_FEATURES = {
   customer_portal: { name: "Customer portal", plans: ["expand"], built: false },
+  /** The company's own domain (for example book.theircompany.com) for booking pages, instead of link.selestial.io. */
+  custom_domain: { name: "Your own domain for booking pages", plans: ["expand"], built: false },
   advanced_workflows: { name: "Advanced workflow customization", plans: ["expand"], built: false },
   advanced_approvals: { name: "Advanced approval routing", plans: ["expand"], built: true },
   template_governance: { name: "Agreement template governance", plans: ["expand"], built: true },

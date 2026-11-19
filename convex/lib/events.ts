@@ -8,6 +8,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { agentValidator } from "./statuses";
+import { NOTICE_EVENT_TYPES, noticesForEvent } from "./notify/fromEvents";
 
 export const actorValidator = v.union(
   v.object({ kind: v.literal("member"), memberId: v.id("members") }),
@@ -138,7 +139,7 @@ export async function recordEvent(
   ctx: MutationCtx,
   event: { companyId: Id<"companies">; type: string; actor: Actor; subject: Subject; data?: EventData },
 ): Promise<Id<"events">> {
-  return ctx.db.insert("events", {
+  const id = await ctx.db.insert("events", {
     companyId: event.companyId,
     type: event.type,
     actor: event.actor,
@@ -147,4 +148,7 @@ export async function recordEvent(
     data: event.data,
     at: Date.now(),
   });
+  // A few events tell the people who run the company by email (convex/lib/notify/fromEvents.ts).
+  if (NOTICE_EVENT_TYPES.has(event.type)) await noticesForEvent(ctx, { id, companyId: event.companyId, type: event.type, actor: event.actor, subject: event.subject, data: event.data as Record<string, unknown> | undefined });
+  return id;
 }

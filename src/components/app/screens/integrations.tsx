@@ -10,6 +10,7 @@ import { AgentAvatar, eyebrow } from "@/components/app/agent";
 import { useCompany } from "@/components/app/company";
 import { IntegrationMark } from "@/components/app/integration-mark";
 import { GoogleToolPanel, useConnectGoogle, type Feature } from "@/components/app/integrations/google-tool";
+import { InboxesPanel } from "@/components/app/integrations/inboxes";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { Sheet, SheetHeader, SheetPanel, SheetPopup, SheetTitle } from "@/components/ui/sheet";
 import { messageOf } from "@/components/app/form";
@@ -117,6 +118,17 @@ function CardAction({ integration, live, requested, onOpen }: { integration: Int
     if (live?.state === "not_set_up") return <p className="text-xs text-muted-foreground">Selestial still has to switch this on for your account.</p>;
     const feature = GOOGLE_FEATURE[integration.id];
     if (feature) return <GoogleCardAction feature={feature} live={live} owner={owner} onOpen={onOpen} name={integration.name} />;
+    // Gmail: connected inboxes are managed right here, with their purposes (convex/inboxes.ts).
+    if (integration.id === "gmail") {
+      const label = live?.state === "connected" || live?.state === "in_progress" ? (owner ? "Manage inboxes" : "View inboxes") : owner ? "Connect Gmail" : "View";
+      return (
+        <button type="button" onClick={onOpen} className={live?.state === "in_progress" && owner ? primary : live?.state === "ready" && owner ? primary : secondary}>
+          {live?.state === "ready" && owner ? <Plug className="size-3.5" aria-hidden /> : null}
+          {label}
+          <ArrowRight className="size-3.5" aria-hidden />
+        </button>
+      );
+    }
     const label = live?.state === "connected" ? "Manage" : live?.state === "in_progress" ? "See progress" : owner ? `Connect ${integration.name.replace(/^Business /, "")}` : "See setup";
     return (
       <div className="flex flex-wrap items-center gap-2">
@@ -263,7 +275,7 @@ export function IntegrationsScreen({ embedded = false }: { embedded?: boolean })
   const params = useSearchParams();
   // Coming back from Google (?tool=<feature>&result=…) opens that tool with the outcome.
   const returned = params.get("tool");
-  const [openCard, setOpenCard] = useState<string | null>(() => (returned ? (CARD_OF_FEATURE[returned] ?? null) : null));
+  const [openCard, setOpenCard] = useState<string | null>(() => (returned ? (returned === "gmail" ? "gmail" : (CARD_OF_FEATURE[returned] ?? null)) : null));
   const [result, setResult] = useState<string | null>(() => params.get("result"));
   const openFeature = openCard ? GOOGLE_FEATURE[openCard] : undefined;
   const openName = INTEGRATIONS.find((row) => row.id === openCard)?.name ?? "";
@@ -358,12 +370,12 @@ export function IntegrationsScreen({ embedded = false }: { embedded?: boolean })
           })}
         </div>
       )}
-      <Sheet open={openFeature !== undefined} onOpenChange={(next) => (next ? undefined : setOpenCard(null))}>
+      <Sheet open={openFeature !== undefined || openCard === "gmail"} onOpenChange={(next) => (next ? undefined : setOpenCard(null))}>
         <SheetPopup side="right" className="max-w-xl bg-card">
           <SheetHeader>
-            <SheetTitle>{openName}</SheetTitle>
+            <SheetTitle>{openCard === "gmail" ? "Connected inboxes" : openName}</SheetTitle>
           </SheetHeader>
-          <SheetPanel>{openFeature ? <GoogleToolPanel feature={openFeature} result={result} /> : null}</SheetPanel>
+          <SheetPanel>{openCard === "gmail" ? <InboxesPanel result={result} /> : openFeature ? <GoogleToolPanel feature={openFeature} result={result} /> : null}</SheetPanel>
         </SheetPopup>
       </Sheet>
     </>

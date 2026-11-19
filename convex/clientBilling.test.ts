@@ -105,7 +105,7 @@ describe("Clients in Chat", () => {
     });
     expect(outcome).toMatchObject({ status: "done", summary: "Drafted a text to Dana Whitfield. Nothing was sent." });
     expect((outcome as { link: { href: string } }).link.href).toBe(`/app/clients/${s.place.customerId}/conversations?draft=Running+10+minutes+late+today.&channel=sms`);
-    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect()).length)).toBe(0);
+    expect(await s.t.run(async (ctx) => (await ctx.db.query("messages").collect().then((rows) => rows.filter((m) => m.purpose !== "member_notice"))).length)).toBe(0);
     void (s.place.customerId as Id<"customers">);
   });
 });

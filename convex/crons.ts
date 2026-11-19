@@ -24,6 +24,8 @@ crons.interval("finance works out team earnings", { minutes: 15 }, internal.team
 
 // A text whose send started and never finished is marked unconfirmed, never quietly sent again.
 crons.interval("find sends that never finished", { minutes: 5 }, internal.messaging.sweepStuck, {});
+// The Monday summary at 7 AM company time, and reminders two hours before a proposal's deadline.
+crons.interval("notices: weekly summary and approval reminders", { hours: 1 }, internal.notifications.hourly, {});
 
 // A company's data export can be downloaded for a day; then its file is deleted.
 crons.interval("expire company data exports", { minutes: 15 }, internal.dataRights.expireExports, {});

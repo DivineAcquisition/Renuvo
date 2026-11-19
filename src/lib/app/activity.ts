@@ -41,6 +41,7 @@ const TITLES: Record<string, [string, ActivityArea]> = {
 
   "member.invited": ["Team member invited", "team"],
   "member.joined": ["Team member joined", "team"],
+  "member.reconnected": ["Team member reconnected after a sign-in change", "team"],
   "member.role_changed": ["Team member's role changed", "team"],
   "member.removed": ["Team member removed", "team"],
   "invitation.revoked": ["Invitation cancelled", "team"],

@@ -23,7 +23,7 @@ import { Sidebar, SidebarStateProvider, type BusinessOption } from "@/components
 import { useNow } from "@/components/app/use-now";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LANDING_PATH } from "@/lib/app/navigation";
+import { LANDING_PATH, SETUP_PAGES } from "@/lib/app/navigation";
 import { AUTH, withNext } from "@/lib/auth/routes";
 
 import { api } from "../../../convex/_generated/api";
@@ -31,6 +31,7 @@ import { currentVersion } from "../../../convex/lib/trust/documents";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const STORED = "selestial.company";
+const SETUP_PATH = SETUP_PAGES[0].path;
 
 function Loading() {
   return (
@@ -183,7 +184,18 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, children }: 
   const company = useQuery(api.companies.get, { companyId });
   const count = useQuery(api.overview.decisionCount, { companyId });
   const team = useQuery(api.overview.team, { companyId });
-  if (company === undefined) return <Loading />;
+  const setup = useQuery(api.setup.state, { companyId });
+  const router = useRouter();
+  const pathname = usePathname();
+  const inSetup = pathname === SETUP_PATH || pathname.startsWith(`${SETUP_PATH}/`);
+  // Only an Owner who has not yet opened the workspace is taken to setup. Staff and older companies never are.
+  const sendToSetup = setup?.required === true && !inSetup;
+  useEffect(() => {
+    if (sendToSetup) router.replace(SETUP_PATH);
+  }, [sendToSetup, router]);
+  if (company === undefined || setup === undefined || sendToSetup) return <Loading />;
+  // Setup is its own full screen: no sidebar, dock or chat until the owner opens the workspace.
+  if (inSetup) return <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>{children}</CompanyProvider>;
   return (
     <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
       <ChatProvider userId={userId} companyId={companyId}>
@@ -210,6 +222,23 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, children }: 
 function Companies({ userId, children }: { userId: string; children: React.ReactNode }) {
   const router = useRouter();
   const mine = useQuery(api.companies.mine, {});
+  const reconnect = useMutation(api.companies.reconnect);
+  // Someone with no company may have one under an earlier sign-in (the sign-in service changed). Look
+  // once, before offering to create a company; a reconnected membership arrives through `mine`.
+  const [looked, setLooked] = useState(false);
+  const empty = mine !== undefined && mine.length === 0;
+  useEffect(() => {
+    if (!empty || looked) return;
+    let live = true;
+    reconnect({})
+      .catch(() => null)
+      .finally(() => {
+        if (live) setLooked(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [empty, looked, reconnect]);
   const [chosen, setChosen] = useState<string | null>(() => {
     try {
       return window.localStorage.getItem(STORED);
@@ -218,7 +247,7 @@ function Companies({ userId, children }: { userId: string; children: React.React
     }
   });
   if (mine === undefined) return <Loading />;
-  if (mine.length === 0) return <Onboarding />;
+  if (mine.length === 0) return looked ? <Onboarding /> : <Loading />;
   const current = mine.find((row) => row.companyId === chosen) ?? mine[0];
   // Switching company changes the whole workspace, so it lands on Home: a page for one company's
   // record means nothing in another.

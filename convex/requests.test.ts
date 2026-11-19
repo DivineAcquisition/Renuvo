@@ -169,7 +169,9 @@ describe("public requests", () => {
     const { as, companyId } = await company(t, "owner-a", "Alpha Cleaning");
     const visit = await seedVisit(as, companyId);
     await as.mutation(api.customers.update, { companyId, customerId: visit.customerId, email: "dana@example.com" });
-    const before = await t.run(async (ctx) => ({ customer: await ctx.db.get(visit.customerId), cleaner: await ctx.db.get(visit.cleanerId) }));
+    // Whatever setting up the company scheduled (its Owner's welcome email) is settled first.
+    await flush(t);
+    const before = await t.run(async (ctx) => ({ customer: await ctx.db.get(visit.customerId), cleaner: await ctx.db.get(visit.cleanerId), scheduled: (await ctx.db.system.query("_scheduled_functions").collect()).map((row) => row._id) }));
     for (const subtype of ["access", "deletion", "correction"]) {
       const answer = await t.mutation(api.requests.submit, { ...privacy, subtype, visitorKey: `v-${subtype}` });
       expect(answer.status).toBe("saved");
@@ -188,7 +190,7 @@ describe("public requests", () => {
     expect(after.cleaner).toEqual(before.cleaner);
     expect(after.exports).toEqual([]);
     expect(after.deletions).toEqual([]);
-    expect(after.scheduled.every((row) => row.name.startsWith("requests"))).toBe(true);
+    expect(after.scheduled.filter((row) => !before.scheduled.includes(row._id)).every((row) => row.name.startsWith("requests"))).toBe(true);
     // Each saved request is routed to Selestial, unverified, for a person to look at.
     for (const row of await requests(t)) expect(row).toMatchObject({ routing: "selestial", verification: {}, status: "received" });
   });

@@ -8,7 +8,9 @@ import { byMember, recordEvent } from "./lib/events";
 import { roleOf } from "./lib/roles";
 import { agentValidator } from "./lib/statuses";
 import { text } from "./lib/text";
+import { startSetup } from "./setup";
 import { currentVersion } from "./lib/trust/documents";
+import { reconnectAfterSignInMove } from "./lib/reconnect";
 
 function timezone(value: string): string {
   const zone = value.trim();
@@ -51,12 +53,23 @@ export const create = signedInMutation({
       ...(key !== undefined ? { setupKey: key } : {}),
       createdAt: now,
     });
-    const memberId = await ctx.db.insert("members", { companyId, userId: ctx.userId, email: ctx.email, name: ctx.name, role: "owner", status: "active", createdAt: now });
+    const memberId = await ctx.db.insert("members", { companyId, userId: ctx.userId, userIssuer: ctx.issuer, email: ctx.email, name: ctx.name, role: "owner", status: "active", createdAt: now });
     await recordEvent(ctx, { companyId, type: "company.created", actor: { kind: "member", memberId }, subject: { table: "companies", id: companyId } });
     // In the same transaction as the company, so a company never exists without the acceptance it was made with.
     if (args.acceptTerms !== undefined) await acceptTerms(ctx, { companyId, documentId: args.acceptTerms, memberId, userId: ctx.userId });
+    // A new company starts in setup. Companies made before setup existed have no row and are never sent through it.
+    await startSetup(ctx, companyId);
     return companyId;
   },
+});
+
+/**
+ * After the sign-in service changes, a person's memberships still point at their old sign-in id. The app
+ * calls this when someone signed in has no company, before offering to create one.
+ */
+export const reconnect = signedInMutation({
+  args: {},
+  handler: async (ctx) => ({ reconnected: await reconnectAfterSignInMove(ctx) }),
 });
 
 /** The companies the signed-in person belongs to. */
