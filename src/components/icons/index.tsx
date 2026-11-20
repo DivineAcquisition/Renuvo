@@ -90,6 +90,13 @@ import {
   Paperclip as PhPaperclip,
   PencilLine as PhPencilLine,
   Play as PhPlay,
+  Pause as PhPause,
+  SpeakerHigh as PhSpeakerHigh,
+  SpeakerSlash as PhSpeakerSlash,
+  ClosedCaptioning as PhClosedCaptioning,
+  CornersOut as PhCornersOut,
+  CornersIn as PhCornersIn,
+  Lifebuoy as PhLifebuoy,
   PlayCircle as PhPlayCircle,
   Plug as PhPlug,
   Plugs as PhPlugs,
@@ -295,6 +302,13 @@ export const PanelLeftIcon = wrap(PhSidebarSimple, "PanelLeftIcon", true);
 export const Paperclip = wrap(PhPaperclip, "Paperclip", true);
 export const PenLine = wrap(PhPencilLine, "PenLine", true);
 export const Play = wrap(PhPlay, "Play", true);
+export const Pause = wrap(PhPause, "Pause", true);
+export const Volume2 = wrap(PhSpeakerHigh, "Volume2", true);
+export const VolumeX = wrap(PhSpeakerSlash, "VolumeX", true);
+export const Captions = wrap(PhClosedCaptioning, "Captions", true);
+export const Maximize = wrap(PhCornersOut, "Maximize", false);
+export const Minimize = wrap(PhCornersIn, "Minimize", false);
+export const LifeBuoy = wrap(PhLifebuoy, "LifeBuoy", true);
 export const PlayCircle = wrap(PhPlayCircle, "PlayCircle", true);
 export const Plug = wrap(PhPlug, "Plug", true);
 export const PlugZap = wrap(PhPlugsConnected, "PlugZap", true);

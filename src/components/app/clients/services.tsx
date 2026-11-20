@@ -31,6 +31,7 @@ import { ActionMenu } from "./menu";
 import { VisitRow } from "./parts";
 import { SalesPlans, SalesWork, useClientSales } from "./sales";
 import type { Profile } from "./profile";
+import { ImportedRecords } from "@/components/app/setup/migration";
 
 type Plan = NonNullable<ReturnType<typeof useQuery<typeof api.servicePlans.forClient>>>["plans"][number];
 
@@ -68,6 +69,7 @@ export function ServicesTab({ profile }: { profile: Profile }) {
         />
       </div>
       {view === "upcoming" || view === "history" ? <Visits profile={profile} when={view} /> : view === "plans" ? <Plans profile={profile} /> : <Proposals profile={profile} />}
+      {view === "plans" || view === "history" ? <ImportedRecords customerId={profile.id} /> : null}
       <Modal open={booking} onClose={() => setBooking(false)} title="Book a visit" description="Priced from Services & Pricing. Dispatch starts staffing it once it is booked.">
         <NewVisitForm initial={{ customerId: profile.id, propertyId: profile.properties.find((p) => p.status === "active")?.id }} onDone={() => setBooking(false)} />
       </Modal>

@@ -22,13 +22,12 @@ import type { FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import { CATEGORY_CHOICES, SCALE_CHOICES, TOOL_CHOICES, WORKFORCE_CHOICES, type Choice } from "../../../../convex/lib/setup/facts";
 import { connectionsFor, PRIORITY_INFO, QUESTIONS, STAGES, stepsFor, UNSURE } from "../../../../convex/lib/setup/path";
-import { ConnectedImport } from "./connectors";
 import { AgentWork } from "./work";
 import { BeforeStart } from "./review";
 
 const FIRST_WORK_PATH = "/app/first-work";
 import { ActivationReview } from "@/components/app/activation/review";
-import { ClientImport } from "./import";
+import { MigrationRecordsStep, MigrationReview } from "./migration";
 import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
 
@@ -502,14 +501,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
             {step.id === "records" ? (
               <>
                 <StepHeading eyebrow="Prepare your workspace" title="Bring in what you already have" lead="Optional. Anything you bring in now saves you typing it later. Nothing is contacted because it was imported." />
-                <section className="grid gap-2" aria-labelledby="clients-heading">
-                  <h2 id="clients-heading" className="text-sm font-semibold text-strong">
-                    Your clients
-                  </h2>
-                  <ConnectedImport />
-                  <p className="text-xs text-muted-foreground">Or from a spreadsheet, including an export from Jobber, Housecall Pro or BookingKoala:</p>
-                  <ClientImport />
-                </section>
+                <MigrationRecordsStep />
                 {connectionsFor(priority ?? undefined, secondary).length ? (
                   <section className="grid gap-2" aria-labelledby="connect-heading">
                     <h2 id="connect-heading" className="text-sm font-semibold text-strong">
@@ -563,6 +555,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     </Button>
                   ))}
                 </div>
+                <MigrationReview />
                 <BeforeStart agent={info?.agent ?? null} canEdit={view.canEdit} />
                 <div className="grid gap-1 border-t border-border pt-4">
                   <h2 className="font-display text-lg font-semibold text-strong">What Selestial will start</h2>

@@ -242,6 +242,7 @@ export const SETUP_PAGES: readonly { path: string; label: string; purpose: strin
   { path: `${APP_ROOT}/setup`, label: "Set up your company", purpose: "The Owner confirms the company's details, chooses what Selestial helps with first, and opens the workspace." },
   { path: `${APP_ROOT}/first-work`, label: "Your first work", purpose: "Where setup lands: what is prepared, what waits for a decision, what agents sent, and one next step." },
   { path: `${APP_ROOT}/texting`, label: "Set up business texting", purpose: "The Owner gets the company its own number and texting registration, step by step, and follows it to ready. Opened from settings, agent pages and setup." },
+  { path: `${APP_ROOT}/help`, label: "Moving your records", purpose: "A searchable directory of the published migration tutorials: exporting from Jobber, Housecall Pro or BookingKoala, preparing spreadsheets and checking imports. Opened from setup and import screens." },
 ];
 
 /** Pages inside Sales that are not tabs: the booking and proposal workspace and its entry point. */

@@ -33,6 +33,8 @@ import { activationTables } from "./lib/activation/schema";
 import { connectorTables } from "./lib/connectors/schema";
 import { retentionSettingsValidator, retentionTables } from "./lib/retention/schema";
 import { servicesTables } from "./lib/services/schema";
+import { tutorialTables } from "./lib/tutorials/schema";
+import { migrationTables } from "./lib/migration/schema";
 import { noticeEventValidator, noticeFactsValidator } from "./lib/notify/catalog";
 import { notifyTables } from "./lib/notify/schema";
 import {
@@ -1008,6 +1010,9 @@ export default defineSchema({
   ...activationTables,
   // ── Retention: signals, cases, actions, feedback and customer links (convex/lib/retention/schema.ts) ─
   ...retentionTables,
+  // ── Migration: tutorials for moving in, and records brought from another system (convex/lib/tutorials, lib/migration) ─
+  ...tutorialTables,
+  ...migrationTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({
