@@ -31,6 +31,7 @@ import { salesTables } from "./lib/sales/schema";
 import { setupTables } from "./lib/setup/schema";
 import { activationTables } from "./lib/activation/schema";
 import { connectorTables } from "./lib/connectors/schema";
+import { migrationMarkValidator, migrationTables } from "./lib/migration/schema";
 import { retentionSettingsValidator, retentionTables } from "./lib/retention/schema";
 import { servicesTables } from "./lib/services/schema";
 import { noticeEventValidator, noticeFactsValidator } from "./lib/notify/catalog";
@@ -511,6 +512,8 @@ export default defineSchema({
     recovery: v.optional(v.object({ caseId: v.id("retentionCases"), originalJobId: v.optional(v.id("jobs")) })),
     /** Cleaners a person agreed not to send to this visit, for example after a customer asked for someone else. Dispatch does not offer it to them. */
     avoidCleanerIds: v.optional(v.array(v.id("cleaners"))),
+    /** Written by a migration. While held, Dispatch doesn't offer it and no confirmation is sent (convex/migration.ts). */
+    migration: v.optional(migrationMarkValidator),
     createdAt: v.number(),
   })
     .index("by_company_start", ["companyId", "startsAt"])
@@ -984,6 +987,7 @@ export default defineSchema({
   ...agreementTables,
   ...googleTables,
   ...connectorTables,
+  ...migrationTables,
   // ── Cleaners: subcontractors, requirements, crews, portal, follow-ups, coaching, personnel ──────
   ...cleanersTables,
   ...clientsTables,

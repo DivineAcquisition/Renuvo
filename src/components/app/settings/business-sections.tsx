@@ -1,5 +1,6 @@
 "use client";
 
+import { MigrationEntry } from "@/components/app/migration/entry";
 import { useId, useMemo, useState } from "react";
 
 import { Unavailable } from "@/components/app/settings/guard";
@@ -340,6 +341,7 @@ export function BusinessSection() {
   const timezoneChanged = draft.timezone !== saved.timezone;
   return (
     <div className="grid gap-5">
+      <MigrationEntry />
       <Panel title="Company">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Company name" error={canEdit && !draft.name.trim() ? "Enter your company name." : null}>

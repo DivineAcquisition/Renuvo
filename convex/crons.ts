@@ -77,6 +77,9 @@ crons.interval("cleaners requirements that expire", { minutes: 60 }, internal.re
 // Booking Experiences: holds that ended, and sessions customers walked away from.
 crons.interval("bookings let go of ended holds", { minutes: 5 }, internal.bookingOps.sweep, {});
 
+// A migration import whose background step stopped picks up from its last checkpoint (convex/migration.ts).
+crons.interval("migration imports resume after an interruption", { minutes: 2 }, internal.migration.sweep, {});
+
 // Sales: lapsed holds and Dispatch handoffs that need another try; recurring plans made to their horizon.
 crons.interval("sales bookings sweep", { minutes: 10 }, internal.bookings.sweep, {});
 crons.interval("recurring plans make their visits", { hours: 6 }, internal.plans.sweep, {});

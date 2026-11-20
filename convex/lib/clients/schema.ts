@@ -149,6 +149,8 @@ export const clientsTables = {
     endsOn: v.optional(v.string()),
     /** Days of the series a person skipped. A skipped day is never booked again. */
     skipped: v.array(v.string()),
+    /** Written by a migration: set up but not started, until the owner releases it (convex/migration.ts). */
+    migration: v.optional(v.object({ migrationId: v.id("migrations"), held: v.boolean() })),
     revision: v.number(),
     createdBy: actorValidator,
     createdAt: v.number(),

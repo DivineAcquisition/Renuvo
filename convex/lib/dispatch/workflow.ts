@@ -39,6 +39,8 @@ export const URGENT_HIRE = "dispatch.request_urgent_hire";
 
 export type CoverState =
   | "gone"
+  /** Imported by a migration and not released yet: Dispatch leaves it alone until the owner releases it. */
+  | "held"
   | "closed"
   | "covered"
   | "underway"
@@ -230,6 +232,7 @@ export async function coverJob(ctx: MutationCtx, jobId: Id<"jobs">): Promise<Cov
   if (!job) return "gone";
   const company = await ctx.db.get(job.companyId);
   if (!company) return "gone";
+  if (job.migration?.held) return "held";
   const settings = dispatchSettings(company);
   const policy = dispatchPolicy(company);
   const now = Date.now();

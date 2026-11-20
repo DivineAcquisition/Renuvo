@@ -5,6 +5,7 @@
  * Search, filters, sort and paging happen on the server; the view, filters and an open quick view live in
  * the address, and coming back from a profile returns to the same place on the page.
  */
+import { MIGRATION_PATH } from "@/components/app/migration/entry";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import Link from "next/link";
@@ -352,7 +353,11 @@ function DirectoryTable({ state, view, canManage, owners, onQuickView, onBook, o
               </Button>
             }
           >
-            Add a client with their first property, then book a visit or set up a recurring plan.
+            Add a client with their first property, then book a visit or set up a recurring plan. Moving from Jobber, Housecall Pro, BookingKoala or a spreadsheet?{" "}
+            <Link href={MIGRATION_PATH} className="font-medium text-brand-300 underline-offset-2 hover:underline">
+              Bring your business to Selestial
+            </Link>
+            .
           </EmptyState>
         ) : (
           <EmptyState title="No clients in this view">{VIEWS.find((v) => v.id === view)?.detail ?? RESIDENTIAL_VIEWS.find((v) => v.id === view && "detail" in v)?.label}</EmptyState>

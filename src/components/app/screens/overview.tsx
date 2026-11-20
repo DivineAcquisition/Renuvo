@@ -1,5 +1,6 @@
 "use client";
 
+import { MigrationBanner } from "@/components/app/migration/entry";
 import { SetupChecklist } from "@/components/app/setup/checklist";
 import { useUser } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
@@ -77,7 +78,12 @@ export function OverviewScreen() {
       onApprove={(decision) => void approve(decision)}
       approving={approving}
       approveError={error}
-      checklist={<SetupChecklist />}
+      checklist={
+        <>
+          <MigrationBanner />
+          <SetupChecklist />
+        </>
+      }
     />
   );
 }

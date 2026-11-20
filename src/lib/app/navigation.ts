@@ -241,6 +241,7 @@ export const AGREEMENT_PAGES: readonly { path: string; label: string; purpose: s
 export const SETUP_PAGES: readonly { path: string; label: string; purpose: string }[] = [
   { path: `${APP_ROOT}/setup`, label: "Set up your company", purpose: "The Owner confirms the company's details, chooses what Selestial helps with first, and opens the workspace." },
   { path: `${APP_ROOT}/first-work`, label: "Your first work", purpose: "Where setup lands: what is prepared, what waits for a decision, what agents sent, and one next step." },
+  { path: `${APP_ROOT}/migration`, label: "Bring your business to Selestial", purpose: "Owners and Managers move customers, properties and upcoming work in from another system or a spreadsheet, review every record, and release the schedule when ready. Opened from setup, Settings, Clients and Home." },
   { path: `${APP_ROOT}/texting`, label: "Set up business texting", purpose: "The Owner gets the company its own number and texting registration, step by step, and follows it to ready. Opened from settings, agent pages and setup." },
 ];
 

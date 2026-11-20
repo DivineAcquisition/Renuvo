@@ -369,7 +369,7 @@ export const sweepConversions = internalMutation({
       for (const lead of leads) {
         if (!lead.customerId || !lead.gclid || lead.test) continue;
         const jobs = await ctx.db.query("jobs").withIndex("by_company_customer", (q) => q.eq("companyId", companyId).eq("customerId", lead.customerId!)).take(20);
-        const first = jobs.filter((j) => j.createdAt >= lead.receivedAt && j.status !== "cancelled" && (j.priceCents ?? 0) > 0).sort((a, b) => a.createdAt - b.createdAt)[0];
+        const first = jobs.filter((j) => !j.migration && j.createdAt >= lead.receivedAt && j.status !== "cancelled" && (j.priceCents ?? 0) > 0).sort((a, b) => a.createdAt - b.createdAt)[0];
         if (!first) continue;
         const done = await ctx.db.query("googleConversions").withIndex("by_company_job", (q) => q.eq("companyId", companyId).eq("jobId", first._id)).first();
         if (done) continue;

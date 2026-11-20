@@ -207,6 +207,9 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "bookingEvents", index: "by_company_experience_at" },
   // Notifications to members (convex/lib/notify/schema.ts): each person's choices. The notices themselves are messages.
   { table: "notificationPreferences", index: "by_company_member" },
+  // Migration (convex/lib/migration/schema.ts): the saved migration, its files and runs, and what each source record became.
+  { table: "migrations", index: "by_company" },
+  { table: "migrationLinks", index: "by_company_source_kind_external" },
 ];
 
 /** Company tables kept out of the export, and why. */
@@ -235,6 +238,9 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
   portalCodes: "Hashes of one-time codes that unlock a portal for ten minutes; nothing in them is about the business.",
   capacityHolds: "Short-lived reservations of a day's minutes while a booking waits; the booking keeps what matters.",
+  migrationFiles: "Each uploaded export's name, columns and mapping; the rows it contained are what was imported, exported as clients, properties, plans and visits.",
+  migrationRows: "Working copies of the rows of uploaded files while they were reviewed; what was imported is exported as clients, properties, plans and visits, and each one's source is in migrationLinks.",
+  migrationRuns: "Progress records of background imports; their totals are in the migration and each record's result in migrationLinks.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 

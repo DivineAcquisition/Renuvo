@@ -28,6 +28,7 @@ import { BeforeStart } from "./review";
 
 const FIRST_WORK_PATH = "/app/first-work";
 import { ActivationReview } from "@/components/app/activation/review";
+import { MigrationEntry } from "@/components/app/migration/entry";
 import { ClientImport } from "./import";
 import { PrepareDrafts, WebsiteProgress } from "./prepare";
 import type { Method, Priority } from "../../../../convex/lib/setup/schema";
@@ -507,7 +508,8 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     Your clients
                   </h2>
                   <ConnectedImport />
-                  <p className="text-xs text-muted-foreground">Or from a spreadsheet, including an export from Jobber, Housecall Pro or BookingKoala:</p>
+                  <MigrationEntry className="border-brand-500/30 bg-brand-500/[0.03]" />
+                  <p className="text-xs text-muted-foreground">Or, for a quick client list only, from a spreadsheet:</p>
                   <ClientImport />
                 </section>
                 {connectionsFor(priority ?? undefined, secondary).length ? (

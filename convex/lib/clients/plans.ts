@@ -62,7 +62,7 @@ export async function upcomingPlanVisits(ctx: QueryCtx, plan: Doc<"servicePlans"
  * person to look, and the rest of the series is still booked.
  */
 export async function bookAhead(ctx: MutationCtx, plan: Doc<"servicePlans">, actor: Actor): Promise<{ booked: number; problems: string[] }> {
-  if (plan.kind !== "recurring" || plan.state !== "active" || !plan.cadence) return { booked: 0, problems: [] };
+  if (plan.kind !== "recurring" || plan.state !== "active" || !plan.cadence || plan.migration?.held) return { booked: 0, problems: [] };
   const company = (await ctx.db.get(plan.companyId))!;
   const service = await ctx.db.get(plan.serviceId);
   if (!service || service.status !== "active") return { booked: 0, problems: ["The plan's service is not live, so no visits were booked."] };

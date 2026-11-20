@@ -424,6 +424,7 @@ const COVER_GROUP: Record<CoverState, "covered" | "offered" | "decision" | "gap"
   covered: "covered",
   underway: "skip",
   gone: "skip",
+  held: "skip",
   closed: "skip",
   offer_out: "offered",
   offered: "offered",
