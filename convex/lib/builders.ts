@@ -9,6 +9,7 @@
 import type { PublicHttpAction, RegisteredMutation, RegisteredQuery, UserIdentity } from "convex/server";
 import { v, type ObjectType, type PropertyValidators } from "convex/values";
 
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { httpAction, mutation, query, type ActionCtx, type MutationCtx, type QueryCtx } from "../_generated/server";
 import { requireIdentity, requireMember } from "./access";
@@ -502,7 +503,16 @@ export function providerWebhook(def: {
   return httpAction(async (ctx, request) => {
     const body = await request.text();
     if (body.length > 256 * 1024 || !(await def.verify(request, body))) return new Response(null, { status: 401 });
-    const status = await def.handler(ctx, body, request);
+    let status: void | number;
+    try {
+      status = await def.handler(ctx, body, request);
+    } catch (error) {
+      // A verified callback that could not be processed: noted for the operations checks (convex/operations.ts),
+      // never with the request's contents, then answered 500 so the provider sends it again.
+      const detail = error instanceof Error ? error.message : String(error);
+      await ctx.runMutation(internal.operations.webhookFailed, { source: new URL(request.url).pathname, detail }).catch(() => undefined);
+      return new Response(null, { status: 500 });
+    }
     return new Response(null, { status: typeof status === "number" ? status : 200 });
   });
 }

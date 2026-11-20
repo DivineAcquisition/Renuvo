@@ -94,4 +94,8 @@ crons.interval("retention reads customer replies in care inboxes", { minutes: 10
 // tick, and blocked first work is checked again. Each step is re-checked before it runs; nothing runs twice.
 crons.interval("activation recovers and resumes first work", { minutes: 5 }, internal.activation.sweep, {});
 
+// Operations: each monitoring check runs on its own schedule (convex/lib/operations/detectors.ts). Checks read
+// records through indexes only and never call a provider or a model; what they find becomes an incident.
+crons.interval("operations checks find and verify incidents", { minutes: 5 }, internal.operations.tick, {});
+
 export default crons;
