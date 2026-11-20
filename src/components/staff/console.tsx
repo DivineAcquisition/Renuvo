@@ -6,6 +6,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
+import { Modal } from "@/components/app/modal";
 import { missingSetup } from "@/components/app/not-set-up";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { UserMenu } from "@/components/auth/user-menu";
@@ -14,6 +15,7 @@ import { ArrowLeft } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OpenWorkspaceDialog } from "@/components/staff/operations";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
@@ -55,6 +57,7 @@ function StaffCheck({ children }: { children: React.ReactNode }) {
 }
 
 const NAV = [
+  { href: "/staff/operations", label: "Operations" },
   { href: "/staff", label: "Requests" },
   { href: "/staff/trust", label: "Trust records" },
   { href: "/staff/companies", label: "Companies" },
@@ -66,7 +69,7 @@ const NAV = [
   { href: "/staff/ai", label: "AI models" },
 ];
 
-function StaffShell({ role, children }: { role: "admin" | "reviewer"; children: React.ReactNode }) {
+function StaffShell({ role, children }: { role: "admin" | "support" | "reviewer"; children: React.ReactNode }) {
   const pathname = usePathname();
   return (
     <div className="min-h-dvh bg-muted/50">
@@ -76,7 +79,7 @@ function StaffShell({ role, children }: { role: "admin" | "reviewer"; children: 
             <LogoMark className="size-7" />
             Selestial staff
           </Link>
-          <Badge variant={role === "admin" ? "info" : "outline"}>{role === "admin" ? "Admin" : "Reviewer"}</Badge>
+          <Badge variant={role === "admin" ? "info" : "outline"}>{role === "admin" ? "Admin" : role === "support" ? "Support" : "Reviewer"}</Badge>
           <nav aria-label="Staff" className="order-last flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto">
             {NAV.map((item) => {
               const active = item.href === "/staff" ? pathname === "/staff" || pathname.startsWith("/staff/requests") : pathname.startsWith(item.href);
@@ -766,7 +769,7 @@ export function Companies() {
   const [picked, setPicked] = useState<{ id: Id<"companies">; name: string; plan: "operate" | "expand" | "growth" | "scale" } | null>(null);
   return (
     <>
-      <PageHeader title="Companies" lead="Confirm a carrier registration after checking it with the texting provider, or suspend a company's sending. Staff see names only, never a company's records." />
+      <PageHeader title="Companies" lead="Confirm a carrier registration after checking it with the texting provider, suspend a company's sending, or open its workspace in an Admin Support Session. Outside a session, staff see names only." />
       <Panel>
         <Field label="Find a company">
           <TextInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Two letters or more" />
@@ -794,8 +797,10 @@ function CompanyActions({ company }: { company: { id: Id<"companies">; name: str
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
   const [done, setDone] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
   return (
-    <Panel title={company.name} className="mt-5">
+    <Panel title={company.name} className="mt-5" action={<Button size="sm" variant="primary" onClick={() => setOpening(true)}>Open company workspace</Button>}>
+      <OpenWorkspaceDialog open={opening} onClose={() => setOpening(false)} company={{ id: company.id, name: company.name }} />
       <form
         className="grid gap-3 sm:grid-cols-3"
         onSubmit={(event) => {
@@ -846,36 +851,82 @@ function CompanyActions({ company }: { company: { id: Id<"companies">; name: str
 
 // ── Staff ─────────────────────────────────────────────────────────────────────────────────────────
 
+type StaffRole = "admin" | "support" | "reviewer";
+const ROLE_NAME: Record<StaffRole, string> = { admin: "Admin", support: "Support", reviewer: "Reviewer" };
+const SENSITIVE = ["communications.send", "billing.adjust", "records.destroy"] as const;
+const CAPABILITY_NAME: Record<string, string> = {
+  "workspace.view": "View workspaces",
+  "records.edit": "Edit records",
+  "agents.recover": "Recover agent work",
+  "communications.send": "Communication actions",
+  "billing.adjust": "Billing adjustments",
+  "records.destroy": "Destructive actions",
+};
+
 export function StaffPeople() {
   const me = useQuery(api.staff.me, {});
   const people = useQuery(api.staff.list, {});
   const add = useMutation(api.staff.add);
   const remove = useMutation(api.staff.remove);
+  const setRole = useMutation(api.staff.setRole);
+  const revoke = useMutation(api.staff.revokeCapability);
   const { busy, error, run } = useRun();
-  const [form, setForm] = useState({ name: "", email: "", role: "reviewer" as "admin" | "reviewer" });
+  const [form, setForm] = useState({ name: "", email: "", role: "reviewer" as StaffRole });
+  const [granting, setGranting] = useState<{ staffId: Id<"staff">; name: string } | null>(null);
   const admin = me?.role === "admin";
   return (
     <>
-      <PageHeader title="Staff" lead="Selestial people who handle requests and trust records. Being staff gives no access to any company's records." />
+      <PageHeader title="Staff" lead="Selestial people who handle requests, trust records and operations. Admins and Support can open a company's workspace only in an Admin Support Session; sensitive capabilities are granted to each person." />
       <Panel>
         {people === undefined ? (
           <Skeleton className="h-24" />
         ) : (
           <ul className="grid gap-1.5">
             {people.map((person) => (
-              <li key={person.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm">
-                <span>
-                  <span className="font-medium text-strong">{person.name}</span> <span className="text-muted-foreground">{person.email}</span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <Badge variant={person.role === "admin" ? "info" : "outline"}>{person.role}</Badge>
-                  {!person.joined ? <Badge variant="warning">Not signed in yet</Badge> : null}
-                  {admin && person.email !== me?.email ? (
-                    <Button size="sm" variant="ghost" loading={busy} onClick={() => void run(() => remove({ staffId: person.id }))}>
-                      Remove
+              <li key={person.id} className="grid gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <span className="font-medium text-strong">{person.name}</span> <span className="text-muted-foreground">{person.email}</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {admin && person.email !== me?.email ? (
+                      <SelectInput aria-label={`Role for ${person.name}`} className="h-8 w-32 py-0 text-xs" value={person.role} onChange={(event) => void run(() => setRole({ staffId: person.id, role: event.target.value as StaffRole }))}>
+                        <option value="reviewer">Reviewer</option>
+                        <option value="support">Support</option>
+                        <option value="admin">Admin</option>
+                      </SelectInput>
+                    ) : (
+                      <Badge variant={person.role === "admin" ? "info" : "outline"}>{ROLE_NAME[person.role]}</Badge>
+                    )}
+                    {!person.joined ? <Badge variant="warning">Not signed in yet</Badge> : null}
+                    {admin && person.email !== me?.email ? (
+                      <Button size="sm" variant="ghost" loading={busy} onClick={() => void run(() => remove({ staffId: person.id }))}>
+                        Remove
+                      </Button>
+                    ) : null}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {person.capabilities.length === 0 ? <span className="text-xs text-muted-foreground">Request queues only. Opens no company workspace.</span> : null}
+                  {person.capabilities.map((capability) => {
+                    const granted = person.granted.includes(capability);
+                    return (
+                      <Badge key={capability} variant={granted ? "warning" : "outline"} size="sm">
+                        {CAPABILITY_NAME[capability] ?? capability}
+                        {granted && admin ? (
+                          <button type="button" aria-label={`Take back ${CAPABILITY_NAME[capability]} from ${person.name}`} className="ml-1 font-semibold" onClick={() => void run(() => revoke({ staffId: person.id, capability: capability as (typeof SENSITIVE)[number] }))}>
+                            ×
+                          </button>
+                        ) : null}
+                      </Badge>
+                    );
+                  })}
+                  {admin ? (
+                    <Button size="xs" variant="ghost" onClick={() => setGranting({ staffId: person.id, name: person.name })}>
+                      Grant a capability
                     </Button>
                   ) : null}
-                </span>
+                </div>
               </li>
             ))}
           </ul>
@@ -898,8 +949,9 @@ export function StaffPeople() {
               <TextInput type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
             </Field>
             <Field label="Role">
-              <SelectInput value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as "admin" | "reviewer" })}>
+              <SelectInput value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as StaffRole })}>
                 <option value="reviewer">Reviewer</option>
+                <option value="support">Support</option>
                 <option value="admin">Admin</option>
               </SelectInput>
             </Field>
@@ -912,7 +964,37 @@ export function StaffPeople() {
         ) : null}
         <FormError message={error} />
       </Panel>
+      <Modal open={granting !== null} onClose={() => setGranting(null)} title={`Grant a capability to ${granting?.name ?? ""}`} description="Sensitive capabilities are never part of a role. Each grant is recorded with your reason. No support-session action uses them yet; they are ready for the actions that will.">
+        {granting ? <GrantForm staffId={granting.staffId} onDone={() => setGranting(null)} /> : null}
+      </Modal>
     </>
+  );
+}
+
+function GrantForm({ staffId, onDone }: { staffId: Id<"staff">; onDone: () => void }) {
+  const grant = useMutation(api.staff.grantCapability);
+  const [capability, setCapability] = useState<(typeof SENSITIVE)[number]>("communications.send");
+  const [reason, setReason] = useState("");
+  const { busy, error, run } = useRun();
+  return (
+    <form className="grid gap-3" onSubmit={(event) => (event.preventDefault(), void run(async () => (await grant({ staffId, capability, reason }), onDone())))}>
+      <Field label="Capability">
+        <SelectInput value={capability} onChange={(event) => setCapability(event.target.value as typeof capability)}>
+          {SENSITIVE.map((item) => (
+            <option key={item} value={item}>
+              {CAPABILITY_NAME[item]}
+            </option>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label="Why they need it">
+        <TextInput value={reason} onChange={(event) => setReason(event.target.value)} maxLength={300} required />
+      </Field>
+      <FormError message={error} />
+      <Button type="submit" variant="primary" size="sm" loading={busy} disabled={reason.trim().length < 5}>
+        Grant
+      </Button>
+    </form>
   );
 }
 

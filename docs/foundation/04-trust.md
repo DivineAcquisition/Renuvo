@@ -124,10 +124,14 @@ The Terms are accepted at workspace setup (in the same transaction as the compan
 
 ## Staff
 
-Selestial staff are rows in the record (`staff`), roles `admin` and `reviewer`, separate from any
-company membership; being staff gives no access to company records. `STAFF_BOOTSTRAP_EMAIL` makes one
-confirmed email an admin only while no active admin exists. The console is `/staff` (requests, trust
-records, companies, staff); to anyone else it reads "Not found.".
+Selestial staff are rows in the record (`staff`), roles `admin`, `support` and `reviewer`, separate from
+any company membership. Being staff opens no company by itself: a staff member with `workspace.view`
+can open one only through an Admin Support Session, for a stated reason and an hour at a time, recorded
+and listed in the company's Settings › Support access (docs/operations/03-support-sessions.md).
+Support sessions are off until the deployment sets `SUPPORT_ACCESS=on`, which waits for the privacy
+notice to describe them. `STAFF_BOOTSTRAP_EMAIL` makes one confirmed email an admin only while no
+active admin exists. The console is `/staff` (operations, requests, trust records, companies, staff); to
+anyone else it reads "Not found.".
 
 ## Control and disclosure register
 

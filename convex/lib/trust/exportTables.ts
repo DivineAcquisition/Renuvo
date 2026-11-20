@@ -87,6 +87,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "activationTasks", index: "by_company_state" },
   { table: "memberNotices", index: "by_company_dedupe" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
+  // Admin Support Sessions: when Selestial was in the workspace, why, and what it changed.
+  { table: "supportSessions", index: "by_company_started" },
+  { table: "supportGrants", index: "by_company_granted" },
+  { table: "supportEvents", index: "by_company_at" },
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
   { table: "chatActionSteps", index: "by_company_key" },
   { table: "chatArtifacts", index: "by_company_creator_updated" },

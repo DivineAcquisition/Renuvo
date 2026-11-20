@@ -59,8 +59,19 @@ Owner notices are already free of the messaging balance: `member_notice` is in t
 - Status indexes on `mailboxConnections`, `googleConnections`, `connectorConnections`, and a
   `by_state_updated` index on `activationTasks`, so no check scans a table.
 
-## Not in Phase 1
+## What Phase 2 adds
 
-The staff Operations pages and support sessions (Phase 2); owner recovery cards and alerts, including staff
-email (Phase 3); pause, takeover, suspension and safe-retry controls, preview isolation, and the backup
-runbook (Phase 4). Nothing has been deployed.
+- The staff Operations workspace (`/staff/operations`): Overview, Needs attention, Agent work,
+  Communications, Connections, Billing and Activity, with an incident side panel (history, records,
+  diagnostics; take, note, check again, resolve, open the company workspace) and each check's freshness.
+- Admin Support Sessions ([03-support-sessions.md](03-support-sessions.md)): staff roles `admin`,
+  `support`, `reviewer` and per-person capability grants; sessions enforced in the company builders;
+  the Selestial Support member; hidden message content; Settings › Support access for the owner.
+- Existing staff functions that predate the capability catalog (for example
+  `messagingFunds` balance adjustments and `compliance.setSuspended`) still check only that the caller is
+  staff. Phase 4 gates them with `billing.adjust` and an emergency-suspension capability.
+
+## Not yet built
+
+Owner recovery cards and alerts, including staff email (Phase 3); pause, takeover, suspension and
+safe-retry controls, preview isolation, and the backup runbook (Phase 4). Nothing has been deployed.

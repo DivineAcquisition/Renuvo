@@ -24,11 +24,12 @@ import { linkForStatementToken } from "./finance/statementLinks";
 import { notePortalAction, portalLinkForToken, portalLinkState, type PortalAction, type PortalLinkState } from "./cleaners/portal";
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 import { publicIdFor, type LinkKind } from "./sales/links";
+import { manageBasisHolds, recordSupportChange, redactingDb, requireSupport, type SupportContext, type SupportUse } from "./support/access";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
 
 /** The arguments a company function takes from callers: its own, plus the company. */
-export type CompanyArgs<V extends AnyValidators> = ObjectType<V> & { companyId: Id<"companies"> };
+export type CompanyArgs<V extends AnyValidators> = ObjectType<V> & { companyId: Id<"companies">; supportSessionId?: Id<"supportSessions"> };
 
 export type MemberAccess = {
   identity: UserIdentity;
@@ -36,6 +37,12 @@ export type MemberAccess = {
   company: Doc<"companies">;
   companyId: Id<"companies">;
   role: Role;
+  /**
+   * Set when Selestial staff are working in the company through an Admin Support Session
+   * (convex/lib/support/access.ts). `member` is then the company's Selestial Support member, so everything
+   * done is recorded as Selestial Support, and this names the staff member and session.
+   */
+  support: SupportContext | null;
 };
 
 type QueryDef<V extends AnyValidators, R> = {
@@ -44,17 +51,31 @@ type QueryDef<V extends AnyValidators, R> = {
 };
 type MutationDef<V extends AnyValidators, R> = {
   args: V;
+  /**
+   * Opens this write to Manage-mode support sessions, under one staff capability, with what the owner is
+   * told it did. Without it, a support session can never make this change: the default is closed.
+   */
+  support?: SupportUse;
   handler: (ctx: MutationCtx & MemberAccess, args: ObjectType<V>) => R;
 };
 
-/** A read inside a company. Any active member. */
+/** Every company function also takes the support session it is called in, when it is. */
+const SUPPORT_ARG = { supportSessionId: v.optional(v.id("supportSessions")) };
+
+/** A read inside a company. Any active member, or Selestial staff in a support session for it. */
 export function companyQuery<V extends AnyValidators, R>(def: QueryDef<V, R>): RegisteredQuery<"public", CompanyArgs<V>, R> {
   return query({
-    args: { companyId: v.id("companies"), ...def.args },
-    handler: async (ctx: QueryCtx, args: { companyId: Id<"companies"> }) => {
-      const { companyId, ...rest } = args;
+    args: { companyId: v.id("companies"), ...SUPPORT_ARG, ...def.args },
+    handler: async (ctx: QueryCtx, args: { companyId: Id<"companies">; supportSessionId?: Id<"supportSessions"> }) => {
+      const { companyId, supportSessionId, ...rest } = args;
+      if (supportSessionId) {
+        const { support, ...access } = await requireSupport(ctx, companyId, supportSessionId);
+        // What the preview role would see, with customer words hidden unless revealed.
+        const db = support.revealed ? ctx.db : redactingDb(ctx.db);
+        return def.handler({ ...ctx, db, ...access, role: support.session.previewRole, support }, rest as ObjectType<V>);
+      }
       const access = await requireMember(ctx, companyId);
-      return def.handler({ ...ctx, ...access, role: roleOf(access.member.role) }, rest as ObjectType<V>);
+      return def.handler({ ...ctx, ...access, role: roleOf(access.member.role), support: null }, rest as ObjectType<V>);
     },
   } as any) as RegisteredQuery<"public", CompanyArgs<V>, R>;
 }
@@ -62,11 +83,22 @@ export function companyQuery<V extends AnyValidators, R>(def: QueryDef<V, R>): R
 /** A write inside a company. Any active member: Office works the queue, so day-to-day records are theirs too. */
 export function companyMutation<V extends AnyValidators, R>(def: MutationDef<V, R>): RegisteredMutation<"public", CompanyArgs<V>, R> {
   return mutation({
-    args: { companyId: v.id("companies"), ...def.args },
-    handler: async (ctx: MutationCtx, args: { companyId: Id<"companies"> }) => {
-      const { companyId, ...rest } = args;
+    args: { companyId: v.id("companies"), ...SUPPORT_ARG, ...def.args },
+    handler: async (ctx: MutationCtx, args: { companyId: Id<"companies">; supportSessionId?: Id<"supportSessions"> }) => {
+      const { companyId, supportSessionId, ...rest } = args;
+      if (supportSessionId) {
+        const { support, ...access } = await requireSupport(ctx, companyId, supportSessionId);
+        if (support.session.mode !== "manage") throw userError("This support session is view only. Switch to Manage to make changes.", "not_allowed");
+        if (!def.support) throw userError("A support session can't do this. The owner can, or it can be prepared for them.", "not_allowed");
+        if (!support.capabilities.has(def.support.capability)) notAllowed();
+        if (!(await manageBasisHolds(ctx, support.session, Date.now()))) throw userError("Manage access has ended: the owner's permission or the incident it was opened for is over. Switch back to View.", "not_allowed");
+        // Support works as a Manager, never as the Owner: owner-only changes stay closed unless opened by name.
+        const result = await def.handler({ ...ctx, ...access, role: "manager", support }, rest as ObjectType<V>);
+        await recordSupportChange(ctx, support, def.support, Object.keys(rest));
+        return result;
+      }
       const access = await requireMember(ctx, companyId);
-      return def.handler({ ...ctx, ...access, role: roleOf(access.member.role) }, rest as ObjectType<V>);
+      return def.handler({ ...ctx, ...access, role: roleOf(access.member.role), support: null }, rest as ObjectType<V>);
     },
   } as any) as RegisteredMutation<"public", CompanyArgs<V>, R>;
 }
@@ -85,6 +117,7 @@ export function managerQuery<V extends AnyValidators, R>(def: QueryDef<V, R>) {
 export function managerMutation<V extends AnyValidators, R>(def: MutationDef<V, R>) {
   return companyMutation({
     args: def.args,
+    support: def.support,
     handler: async (ctx, args) => {
       if (!isManager(ctx.role)) notAllowed();
       return def.handler(ctx, args);
@@ -107,8 +140,10 @@ export function ownerQuery<V extends AnyValidators, R>(def: QueryDef<V, R>) {
 export function ownerMutation<V extends AnyValidators, R>(def: MutationDef<V, R>) {
   return companyMutation({
     args: def.args,
+    support: def.support,
     handler: async (ctx, args) => {
-      if (!isOwner(ctx.role)) notAllowed();
+      // A support session reaches here only for a change opened to it by name (companyMutation checked it).
+      if (!isOwner(ctx.role) && !ctx.support) notAllowed();
       return def.handler(ctx, args);
     },
   });

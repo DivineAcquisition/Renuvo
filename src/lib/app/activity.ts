@@ -34,6 +34,8 @@ const TITLES: Record<string, [string, ActivityArea]> = {
   "company.ai_features_changed": ["AI features changed", "agents"],
   "company.plan_changed": ["Plan changed", "billing"],
   "company.deletion_requested": ["Company deletion requested", "privacy"],
+  "support.access_granted": ["Selestial Support allowed to make changes", "privacy"],
+  "support.access_revoked": ["Selestial Support's permission to make changes ended", "privacy"],
   "company.checklist_template_saved": ["Job checklist saved", "dispatch"],
   "company.checklist_template_retired": ["Job checklist retired", "dispatch"],
   "recruiter.playbook_changed": ["Recruiting rules changed", "hiring"],
