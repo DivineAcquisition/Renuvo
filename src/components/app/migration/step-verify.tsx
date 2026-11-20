@@ -7,21 +7,20 @@
  */
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useState } from "react";
 
-import { CheckCircle2, Download, Minus, Rocket, TriangleAlert } from "@/components/icons";
-import { Badge } from "@/components/ui/badge";
+import { CheckCircle2, Download, Minus, TriangleAlert } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 
 import { api } from "../../../../convex/_generated/api";
 import { KIND_LABELS } from "../../../../convex/lib/migration/rules";
 import { csvCell, download, plural, useMigration } from "./context";
-import { Note, Section, StepHeading } from "./parts";
+import { ActivationReview, UndoPanel } from "./activation";
+import { Section, StepHeading } from "./parts";
 
 const RECORD_WORDS: Record<string, string> = { customers: "customer", properties: "property", servicePlans: "recurring", jobs: "visit", cleaners: "team member", importedHistory: "past visit", openingBalances: "opening balance" };
 
 export function VerifyStep() {
-  const { view, companyId, act, go } = useMigration();
+  const { companyId, act, go } = useMigration();
   const report = useQuery(api.migration.report, { companyId });
   const reopen = useMutation(api.migration.reopen);
   if (!report) return <div className="h-64 animate-pulse rounded-xl bg-muted/40 motion-reduce:animate-none" aria-busy="true" />;
@@ -47,7 +46,7 @@ export function VerifyStep() {
           <table className="w-full min-w-[38rem] text-left text-xs">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr>
-                {["Records", "In files", "Created", "Updated", "Matched", "Skipped", "Failed", "Awaiting review", ""].map((h) => (
+                {["Records", "In files", "Created", "Updated", "Matched", "Skipped", "Undone", "Failed", "Awaiting review", ""].map((h) => (
                   <th key={h} scope="col" className="px-3 py-2 text-right font-medium first:text-left">
                     {h}
                   </th>
@@ -63,6 +62,7 @@ export function VerifyStep() {
                   <td className="px-3 py-2 text-right tabular-nums">{k.updated}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{k.linked}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{k.skipped}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{k.undone}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{k.failed ? <span className="text-destructive-foreground">{k.failed}</span> : 0}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{k.awaiting ? <span className="text-warning-foreground">{k.awaiting}</span> : 0}</td>
                   <td className="px-3 py-2 text-right">{k.balanced ? <CheckCircle2 className="ml-auto size-3.5 text-success" aria-label="Adds up" /> : <TriangleAlert className="ml-auto size-3.5 text-warning" aria-label="Doesn't add up" />}</td>
@@ -135,64 +135,8 @@ export function VerifyStep() {
         </ul>
       </Section>
 
-      <Release held={report.held} status={report.status} releasedAt={report.releasedAt} canRelease={view.canRelease} />
+      <ActivationReview />
+      <UndoPanel />
     </div>
-  );
-}
-
-function Release({ held, status, releasedAt, canRelease }: { held: { visits: number; plans: number; cleaners: number }; status: string; releasedAt: number | null; canRelease: boolean }) {
-  const { companyId, act } = useMigration();
-  const release = useMutation(api.migration.release);
-  const [sure, setSure] = useState(false);
-  const scheduleHeld = held.visits + held.plans > 0;
-  const [schedule, setSchedule] = useState(scheduleHeld);
-  const [team, setTeam] = useState(held.cleaners > 0);
-  if (!scheduleHeld && !held.cleaners) {
-    return releasedAt ? (
-      <Section title="Activation">
-        <Note tone="done">You released your imported records on {new Date(releasedAt).toLocaleDateString("en-US", { month: "long", day: "numeric" })}.</Note>
-      </Section>
-    ) : null;
-  }
-  return (
-    <Section title="Activate what you imported" lead="Imported visits, recurring services and team members are on hold until you say so. Choose what to release and see what each does.">
-      <div className="grid gap-3 rounded-2xl border border-brand-500/30 bg-gradient-to-br from-brand-500/[0.06] to-transparent p-4">
-        {scheduleHeld ? (
-          <label className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-xs">
-            <input type="checkbox" className="mt-0.5" checked={schedule} disabled={!canRelease} onChange={(e) => setSchedule(e.target.checked)} />
-            <span className="grid gap-1">
-              <span className="text-sm font-semibold text-strong">Your schedule</span>
-              {held.visits ? <span className="text-strong"><Badge variant="info">Dispatch</Badge> Offers {plural(held.visits, "imported visit")} to your cleaners, following your Dispatch settings. Offers go to cleaners by text or email, which may use messaging credits.</span> : null}
-              {held.plans ? <span className="text-strong"><Badge variant="info">Recurring</Badge> Starts {plural(held.plans, "recurring service")}: each books its visits up to four weeks ahead, skipping any day an imported booking already covers. Paused ones stay paused.</span> : null}
-            </span>
-          </label>
-        ) : null}
-        {held.cleaners ? (
-          <label className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-xs">
-            <input type="checkbox" className="mt-0.5" checked={team} disabled={!canRelease} onChange={(e) => setTeam(e.target.checked)} />
-            <span className="grid gap-1">
-              <span className="text-sm font-semibold text-strong">Your team</span>
-              <span className="text-strong"><Badge variant="info">Team</Badge> {plural(held.cleaners, "imported team member")} start getting the usual onboarding follow-ups about the steps they still owe, by text or email. They stay onboarding, and aren&apos;t offered work until you make each one active.</span>
-            </span>
-          </label>
-        ) : null}
-        <p className="text-xs text-muted-foreground">Releasing doesn&apos;t message customers. Imported prices still wait for your approval in Services & Pricing, and opening balances are never charged.</p>
-        {status !== "imported" && status !== "released" ? <Note tone="warning">Finish the import before releasing.</Note> : null}
-        {canRelease ? (
-          <>
-            <label className="flex items-start gap-2 text-xs text-strong">
-              <input type="checkbox" className="mt-0.5" checked={sure} onChange={(e) => setSure(e.target.checked)} />
-              I&apos;ve checked what I imported and want what I chose above to start working with it.
-            </label>
-            <Button variant="gradient" className="justify-self-start" disabled={!sure || (!schedule && !team) || (status !== "imported" && status !== "released")} onClick={() => void act(() => release({ companyId, confirm: true, schedule: schedule && scheduleHeld, team: team && held.cleaners > 0 }))}>
-              <Rocket aria-hidden />
-              Release what I chose
-            </Button>
-          </>
-        ) : (
-          <Note>Your company&apos;s Owner releases imported records, because it starts work with your team.</Note>
-        )}
-      </div>
-    </Section>
   );
 }

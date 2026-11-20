@@ -172,12 +172,74 @@ The original 13, plus:
 
 Full suite: 121 files passing. Screenshots: `docs/screenshots/migration/*-p5-*.png` (the "$700" in the balance note there predates the fix that leaves skipped duplicates out of that total).
 
-## Not yet (phases 6–7)
+## Phase 6: undo, activation review, completion email
 
-- **Undo** for untouched imported records, with targeted conflict resolution for anything edited, paid, messaged or used since.
-- **Full activation review:** per-agent capabilities, affected records, missing connections, expected volume and cost, with approvals. Today's release covers Dispatch, recurring plans and team follow-ups.
-- **Branded completion email:** only the in-app notice is sent now.
+Built November 20, 2026, after main gained Operations recovery, tutorials, and a second, quicker importer from another session (#125 and the tutorials work).
+
+### Decisions (from the owner)
+
+| Question | Decision |
+|---|---|
+| Two importers | Keep both, clearly labeled. The quick setup import (`convex/migrationImports.ts`) stays for a client list plus appointments or schedules waiting to be set up; the guided migration is the full path. Each points to the other |
+| Undo | Owner only. Managers see the preview; support sessions can't undo |
+| Activation | Per workflow |
+| Completion email | Owner only (Owners and Managers still get the in-app notice) |
+
+### Merging main
+
+Both versions added `convex/lib/migration/schema.ts`. It now holds both table sets: `migrationRecords` and `migrationImportRuns` for the quick import, and the guided tables. Setup shows the guided-migration card above the quick-import step, and Home keeps both the migration banner and main's issue cards. Every test from both branches passes.
+
+### Undo (`lib/migration/undo.ts`; `migration.undoPreview`, `migration.undo`, `migration.undoStep`)
+
+- **Only what the import created.** Records it matched or updated (`linked`, `updated`) were already the company's and are never removed.
+- **Preview first.** For each kind it shows how many records can be undone, and every record that will stay, with the reason. Choosing customers includes everything they own.
+- **"Touched" means any of these:**
+  - Visits: started, released to Dispatch, offered, invoiced or messaged.
+  - Plans: started, changed, or booked visits of their own.
+  - Properties: edited, with outside visits or plans, an approved price, or an agreement.
+  - Team members: released, status changed, offered work, onboarding started, messaged, or an agreement.
+  - Customers: edited, invoiced, messaged, notes added, in the sales pipeline, a care case, an agreement, quick-import records, or outside visits, plans, properties or contacts.
+  - Each record is judged on its own. An untouched imported visit of an edited customer is undone, and the customer stays.
+- **Durable.** Undo works dependents first (visits → plans → history → balances → properties → team → customers), 25 links per checkpointed step. The same sweep cron resumes a stalled undo.
+- **What's removed with a record:** a customer takes its contacts, its directory rows and its `importedRecords` entries. A plan's imported price proposal is withdrawn. A team member's requirements, availability and follow-ups go with them.
+- **What's never removed:** opt-outs (suppressions). An undo never makes anyone reachable.
+- **Rows afterwards:** undone rows are marked, left decided "skip" (importing again doesn't bring them back unless someone takes back the skip), and counted in a new **Undone** column. The report stays balanced. Kept records show "Kept by undo" with the reason, in Review & fix and in the downloadable report.
+
+### Activation review (`migration.activationReview`)
+
+Three workflows, each with its records, what it does, its Agent controls level, what's missing, approvals still needed, and an estimate of messages and cost at the current rate card ($0.025 a text segment):
+
+| Workflow | Records | Missing / approvals it checks |
+|---|---|---|
+| Dispatch offers imported visits | Held visits, how many in the next two weeks, the first date | Dispatch paused, first offers Off, no active cleaner, texting not set up; Ask me first |
+| Recurring services start booking | Held plans; visits they'd book in four weeks minus days imported visits cover | Imported prices waiting in Services & Pricing |
+| Team onboarding follow-ups | Held team members | No phone or email, reminders Off, texting not set up; Ask me first |
+
+It also lists what isn't affected: customers aren't messaged, balances aren't reminded, no consent was created. `release` now takes `visits`, `plans` and `team` separately, and records when each was turned on.
+
+### Completion email
+
+A new `migration_complete` notice (Owner audience), sent through the shared notice router (preferences, quiet hours, outbox) when an import finishes. It's composed with the platform alert template: the counts, what needs attention, "nothing has been sent to customers or cleaners", and a button to Verify.
+
+### Two importers, side by side
+
+The quick setup step says what it is and links to the guided migration. The guided Files step explains that quick-import clients are recognized. Appointments and recurring services the quick import is still holding are flagged as possible duplicates, so nothing is booked twice.
+
+### Tests
+
+20 migration tests (plus the full suite, 124 files):
+- the completion email reaches the Owner;
+- the review's counts, missing pieces and approvals; a plans-only release keeps imported visits held;
+- undo removes untouched records, keeps an edited customer and a matched existing one with reasons, withdraws price proposals, keeps opt-outs, balances the report, is Owner-only, and doesn't bring undone rows back on re-import;
+- a visit released to Dispatch is kept by undo;
+- an appointment from the quick import is flagged instead of booked twice.
+
+Screenshots: `docs/screenshots/migration/*-p6-verify.png`. The first-visit date and the $0.025 rate formatting were fixed after the capture.
+
+## Not yet (phase 7 and beyond)
+
+- **Verification against real export samples** from Jobber, Housecall Pro and BookingKoala: still the most important open item.
 - **Model-assisted review** with cost disclosure (free for assisted migrations).
 - **Cleaner assignment conflicts:** assignments in booking files are noted, not imported.
 - Agreement documents inside the migration (they go through Agreements today), Excel files, and connector reads inside the migration.
-- **Verification against real export samples** from Jobber, Housecall Pro and BookingKoala.
+- **One importer:** merging the quick setup import and the guided migration into a single path.

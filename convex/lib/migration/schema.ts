@@ -125,6 +125,23 @@ export const migrationTables = {
     updatedAt: v.number(),
     releasedAt: v.optional(v.number()),
     releasedBy: v.optional(v.id("members")),
+    /** What has been released to work, workflow by workflow, and when. */
+    released: v.optional(v.object({ visits: v.optional(v.number()), plans: v.optional(v.number()), team: v.optional(v.number()) })),
+    /** An undo in progress or finished: which kinds, where it is, and what it did. */
+    undo: v.optional(
+      v.object({
+        status: literals(["running", "done"] as const),
+        kinds: v.array(fileKindValidator),
+        pass: v.number(),
+        cursor: v.union(v.string(), v.null()),
+        undone: v.number(),
+        kept: v.number(),
+        by: v.id("members"),
+        startedAt: v.number(),
+        finishedAt: v.optional(v.number()),
+        leaseUntil: v.number(),
+      }),
+    ),
   }).index("by_company", ["companyId"]),
 
   migrationFiles: defineTable({
@@ -199,6 +216,10 @@ export const migrationTables = {
     editedByStaff: v.optional(staffRef),
     /** A question Selestial staff left for the owner about this row. It waits until the owner decides the row. */
     question: v.optional(v.object({ text: v.string(), staff: staffRef, at: v.number() })),
+    /** The Owner undid what this row created. It stays decided "skip" until someone brings it back. */
+    undone: v.optional(v.object({ at: v.number(), by: v.id("members") })),
+    /** Why an undo left what this row created in place: it was edited, paid, messaged or used since. */
+    undoBlocked: v.optional(v.string()),
     result: v.optional(v.object({ outcome: literals(OUTCOMES), table: v.optional(v.string()), id: v.optional(v.string()), reason: v.optional(v.string()), at: v.number() })),
   })
     .index("by_migration_kind", ["migrationId", "kind", "index"])

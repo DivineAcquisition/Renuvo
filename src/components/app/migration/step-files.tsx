@@ -91,6 +91,8 @@ export function FilesStep() {
         ) : null}
       </div>
 
+      <Note>Used the quick import in setup already? Clients it brought in are recognized here, and appointments or schedules waiting there are flagged so nothing is booked twice.</Note>
+
       {gaps.map((gap) => (
         <Note key={gap} tone="warning">
           {gap}{" "}

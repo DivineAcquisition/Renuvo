@@ -46,6 +46,13 @@ export function MigrationRecordsStep() {
   const named = platform && platform !== "spreadsheet" ? PLATFORM_WORDS[platform] : null;
   return (
     <>
+      <p className="rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+        This is the quick import: a client list, and appointments or schedules kept for you to set up. Moving your whole business, with your team, history and balances, and a review of every record first? Use{" "}
+        <Link href="/app/migration" className="font-medium text-brand-300 underline-offset-2 hover:underline">
+          Bring your business to Selestial
+        </Link>
+        .
+      </p>
       <SourcePicker value={platform} onChange={setPlatform} />
       {platform ? <TutorialCard key={platform} placement="setup.source" platform={platform} dismissKey={`setup.source:${platform}`} /> : null}
       <section className="grid gap-2" aria-labelledby="clients-heading">

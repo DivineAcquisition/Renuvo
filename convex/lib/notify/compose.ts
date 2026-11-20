@@ -419,6 +419,31 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
         because: "Selestial tells the Owner when something stops working and needs them, once per problem.",
       });
     }
+    case "migration_complete": {
+      const id = notice.ref ? ctx.db.normalizeId("migrations", notice.ref) : null;
+      const migration = id ? await ctx.db.get(id) : null;
+      if (!migration || migration.companyId !== company._id) return { problem: "The migration no longer exists." };
+      const failed = num(facts, "failed") ?? 0;
+      const attention = Object.values(migration.summary ?? {}).reduce((n, s) => n + (s.awaiting ?? 0) + (s.error ?? 0), 0) + failed;
+      return alertEmail({
+        ...c,
+        eyebrow: "Your migration",
+        subject: attention ? "Your import is ready to review" : "Your import is in: everything is accounted for",
+        heading: "Your import is ready to review",
+        body: attention ? "Customers, properties and upcoming work have been imported. Some records need attention before your agents can use them." : "Everything in your files was imported, matched to a record you already had, or skipped by your choice.",
+        tone: attention ? "warning" : "info",
+        note: "Nothing has been sent to customers or cleaners. Imported visits, recurring services and team members wait until you release them.",
+        facts: [
+          { label: "Created", value: String(num(facts, "created") ?? 0) },
+          { label: "Updated", value: String(num(facts, "updated") ?? 0) },
+          { label: "Matched to existing records", value: String(num(facts, "linked") ?? 0) },
+          { label: "Skipped", value: String(num(facts, "skipped") ?? 0) },
+          { label: "Failed", value: String(failed) },
+          ...(attention ? [{ label: "Need your attention", value: String(attention) }] : []),
+        ],
+        button: { label: "Review your import", path: "/app/migration?step=verify" },
+      });
+    }
     case "support_summary":
       return alertEmail({
         ...c,

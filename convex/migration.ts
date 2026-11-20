@@ -22,7 +22,11 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { noticeInApp } from "./lib/activation/notices";
 import { companyQuery, managerMutation, managerQuery, ownerMutation, ownerQuery, type MemberAccess } from "./lib/builders";
-import { bookAhead } from "./lib/clients/plans";
+import { bookAhead, seriesDays } from "./lib/clients/plans";
+import { authorityFor } from "./lib/authority";
+import { rateCardAt } from "./lib/messagingBilling/rates";
+import { notifyMembers } from "./lib/notify/route";
+import { TABLE_KIND, UNDO_ORDER, undoBlocker, undoRecord } from "./lib/migration/undo";
 import { detectSource } from "./lib/clients/importing";
 import { parseCsv } from "./lib/csv";
 import { applyTemplate } from "./lib/dispatch/templates";
@@ -491,7 +495,7 @@ export const checkInput = internalQuery({
       .paginate({ numItems: 500, cursor: args.cursor });
     return {
       migration: { companyId: migration.companyId, timezone: migration.timezone, dateOrder: migration.dateOrder, serviceMap: migration.serviceMap, groups: migration.groups, source: migration.source },
-      rows: page.page.map((row) => ({ id: row._id, kind: row.kind, index: row.index, values: effective(row), decision: row.decision ? { choice: row.decision.choice, ...(row.decision.targetId ? { targetId: row.decision.targetId } : {}) } : undefined, category: row.category?.confirmed ? { value: row.category.value, confirmed: true } : undefined, stamp: stampOf(row), decided: Boolean(row.decision && row.decision.choice !== "review"), result: row.result?.outcome ?? null, asked: Boolean(row.question && !row.decision && !row.result) })),
+      rows: page.page.map((row) => ({ id: row._id, kind: row.kind, index: row.index, values: effective(row), decision: row.decision ? { choice: row.decision.choice, ...(row.decision.targetId ? { targetId: row.decision.targetId } : {}) } : undefined, category: row.category?.confirmed ? { value: row.category.value, confirmed: true } : undefined, stamp: stampOf(row), ...(row.result?.id && row.result.outcome !== "failed" && row.result.outcome !== "skipped" ? { resultId: row.result.id } : {}), decided: Boolean(row.decision && row.decision.choice !== "review"), result: row.result?.outcome ?? null, asked: Boolean(row.question && !row.decision && !row.result) })),
       cursor: page.isDone ? null : page.continueCursor,
     };
   },
@@ -513,11 +517,16 @@ export const existingFor = internalQuery({
     const team = (await Promise.all((["onboarding", "ready", "paused"] as const).map((status) => ctx.db.query("cleaners").withIndex("by_company_status", (q) => q.eq("companyId", args.companyId).eq("status", status)).take(2000)))).flat();
     const history = await ctx.db.query("importedHistory").withIndex("by_company_customer_day", (q) => q.eq("companyId", args.companyId)).take(5000);
     const owed = await ctx.db.query("openingBalances").withIndex("by_company_customer", (q) => q.eq("companyId", args.companyId)).take(5000);
+    const quick = [
+      ...(await ctx.db.query("migrationRecords").withIndex("by_company_kind", (q) => q.eq("companyId", args.companyId).eq("kind", "appointment")).take(3000)),
+      ...(await ctx.db.query("migrationRecords").withIndex("by_company_kind", (q) => q.eq("companyId", args.companyId).eq("kind", "recurring")).take(3000)),
+    ].filter((r) => r.review !== "dismissed");
     return {
       today,
       cleaners: team.map((c) => ({ id: c._id, name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
       history: history.map((h) => ({ customerId: h.customerId, day: h.day, ...(h.externalId ? { externalId: h.externalId } : {}) })),
       balances: owed.map((b) => ({ customerId: b.customerId, reference: b.reference })),
+      quick: quick.map((r) => ({ customerId: r.customerId, kind: r.kind as "appointment" | "recurring", ...(r.day ? { day: r.day } : {}) })),
       customers: customers.map((c) => ({ id: c._id, name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
       contacts: contacts.filter((c) => c.status === "active").map((c) => ({ customerId: c.customerId, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
       properties: properties.filter((p) => p.status === "active").map((p) => ({ id: p._id, customerId: p.customerId, line1: p.address.line1, ...(p.address.line2 ? { line2: p.address.line2 } : {}), postalCode: p.address.postalCode, ...(p.label ? { label: p.label } : {}) })),
@@ -857,6 +866,8 @@ function rowView(row: Doc<"migrationRows">) {
     decision: row.decision ? { choice: row.decision.choice, targetId: row.decision.targetId ?? null, fields: row.decision.fields ?? [], bySupport: Boolean(row.decision.staff) } : null,
     editedBySupport: Boolean(row.editedByStaff),
     question: row.question ? { text: row.question.text, at: row.question.at } : null,
+    undone: row.undone ? { at: row.undone.at } : null,
+    undoBlocked: row.undoBlocked ?? null,
     result: row.result ?? null,
   };
 }
@@ -996,6 +1007,8 @@ async function finishRun(ctx: MutationCtx, migration: Doc<"migrations">, run: Do
   await scheduleCheck(ctx, (await ctx.db.get(migration._id))!);
   await recordEvent(ctx, { companyId: migration.companyId, type: "migration.imported", actor: run.startedBy, subject: { table: "companies", id: migration.companyId }, data: { created: c.created, updated: c.updated, linked: c.linked, skipped: c.skipped, failed: c.failed } });
   await noticeInApp(ctx, { companyId: migration.companyId, kind: attention ? "needs_information" : "batch_finished", headline: "Your import is ready to review", summary: `${words} Some records may need attention before your agents can use them.`, key: `migration.imported:${run._id}` });
+  // The branded email goes to the Owner, through the shared notice router (its preferences, quiet hours and outbox).
+  await notifyMembers(ctx, { companyId: migration.companyId, event: "migration_complete", ref: migration._id, key: run._id, facts: { created: c.created, updated: c.updated, linked: c.linked, skipped: c.skipped, failed: c.failed } });
 }
 
 /** Every few minutes: a run whose step stopped (a deploy, a crash) is picked up where its checkpoint left it. */
@@ -1014,6 +1027,14 @@ export const sweep = internalMutation({
         await ctx.db.patch(run._id, { attempts: 0, cursor: next ? next.index : run.cursor, counts: { ...run.counts, failed: run.counts.failed + (next && !next.result ? 1 : 0) }, leaseUntil: now + LIMITS.leaseMs });
       } else await ctx.db.patch(run._id, { attempts, leaseUntil: now + LIMITS.leaseMs });
       await ctx.scheduler.runAfter(0, internal.migration.runStep, { runId: run._id, ...(attempts > 1 ? { batch: 1 } : {}) });
+    }
+    // An undo whose step stopped picks up from its checkpoint too.
+    const migrations = await ctx.db.query("migrations").take(500);
+    for (const m of migrations) {
+      if (m.undo?.status === "running" && m.undo.leaseUntil < now) {
+        await ctx.db.patch(m._id, { undo: { ...m.undo, leaseUntil: now + LIMITS.leaseMs } });
+        await ctx.scheduler.runAfter(0, internal.migration.undoStep, { migrationId: m._id });
+      }
     }
     return stuck.length;
   },
@@ -1056,20 +1077,25 @@ export const report = managerQuery({
     const migration = await migrationOf(ctx, ctx.companyId);
     if (!migration) return null;
     const files = (await ctx.db.query("migrationFiles").withIndex("by_migration", (q) => q.eq("migrationId", migration._id)).take(LIMITS.files + 20)).filter((f) => f.status === "ready");
-    const kinds: { kind: FileKind; source: number; created: number; updated: number; linked: number; skipped: number; failed: number; awaiting: number; balanced: boolean }[] = [];
+    const kinds: { kind: FileKind; source: number; created: number; updated: number; linked: number; skipped: number; failed: number; awaiting: number; undone: number; balanced: boolean }[] = [];
     const problems: { kind: FileKind; file: string; row: number; name: string; outcome: string; reason: string }[] = [];
     const recent: { kind: FileKind; table: string; id: string; name: string }[] = [];
     const fileName = new Map(files.map((f) => [f._id, f.name]));
     for (const kind of [...IMPORTABLE, "services", "agreements", "other"] as FileKind[]) {
       const rows = await ctx.db.query("migrationRows").withIndex("by_migration_kind", (q) => q.eq("migrationId", migration._id).eq("kind", kind)).take(LIMITS.rows);
       if (!rows.length) continue;
-      const tally = { kind, source: rows.length, created: 0, updated: 0, linked: 0, skipped: 0, failed: 0, awaiting: 0, balanced: true };
+      const tally = { kind, source: rows.length, created: 0, updated: 0, linked: 0, skipped: 0, failed: 0, awaiting: 0, undone: 0, balanced: true };
       for (const row of rows) {
         const values = effective(row);
         const scheduled = kind === "recurring" || kind === "bookings";
         const name = (scheduled || kind === "history" ? [values.service, values.customerName].filter(Boolean).join(" · ") : kind === "balances" ? [values.externalId, values.customerName].filter(Boolean).join(" · ") : values.name || [values.firstName, values.lastName].filter(Boolean).join(" ") || values.company || values.label || values.line1) || `Row ${row.index + 2}`;
+        if (row.undone) {
+          tally.undone += 1;
+          continue;
+        }
         if (row.result) {
           tally[row.result.outcome] += 1;
+          if (row.undoBlocked) problems.push({ kind, file: fileName.get(row.fileId) ?? "", row: row.index + 2, name, outcome: "Kept by undo", reason: row.undoBlocked });
           if (row.result.outcome === "failed") problems.push({ kind, file: fileName.get(row.fileId) ?? "", row: row.index + 2, name, outcome: "Failed", reason: row.result.reason ?? "" });
           else if (row.result.table && row.result.id && recent.length < 60 && row.result.outcome !== "skipped") recent.push({ kind, table: row.result.table, id: row.result.id, name });
         } else {
@@ -1078,7 +1104,7 @@ export const report = managerQuery({
           problems.push({ kind, file: fileName.get(row.fileId) ?? "", row: row.index + 2, name, outcome: row.state === "held" ? "Not transferred" : row.state === "error" ? "Needs correction" : "Awaiting review", reason });
         }
       }
-      tally.balanced = tally.created + tally.updated + tally.linked + tally.skipped + tally.failed + tally.awaiting === tally.source;
+      tally.balanced = tally.created + tally.updated + tally.linked + tally.skipped + tally.failed + tally.awaiting + tally.undone === tally.source;
       kinds.push(tally);
     }
     const links = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", migration._id)).take(10000);
@@ -1111,21 +1137,23 @@ export const report = managerQuery({
  * them is sent to anyone. Releasing doesn't message customers.
  */
 export const release = ownerMutation({
-  args: { confirm: v.literal(true), schedule: v.boolean(), team: v.boolean() },
+  args: { confirm: v.literal(true), visits: v.boolean(), plans: v.boolean(), team: v.boolean() },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
     if (migration.status !== "imported" && migration.status !== "released") throw userError("Import your records before releasing them.");
-    if (!args.schedule && !args.team) throw userError("Choose what to release.");
+    if (migration.undo?.status === "running") throw userError("An undo is running. Release once it finishes.");
+    if (!args.visits && !args.plans && !args.team) throw userError("Choose what to release.");
     const now = Date.now();
-    await ctx.db.patch(migration._id, { status: "released", releasedAt: now, releasedBy: ctx.member._id, updatedAt: now });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "migration.released", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { schedule: args.schedule, team: args.team } });
-    await ctx.scheduler.runAfter(0, internal.migration.releaseChunk, { migrationId: migration._id, cursor: null, memberId: ctx.member._id, schedule: args.schedule, team: args.team });
+    const released = { ...(migration.released ?? {}), ...(args.visits ? { visits: now } : {}), ...(args.plans ? { plans: now } : {}), ...(args.team ? { team: now } : {}) };
+    await ctx.db.patch(migration._id, { status: "released", releasedAt: now, releasedBy: ctx.member._id, released, updatedAt: now });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "migration.released", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { visits: args.visits, plans: args.plans, team: args.team } });
+    await ctx.scheduler.runAfter(0, internal.migration.releaseChunk, { migrationId: migration._id, cursor: null, memberId: ctx.member._id, visits: args.visits, plans: args.plans, team: args.team });
     return null;
   },
 });
 
 export const releaseChunk = internalMutation({
-  args: { migrationId: v.id("migrations"), cursor: v.union(v.string(), v.null()), memberId: v.id("members"), schedule: v.boolean(), team: v.boolean() },
+  args: { migrationId: v.id("migrations"), cursor: v.union(v.string(), v.null()), memberId: v.id("members"), visits: v.boolean(), plans: v.boolean(), team: v.boolean() },
   handler: async (ctx, args) => {
     const page = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", args.migrationId)).paginate({ numItems: 100, cursor: args.cursor });
     const actor: Actor = { kind: "member", memberId: args.memberId };
@@ -1136,7 +1164,7 @@ export const releaseChunk = internalMutation({
         if (cleaner?.migration?.held) await ctx.db.patch(cleaner._id, { migration: { ...cleaner.migration, held: false } });
       }
     }
-    if (args.schedule) {
+    if (args.visits) {
       for (const link of page.page.filter((l) => l.table === "jobs")) {
         const job = await ctx.db.get(link.recordId as Id<"jobs">);
         if (!job?.migration?.held) continue;
@@ -1144,7 +1172,9 @@ export const releaseChunk = internalMutation({
         await applyTemplate(ctx, (await ctx.db.get(job._id))!);
         await ctx.scheduler.runAfter(0, internal.dispatch.cover, { jobId: job._id });
       }
-      // A released plan books ahead and skips days an imported visit already holds.
+    }
+    if (args.plans) {
+      // A released plan books ahead and skips days an imported visit already holds, released or not.
       for (const link of page.page.filter((l) => l.table === "servicePlans")) {
         const plan = await ctx.db.get(link.recordId as Id<"servicePlans">);
         if (!plan?.migration?.held) continue;
@@ -1153,6 +1183,253 @@ export const releaseChunk = internalMutation({
       }
     }
     if (!page.isDone) await ctx.scheduler.runAfter(0, internal.migration.releaseChunk, { ...args, cursor: page.continueCursor });
+    return null;
+  },
+});
+
+// ── Activation review ──────────────────────────────────────────────────────────────────────────────
+
+const LEVEL_WORDS: Record<string, string> = { off: "Off", propose: "Ask me first", execute_and_report: "Act and notify me", execute: "Act on its own" };
+
+/**
+ * Before anything is released: for each workflow, what it would do, to which records, what's missing,
+ * how many messages it would likely send and what they'd cost, and what still needs the Owner's approval.
+ * Estimates say they're estimates; nothing here sends or charges anything.
+ */
+export const activationReview = managerQuery({
+  args: {},
+  handler: async (ctx) => {
+    const migration = await migrationOf(ctx, ctx.companyId);
+    if (!migration) return null;
+    const now = Date.now();
+    const company = ctx.company;
+    const today = dayOf(now, company.timezone);
+    const card = rateCardAt(now);
+    const textCents = card.rates.sms_out / 100;
+    const links = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", migration._id)).take(10000);
+    const held = { jobs: [] as Doc<"jobs">[], plans: [] as Doc<"servicePlans">[], cleaners: [] as Doc<"cleaners">[] };
+    for (const link of links) {
+      if (link.table === "jobs") {
+        const job = await ctx.db.get(link.recordId as Id<"jobs">);
+        if (job?.migration?.held && job.status === "scheduled") held.jobs.push(job);
+      } else if (link.table === "servicePlans") {
+        const plan = await ctx.db.get(link.recordId as Id<"servicePlans">);
+        if (plan?.migration?.held) held.plans.push(plan);
+      } else if (link.table === "cleaners") {
+        const cleaner = await ctx.db.get(link.recordId as Id<"cleaners">);
+        if (cleaner?.migration?.held) held.cleaners.push(cleaner);
+      }
+    }
+    const level = async (action: string) => {
+      const a = await authorityFor(ctx, ctx.companyId, action);
+      return a.kind === "level" ? a.level : a.kind;
+    };
+    const readyCleaners = await ctx.db.query("cleaners").withIndex("by_company_status", (q) => q.eq("companyId", ctx.companyId).eq("status", "ready")).take(500);
+    const texting = await ctx.db.query("textingRequests").withIndex("by_company_requested", (q) => q.eq("companyId", ctx.companyId)).order("desc").first();
+    const textingReady = texting?.status === "active";
+    const dispatchPaused = company.pausedAgents.includes("dispatch");
+    const offerLevel = await level("dispatch.request_acceptance");
+    const dispatchMissing = [
+      ...(dispatchPaused ? ["Dispatch is paused for your company. Nothing is offered until you resume it in Agent controls."] : []),
+      ...(offerLevel === "off" ? ["Dispatch's first offers are set to Off, so it won't offer these visits until you change that in Agent controls."] : []),
+      ...(readyCleaners.length === 0 ? ["No cleaner is active yet, so there's no one to offer visits to. Dispatch will list the visits that need cover."] : []),
+      ...(!textingReady ? ["Business texting isn't set up, so offers go by email where cleaners have one."] : []),
+    ];
+    const dispatchApprovals = offerLevel === "propose" ? ["Dispatch is set to Ask me first for offers: each offer waits for your approval in Approvals."] : [];
+    const next14 = held.jobs.filter((j) => j.startsAt < now + 14 * 86_400_000).length;
+    const firstVisit = held.jobs.map((j) => j.startsAt).sort((a, b) => a - b)[0] ?? null;
+
+    // Plans: the visits they'd book in the next four weeks that no imported visit already covers.
+    let planVisits = 0;
+    const pendingPrices: string[] = [];
+    for (const plan of held.plans) {
+      const days = seriesDays({ ...plan, state: "active" }, today, dayOf(now + 28 * 86_400_000, company.timezone));
+      const covered = new Set(held.jobs.filter((j) => j.planId === plan._id).map((j) => j.planDate));
+      const booked = await ctx.db.query("jobs").withIndex("by_company_plan", (q) => q.eq("companyId", ctx.companyId).eq("planId", plan._id)).take(100);
+      for (const j of booked) covered.add(j.planDate);
+      planVisits += plan.pausedFrom ? 0 : days.filter((d) => !covered.has(d)).length;
+      const changes = await ctx.db.query("serviceChanges").withIndex("by_company_service", (q) => q.eq("companyId", ctx.companyId).eq("serviceId", plan.serviceId)).order("desc").take(50);
+      const waiting = changes.find((c) => c.kind === "property_price" && c.state === "in_review" && c.propertyPrice?.propertyId === plan.propertyId);
+      if (waiting) pendingPrices.push(waiting.title);
+    }
+
+    // Team: who'd get onboarding follow-ups, and who can't be reached.
+    const reminderLevel = await level("recruiter.onboarding_reminder");
+    const unreachable = held.cleaners.filter((c) => !c.email && !c.phone).length;
+
+    const cost = (messages: number) => Math.round(messages * textCents);
+    const workflows = [
+      {
+        id: "visits" as const,
+        title: "Dispatch offers your imported visits",
+        agent: "Dispatch",
+        count: held.jobs.length,
+        records: held.jobs.length ? `${held.jobs.length} imported ${held.jobs.length === 1 ? "visit" : "visits"}${next14 ? `, ${next14} in the next two weeks` : ""}${firstVisit ? `, the first on ${new Date(firstVisit).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: company.timezone })}` : ""}.` : "No imported visits are waiting.",
+        does: ["Offers each visit to an eligible cleaner, following your Dispatch settings, and finds cover when someone declines.", "Applies each service's checklist to the visit."],
+        missing: dispatchMissing,
+        approvals: dispatchApprovals,
+        level: LEVEL_WORDS[offerLevel] ?? offerLevel,
+        messages: held.jobs.length,
+        messagesWords: held.jobs.length ? `At least ${held.jobs.length} offer ${held.jobs.length === 1 ? "text" : "texts"} to cleaners (one per visit), more when someone declines or doesn't answer.` : "None.",
+        costCents: cost(held.jobs.length),
+        released: migration.released?.visits ?? null,
+      },
+      {
+        id: "plans" as const,
+        title: "Recurring services start booking",
+        agent: "Operations",
+        count: held.plans.length,
+        records: held.plans.length ? `${held.plans.length} imported recurring ${held.plans.length === 1 ? "service" : "services"}${held.plans.some((p) => p.pausedFrom) ? " (paused ones stay paused)" : ""}.` : "No imported recurring services are waiting.",
+        does: [`Books about ${planVisits} more ${planVisits === 1 ? "visit" : "visits"} over the next four weeks, skipping days an imported visit already covers, then keeps booking ahead.`, dispatchPaused ? "Dispatch is paused, so those visits wait for cover until it resumes." : "Dispatch offers those new visits to your team like any other booking."],
+        missing: held.plans.length && pendingPrices.length ? [] : [],
+        approvals: pendingPrices.length ? [`${pendingPrices.length} imported ${pendingPrices.length === 1 ? "price is" : "prices are"} waiting for your approval in Services & Pricing. Until approved, visits are priced by your services.`] : [],
+        level: "Books on schedule",
+        messages: dispatchPaused ? 0 : planVisits,
+        messagesWords: planVisits && !dispatchPaused ? `About ${planVisits} offer ${planVisits === 1 ? "text" : "texts"} to cleaners for the new visits over four weeks.` : "None right away.",
+        costCents: dispatchPaused ? 0 : cost(planVisits),
+        released: migration.released?.plans ?? null,
+      },
+      {
+        id: "team" as const,
+        title: "Your imported team gets onboarding follow-ups",
+        agent: "Recruiter",
+        count: held.cleaners.length,
+        records: held.cleaners.length ? `${held.cleaners.length} imported team ${held.cleaners.length === 1 ? "member" : "members"}, all onboarding.` : "No imported team members are waiting.",
+        does: ["Sends each person the usual reminders about the onboarding steps they still owe, as your cleaner settings say.", "Doesn't make anyone active or offer them work: you do that on each profile once their requirements are met."],
+        missing: [...(unreachable ? [`${unreachable} ${unreachable === 1 ? "has" : "have"} no phone or email, so they can't be reminded.`] : []), ...(reminderLevel === "off" ? ["Onboarding reminders are set to Off in Agent controls."] : []), ...(!textingReady ? ["Business texting isn't set up, so reminders go by email where people have one."] : [])],
+        approvals: reminderLevel === "propose" ? ["Onboarding reminders are set to Ask me first: each waits for your approval."] : [],
+        level: LEVEL_WORDS[reminderLevel] ?? reminderLevel,
+        messages: held.cleaners.length - unreachable,
+        messagesWords: held.cleaners.length ? `About ${held.cleaners.length - unreachable} first ${held.cleaners.length - unreachable === 1 ? "reminder" : "reminders"}, then follow-ups on your cleaner settings' schedule.` : "None.",
+        costCents: cost(held.cleaners.length - unreachable),
+        released: migration.released?.team ?? null,
+      },
+    ];
+    return {
+      workflows,
+      rate: { textCents, card: card.version },
+      untouched: [
+        "Customers aren't messaged by any of this. Sales and Customer care don't reach out to imported customers because they were imported.",
+        "Finance never reminds anyone about opening balances, and imported history never becomes invoices or pay.",
+        "No permission to text or email customers was created; documented opt-outs stay in force.",
+      ],
+      canRelease: !ctx.support && roleOf(ctx.member.role) === "owner",
+      status: migration.status,
+      undoRunning: migration.undo?.status === "running",
+    };
+  },
+});
+
+// ── Undo ───────────────────────────────────────────────────────────────────────────────────────────
+
+/** Ids of every record this migration created and still has, so its own records don't block each other. */
+async function createdBy(ctx: QueryCtx, migrationId: Id<"migrations">) {
+  const links = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", migrationId)).take(10000);
+  const created: Doc<"migrationLinks">[] = [];
+  for (const link of links) {
+    const row = await ctx.db.get(link.rowId);
+    // Only what this migration made is ever undone; a record it matched or updated was already yours.
+    if (row?.result?.outcome === "created" && row.result.id === link.recordId) created.push(link);
+  }
+  return { created, ids: new Set(created.map((l) => l.recordId)) };
+}
+
+/**
+ * What an undo would do: for each kind, how many untouched records it would remove, and each record it
+ * would keep with the reason. Owners and Managers can look; only the Owner can undo.
+ */
+export const undoPreview = managerQuery({
+  args: {},
+  handler: async (ctx) => {
+    const migration = await migrationOf(ctx, ctx.companyId);
+    if (!migration) return null;
+    const { created, ids } = await createdBy(ctx, migration._id);
+    const kinds: Record<string, { undoable: number; kept: { name: string; reason: string; table: string; id: string }[] }> = {};
+    // Blocked dependents keep their parents: work in undo order and treat what would be removed as gone.
+    const going = new Set<string>();
+    for (const table of UNDO_ORDER) {
+      for (const link of created.filter((l) => l.table === table)) {
+        const kind = TABLE_KIND[table];
+        const bucket = (kinds[kind] ??= { undoable: 0, kept: [] });
+        const blocker = await undoBlocker(ctx, link, { own: ids, going });
+        if (blocker) {
+          const row = await ctx.db.get(link.rowId);
+          const values = row ? effective(row) : {};
+          bucket.kept.push({ name: values.name || [values.firstName, values.lastName].filter(Boolean).join(" ") || values.company || values.service || values.externalId || values.line1 || "Record", reason: blocker, table, id: link.recordId });
+        } else {
+          bucket.undoable += 1;
+          going.add(link.recordId);
+        }
+      }
+    }
+    return { kinds, undo: migration.undo ?? null, canUndo: !ctx.support && roleOf(ctx.member.role) === "owner" };
+  },
+});
+
+/** Starts an undo of the chosen kinds. Dependents of a chosen kind that are untouched go too, first. */
+export const undo = ownerMutation({
+  args: { confirm: v.literal(true), kinds: v.array(fileKindValidator) },
+  handler: async (ctx, args) => {
+    const migration = await requireMigration(ctx);
+    if (migration.status === "importing") throw userError("Your import is running. Undo once it finishes.");
+    if (migration.undo?.status === "running") return null;
+    const kinds = [...new Set(args.kinds)].filter((k) => (IMPORTABLE as readonly string[]).includes(k));
+    if (!kinds.length) throw userError("Choose what to undo.");
+    // A customer goes only with what it owns, so choosing customers includes everything that belongs to them.
+    const withDependents = kinds.includes("customers") ? [...IMPORTABLE] : kinds.includes("properties") ? [...new Set([...kinds, "recurring", "bookings"] as const)] : kinds;
+    const now = Date.now();
+    await ctx.db.patch(migration._id, { undo: { status: "running", kinds: withDependents as FileKind[], pass: 0, cursor: null, undone: 0, kept: 0, by: ctx.member._id, startedAt: now, leaseUntil: now + LIMITS.leaseMs }, updatedAt: now });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "migration.undo_started", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { kinds: withDependents.join(",") } });
+    await ctx.scheduler.runAfter(0, internal.migration.undoStep, { migrationId: migration._id });
+    return null;
+  },
+});
+
+/** One batch of an undo, checkpointed with its writes. Restarted by the sweep if it stops. */
+export const undoStep = internalMutation({
+  args: { migrationId: v.id("migrations") },
+  handler: async (ctx, args) => {
+    const migration = await ctx.db.get(args.migrationId);
+    const state = migration?.undo;
+    if (!migration || !state || state.status !== "running") return null;
+    let { pass, cursor, undone, kept } = state;
+    const table = UNDO_ORDER[pass];
+    if (!table) return null;
+    const page = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", migration._id)).paginate({ numItems: 25, cursor });
+    const { ids } = await createdBy(ctx, migration._id);
+    for (const link of page.page) {
+      if (link.table !== table || !state.kinds.includes(TABLE_KIND[table] as FileKind)) continue;
+      const row = await ctx.db.get(link.rowId);
+      if (!row || row.result?.outcome !== "created" || row.result.id !== link.recordId) continue;
+      // Dependents were handled in earlier passes: what was removed is gone, what was kept still counts.
+      const blocker = await undoBlocker(ctx, link, { own: ids, going: new Set() });
+      if (blocker) {
+        await ctx.db.patch(row._id, { undoBlocked: blocker });
+        kept += 1;
+        continue;
+      }
+      await undoRecord(ctx, link);
+      await ctx.db.delete(link._id);
+      // The row stays decided "skip", so importing again doesn't bring it back unless someone chooses to.
+      await ctx.db.patch(row._id, { result: undefined, undoBlocked: undefined, undone: { at: Date.now(), by: state.by }, decision: { choice: "skip", by: { kind: "member", memberId: state.by }, at: Date.now() } });
+      undone += 1;
+    }
+    if (page.isDone) {
+      pass += 1;
+      cursor = null;
+    } else cursor = page.continueCursor;
+    const finished = pass >= UNDO_ORDER.length;
+    const now = Date.now();
+    await ctx.db.patch(migration._id, { undo: { ...state, pass, cursor, undone, kept, leaseUntil: now + LIMITS.leaseMs, ...(finished ? { status: "done" as const, finishedAt: now } : {}) } });
+    if (!finished) {
+      await ctx.scheduler.runAfter(0, internal.migration.undoStep, { migrationId: migration._id });
+      return null;
+    }
+    const remaining = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", migration._id)).first();
+    const notes = [...migration.notes.filter((n) => n.key !== "undo"), { key: "undo", step: "verify" as const, words: `Undo finished: ${undone} ${undone === 1 ? "record" : "records"} removed${kept ? `, ${kept} kept because they were changed or used since. Each says why in Review & fix` : ""}. Opt-outs from your files stay in force.`, tone: kept ? ("attention" as const) : ("done" as const), at: now }];
+    await ctx.db.patch(migration._id, { notes, ...(remaining ? {} : { status: "open" as const, step: "review" as const }) });
+    await recordEvent(ctx, { companyId: migration.companyId, type: "migration.undone", actor: { kind: "member", memberId: state.by }, subject: { table: "companies", id: migration.companyId }, data: { undone, kept } });
+    await scheduleCheck(ctx, (await ctx.db.get(migration._id))!);
     return null;
   },
 });

@@ -51,6 +51,8 @@ export type RowIn = {
   /** Values with the owner's edits applied. */
   values: Record<string, string>;
   decision?: { choice: string; targetId?: string };
+  /** The Selestial record this row already became or was matched to, after an import. */
+  resultId?: string;
   category?: { value: Category; confirmed: boolean };
 };
 
@@ -69,6 +71,8 @@ export type Existing = {
   /** History and opening balances already imported, so a repeat never counts them twice. */
   history?: { customerId: string; day: string; externalId?: string }[];
   balances?: { customerId: string; reference: string }[];
+  /** Appointments and schedules the quick setup import brought in, still waiting or already set up. */
+  quick?: { customerId: string; kind: "appointment" | "recurring"; day?: string }[];
 };
 
 export type Context = {
@@ -295,6 +299,13 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
     return { problem: `${plural(candidates.length, "customer")} named "${row.values.customerName}" could match. Choose which one.`, review: candidates };
   }
 
+  /** The customer record a reference stands for: an existing one, or what a file row became or was matched to. */
+  const recordOf = (ref: CustomerRef): string | undefined => {
+    if (ref.customerId) return ref.customerId;
+    const row = ref.rowId ? customerRowOf.get(ref.rowId) : undefined;
+    return row?.resultId ?? (row?.decision?.choice === "keep_existing" ? row.decision.targetId : undefined);
+  };
+
   type PropertyRef = { propertyRowId?: string; propertyId?: string; viaCustomerRow?: boolean; label: string };
   function resolveProperty(row: RowIn, customer: CustomerRef): { ref: PropertyRef } | { problem: string; review?: Match[] } {
     const ref = row.values.propertyRef?.trim();
@@ -475,6 +486,11 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
             result.state = "duplicate";
             result.matches.push({ table: "row", id: twin.id, name: twin.values.service ?? "Recurring service", why: `The same service at the same property as row ${twin.index + 2}` });
           } else seenSeries.set(`${placeKey}|${serviceId}`, row);
+          const knownCustomer = recordOf(place.customer);
+          if (knownCustomer && (existing.quick ?? []).some((q) => q.kind === "recurring" && q.customerId === knownCustomer)) {
+            if (result.state === "ready") result.state = "duplicate";
+            result.matches.push({ table: "migrationRecords", id: knownCustomer, name: row.values.service ?? "Recurring service", why: "The quick import in setup already brought in a recurring service for this client" });
+          }
           if (place.property.propertyId && existing.plans.some((plan) => plan.propertyId === place.property.propertyId && plan.serviceId === serviceId && plan.state !== "ended")) {
             if (result.state === "ready") result.state = "duplicate";
             result.matches.push({ table: "servicePlans", id: place.property.propertyId, name: row.values.service ?? "Plan", why: "This property already has this service planned in Selestial" });
@@ -542,6 +558,11 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
       }
     }
 
+    const knownCustomer = recordOf(place.customer);
+    if (knownCustomer && (existing.quick ?? []).some((q) => q.kind === "appointment" && q.customerId === knownCustomer && q.day === day)) {
+      if (result.state === "ready") result.state = "duplicate";
+      result.matches.push({ table: "migrationRecords", id: knownCustomer, name: row.values.service ?? "Appointment", why: `The quick import in setup already brought in an appointment for this client on ${day}` });
+    }
     // A visit of an imported recurring service: the plan won't book that day again.
     const byRef = row.values.recurringRef ? series.find((s) => s.sourceId === row.values.recurringRef?.trim()) : undefined;
     const candidates = byRef ? [byRef] : series.filter((s) => s.place === placeKey && (!serviceId || s.serviceId === serviceId));

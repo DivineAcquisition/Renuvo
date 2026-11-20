@@ -209,6 +209,8 @@ function Records({ kind, filter, setFilter }: { kind: FileKind; filter: Filter; 
                     {row.edited.length ? <Badge variant="info">Corrected</Badge> : null}
                     {row.decision?.bySupport || row.editedBySupport ? <Badge variant="outline">By Selestial Support</Badge> : null}
                     {row.question && !row.decision ? <Badge variant="warning">Question for you</Badge> : null}
+                    {row.undone ? <Badge variant="secondary">Undone</Badge> : null}
+                    {row.undoBlocked ? <Badge variant="warning">Kept by undo</Badge> : null}
                   </span>
                   <span className="truncate pl-5 text-xs text-muted-foreground">{subtitle(row)}</span>
                   {row.problems[0] || row.notes[0] ? <span className={cn("pl-5 text-xs", row.problems[0] ? "text-destructive-foreground" : "text-muted-foreground")}>{row.problems[0] ?? row.notes[0]}</span> : null}
@@ -304,6 +306,8 @@ function Detail({ row }: { row: Row }) {
           </span>
         </div>
       ) : null}
+      {row.undoBlocked ? <Note tone="warning">An undo kept this record: {row.undoBlocked}</Note> : null}
+      {row.undone ? <Note>You undid this record on {new Date(row.undone.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Take back the skip to import it again.</Note> : null}
       {view.inSupport && !written ? <AskOwner row={row} /> : null}
 
       {row.kind === "recurring" && typeof row.parsed.preview === "string" && row.parsed.preview ? (

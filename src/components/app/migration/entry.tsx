@@ -41,7 +41,7 @@ export function MigrationEntry({ className }: { className?: string }) {
         <Badge variant={words.variant}>{words.label}</Badge>
         {status?.attention ? <Badge variant="warning">{status.attention} need attention</Badge> : null}
       </div>
-      <p className="text-sm text-muted-foreground">Moving from Jobber, Housecall Pro, BookingKoala or a spreadsheet? Bring your customers, properties and upcoming work in one place, and see what needs attention before anything goes live.</p>
+      <p className="text-sm text-muted-foreground">The full, guided move from Jobber, Housecall Pro, BookingKoala or a spreadsheet: customers, properties, your team, upcoming and recurring work, history and balances, with every record reviewed before anything goes live.</p>
       {status?.canOpen ? (
         <Link href={MIGRATION_PATH} className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-sm font-medium text-strong hover:border-brand-500/50 focus-visible:outline-2 focus-visible:outline-brand-500">
           {words.action}

@@ -356,7 +356,7 @@ describe("A migration, end to end", () => {
     expect(await t.run(async (ctx) => (await ctx.db.query("properties").collect()).length)).toBe(5);
 
     // The Owner releases the schedule: visits go to Dispatch, and plans start booking ahead without doubling imported days.
-    await as.mutation(api.migration.release, { companyId, confirm: true, schedule: true, team: true });
+    await as.mutation(api.migration.release, { companyId, confirm: true, visits: true, plans: true, team: true });
     await settle(t);
     const released = await t.run(async (ctx) => ({ jobs: await ctx.db.query("jobs").collect(), plans: await ctx.db.query("servicePlans").collect() }));
     expect(released.plans.every((p) => p.state === "active" && p.migration?.held === false)).toBe(true);
@@ -370,7 +370,7 @@ describe("A migration, end to end", () => {
     const manager = await addMember(t, as, companyId, "mgr", "manager");
     const office = await addMember(t, as, companyId, "desk", "office");
     expect(await refusal(office.query(api.migration.view, { companyId }))).toBe("Not allowed.");
-    expect(await refusal(manager.mutation(api.migration.release, { companyId, confirm: true, schedule: true, team: false }))).toBe("Not allowed.");
+    expect(await refusal(manager.mutation(api.migration.release, { companyId, confirm: true, visits: true, plans: true, team: false }))).toBe("Not allowed.");
   });
 
   it("picks an interrupted import up from its checkpoint, without writing anything twice", async () => {
@@ -526,7 +526,7 @@ describe("More records, end to end", () => {
     const report = (await as.query(api.migration.report, { companyId }))!;
     expect(report.held.cleaners).toBe(2);
     expect(report.kinds.every((k) => k.balanced)).toBe(true);
-    await as.mutation(api.migration.release, { companyId, confirm: true, schedule: false, team: true });
+    await as.mutation(api.migration.release, { companyId, confirm: true, visits: false, plans: false, team: true });
     await settle(t);
     expect((await t.run((ctx) => ctx.db.query("cleaners").collect())).every((c) => c.migration?.held === false && c.status === "onboarding")).toBe(true);
 
@@ -587,10 +587,145 @@ describe("Assisted migration", () => {
 
     // Staff can't import or release: the owner does.
     expect(await refusal(staff.mutation(api.migration.startImport, { companyId, supportSessionId }))).toContain("support session can't");
-    expect(await refusal(staff.mutation(api.migration.release, { companyId, supportSessionId, confirm: true, schedule: true, team: true }))).toContain("support session can't");
+    expect(await refusal(staff.mutation(api.migration.release, { companyId, supportSessionId, confirm: true, visits: true, plans: true, team: true }))).toContain("support session can't");
     // Answering the question as the owner clears it.
     await owner.mutation(api.migration.decide, { companyId, rowIds: [sam.id], choice: "skip" });
     await settle(t);
     expect((await owner.query(api.migration.rows, { companyId, kind: "customers", filter: "questions", offset: 0, limit: 20 })).total).toBe(0);
+  });
+});
+
+// ── Phase 6: undo, activation review, completion email ───────────────────────────────────────────────
+
+describe("Undo, activation review and the completion email", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function imported() {
+    const { t, as, companyId, migrationId } = await prepared();
+    const view = (await as.query(api.migration.view, { companyId }))!;
+    const serviceId = view.services[0].id;
+    await as.mutation(api.migration.mapService, { companyId, name: "Deep Clean", serviceId });
+    await as.mutation(api.migration.mapService, { companyId, name: "Office Clean", serviceId });
+    await settle(t);
+    const customers = await rowsOf(as, companyId, "customers");
+    const by = (id: string) => customers.find((r) => r.values.externalId === id)!;
+    const group = (await as.query(api.migration.view, { companyId }))!.migration.groups[0];
+    await as.mutation(api.migration.decideGroup, { companyId, key: group.key, accepted: true });
+    await as.mutation(api.migration.decide, { companyId, rowIds: [by("104").id], choice: "keep_existing" });
+    await as.mutation(api.migration.decide, { companyId, rowIds: [by("106").id], choice: "skip" });
+    await settle(t);
+    const r2 = (await rowsOf(as, companyId, "recurring")).find((r) => r.values.externalId === "R2")!;
+    for (const [field, value] of [["line1", "400 Congress Ave"], ["line2", "Suite 200"], ["postalCode", "78701"]]) await as.mutation(api.migration.edit, { companyId, rowIds: [r2.id], field, value });
+    await settle(t);
+    await confirmColumns(t, as, companyId);
+    const revision = (await as.query(api.migration.view, { companyId }))!.migration.revision;
+    await as.mutation(api.migration.save, { companyId, revision, timezoneConfirmed: true });
+    await as.mutation(api.migration.startImport, { companyId });
+    await settle(t);
+    return { t, as, companyId, migrationId };
+  }
+
+  it("emails the Owner a branded completion notice through the notice router", async () => {
+    const { t } = await imported();
+    const notices = await t.run(async (ctx) => (await ctx.db.query("messages").collect()).filter((m) => m.notice?.event === "migration_complete"));
+    expect(notices).toHaveLength(1);
+    expect(notices[0].to).toBe("owner-a@example.com");
+  });
+
+  it("reviews each workflow before release, then releases only what the Owner chose", async () => {
+    const { t, as, companyId } = await imported();
+    const review = (await as.query(api.migration.activationReview, { companyId }))!;
+    const flow = Object.fromEntries(review.workflows.map((w) => [w.id, w]));
+    expect(flow.visits).toMatchObject({ count: 3, messages: 3 });
+    expect(flow.visits.missing.join(" ")).toContain("No cleaner is active");
+    expect(flow.plans.count).toBe(2);
+    expect(flow.plans.approvals.join(" ")).toContain("waiting for your approval");
+    expect(flow.team.count).toBe(0);
+    expect(review.untouched.join(" ")).toContain("Customers aren't messaged");
+    // Plans only: visits stay held, so Dispatch still leaves the imported ones alone.
+    await as.mutation(api.migration.release, { companyId, confirm: true, visits: false, plans: true, team: false });
+    await settle(t);
+    const after = await t.run(async (ctx) => ({ jobs: await ctx.db.query("jobs").collect(), plans: await ctx.db.query("servicePlans").collect() }));
+    expect(after.plans.every((p) => p.state === "active")).toBe(true);
+    const importedVisits = after.jobs.filter((j) => j.migration);
+    expect(importedVisits.every((j) => j.migration?.held)).toBe(true);
+    expect((await as.query(api.migration.activationReview, { companyId }))!.workflows.find((w) => w.id === "plans")!.released).not.toBeNull();
+  });
+
+  it("undoes untouched records, keeps touched or pre-existing ones with the reason, and never lifts an opt-out", async () => {
+    const { t, as, companyId } = await imported();
+    // The owner edits Dana after the import: she stays, with everything she owns.
+    const dana = await t.run(async (ctx) => (await ctx.db.query("customers").collect()).find((c) => c.name === "Dana Whitfield")!);
+    await t.run((ctx) => ctx.db.patch(dana._id, { revision: 2 }));
+    const preview = (await as.query(api.migration.undoPreview, { companyId }))!;
+    expect(preview.canUndo).toBe(true);
+    expect(preview.kinds.customers.kept.map((k) => [k.name, k.reason])).toEqual([["Dana Whitfield", "It was edited after the import."]]);
+    expect(preview.kinds.customers.undoable).toBe(2);
+    // Managers can look but not undo; the import isn't undone by a manager.
+    const manager = await addMember(t, as, companyId, "mgr2", "manager");
+    expect(await refusal(manager.mutation(api.migration.undo, { companyId, confirm: true, kinds: ["customers"] }))).toBe("Not allowed.");
+
+    await as.mutation(api.migration.undo, { companyId, confirm: true, kinds: ["customers"] });
+    await settle(t);
+    const left = await t.run(async (ctx) => ({
+      customers: (await ctx.db.query("customers").collect()).map((c) => c.name).sort(),
+      jobs: await ctx.db.query("jobs").collect(),
+      plans: await ctx.db.query("servicePlans").collect(),
+      suppressions: await ctx.db.query("suppressions").collect(),
+      changes: (await ctx.db.query("serviceChanges").collect()).filter((c) => c.kind === "property_price"),
+      views: await ctx.db.query("clientViews").collect(),
+    }));
+    // Sam was matched, not created: never undone. Dana was edited: kept. Harbor Dental and Opted Out are gone.
+    expect(left.customers).toEqual(["Dana Whitfield", "Sam Existing"]);
+    expect(left.views.every((v) => left.customers.length >= 1 && v.customerId)).toBe(true);
+    // Each record is judged on its own: Dana's imported plan and visits were untouched, so they go even though she stays.
+    // Their price proposals are withdrawn with them.
+    expect(left.plans).toEqual([]);
+    expect(left.jobs).toEqual([]);
+    expect(left.changes.map((c) => c.state)).toEqual(["withdrawn", "withdrawn"]);
+    // The opt-out from the file stays in force.
+    expect(left.suppressions.map((s) => s.address).sort()).toEqual(["+15125550105", "optout@example.com"]);
+    const report = (await as.query(api.migration.report, { companyId }))!;
+    const customers = report.kinds.find((k) => k.kind === "customers")!;
+    expect(customers).toMatchObject({ balanced: true });
+    expect(customers.undone).toBe(3);
+    expect(report.kinds.find((k) => k.kind === "bookings")).toMatchObject({ undone: 3, balanced: true });
+    expect(report.problems.some((p) => p.outcome === "Kept by undo" && p.name === "Dana Whitfield")).toBe(true);
+    // Importing again doesn't bring undone rows back on its own.
+    await as.mutation(api.migration.reopen, { companyId });
+    await settle(t);
+    await as.mutation(api.migration.startImport, { companyId });
+    await settle(t);
+    expect((await t.run((ctx) => ctx.db.query("customers").collect())).length).toBe(2);
+  });
+
+  it("keeps a visit already released to Dispatch, and flags an appointment the quick setup import already brought in", async () => {
+    const { t, as, companyId } = await imported();
+    await as.mutation(api.migration.release, { companyId, confirm: true, visits: true, plans: false, team: false });
+    await settle(t);
+    const preview = (await as.query(api.migration.undoPreview, { companyId }))!;
+    expect(preview.kinds.bookings.undoable).toBe(0);
+    expect(preview.kinds.bookings.kept[0].reason).toContain("released to Dispatch");
+    // Customers with released visits stay too.
+    expect(preview.kinds.customers.kept.map((k) => k.reason).join(" ")).toContain("visits can't be undone");
+
+    // The quick importer's waiting appointment for Sam on March 10 makes the guided booking for that day a possible duplicate.
+    const sam = await t.run(async (ctx) => (await ctx.db.query("customers").collect()).find((c) => c.name === "Sam Existing")!);
+    const owner = await t.run(async (ctx) => (await ctx.db.query("members").collect())[0]);
+    await t.run(async (ctx) => {
+      const runId = await ctx.db.insert("migrationImportRuns", { companyId, importKey: "quick-1", kind: "appointment", source: "csv", label: "Quick", results: [], created: 1, skipped: 0, failed: 0, by: owner._id, createdAt: Date.now() });
+      await ctx.db.insert("migrationRecords", { companyId, customerId: sam._id, kind: "appointment", source: "csv", key: "q1", day: "2027-03-17", review: "review", runId, createdAt: Date.now() });
+    });
+    await as.mutation(api.migration.reopen, { companyId });
+    const storageId = await t.run((ctx) => ctx.storage.store(new Blob(["Booking ID,Customer ID,Service,Date,Start Time,Price\nB9,104,Deep Clean,2027-03-17,1:00 PM,$300\n"], { type: "text/csv" })));
+    await as.mutation(api.migration.addFile, { companyId, storageId, name: "more-bookings.csv" });
+    await settle(t);
+    const b9 = (await rowsOf(as, companyId, "bookings")).find((r) => r.values.externalId === "B9")!;
+    expect(b9.state).toBe("duplicate");
+    expect(b9.matches.map((m) => m.why).join(" ")).toContain("quick import in setup");
   });
 });

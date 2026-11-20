@@ -60,6 +60,7 @@ import type * as lib_migration_analyze from "../lib/migration/analyze.js";
 import type * as lib_migration_rules from "../lib/migration/rules.js";
 import type * as lib_migration_schema from "../lib/migration/schema.js";
 import type * as lib_migration_sources from "../lib/migration/sources.js";
+import type * as lib_migration_undo from "../lib/migration/undo.js";
 import type * as lib_migration_write from "../lib/migration/write.js";
 import type * as consent from "../consent.js";
 import type * as contactPortal from "../contactPortal.js";
@@ -579,6 +580,7 @@ declare const fullApi: ApiFromModules<{
   "lib/migration/rules": typeof lib_migration_rules;
   "lib/migration/schema": typeof lib_migration_schema;
   "lib/migration/sources": typeof lib_migration_sources;
+  "lib/migration/undo": typeof lib_migration_undo;
   "lib/migration/write": typeof lib_migration_write;
   consent: typeof consent;
   contactPortal: typeof contactPortal;
