@@ -28,6 +28,9 @@ export const ROW_STATES = ["ready", "update", "duplicate", "skip", "error", "rev
 export const CHOICES = ["create", "keep_existing", "update_fields", "separate", "skip", "review"] as const;
 export const OUTCOMES = ["created", "updated", "linked", "skipped", "failed"] as const;
 
+/** The Selestial staff member who did something in a support session. The company sees "Selestial Support". */
+export const staffRef = v.object({ staffId: v.id("staff"), sessionId: v.id("supportSessions") });
+
 export const migrationTables = {
   migrations: defineTable({
     companyId: v.id("companies"),
@@ -136,7 +139,11 @@ export const migrationTables = {
     category: v.optional(v.object({ value: categoryValidator, because: v.string(), confirmed: v.boolean() })),
     /** Rows sharing a commercial account. */
     groupKey: v.optional(v.string()),
-    decision: v.optional(v.object({ choice: literals(CHOICES), fields: v.optional(v.array(v.string())), targetId: v.optional(v.string()), by: actorValidator, at: v.number() })),
+    decision: v.optional(v.object({ choice: literals(CHOICES), fields: v.optional(v.array(v.string())), targetId: v.optional(v.string()), by: actorValidator, at: v.number(), staff: v.optional(staffRef) })),
+    /** Set when Selestial staff corrected a value in a support session: who, so the owner sees it was them. */
+    editedByStaff: v.optional(staffRef),
+    /** A question Selestial staff left for the owner about this row. It waits until the owner decides the row. */
+    question: v.optional(v.object({ text: v.string(), staff: staffRef, at: v.number() })),
     result: v.optional(v.object({ outcome: literals(OUTCOMES), table: v.optional(v.string()), id: v.optional(v.string()), reason: v.optional(v.string()), at: v.number() })),
   })
     .index("by_migration_kind", ["migrationId", "kind", "index"])
@@ -180,6 +187,46 @@ export const migrationTables = {
   })
     .index("by_company_source_kind_external", ["companyId", "source", "kind", "externalId"])
     .index("by_migration", ["migrationId"]),
+
+  /**
+   * A completed visit from another system, kept as read-only history on the client. It is not a job: it is
+   * never paid, invoiced, followed up, counted in metrics or offered to anyone.
+   */
+  importedHistory: defineTable({
+    companyId: v.id("companies"),
+    customerId: v.id("customers"),
+    propertyId: v.optional(v.id("properties")),
+    /** YYYY-MM-DD on the company's calendar. */
+    day: v.string(),
+    service: v.optional(v.string()),
+    priceCents: v.optional(v.number()),
+    cleaner: v.optional(v.string()),
+    outcome: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    source: v.string(),
+    externalId: v.optional(v.string()),
+    migrationId: v.id("migrations"),
+    rowId: v.id("migrationRows"),
+    createdAt: v.number(),
+  }).index("by_company_customer_day", ["companyId", "customerId", "day"]),
+
+  /**
+   * What a customer owed in the old system, by its old invoice number, for reference. Never payable, never
+   * reminded, never added to Selestial invoices or balances, and never charged.
+   */
+  openingBalances: defineTable({
+    companyId: v.id("companies"),
+    customerId: v.id("customers"),
+    amountCents: v.number(),
+    reference: v.string(),
+    issuedOn: v.optional(v.string()),
+    dueOn: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    source: v.string(),
+    migrationId: v.id("migrations"),
+    rowId: v.id("migrationRows"),
+    createdAt: v.number(),
+  }).index("by_company_customer", ["companyId", "customerId"]),
 };
 
 /** On a job or plan written by a migration: held until the owner releases it, so no agent acts on it first. */

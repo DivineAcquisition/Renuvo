@@ -13,11 +13,11 @@ import type { Schedule } from "../services/spec";
 // ── Record types ─────────────────────────────────────────────────────────────────────────────────────
 
 /** What can be imported now, in the order it is written: a parent before what depends on it. */
-export const IMPORTABLE = ["customers", "properties", "recurring", "bookings"] as const;
+export const IMPORTABLE = ["customers", "properties", "cleaners", "recurring", "bookings", "history", "balances"] as const;
 export type Importable = (typeof IMPORTABLE)[number];
 
 /** Recognized and kept, but not imported yet. Shown as "not transferred, and why" rather than silently dropped. */
-export const NOT_YET = ["cleaners", "services", "history", "agreements", "balances", "other"] as const;
+export const NOT_YET = ["services", "agreements", "other"] as const;
 export type NotYet = (typeof NOT_YET)[number];
 
 export const FILE_KINDS = [...IMPORTABLE, ...NOT_YET] as const;
@@ -28,11 +28,11 @@ export const KIND_LABELS: Record<FileKind, { label: string; contains: string }> 
   properties: { label: "Properties", contains: "Service addresses, each linked to a customer. Commercial accounts often have several." },
   recurring: { label: "Recurring services", contains: "Standing schedules: how often, the next visit, and the price." },
   bookings: { label: "Upcoming bookings", contains: "Visits already on the calendar: date, time, service and price." },
-  cleaners: { label: "Cleaners", contains: "Your team. Kept with this migration; importing cleaners comes next." },
+  cleaners: { label: "Cleaners", contains: "Your team: contact details, employee or contractor, skills, service areas and weekly availability. Added as onboarding, with no invitation sent." },
   services: { label: "Services & prices", contains: "Your service list. Used to match bookings to your Services & Pricing; not imported as new services." },
-  history: { label: "Service history", contains: "Completed visits. Kept with this migration; importing history comes next." },
-  agreements: { label: "Agreements", contains: "Signed documents. Kept with this migration; importing agreements comes next." },
-  balances: { label: "Balances & invoices", contains: "Outstanding amounts. Kept with this migration; importing balances comes next." },
+  history: { label: "Service history", contains: "Completed visits, kept as read-only history on each client. Never paid, invoiced or followed up." },
+  agreements: { label: "Agreements", contains: "A list of agreements. Upload the signed documents themselves in Agreements, where a signature is never assumed." },
+  balances: { label: "Balances & invoices", contains: "Outstanding amounts with their old invoice numbers, kept as opening balances for reference. Never charged or reminded." },
   other: { label: "Something else", contains: "A file Selestial didn't recognize. Tell us what it is, or ask Selestial for help." },
 };
 
@@ -65,7 +65,11 @@ export const FIELDS: Record<Importable, FieldDef[]> = {
     { key: "phone", label: "Phone", guesses: ["phone", "mobile", "mobile phone", "mobile number", "cell", "main phone", "main phone #s", "mobile phone #s", "phone number", "home number", "work number", "phones"] },
     ...ADDRESS,
     { key: "notes", label: "Notes", guesses: ["notes", "note", "client notes", "customer notes", "comments"] },
-    { key: "doNotContact", label: "Opted out of messages", guesses: ["do not contact", "do not text", "opted out", "opt out", "unsubscribed", "sms opt out", "marketing opt out", "email opt out", "do not email"], help: "A documented opt-out is kept. A phone number or email is never treated as permission to message." },
+    { key: "doNotContact", label: "Opted out of all messages", guesses: ["do not contact", "opted out", "opt out", "unsubscribed"], help: "A documented opt-out is kept. A phone number or email is never treated as permission to message." },
+    { key: "smsOptOut", label: "Opted out of texts", guesses: ["sms opt out", "do not text", "text opt out", "sms unsubscribed", "no texts"] },
+    { key: "emailOptOut", label: "Opted out of email", guesses: ["email opt out", "do not email", "email unsubscribed", "no emails"] },
+    { key: "marketingOptOut", label: "Opted out of marketing", guesses: ["marketing opt out", "no marketing", "marketing unsubscribed"] },
+    { key: "consentNote", label: "Consent recorded in the old system", guesses: ["sms consent", "text consent", "consent", "opt in", "opted in", "marketing consent"], help: "Kept as a note for the Owner. It isn't used as permission: Selestial can't see the original evidence." },
   ],
   properties: [
     { key: "externalId", label: "Property ID in the old system", guesses: ["property id", "location id", "site id", "address id", "id"] },
@@ -97,6 +101,40 @@ export const FIELDS: Record<Importable, FieldDef[]> = {
     { key: "status", label: "Status", guesses: ["status", "state", "active", "paused"] },
     { key: "cleaner", label: "Assigned cleaner", guesses: ["cleaner", "assigned to", "team", "provider", "employee", "technician", "assigned"] },
     { key: "notes", label: "Notes", guesses: ["notes", "instructions", "job notes", "description"] },
+  ],
+  cleaners: [
+    { key: "externalId", label: "ID in the old system", guesses: ["employee id", "id", "staff id", "provider id", "technician id"] },
+    { key: "name", label: "Name", required: "one_of", guesses: ["name", "full name", "employee name", "cleaner", "employee", "technician", "provider"] },
+    { key: "firstName", label: "First name", required: "one_of", guesses: ["first name", "first"] },
+    { key: "lastName", label: "Last name", guesses: ["last name", "last", "surname"] },
+    { key: "email", label: "Email", guesses: ["email", "e-mail", "email address"] },
+    { key: "phone", label: "Phone", guesses: ["phone", "mobile", "cell", "phone number", "mobile phone"] },
+    { key: "engagement", label: "Employee or contractor", required: "always", guesses: ["employment type", "worker type", "type", "classification", "engagement", "relationship", "role"], help: "Selestial never guesses employment status. Fill it in for each person if your file doesn't say." },
+    { key: "skills", label: "Skills", guesses: ["skills", "specialties", "services", "certifications"] },
+    { key: "serviceAreas", label: "Service areas (ZIP codes)", guesses: ["service areas", "areas", "zip codes", "zips", "territory"] },
+    { key: "availability", label: "Weekly availability", guesses: ["availability", "available", "schedule", "working hours", "hours"], help: "Like \"Mon-Fri 8am-4pm\". Anything Selestial can't read is noted, not guessed." },
+    { key: "status", label: "Status in the old system", guesses: ["status", "active", "employment status", "state"] },
+    { key: "notes", label: "Notes", guesses: ["notes", "comments"] },
+  ],
+  history: [
+    { key: "externalId", label: "Visit ID in the old system", guesses: ["visit id", "job id", "job #", "job number", "booking id", "id", "invoice #"] },
+    ...CUSTOMER_REF,
+    { key: "propertyRef", label: "Property ID in the old system", guesses: ["property id", "location id", "site id"] },
+    ...ADDRESS,
+    { key: "date", label: "Date", required: "always", guesses: ["date", "completed", "completed date", "completion date", "visit date", "service date", "finished"] },
+    { key: "service", label: "Service", guesses: ["service", "service name", "job title", "title", "line items"] },
+    { key: "price", label: "Price", guesses: ["price", "amount", "total", "job total"] },
+    { key: "cleaner", label: "Cleaner", guesses: ["cleaner", "assigned to", "team", "employee", "technician"] },
+    { key: "status", label: "Outcome", guesses: ["status", "outcome", "result", "job status"] },
+    { key: "notes", label: "Notes", guesses: ["notes", "job notes", "description", "instructions"] },
+  ],
+  balances: [
+    { key: "externalId", label: "Invoice number", required: "always", guesses: ["invoice #", "invoice number", "invoice", "invoice id", "number", "id", "reference"], help: "Each balance keeps its old invoice number, so it's never counted twice." },
+    ...CUSTOMER_REF,
+    { key: "amount", label: "Amount still owed", required: "always", guesses: ["balance", "amount due", "outstanding", "balance due", "open balance", "due", "amount"] },
+    { key: "issued", label: "Invoice date", guesses: ["invoice date", "issued", "date", "created"] },
+    { key: "due", label: "Due date", guesses: ["due date", "due on", "due"] },
+    { key: "notes", label: "Notes", guesses: ["notes", "memo", "description"] },
   ],
   bookings: [
     { key: "externalId", label: "Booking ID in the old system", guesses: ["booking id", "visit id", "appointment id", "job id", "job #", "job number", "id", "booking #"] },
@@ -150,7 +188,7 @@ export function guessKind(header: string[]): { kind: FileKind; because: string[]
     ["bookings", has("booking", "visit date", "appointment", "scheduled", "date", "start time", "arrival")],
     ["history", has("completed", "completion", "finished")],
     ["balances", has("balance", "amount due", "outstanding", "invoice", "paid")],
-    ["cleaners", has("employee", "hire date", "pay rate", "hourly rate", "role", "availability")],
+    ["cleaners", has("employee", "hire date", "pay rate", "hourly rate", "availability", "technician", "worker type", "employment", "skills", "service area")],
     ["services", has("price book", "unit of measure", "taxable", "industry", "category")],
     ["agreements", has("agreement", "contract", "signed")],
     ["properties", has("property id", "location", "site", "lockbox", "gate code", "bedrooms", "square")],
@@ -159,6 +197,8 @@ export function guessKind(header: string[]): { kind: FileKind; because: string[]
   // A schedule file mentions dates too, so recurrence wins when present; completed visits beat upcoming ones.
   if (scores[0][1].length) return { kind: "recurring", because: scores[0][1] };
   if (scores[2][1].length && scores[1][1].length) return { kind: "history", because: [...scores[2][1], ...scores[1][1]] };
+  // A team list has names, emails and phones like a customer list; two team-only columns decide it.
+  if (scores[4][1].length >= 2) return { kind: "cleaners", because: scores[4][1] };
   const best = scores.slice(1).reduce((a, b) => (b[1].length > a[1].length ? b : a));
   if (!best[1].length) return { kind: "other", because: [] };
   // A customer list with a street and no dates is customers, which carry their first property.
@@ -399,6 +439,21 @@ export function requiredProblems(kind: Importable, values: Record<string, string
   if (kind === "recurring" && !values.frequency) out.push("It doesn't say how often.");
   if (kind === "recurring" && !values.nextVisit) out.push("It doesn't give the next visit date.");
   if (kind === "bookings" && !values.date) out.push("It has no date.");
+  if (kind === "cleaners") {
+    if (!customerNameOf(values)) out.push("It has no name.");
+    const email = firstEmail(values.email);
+    if (values.email && (!email || !EMAIL.test(email))) out.push("The email doesn't look like an email address.");
+    if (!values.engagement) out.push("Say whether this person is an employee or a contractor. Selestial doesn't guess.");
+  }
+  if (kind === "history") {
+    if (!values.customerRef && !values.customerName) out.push("It doesn't say which customer it's for.");
+    if (!values.date) out.push("It has no date.");
+  }
+  if (kind === "balances") {
+    if (!values.customerRef && !values.customerName) out.push("It doesn't say which customer owes it.");
+    if (!values.amount) out.push("It has no amount.");
+    if (!values.externalId) out.push("It has no invoice number, so it could be counted twice. Add the old invoice number.");
+  }
   return out;
 }
 
@@ -411,4 +466,63 @@ export function completedStatus(value: string | undefined): boolean {
 }
 export function pausedStatus(value: string | undefined): boolean {
   return /pause|hold|inactive|suspend|stopped|ended|cancel/i.test(value ?? "");
+}
+
+// ── Cleaners ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** Employee, contractor or subcontractor, from the old system's words. Anything else is a question, never a guess. */
+export function parseEngagement(raw: string | undefined): { engagement: "employee" | "contractor" | "subcontractor" } | { error: string } {
+  const word = (raw ?? "").trim().toLowerCase();
+  if (!word) return { error: "Say whether this person is an employee or a contractor. Selestial doesn't guess." };
+  if (/sub ?contract/.test(word)) return { engagement: "subcontractor" };
+  if (/\b(w-?2|employee|staff|part[- ]time|full[- ]time|hourly|salaried)\b/.test(word)) return { engagement: "employee" };
+  if (/\b(1099|contractor|independent|freelance)\b/.test(word)) return { engagement: "contractor" };
+  return { error: `"${raw!.trim().slice(0, 40)}" doesn't say whether this is an employee or a contractor. Choose one.` };
+}
+
+/** The old system's status words that mean someone no longer works there. */
+export function endedStatus(value: string | undefined): boolean {
+  return /terminat|inactive|former|ended|left|quit|archived|deactivated|let go/i.test(value ?? "");
+}
+
+const DAYS: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+function minutesOf(raw: string): number | null {
+  const time = parseTime(raw);
+  if (!time) return null;
+  return Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+}
+
+/**
+ * Weekly availability like "Mon-Fri 8am-4pm" or "Mon, Wed 9:00-15:00; Sat 8am-12pm". Each part needs days
+ * and a time range with am/pm or 24-hour times. Anything else returns null and is noted, never guessed.
+ */
+export function parseAvailability(raw: string | undefined): { weekday: number; startMinute: number; endMinute: number }[] | null {
+  const text = (raw ?? "").trim().toLowerCase();
+  if (!text) return [];
+  const out: { weekday: number; startMinute: number; endMinute: number }[] = [];
+  for (const part of text.split(/[;\n]+/).map((p) => p.trim()).filter(Boolean)) {
+    const m = /^([a-z ,\-–]+?)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)$/.exec(part);
+    if (!m) return null;
+    const start = minutesOf(/[ap]m|:/.test(m[2]) ? m[2] : `${m[2]}:00`);
+    const end = minutesOf(/[ap]m|:/.test(m[3]) ? m[3] : `${m[3]}:00`);
+    if (start === null || end === null || end <= start) return null;
+    const days = new Set<number>();
+    for (const piece of m[1].split(",").map((p) => p.trim()).filter(Boolean)) {
+      const range = piece.split(/\s*(?:-|–|to)\s*/);
+      const a = DAYS[range[0]?.slice(0, 3) ?? ""];
+      const b = range[1] ? DAYS[range[1].slice(0, 3)] : a;
+      if (a === undefined || b === undefined) return null;
+      for (let d = a; ; d = (d + 1) % 7) {
+        days.add(d);
+        if (d === b) break;
+      }
+    }
+    for (const weekday of days) out.push({ weekday, startMinute: start, endMinute: end });
+  }
+  return out;
+}
+
+export function splitList(value: string | undefined): string[] {
+  return (value ?? "").split(/[,;|/]+/).map((v) => v.trim()).filter(Boolean).slice(0, 40);
 }

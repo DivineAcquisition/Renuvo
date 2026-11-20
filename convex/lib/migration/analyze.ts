@@ -14,6 +14,11 @@ import { scheduleDates } from "../services/engine";
 import type { Schedule } from "../services/spec";
 import {
   addressComplete,
+  endedStatus,
+  IMPORTABLE,
+  parseAvailability,
+  parseEngagement,
+  splitList,
   addressKey,
   cancelledStatus,
   CATEGORY_LABELS,
@@ -59,6 +64,11 @@ export type Existing = {
   /** Records imported earlier from this source, by kind and the old system's id. */
   links: { kind: string; externalId: string; table: string; recordId: string }[];
   services: { id: string; name: string }[];
+  /** The team already in Selestial, for spotting the same person twice. */
+  cleaners?: { id: string; name: string; email?: string; phone?: string }[];
+  /** History and opening balances already imported, so a repeat never counts them twice. */
+  history?: { customerId: string; day: string; externalId?: string }[];
+  balances?: { customerId: string; reference: string }[];
 };
 
 export type Context = {
@@ -127,6 +137,9 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
   const properties = by("properties");
   const recurring = by("recurring");
   const bookings = by("bookings");
+  const cleaners = by("cleaners");
+  const history = by("history");
+  const balances = by("balances");
 
   for (const row of rows) out.set(row.id, { id: row.id, state: "ready", problems: [], notes: [], matches: [], parsed: {}, ...(row.values.externalId ? { sourceId: row.values.externalId } : {}) });
   const get = (id: string) => out.get(id)!;
@@ -551,6 +564,134 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
     }
   }
 
+  // ── Cleaners ──
+  const seenPerson = new Map<string, RowIn>();
+  for (const row of cleaners) {
+    const result = get(row.id);
+    for (const problem of requiredProblems("cleaners", row.values)) if (!/employee or a contractor/.test(problem)) fail(row.id, problem);
+    const name = customerNameOf(row.values);
+    const engagement = parseEngagement(row.values.engagement);
+    if ("error" in engagement) fail(row.id, engagement.error);
+    else if (engagement.engagement === "subcontractor") result.notes.push("A subcontractor worker needs their subcontractor company. It's added as a contractor if no company is named; change it on their profile.");
+    const availability = parseAvailability(row.values.availability);
+    if (availability === null) result.notes.push(`Selestial couldn't read the availability "${row.values.availability}", so none was set. They can confirm their hours when they're onboarded.`);
+    const areas = splitList(row.values.serviceAreas).filter((a) => /^[0-9a-z -]{3,10}$/i.test(a));
+    result.parsed = { name, engagement: "engagement" in engagement ? engagement.engagement : null, availability: availability ? JSON.stringify(availability) : null, skills: splitList(row.values.skills).join("|"), areas: areas.join("|") };
+    if (endedStatus(row.values.status)) {
+      result.state = "skip";
+      result.notes.push(`Marked "${row.values.status}" in your old system, so they're not added. Choose to import anyway if they still work with you.`);
+      continue;
+    }
+    result.notes.push(`Added as onboarding${row.values.status ? ` (they were "${row.values.status}" in your old system)` : ""}. No invitation or message is sent, and they aren't offered work until you make them active and their requirements are met.`);
+    const prior = linkFor("cleaners", row.values.externalId);
+    if (prior) {
+      result.state = "update";
+      result.matches.push({ table: prior.table, id: prior.recordId, name, why: `Imported before with ID ${row.values.externalId}` });
+      continue;
+    }
+    const email = emailKey(firstEmail(row.values.email));
+    const phone = phoneKey(firstPhone(row.values.phone));
+    const key = `${nameKey(name)}|${email}|${phone}`;
+    const earlier = seenPerson.get(key);
+    if (earlier && nameKey(name)) {
+      result.state = "duplicate";
+      result.matches.push({ table: "row", id: earlier.id, name: customerNameOf(earlier.values), why: `Same person as row ${earlier.index + 2}` });
+    } else seenPerson.set(key, row);
+    for (const person of existing.cleaners ?? []) {
+      const why = email && emailKey(person.email) === email ? "Same email" : phone.length >= 10 && phoneKey(person.phone) === phone ? "Same phone" : nameKey(person.name) === nameKey(name) ? "Same name" : null;
+      if (!why) continue;
+      if (result.state === "ready") result.state = "duplicate";
+      result.matches.push({ table: "cleaners", id: person.id, name: person.name, why: `${why} as someone already on your team` });
+    }
+  }
+
+  // ── Service history: read-only, never a job ──
+  const seenVisitBefore = new Map<string, RowIn>();
+  for (const row of history) {
+    const result = get(row.id);
+    for (const problem of requiredProblems("history", row.values)) fail(row.id, problem);
+    const day = readDay(row, "date", "date");
+    if (day && day > context.today) {
+      result.state = "skip";
+      result.notes.push(`This visit is on ${day}, which hasn't happened yet. Put upcoming visits in your bookings file instead.`);
+      continue;
+    }
+    const price = row.values.price ? parseCents(row.values.price) : { cents: null };
+    if ("error" in price) result.notes.push(`${price.error} The price is left out of this history entry.`);
+    result.parsed = { day, cents: "cents" in price ? price.cents : null };
+    const customer = resolveCustomer(row);
+    if ("problem" in customer) {
+      if (customer.review) {
+        result.state = "review";
+        result.matches.push(...customer.review);
+        result.notes.push(customer.problem);
+      } else fail(row.id, customer.problem);
+      continue;
+    }
+    result.parent = customer.ref.rowId ? { rowId: customer.ref.rowId } : { customerId: customer.ref.customerId };
+    const property = resolveProperty(row, customer.ref);
+    if ("ref" in property) {
+      if (property.ref.propertyRowId) result.parent.propertyRowId = property.ref.propertyRowId;
+      if (property.ref.propertyId) result.parent.propertyId = property.ref.propertyId;
+    } else if (row.values.line1 || row.values.propertyRef) result.notes.push(`${property.problem} The visit is kept on the client without a property.`);
+    result.notes.push("Kept as read-only history on the client. It isn't a job, so it's never paid, invoiced, reviewed or followed up.");
+    const owner = customer.ref.rowId ?? customer.ref.customerId!;
+    const key = `${owner}|${day}|${nameKey(row.values.service)}|${row.values.externalId ?? ""}`;
+    const twin = seenVisitBefore.get(key);
+    if (twin) {
+      result.state = "duplicate";
+      result.matches.push({ table: "row", id: twin.id, name: twin.values.service ?? "Visit", why: `The same visit as row ${twin.index + 2}` });
+    } else seenVisitBefore.set(key, row);
+    if (customer.ref.customerId && (existing.history ?? []).some((h) => h.customerId === customer.ref.customerId && h.day === day && (!row.values.externalId || h.externalId === row.values.externalId))) {
+      if (result.state === "ready") result.state = "duplicate";
+      result.matches.push({ table: "importedHistory", id: customer.ref.customerId, name: row.values.service ?? "Visit", why: `This client already has imported history on ${day}` });
+    }
+  }
+
+  // ── Opening balances: reference only ──
+  const seenInvoice = new Map<string, RowIn>();
+  const owed = new Map<string, { label: string; rows: number; cents: number }>();
+  for (const row of balances) {
+    const result = get(row.id);
+    for (const problem of requiredProblems("balances", row.values)) fail(row.id, problem);
+    const amount = row.values.amount ? parseCents(row.values.amount.replace(/^\((.*)\)$/, "-$1")) : { cents: null };
+    if ("error" in amount) fail(row.id, /negative/.test(amount.error) ? "A credit (negative balance) isn't imported. Record credits in Finance." : amount.error);
+    else if (amount.cents === 0) {
+      result.state = "skip";
+      result.notes.push("Nothing is owed on this invoice, so there's no balance to bring over.");
+      continue;
+    }
+    const issued = readDay(row, "issued", "date");
+    const due = readDay(row, "due", "date");
+    result.parsed = { cents: "cents" in amount ? amount.cents : null, issued, due };
+    const customer = resolveCustomer(row);
+    if ("problem" in customer) {
+      if (customer.review) {
+        result.state = "review";
+        result.matches.push(...customer.review);
+        result.notes.push(customer.problem);
+      } else fail(row.id, customer.problem);
+      continue;
+    }
+    result.parent = customer.ref.rowId ? { rowId: customer.ref.rowId } : { customerId: customer.ref.customerId };
+    result.notes.push("Kept as an opening balance for reference, with its old invoice number. It's never charged, reminded or added to Selestial invoices.");
+    const owner = customer.ref.rowId ?? customer.ref.customerId!;
+    const ref = (row.values.externalId ?? "").trim().toLowerCase();
+    const twin = ref ? seenInvoice.get(`${owner}|${ref}`) : undefined;
+    if (twin) {
+      result.state = "duplicate";
+      result.matches.push({ table: "row", id: twin.id, name: twin.values.externalId ?? "Invoice", why: `The same invoice number as row ${twin.index + 2}` });
+    } else if (ref) seenInvoice.set(`${owner}|${ref}`, row);
+    if (customer.ref.customerId && ref && (existing.balances ?? []).some((b) => b.customerId === customer.ref.customerId && b.reference.trim().toLowerCase() === ref)) {
+      if (result.state === "ready") result.state = "duplicate";
+      result.matches.push({ table: "openingBalances", id: customer.ref.customerId, name: row.values.externalId ?? "Invoice", why: "This invoice was already brought over as an opening balance" });
+    }
+    if ("cents" in amount && amount.cents && result.state !== "duplicate" && row.decision?.choice !== "skip") {
+      const sum = owed.get(owner) ?? { label: customer.ref.label, rows: 0, cents: 0 };
+      owed.set(owner, { ...sum, rows: sum.rows + 1, cents: sum.cents + amount.cents });
+    }
+  }
+
   // ── Customer categories, now that schedules are known ──
   for (const row of customers) {
     const result = get(row.id);
@@ -564,10 +705,10 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
 
   // ── Rows not imported yet ──
   for (const row of rows) {
-    if (row.kind === "customers" || row.kind === "properties" || row.kind === "recurring" || row.kind === "bookings") continue;
+    if ((IMPORTABLE as readonly string[]).includes(row.kind)) continue;
     const result = get(row.id);
     result.state = "held";
-    result.notes.push("Kept with your migration. Selestial doesn't import this kind of record yet, so nothing was created from it.");
+    result.notes.push(row.kind === "agreements" ? "Kept with your migration. Upload the signed documents themselves in Agreements: Selestial never treats an agreement as signed without your verification." : "Kept with your migration. Selestial doesn't import this kind of record yet, so nothing was created from it.");
   }
 
   // ── Final state: problems win; a decision settles a choice ──
@@ -592,6 +733,8 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
   if (errors) notes.push({ key: "errors", step: "review", words: `${plural(errors, "record")} ${errors === 1 ? "has" : "have"} missing or unreadable information. Fix them here, or skip them.`, tone: "attention" });
   const linked = bookings.filter((row) => get(row.id).parent?.planRowId).length;
   if (linked) notes.push({ key: "reconcile", step: "review", words: `${plural(linked, "upcoming booking")} ${linked === 1 ? "is a visit" : "are visits"} of your recurring services. Each is brought over once, and the plan won't book the same day again.`, tone: "done" });
+  const several = [...owed.values()].filter((o) => o.rows > 1);
+  if (several.length) notes.push({ key: "balances", step: "review", words: `${plural(several.length, "customer")} ${several.length === 1 ? "has" : "have"} more than one balance row (${several.slice(0, 2).map((o) => `${o.label}: ${o.rows} rows, $${(o.cents / 100).toFixed(2)}`).join("; ")}). Check they're separate invoices, not a running total, so nothing is counted twice.`, tone: "attention" });
   const categories = new Map<Category, number>();
   for (const row of customers) {
     const c = get(row.id).category;

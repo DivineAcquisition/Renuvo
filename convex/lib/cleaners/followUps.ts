@@ -48,6 +48,8 @@ export type Need = { summary: string; items: { key: string; label: string }[] } 
 
 /** What the topic still needs from this cleaner, read from the record now. Null means nothing. */
 export async function needFor(ctx: MutationCtx, company: Doc<"companies">, cleaner: Doc<"cleaners">, topic: FollowUpTopic, now: number): Promise<Need> {
+  // A cleaner a migration added waits until the Owner releases the team: nothing reaches them before that.
+  if (cleaner.migration?.held) return null;
   if (cleaner.status === "ended" || cleaner.status === "suspended" || cleaner.status === "paused") return null;
   const settings = cleanersSettings(company);
   if (topic === "onboarding") {

@@ -35,7 +35,7 @@ export const SOURCE_CARDS: Record<Source, SourceCard> = {
     name: "Jobber",
     summary: "Upload your Jobber client export as a CSV. Selestial recognizes Jobber's column names and suggests how to map them.",
     supported: ["Clients and their service addresses from a CSV export", "Upcoming visits and recurring jobs from a CSV, mapped column by column", "A read-only Jobber connection for clients and upcoming visits, where it's switched on for your workspace"],
-    notSupported: ["Invoices, payments and balances aren't imported yet", NEVER_BY_CSV],
+    notSupported: ["Outstanding balances come over for reference only, with their old invoice numbers; payments and invoices themselves stay in your old system", NEVER_BY_CSV],
     exportSteps: [
       {
         title: "Export your clients",
@@ -51,7 +51,7 @@ export const SOURCE_CARDS: Record<Source, SourceCard> = {
     name: "Housecall Pro",
     summary: "Housecall Pro emails you a CSV of your customers and a CSV of your jobs. Upload both and Selestial links them.",
     supported: ["Customers from Housecall Pro's customer export", "Jobs from Housecall Pro's jobs export, as upcoming bookings", "A read-only Housecall Pro connection with your API key, where it's switched on"],
-    notSupported: ["Sub-customers (child accounts) arrive as separate customers to review", "Invoices, payments and balances aren't imported yet", NEVER_BY_CSV],
+    notSupported: ["Sub-customers (child accounts) arrive as separate customers to review", "Outstanding balances come over for reference only, with their old invoice numbers; payments and invoices themselves stay in your old system", NEVER_BY_CSV],
     exportSteps: [
       { title: "Export customers", steps: ["In Housecall Pro, select Customers in the left navigation.", "Click Actions, then Export.", "Confirm your email and click Send file. Housecall Pro emails you a CSV from notifications@housecallpro.com.", "Only Admins in Housecall Pro can export."] },
       { title: "Export jobs", steps: ["Select Jobs in the left navigation.", "Click Actions, then Export.", "Verify your email and click Send File. The CSV arrives by email."] },
@@ -64,7 +64,7 @@ export const SOURCE_CARDS: Record<Source, SourceCard> = {
     name: "BookingKoala",
     summary: "Upload a CSV of your BookingKoala customers or bookings. Selestial recognizes common BookingKoala columns like Frequency and Apt.",
     supported: ["Customers and addresses from a CSV", "Bookings and recurring frequency from a CSV, mapped column by column"],
-    notSupported: ["There's no direct BookingKoala connection", "Payments and balances aren't imported yet", NEVER_BY_CSV],
+    notSupported: ["There's no direct BookingKoala connection", "Outstanding balances come over for reference only; payments stay in your old system", NEVER_BY_CSV],
     exportSteps: [{ title: "Export from BookingKoala", steps: ["Export your customers, and your bookings if you can, as CSV from your BookingKoala admin.", "Upload the files here. Selestial shows what each one contains before anything is imported."] }],
     // BookingKoala's support site couldn't be reached when this was written.
     verifiedFrom: null,
@@ -74,7 +74,7 @@ export const SOURCE_CARDS: Record<Source, SourceCard> = {
     id: "spreadsheet",
     name: "Spreadsheet",
     summary: "Your own list in Excel or Google Sheets. Save it as CSV, or start from a Selestial template.",
-    supported: ["Customers, properties, recurring services and upcoming bookings", "Templates with the columns Selestial reads"],
+    supported: ["Customers, properties, your team, recurring services, upcoming bookings, past visits and opening balances", "Templates with the columns Selestial reads"],
     notSupported: ["Excel files (.xlsx) need saving as CSV first: File › Save As › CSV in Excel, or File › Download › CSV in Google Sheets", NEVER_BY_CSV],
     exportSteps: [{ title: "Save as CSV", steps: ["Excel: File › Save As, and choose CSV UTF-8.", "Google Sheets: File › Download › Comma-separated values.", "Numbers: File › Export To › CSV."] }],
     verifiedFrom: null,
@@ -103,11 +103,11 @@ export const SOURCE_CARDS: Record<Source, SourceCard> = {
 };
 
 /** Templates: the exact column names Selestial reads, with one example row each. */
-export const TEMPLATES: Record<"customers" | "properties" | "recurring" | "bookings", { file: string; header: string[]; example: string[] }> = {
+export const TEMPLATES: Record<"customers" | "properties" | "cleaners" | "recurring" | "bookings" | "history" | "balances", { file: string; header: string[]; example: string[] }> = {
   customers: {
     file: "selestial-customers.csv",
-    header: ["Customer ID", "First Name", "Last Name", "Company Name", "Customer Type", "Email", "Phone", "Street", "Apt", "City", "State", "Zip", "Notes", "Do Not Contact"],
-    example: ["C-1001", "Dana", "Whitfield", "", "Residential", "dana@example.com", "512-555-0101", "12 Elm St", "", "Austin", "TX", "78701", "Has a friendly dog", "No"],
+    header: ["Customer ID", "First Name", "Last Name", "Company Name", "Customer Type", "Email", "Phone", "Street", "Apt", "City", "State", "Zip", "Notes", "Do Not Contact", "SMS Opt Out", "Email Opt Out", "Marketing Opt Out", "SMS Consent"],
+    example: ["C-1001", "Dana", "Whitfield", "", "Residential", "dana@example.com", "512-555-0101", "12 Elm St", "", "Austin", "TX", "78701", "Has a friendly dog", "No", "", "", "", ""],
   },
   properties: {
     file: "selestial-properties.csv",
@@ -123,6 +123,21 @@ export const TEMPLATES: Record<"customers" | "properties" | "recurring" | "booki
     file: "selestial-bookings.csv",
     header: ["Booking ID", "Customer ID", "Property ID", "Service", "Date", "Start Time", "End Time", "Price", "Status", "Cleaner", "Recurring ID", "Notes"],
     example: ["B-4001", "C-1001", "", "Standard clean", "2027-01-08", "9:00 AM", "11:00 AM", "$140.00", "Scheduled", "", "R-3001", ""],
+  },
+  cleaners: {
+    file: "selestial-team.csv",
+    header: ["Employee ID", "First Name", "Last Name", "Email", "Phone", "Worker Type", "Skills", "Service Areas", "Availability", "Status"],
+    example: ["E-1", "Maria", "Lopez", "maria@example.com", "512-555-0177", "Employee", "deep clean; move out", "78701; 78703", "Mon-Fri 8am-4pm", "Active"],
+  },
+  history: {
+    file: "selestial-service-history.csv",
+    header: ["Visit ID", "Customer ID", "Property ID", "Service", "Completed Date", "Price", "Cleaner", "Status", "Notes"],
+    example: ["V-5001", "C-1001", "", "Standard clean", "2026-10-02", "$140.00", "Maria Lopez", "Completed", ""],
+  },
+  balances: {
+    file: "selestial-opening-balances.csv",
+    header: ["Invoice #", "Customer ID", "Balance Due", "Invoice Date", "Due Date", "Notes"],
+    example: ["INV-1042", "C-1001", "$140.00", "2026-10-02", "2026-10-16", ""],
   },
 };
 

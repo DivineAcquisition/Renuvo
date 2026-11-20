@@ -23,7 +23,7 @@ import { plural, useMigration } from "./context";
 import { Empty, Note, StateBadge, StepHeading, Tile } from "./parts";
 
 type Row = FunctionReturnType<typeof api.migration.rows>["rows"][number];
-type Filter = "attention" | "all" | "ready" | "update" | "duplicate" | "review" | "error" | "skip" | "held" | "failed";
+type Filter = "attention" | "questions" | "all" | "ready" | "update" | "duplicate" | "review" | "error" | "skip" | "held" | "failed";
 const PAGE = 25;
 
 export function ReviewStep() {
@@ -40,6 +40,23 @@ export function ReviewStep() {
   return (
     <div className="grid min-w-0 gap-7 [&>*]:min-w-0">
       <StepHeading eyebrow="Step 4 of 6" title="Review & fix" lead="Here's what will happen to every record before anything goes live. Fix what's flagged, or skip it; nothing is merged or overwritten without your choice." />
+
+      {totals("questions") ? (
+        <button type="button" onClick={() => setFilter("questions")} className="flex items-center gap-3 rounded-2xl border border-warning/40 bg-warning/10 px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-brand-500">
+          <Sparkles className="size-4 text-warning" aria-hidden />
+          <span className="text-sm text-strong">
+            {view.inSupport ? (
+              <>
+                <span className="font-semibold">{totals("questions")} open {totals("questions") === 1 ? "question" : "questions"}</span> waiting for the company. They answer by choosing what happens to each record.
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">{totals("questions")} {totals("questions") === 1 ? "question" : "questions"} for you</span> from Selestial Support. Answer each by choosing what happens to the record.
+              </>
+            )}
+          </span>
+        </button>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Tile label="Ready to create" value={totals("ready")} tone="good" onClick={() => setFilter("ready")} active={filter === "ready"} />
@@ -122,6 +139,7 @@ export function ReviewStep() {
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "attention", label: "Needs attention" },
+  { id: "questions", label: "Questions" },
   { id: "all", label: "All" },
   { id: "ready", label: "Ready" },
   { id: "update", label: "Imported before" },
@@ -189,6 +207,8 @@ function Records({ kind, filter, setFilter }: { kind: FileKind; filter: Filter; 
                     {row.decision ? <Badge variant="outline">You chose: {CHOICE_WORDS[row.decision.choice]}</Badge> : null}
                     {row.result ? <Badge variant={row.result.outcome === "failed" ? "error" : "success"}>{OUTCOME_WORDS[row.result.outcome]}</Badge> : null}
                     {row.edited.length ? <Badge variant="info">Corrected</Badge> : null}
+                    {row.decision?.bySupport || row.editedBySupport ? <Badge variant="outline">By Selestial Support</Badge> : null}
+                    {row.question && !row.decision ? <Badge variant="warning">Question for you</Badge> : null}
                   </span>
                   <span className="truncate pl-5 text-xs text-muted-foreground">{subtitle(row)}</span>
                   {row.problems[0] || row.notes[0] ? <span className={cn("pl-5 text-xs", row.problems[0] ? "text-destructive-foreground" : "text-muted-foreground")}>{row.problems[0] ?? row.notes[0]}</span> : null}
@@ -227,7 +247,9 @@ function title(row: Row): string {
   const v = row.values;
   if (row.kind === "customers") return v.name || [v.firstName, v.lastName].filter(Boolean).join(" ") || v.company || `Row ${row.index + 2}`;
   if (row.kind === "properties") return v.label || v.line1 || `Row ${row.index + 2}`;
-  if (row.kind === "recurring" || row.kind === "bookings") return `${v.service ?? "Service"} · ${v.customerName || (v.customerRef ? `customer ${v.customerRef}` : "unknown customer")}`;
+  if (row.kind === "cleaners") return v.name || [v.firstName, v.lastName].filter(Boolean).join(" ") || `Row ${row.index + 2}`;
+  if (row.kind === "balances") return `${v.externalId ? `Invoice ${v.externalId}` : "Balance"} · ${v.customerName || (v.customerRef ? `customer ${v.customerRef}` : "unknown customer")}`;
+  if (row.kind === "recurring" || row.kind === "bookings" || row.kind === "history") return `${v.service ?? "Service"} · ${v.customerName || (v.customerRef ? `customer ${v.customerRef}` : "unknown customer")}`;
   return Object.values(v).slice(0, 2).join(" · ") || row.cells.slice(0, 3).join(" · ");
 }
 
@@ -238,6 +260,9 @@ function subtitle(row: Row): string {
   if (row.kind === "properties") return [v.line1, v.line2, v.city, v.region, v.postalCode].filter(Boolean).join(", ");
   if (row.kind === "recurring") return [p.schedule ? SCHEDULE_WORDS[p.schedule as keyof typeof SCHEDULE_WORDS] : v.frequency, p.startsOn ? `next ${p.startsOn}` : v.nextVisit, p.time ?? v.time, v.price].filter(Boolean).join(" · ");
   if (row.kind === "bookings") return [p.day ?? v.date, p.time ?? v.time, v.price, v.status].filter(Boolean).join(" · ");
+  if (row.kind === "cleaners") return [p.engagement ? String(p.engagement) : v.engagement, v.email, v.phone, v.availability, v.status].filter(Boolean).join(" · ");
+  if (row.kind === "history") return [p.day ?? v.date, v.price, v.cleaner, v.status].filter(Boolean).join(" · ");
+  if (row.kind === "balances") return [v.amount, p.due ? `due ${p.due}` : v.due].filter(Boolean).join(" · ");
   return row.cells.filter(Boolean).slice(0, 5).join(" · ");
 }
 
@@ -269,6 +294,17 @@ function Detail({ row }: { row: Row }) {
           ))}
         </ul>
       ) : null}
+
+      {row.question ? (
+        <div className="flex gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs text-strong">
+          <Sparkles className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden />
+          <span>
+            <span className="font-semibold">Selestial Support asks:</span> {row.question.text}
+            {!row.decision ? <span className="mt-0.5 block text-muted-foreground">Answer by choosing what happens to this record below.</span> : null}
+          </span>
+        </div>
+      ) : null}
+      {view.inSupport && !written ? <AskOwner row={row} /> : null}
 
       {row.kind === "recurring" && typeof row.parsed.preview === "string" && row.parsed.preview ? (
         <div className="grid gap-1.5">
@@ -363,7 +399,7 @@ function Detail({ row }: { row: Row }) {
                 <span>
                   <span className="font-medium text-strong">{m.name}</span> <span className="text-muted-foreground">· {m.why}</span>
                 </span>
-                {m.table === "customers" || m.table === "properties" ? <MatchActions row={row} targetId={m.id} /> : null}
+                {m.table === "customers" || m.table === "properties" || m.table === "cleaners" ? <MatchActions row={row} targetId={m.id} /> : null}
               </li>
             ))}
           </ul>
@@ -386,7 +422,7 @@ function MatchActions({ row, targetId }: { row: Row; targetId: string }) {
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       <Button variant="outline" size="xs" disabled={locked} onClick={() => void act(() => decide({ companyId, rowIds: [row.id], choice: "keep_existing", targetId }))}>
-        Same {row.kind === "customers" ? "customer" : "property"}: keep it as is
+        Same {row.kind === "customers" ? "customer" : row.kind === "cleaners" ? "person" : "property"}: keep it as is
       </Button>
       {options.length ? (
         picking ? (
@@ -426,6 +462,11 @@ function Choices({ row }: { row: Row }) {
       {row.state === "review" && row.kind === "customers" ? (
         <Button variant="outline" size="sm" disabled={locked} onClick={() => void act(() => decide({ companyId, rowIds: [row.id], choice: "create" }))}>
           Create as its own customer
+        </Button>
+      ) : null}
+      {row.state === "skip" && row.kind === "cleaners" && row.decision?.choice !== "create" ? (
+        <Button variant="outline" size="sm" disabled={locked} onClick={() => void act(() => decide({ companyId, rowIds: [row.id], choice: "create" }))}>
+          Import anyway
         </Button>
       ) : null}
       <Button variant="ghost" size="sm" disabled={locked} onClick={() => void act(() => decide({ companyId, rowIds: [row.id], choice: "skip" }))}>
@@ -503,6 +544,24 @@ function BulkBar({ rows, kind, clear }: { rows: Row[]; kind: FileKind; clear: ()
       <span className="flex-1" />
       <Button variant="ghost" size="xs" onClick={clear}>
         Clear
+      </Button>
+    </div>
+  );
+}
+
+/** For Selestial staff in a support session: leave the owner a question about a record they can't settle. */
+function AskOwner({ row }: { row: Row }) {
+  const { companyId, act, locked } = useMigration();
+  const ask = useMutation(api.migration.askOwner);
+  const [text, setText] = useState("");
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-border px-3 py-2">
+      <TextInput aria-label="Question for the owner" className="min-h-8 flex-1 py-1 text-xs" placeholder="Ask the owner about this record…" value={text} maxLength={500} onChange={(e) => setText(e.target.value)} />
+      <Button variant="outline" size="xs" disabled={locked || !text.trim()} onClick={() => void act(async () => {
+        await ask({ companyId, rowIds: [row.id], text });
+        setText("");
+      })}>
+        Ask the owner
       </Button>
     </div>
   );

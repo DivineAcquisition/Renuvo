@@ -15,7 +15,7 @@ import { IMPORTABLE, KIND_LABELS } from "../../../../convex/lib/migration/rules"
 import { plural, useMigration } from "./context";
 import { Note, Section, StepHeading, Tile } from "./parts";
 
-const PHASE_WORDS = ["customers", "properties", "recurring services", "upcoming bookings"];
+const PHASE_WORDS = ["customers", "properties", "your team", "recurring services", "upcoming bookings", "service history", "opening balances"];
 
 export function ImportStep() {
   const { view, companyId, act, go } = useMigration();
@@ -27,7 +27,7 @@ export function ImportStep() {
 
   return (
     <div className="grid min-w-0 gap-7 [&>*]:min-w-0">
-      <StepHeading eyebrow="Step 5 of 6" title="Import" lead="Selestial writes your records in the background, customers first, then properties, recurring services and bookings. You can leave this page; it keeps going." />
+      <StepHeading eyebrow="Step 5 of 6" title="Import" lead="Selestial writes your records in the background: customers first, then properties, your team, recurring services, bookings, service history and opening balances. You can leave this page; it keeps going." />
 
       <div className="grid gap-2 rounded-2xl border border-border bg-muted/20 p-4 text-xs text-muted-foreground">
         <p className="flex items-center gap-2 text-sm font-semibold text-strong">
@@ -37,6 +37,8 @@ export function ImportStep() {
         <ul className="grid list-disc gap-0.5 pl-5">
           <li>No customer, applicant or cleaner is messaged, offered work or reminded about anything because it was imported.</li>
           <li>Imported visits and recurring services are held: Dispatch doesn&apos;t offer them and plans don&apos;t book ahead until you release them in the next step.</li>
+          <li>Your team is added as onboarding and held: no invitation, onboarding reminder or offer reaches them until you release them.</li>
+          <li>Past visits are read-only history and balances are for reference: nothing is paid, invoiced, charged or reminded.</li>
           <li>Imported prices for recurring services are proposed for your approval in Services & Pricing; nothing is charged at them before.</li>
           <li>A phone number or email in your files is not permission to message. Documented opt-outs are kept.</li>
         </ul>
@@ -106,16 +108,20 @@ export function ImportStep() {
             </table>
           </div>
           <p className="text-[11px] text-muted-foreground">Duplicates you decided are counted where your choice puts them when they&apos;re written. &ldquo;Left out for now&rdquo; means waiting for your choice or a correction; they stay in Review &amp; fix.</p>
-          {Object.keys(view.migration.summary).some((k) => !(IMPORTABLE as readonly string[]).includes(k)) ? <Note>Files with cleaners, history, agreements or balances are kept with the migration but not imported yet. They&apos;re listed in your report as not transferred.</Note> : null}
+          {Object.keys(view.migration.summary).some((k) => !(IMPORTABLE as readonly string[]).includes(k)) ? <Note>Files with services, agreements or other records are kept with the migration but not imported. They&apos;re listed in your report as not transferred.</Note> : null}
           {readiness.blockers.map((b) => (
             <p key={b} className="flex items-center gap-2 text-xs text-warning-foreground">
               <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
               {b}
             </p>
           ))}
-          <Button variant="gradient" size="lg" className="justify-self-start" disabled={readiness.blockers.length > 0} onClick={() => void act(() => startImport({ companyId }))}>
-            {run ? "Import the remaining records" : "Start the import"}
-          </Button>
+          {view.inSupport ? (
+            <Note>You&apos;ve prepared everything you can. The company&apos;s Owner or a Manager starts the import after reviewing your changes and questions.</Note>
+          ) : (
+            <Button variant="gradient" size="lg" className="justify-self-start" disabled={readiness.blockers.length > 0} onClick={() => void act(() => startImport({ companyId }))}>
+              {run ? "Import the remaining records" : "Start the import"}
+            </Button>
+          )}
         </Section>
       ) : null}
     </div>

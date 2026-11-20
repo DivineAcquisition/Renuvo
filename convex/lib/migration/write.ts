@@ -11,6 +11,7 @@
 import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx } from "../../_generated/server";
 import type { MemberAccess } from "../builders";
+import { createWorker } from "../cleaners/enroll";
 import { refreshClient } from "../clients/directory";
 import { addSuppression } from "../compliance/permissions";
 import { type Actor } from "../events";
@@ -46,6 +47,7 @@ export function stableKey(row: Doc<"migrationRows">): string {
   if (values.externalId?.trim()) return values.externalId.trim().slice(0, 120);
   if (row.kind === "customers") return `name:${nameKey(customerNameOf(values))}|${(firstEmail(values.email) ?? "").toLowerCase()}|${(values.phone ?? "").replace(/\D/g, "")}`.slice(0, 120);
   if (row.kind === "properties") return `address:${addressKey(values)}`.slice(0, 120);
+  if (row.kind === "cleaners") return `person:${nameKey(customerNameOf(values))}|${(firstEmail(values.email) ?? "").toLowerCase()}|${(values.phone ?? "").replace(/\D/g, "")}`.slice(0, 120);
   const p = row.parsed ?? {};
   return `${row.kind}:${row.parent?.customerId ?? row.parent?.rowId ?? ""}|${row.parent?.propertyId ?? row.parent?.propertyRowId ?? ""}|${p.serviceId ?? ""}|${p.day ?? p.startsOn ?? ""}|${p.time ?? ""}`.slice(0, 120);
 }
@@ -142,13 +144,29 @@ async function propertyOfParent(ctx: WriteCtx, row: Doc<"migrationRows">, custom
   return failRow(same.length ? `${customer.name} has several properties. Say which one.` : `${customer.name} has no matching property.`);
 }
 
+/**
+ * Documented opt-outs, kept with their scope: all messages, texts only, email only, or marketing only.
+ * Nothing here ever grants permission.
+ */
 async function keepOptOuts(ctx: WriteCtx, values: Record<string, string>, migration: Doc<"migrations">, actor: Actor, email?: string, phone?: string) {
-  if (!isOptOut(values.doNotContact)) return;
-  const note = `Opted out in the ${migration.source === "spreadsheet" || !migration.source ? "imported file" : `${migration.source.replace("_", " ")} export`} ("${values.doNotContact.slice(0, 40)}").`;
-  if (email) await addSuppression(ctx, { companyId: ctx.companyId, channel: "email", address: email.toLowerCase(), scope: "all", reason: "manual", note, at: Date.now(), actor });
+  const where = migration.source === "spreadsheet" || !migration.source ? "imported file" : `${migration.source.replace("_", " ")} export`;
   const digits = (phone ?? "").replace(/\D/g, "");
   const e164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith("1") ? `+${digits}` : null;
-  if (e164) await addSuppression(ctx, { companyId: ctx.companyId, channel: "sms", address: e164, scope: "all", reason: "manual", note, at: Date.now(), actor });
+  const stop = async (channel: "email" | "sms", scope: "all" | "marketing", word: string) => {
+    const address = channel === "email" ? email?.toLowerCase() : e164;
+    if (!address) return;
+    await addSuppression(ctx, { companyId: ctx.companyId, channel, address, scope, reason: "manual", note: `Opted out in the ${where} ("${word.slice(0, 40)}").`, at: Date.now(), actor });
+  };
+  if (isOptOut(values.doNotContact)) {
+    await stop("email", "all", values.doNotContact);
+    await stop("sms", "all", values.doNotContact);
+  }
+  if (isOptOut(values.smsOptOut)) await stop("sms", "all", values.smsOptOut);
+  if (isOptOut(values.emailOptOut)) await stop("email", "all", values.emailOptOut);
+  if (isOptOut(values.marketingOptOut)) {
+    await stop("email", "marketing", values.marketingOptOut);
+    await stop("sms", "marketing", values.marketingOptOut);
+  }
 }
 
 // ── Customers ────────────────────────────────────────────────────────────────────────────────────────
@@ -218,6 +236,10 @@ async function writeCustomer(ctx: WriteCtx, migration: Doc<"migrations">, row: D
   if (email || phone) await ctx.db.insert("clientContacts", { companyId: ctx.companyId, customerId, name: values.company && (values.firstName || values.lastName) ? [values.firstName, values.lastName].filter(Boolean).join(" ") : name, email, phone, roles: ["primary", "billing"], propertyIds: [], status: "active", createdAt: now, updatedAt: now });
   if (address) await ctx.db.insert("properties", { companyId: ctx.companyId, customerId, address, kind: kind.property, status: "active", revision: 1, createdAt: now, updatedAt: now });
   await keepOptOuts(ctx, values, migration, actor, email, phone);
+  if (values.consentNote) {
+    // Kept for the Owner only. Selestial can't see the old system's evidence, so it isn't used as permission.
+    await ctx.db.patch(customerId, { privateNotes: `From your old system: consent recorded as "${values.consentNote.slice(0, 200)}". The original evidence wasn't transferred, so Selestial doesn't treat it as permission to message.` });
+  }
   // The older client import finds these too, so the two never make a second copy.
   if (values.externalId?.trim()) await ctx.db.insert("importedRecords", { companyId: ctx.companyId, source: linkSource(migration), externalId: values.externalId.trim().slice(0, 120), customerId, createdAt: now });
   await refreshClient(ctx, customerId);
@@ -386,6 +408,82 @@ async function writeVisit(ctx: WriteCtx, migration: Doc<"migrations">, row: Doc<
   return { outcome: "created", table: "jobs", id, reason: plan ? "Part of its recurring service." : undefined };
 }
 
+// ── Cleaners ─────────────────────────────────────────────────────────────────────────────────────────
+
+async function writeCleaner(ctx: WriteCtx, migration: Doc<"migrations">, row: Doc<"migrationRows">, choice: string, actor: Actor): Promise<Outcome> {
+  if (choice === "keep_existing") {
+    const id = target(row, "cleaners");
+    const cleaner = id ? await ctx.db.get(id as Id<"cleaners">).catch(() => null) : null;
+    if (!cleaner || (cleaner as Doc<"cleaners">).companyId !== ctx.companyId) failRow("Choose which person on your team this is.");
+    return { outcome: "linked", table: "cleaners", id: id!, reason: "Kept the person already on your team as they are." };
+  }
+  if (choice === "update_fields") failRow("Team members can be kept or added, not updated, in this import.");
+  const values = effective(row);
+  const p = row.parsed ?? {};
+  const engagement = p.engagement === "employee" || p.engagement === "contractor" ? p.engagement : p.engagement === "subcontractor" ? "contractor" : failRow("Say whether this person is an employee or a contractor.");
+  const windows = typeof p.availability === "string" ? (JSON.parse(p.availability) as { weekday: number; startMinute: number; endMinute: number }[]) : [];
+  const split = (value: unknown) => (typeof value === "string" && value ? value.split("|") : []);
+  const cleanerId = await createWorker(ctx, ctx.company, { name: customerNameOf(values), engagement, email: firstEmail(values.email), phone: firstPhone(values.phone), skills: split(p.skills).slice(0, 20), serviceAreas: split(p.areas).slice(0, 100) }, actor, { template: true, source: "imported" });
+  // Held: no onboarding follow-up or offer reaches them until the Owner releases the team.
+  await ctx.db.patch(cleanerId, { migration: { migrationId: migration._id, held: true } });
+  for (const w of windows.slice(0, 28)) await ctx.db.insert("availabilityWindows", { companyId: ctx.companyId, cleanerId, weekday: w.weekday, startMinute: w.startMinute, endMinute: w.endMinute });
+  return { outcome: "created", table: "cleaners", id: cleanerId, reason: `Added as onboarding${windows.length ? `, with ${windows.length} weekly availability ${windows.length === 1 ? "window" : "windows"}` : ""}. Nothing was sent to them.${p.engagement === "subcontractor" ? " Added as a contractor because no subcontractor company was named; change it on their profile." : ""}` };
+}
+
+// ── Service history and opening balances ─────────────────────────────────────────────────────────────
+
+async function writeHistory(ctx: WriteCtx, migration: Doc<"migrations">, row: Doc<"migrationRows">, choice: string): Promise<Outcome> {
+  if (choice !== "create" && choice !== "separate") failRow("A past visit can be added or skipped.");
+  const values = effective(row);
+  const p = row.parsed ?? {};
+  const customer = await customerOfParent(ctx, row);
+  const day = typeof p.day === "string" ? p.day : failRow("It has no date.");
+  let propertyId: Id<"properties"> | undefined;
+  if (row.parent?.propertyId || row.parent?.propertyRowId) propertyId = (await propertyOfParent(ctx, row, customer).catch(() => null))?._id;
+  const id = await ctx.db.insert("importedHistory", {
+    companyId: ctx.companyId,
+    customerId: customer._id,
+    ...(propertyId ? { propertyId } : {}),
+    day,
+    ...(values.service ? { service: values.service.slice(0, 120) } : {}),
+    ...(typeof p.cents === "number" ? { priceCents: p.cents } : {}),
+    ...(values.cleaner ? { cleaner: values.cleaner.slice(0, 120) } : {}),
+    ...(values.status ? { outcome: values.status.slice(0, 80) } : {}),
+    ...(values.notes ? { notes: values.notes.slice(0, 1000) } : {}),
+    source: linkSource(migration),
+    ...(values.externalId ? { externalId: values.externalId.slice(0, 120) } : {}),
+    migrationId: migration._id,
+    rowId: row._id,
+    createdAt: Date.now(),
+  });
+  return { outcome: "created", table: "importedHistory", id, reason: "Kept as read-only history on the client." };
+}
+
+async function writeBalance(ctx: WriteCtx, migration: Doc<"migrations">, row: Doc<"migrationRows">, choice: string): Promise<Outcome> {
+  if (choice !== "create" && choice !== "separate") failRow("An opening balance can be added or skipped.");
+  const values = effective(row);
+  const p = row.parsed ?? {};
+  const customer = await customerOfParent(ctx, row);
+  const cents = typeof p.cents === "number" && p.cents > 0 ? p.cents : failRow("It has no amount owed.");
+  const reference = (values.externalId ?? "").trim().slice(0, 80) || failRow("It has no invoice number.");
+  const already = (await ctx.db.query("openingBalances").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id)).take(500)).find((b) => b.reference.toLowerCase() === reference.toLowerCase());
+  if (already) return { outcome: "linked", table: "openingBalances", id: already._id, reason: "This invoice was already brought over; it isn't counted twice." };
+  const id = await ctx.db.insert("openingBalances", {
+    companyId: ctx.companyId,
+    customerId: customer._id,
+    amountCents: cents,
+    reference,
+    ...(typeof p.issued === "string" ? { issuedOn: p.issued } : {}),
+    ...(typeof p.due === "string" ? { dueOn: p.due } : {}),
+    ...(values.notes ? { notes: values.notes.slice(0, 500) } : {}),
+    source: linkSource(migration),
+    migrationId: migration._id,
+    rowId: row._id,
+    createdAt: Date.now(),
+  });
+  return { outcome: "created", table: "openingBalances", id, reason: "Kept as an opening balance for reference. It's never charged or reminded." };
+}
+
 /**
  * Writes one row. Already written (a retry, a second run): the earlier result. Imported before under the
  * same key: linked, not copied. A row's problem fails that row only.
@@ -399,7 +497,22 @@ export async function writeRow(ctx: WriteCtx, migration: Doc<"migrations">, row:
   const prior = choice === "create" || (choice === "keep_existing" && !row.decision) ? await linked(ctx, migration, row) : null;
   if (prior) return { outcome: "linked", table: prior.table, id: prior.recordId, reason: "Imported before; not copied again." };
   try {
-    const result = row.kind === "customers" ? await writeCustomer(ctx, migration, row, choice, actor) : row.kind === "properties" ? await writeProperty(ctx, row, choice) : row.kind === "recurring" ? await writePlan(ctx, migration, row, choice, actor) : row.kind === "bookings" ? await writeVisit(ctx, migration, row, choice) : null;
+    const result =
+      row.kind === "customers"
+        ? await writeCustomer(ctx, migration, row, choice, actor)
+        : row.kind === "properties"
+          ? await writeProperty(ctx, row, choice)
+          : row.kind === "cleaners"
+            ? await writeCleaner(ctx, migration, row, choice, actor)
+            : row.kind === "recurring"
+              ? await writePlan(ctx, migration, row, choice, actor)
+              : row.kind === "bookings"
+                ? await writeVisit(ctx, migration, row, choice)
+                : row.kind === "history"
+                  ? await writeHistory(ctx, migration, row, choice)
+                  : row.kind === "balances"
+                    ? await writeBalance(ctx, migration, row, choice)
+                    : null;
     if (!result) return null;
     if (result.id && result.table && (result.outcome === "created" || result.outcome === "linked" || result.outcome === "updated")) await link(ctx, migration, row, result.table, result.id);
     return { outcome: result.outcome, table: result.table, id: result.id, reason: result.reason };

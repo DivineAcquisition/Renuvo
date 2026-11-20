@@ -112,10 +112,15 @@ function Frame() {
         </div>
       </header>
 
-      {view.migration.assisted.length ? (
+      {view.inSupport ? (
+        <p className="flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-strong">
+          <Sparkles className="size-3.5 text-warning" aria-hidden />
+          You&apos;re preparing this migration in a support session. Your changes are recorded as yours and shown to the company as Selestial Support. Leave questions on records you can&apos;t settle; the company&apos;s Owner or a Manager starts the import, and only the Owner releases it.
+        </p>
+      ) : view.migration.assisted.length ? (
         <p className="flex items-center gap-2 rounded-xl border border-brand-500/30 bg-brand-500/5 px-3 py-2 text-xs text-strong">
           <Sparkles className="size-3.5 text-brand-300" aria-hidden />
-          {view.migration.assisted.map((a) => a.name).join(", ")} from Selestial {view.migration.assisted.length === 1 ? "is" : "are"} helping with this migration. Every change they make is shown with their name, and you approve the final import.
+          Selestial Support is helping with this migration. Their changes are marked &ldquo;By Selestial Support&rdquo;, questions for you are under &ldquo;Questions for you&rdquo; in Review &amp; fix, and you start the import and release it.
         </p>
       ) : null}
 

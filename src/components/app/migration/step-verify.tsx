@@ -18,6 +18,8 @@ import { KIND_LABELS } from "../../../../convex/lib/migration/rules";
 import { csvCell, download, plural, useMigration } from "./context";
 import { Note, Section, StepHeading } from "./parts";
 
+const RECORD_WORDS: Record<string, string> = { customers: "customer", properties: "property", servicePlans: "recurring", jobs: "visit", cleaners: "team member", importedHistory: "past visit", openingBalances: "opening balance" };
+
 export function VerifyStep() {
   const { view, companyId, act, go } = useMigration();
   const report = useQuery(api.migration.report, { companyId });
@@ -96,9 +98,9 @@ export function VerifyStep() {
           <ul className="flex flex-wrap gap-1.5">
             {report.recent.slice(0, 24).map((r) => (
               <li key={`${r.table}:${r.id}`}>
-                <Link href={r.table === "customers" ? `/app/clients/${r.id}` : r.table === "jobs" ? `/app/schedule` : `/app/clients`} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-strong hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand-500">
+                <Link href={r.table === "customers" ? `/app/clients/${r.id}` : r.table === "jobs" ? "/app/schedule" : r.table === "cleaners" ? `/app/cleaners/${r.id}` : "/app/clients"} className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-strong hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand-500">
                   {r.name}
-                  <span className="text-muted-foreground">· {r.table === "customers" ? "customer" : r.table === "properties" ? "property" : r.table === "servicePlans" ? "recurring" : "visit"}</span>
+                  <span className="text-muted-foreground">· {RECORD_WORDS[r.table] ?? "record"}</span>
                 </Link>
               </li>
             ))}
@@ -108,15 +110,15 @@ export function VerifyStep() {
 
       <Section title="What didn't transfer, and why">
         <ul className="grid gap-1.5 text-xs text-muted-foreground">
-          {report.kinds.filter((k) => !["customers", "properties", "recurring", "bookings"].includes(k.kind)).map((k) => (
+          {report.kinds.filter((k) => ["services", "agreements", "other"].includes(k.kind)).map((k) => (
             <li key={k.kind} className="flex gap-1.5">
               <Minus className="mt-0.5 size-3 shrink-0" aria-hidden />
-              {KIND_LABELS[k.kind].label} ({plural(k.source, "row")}): kept with your migration, not imported yet. Selestial doesn&apos;t import this kind of record yet.
+              {KIND_LABELS[k.kind].label} ({plural(k.source, "row")}): kept with your migration, not imported. {k.kind === "agreements" ? "Upload the signed documents in Agreements; a signature is never assumed from a list." : k.kind === "services" ? "Bookings were matched to your Selestial services instead." : "Selestial doesn't import this kind of record."}
             </li>
           ))}
           <li className="flex gap-1.5">
             <Minus className="mt-0.5 size-3 shrink-0" aria-hidden />
-            Past visits are service history, which isn&apos;t imported yet; they were skipped and are listed in the report.
+            Past visits in a bookings file are skipped there: put them in a service history file to keep them on each client as read-only history.
           </li>
           <li className="flex gap-1.5">
             <Minus className="mt-0.5 size-3 shrink-0" aria-hidden />
@@ -128,7 +130,7 @@ export function VerifyStep() {
           </li>
           <li className="flex gap-1.5">
             <Minus className="mt-0.5 size-3 shrink-0" aria-hidden />
-            Permission to text or email: a phone number or email isn&apos;t proof of consent, so none was recorded. Documented opt-outs were kept.
+            Permission to text or email: a phone number or email isn&apos;t proof of consent, and consent recorded in your old system came without its evidence, so none was recorded as permission (it&apos;s noted on the client for the Owner). Documented opt-outs were kept, with their scope.
           </li>
         </ul>
       </Section>
@@ -138,53 +140,57 @@ export function VerifyStep() {
   );
 }
 
-function Release({ held, status, releasedAt, canRelease }: { held: { visits: number; plans: number }; status: string; releasedAt: number | null; canRelease: boolean }) {
+function Release({ held, status, releasedAt, canRelease }: { held: { visits: number; plans: number; cleaners: number }; status: string; releasedAt: number | null; canRelease: boolean }) {
   const { companyId, act } = useMigration();
   const release = useMutation(api.migration.release);
   const [sure, setSure] = useState(false);
-  if (releasedAt && !held.visits && !held.plans) {
-    return (
+  const scheduleHeld = held.visits + held.plans > 0;
+  const [schedule, setSchedule] = useState(scheduleHeld);
+  const [team, setTeam] = useState(held.cleaners > 0);
+  if (!scheduleHeld && !held.cleaners) {
+    return releasedAt ? (
       <Section title="Activation">
-        <Note tone="done">You released your imported schedule on {new Date(releasedAt).toLocaleDateString("en-US", { month: "long", day: "numeric" })}. Dispatch is covering the visits, and your recurring services book ahead on their own.</Note>
+        <Note tone="done">You released your imported records on {new Date(releasedAt).toLocaleDateString("en-US", { month: "long", day: "numeric" })}.</Note>
       </Section>
-    );
+    ) : null;
   }
-  if (!held.visits && !held.plans) return null;
   return (
-    <Section title="Activate your schedule" lead="Imported visits and recurring services are on hold until you say so. Here's what releasing them does.">
+    <Section title="Activate what you imported" lead="Imported visits, recurring services and team members are on hold until you say so. Choose what to release and see what each does.">
       <div className="grid gap-3 rounded-2xl border border-brand-500/30 bg-gradient-to-br from-brand-500/[0.06] to-transparent p-4">
-        <ul className="grid gap-2 text-xs">
-          {held.visits ? (
-            <li className="flex gap-2">
-              <Badge variant="info">Dispatch</Badge>
-              <span className="text-strong">Offers {plural(held.visits, "imported visit")} to your cleaners, following your Dispatch settings. Offers go to cleaners by text or email, which may use messaging credits.</span>
-            </li>
-          ) : null}
-          {held.plans ? (
-            <li className="flex gap-2">
-              <Badge variant="info">Recurring</Badge>
-              <span className="text-strong">Starts {plural(held.plans, "recurring service")}: each books its visits up to four weeks ahead, skipping any day an imported booking already covers. Paused ones stay paused.</span>
-            </li>
-          ) : null}
-          <li className="flex gap-2">
-            <Badge variant="outline">Customers</Badge>
-            <span className="text-muted-foreground">Releasing doesn&apos;t message customers. Imported prices still wait for your approval in Services & Pricing.</span>
-          </li>
-        </ul>
+        {scheduleHeld ? (
+          <label className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-xs">
+            <input type="checkbox" className="mt-0.5" checked={schedule} disabled={!canRelease} onChange={(e) => setSchedule(e.target.checked)} />
+            <span className="grid gap-1">
+              <span className="text-sm font-semibold text-strong">Your schedule</span>
+              {held.visits ? <span className="text-strong"><Badge variant="info">Dispatch</Badge> Offers {plural(held.visits, "imported visit")} to your cleaners, following your Dispatch settings. Offers go to cleaners by text or email, which may use messaging credits.</span> : null}
+              {held.plans ? <span className="text-strong"><Badge variant="info">Recurring</Badge> Starts {plural(held.plans, "recurring service")}: each books its visits up to four weeks ahead, skipping any day an imported booking already covers. Paused ones stay paused.</span> : null}
+            </span>
+          </label>
+        ) : null}
+        {held.cleaners ? (
+          <label className="flex items-start gap-3 rounded-xl border border-border bg-card p-3 text-xs">
+            <input type="checkbox" className="mt-0.5" checked={team} disabled={!canRelease} onChange={(e) => setTeam(e.target.checked)} />
+            <span className="grid gap-1">
+              <span className="text-sm font-semibold text-strong">Your team</span>
+              <span className="text-strong"><Badge variant="info">Team</Badge> {plural(held.cleaners, "imported team member")} start getting the usual onboarding follow-ups about the steps they still owe, by text or email. They stay onboarding, and aren&apos;t offered work until you make each one active.</span>
+            </span>
+          </label>
+        ) : null}
+        <p className="text-xs text-muted-foreground">Releasing doesn&apos;t message customers. Imported prices still wait for your approval in Services & Pricing, and opening balances are never charged.</p>
         {status !== "imported" && status !== "released" ? <Note tone="warning">Finish the import before releasing.</Note> : null}
         {canRelease ? (
           <>
             <label className="flex items-start gap-2 text-xs text-strong">
               <input type="checkbox" className="mt-0.5" checked={sure} onChange={(e) => setSure(e.target.checked)} />
-              I&apos;ve checked my imported schedule and want Dispatch and my recurring services to start working with it.
+              I&apos;ve checked what I imported and want what I chose above to start working with it.
             </label>
-            <Button variant="gradient" className="justify-self-start" disabled={!sure || (status !== "imported" && status !== "released")} onClick={() => void act(() => release({ companyId, confirm: true }))}>
+            <Button variant="gradient" className="justify-self-start" disabled={!sure || (!schedule && !team) || (status !== "imported" && status !== "released")} onClick={() => void act(() => release({ companyId, confirm: true, schedule: schedule && scheduleHeld, team: team && held.cleaners > 0 }))}>
               <Rocket aria-hidden />
-              Release my schedule
+              Release what I chose
             </Button>
           </>
         ) : (
-          <Note>Your company&apos;s Owner releases the schedule, because it starts work with your team.</Note>
+          <Note>Your company&apos;s Owner releases imported records, because it starts work with your team.</Note>
         )}
       </div>
     </Section>

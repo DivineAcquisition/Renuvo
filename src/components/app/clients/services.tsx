@@ -30,6 +30,7 @@ import { Card, day, EmptyState, money, StaffingLine, when } from "./bits";
 import { ActionMenu } from "./menu";
 import { VisitRow } from "./parts";
 import { SalesPlans, SalesWork, useClientSales } from "./sales";
+import { ImportedHistory } from "./imported";
 import type { Profile } from "./profile";
 
 type Plan = NonNullable<ReturnType<typeof useQuery<typeof api.servicePlans.forClient>>>["plans"][number];
@@ -71,6 +72,7 @@ export function ServicesTab({ profile }: { profile: Profile }) {
       <Modal open={booking} onClose={() => setBooking(false)} title="Book a visit" description="Priced from Services & Pricing. Dispatch starts staffing it once it is booked.">
         <NewVisitForm initial={{ customerId: profile.id, propertyId: profile.properties.find((p) => p.status === "active")?.id }} onDone={() => setBooking(false)} />
       </Modal>
+      <ImportedHistory customerId={profile.id} />
     </div>
   );
 }

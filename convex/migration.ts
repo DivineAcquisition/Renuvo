@@ -21,7 +21,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { noticeInApp } from "./lib/activation/notices";
-import { companyQuery, managerMutation, managerQuery, ownerMutation, type MemberAccess } from "./lib/builders";
+import { companyQuery, managerMutation, managerQuery, ownerMutation, ownerQuery, type MemberAccess } from "./lib/builders";
 import { bookAhead } from "./lib/clients/plans";
 import { detectSource } from "./lib/clients/importing";
 import { parseCsv } from "./lib/csv";
@@ -40,6 +40,19 @@ import { literals } from "./lib/statuses";
 export const LIMITS = { files: 12, bytes: 5 * 1024 * 1024, rowsPerFile: 2000, rows: 5000, batch: 40, leaseMs: 2 * 60 * 1000, attempts: 3 } as const;
 const STALE = "This migration changed in another tab or by someone else. Your view has been refreshed.";
 const NEEDS_CHOICE = new Set(["duplicate", "review"]);
+
+/** In a support session: which staff member, so their changes are attributed to them. The company sees "Selestial Support". */
+function staffOf(ctx: { support: MemberAccess["support"] }) {
+  return ctx.support ? { staffId: ctx.support.staff._id, sessionId: ctx.support.session._id } : undefined;
+}
+
+/** Records that Selestial staff are helping with this migration, once per staff member. */
+async function noteAssist(ctx: MutationCtx & MemberAccess, migration: Doc<"migrations">) {
+  if (!ctx.support) return;
+  const list = migration.assistedBy ?? [];
+  if (list.some((a) => a.staffId === ctx.support!.staff._id)) return;
+  await ctx.db.patch(migration._id, { assistedBy: [...list, { staffId: ctx.support.staff._id, name: ctx.support.staff.name, since: Date.now() }] });
+}
 
 type Ctx = QueryCtx & MemberAccess;
 
@@ -73,7 +86,8 @@ async function ownFile(ctx: Ctx, migration: Doc<"migrations">, id: Id<"migration
 }
 
 /** Re-checks the whole migration shortly. A newer request replaces an older one, which then writes nothing. */
-async function scheduleCheck(ctx: MutationCtx, migration: Doc<"migrations">) {
+async function scheduleCheck(ctx: MutationCtx & Partial<MemberAccess>, migration: Doc<"migrations">) {
+  if (ctx.support) await noteAssist(ctx as MutationCtx & MemberAccess, (await ctx.db.get(migration._id))!);
   const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   await ctx.db.patch(migration._id, { dirty: true, checking: { token, startedAt: Date.now() }, updatedAt: Date.now() });
   await ctx.scheduler.runAfter(800, internal.migration.check, { migrationId: migration._id, token });
@@ -88,6 +102,7 @@ function stampOf(row: Pick<Doc<"migrationRows">, "values" | "edits" | "decision"
 
 /** Opens the company's migration, making it on the first visit. Every entry point opens this same one. */
 export const open = managerMutation({
+  support: { capability: "records.edit", summary: "opened the migration workspace" },
   args: {},
   handler: async (ctx) => {
     const existing = await migrationOf(ctx, ctx.companyId);
@@ -159,7 +174,8 @@ export const view = managerQuery({
         dirty: migration.dirty,
         checking: Boolean(migration.checking),
         checkedAt: migration.checkedAt ?? null,
-        assisted: (migration.assistedBy ?? []).map((a) => ({ name: a.name, since: a.since })),
+        // The company sees "Selestial Support"; which staff member helped is kept in the record and the session log.
+        assisted: (migration.assistedBy ?? []).map((a) => ({ since: a.since })),
         revision: migration.revision,
         releasedAt: migration.releasedAt ?? null,
       },
@@ -167,13 +183,16 @@ export const view = managerQuery({
       run: run ? { id: run._id, status: run.status, phase: run.phase, total: run.total, done: run.done, counts: run.counts, problem: run.problem ?? null, startedAt: run.startedAt, finishedAt: run.finishedAt ?? null } : null,
       services,
       company: { timezone: ctx.company.timezone, name: ctx.company.name },
-      canRelease: roleOf(ctx.member.role) === "owner",
+      canRelease: !ctx.support && roleOf(ctx.member.role) === "owner",
+      /** Opened by Selestial staff in a support session: they prepare; the company imports and releases. */
+      inSupport: Boolean(ctx.support),
       limits: LIMITS,
     };
   },
 });
 
 export const save = managerMutation({
+  support: { capability: "records.edit", summary: "updated the migration settings" },
   args: {
     revision: v.number(),
     step: v.optional(literals(MIGRATION_STEPS)),
@@ -210,6 +229,7 @@ export const save = managerMutation({
 // ── Files ──────────────────────────────────────────────────────────────────────────────────────────
 
 export const uploadUrl = managerMutation({
+  support: { capability: "records.edit", summary: "started a file upload for the migration" },
   args: {},
   handler: async (ctx) => {
     const migration = await requireMigration(ctx);
@@ -223,6 +243,7 @@ const SPREADSHEET = /\.(xlsx|xlsm|xls|numbers|ods)$/i;
 
 /** Takes an uploaded file. Its name, size and count are checked now; its contents are read on the server next. */
 export const addFile = managerMutation({
+  support: { capability: "records.edit", summary: "added a file to the migration" },
   args: { storageId: v.id("_storage"), name: v.string() },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -391,6 +412,7 @@ async function remap(ctx: MutationCtx, file: Doc<"migrationFiles">, kind: FileKi
 
 /** Says what a file is. Changing it re-suggests the columns for that kind. */
 export const setFileKind = managerMutation({
+  support: { capability: "records.edit", summary: "said what a migration file contains" },
   args: { fileId: v.id("migrationFiles"), kind: fileKindValidator, description: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -407,6 +429,7 @@ export const setFileKind = managerMutation({
 
 /** Confirms or changes which column is which field. A column is used once; unknown fields are refused. */
 export const setMapping = managerMutation({
+  support: { capability: "records.edit", summary: "confirmed the columns of a migration file" },
   args: { fileId: v.id("migrationFiles"), mapping: v.record(v.string(), v.number()), confirm: v.boolean() },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -429,6 +452,7 @@ export const setMapping = managerMutation({
 });
 
 export const removeFile = managerMutation({
+  support: { capability: "records.edit", summary: "removed a migration file" },
   args: { fileId: v.id("migrationFiles") },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -467,7 +491,7 @@ export const checkInput = internalQuery({
       .paginate({ numItems: 500, cursor: args.cursor });
     return {
       migration: { companyId: migration.companyId, timezone: migration.timezone, dateOrder: migration.dateOrder, serviceMap: migration.serviceMap, groups: migration.groups, source: migration.source },
-      rows: page.page.map((row) => ({ id: row._id, kind: row.kind, index: row.index, values: effective(row), decision: row.decision ? { choice: row.decision.choice, ...(row.decision.targetId ? { targetId: row.decision.targetId } : {}) } : undefined, category: row.category?.confirmed ? { value: row.category.value, confirmed: true } : undefined, stamp: stampOf(row), decided: Boolean(row.decision && row.decision.choice !== "review"), result: row.result?.outcome ?? null })),
+      rows: page.page.map((row) => ({ id: row._id, kind: row.kind, index: row.index, values: effective(row), decision: row.decision ? { choice: row.decision.choice, ...(row.decision.targetId ? { targetId: row.decision.targetId } : {}) } : undefined, category: row.category?.confirmed ? { value: row.category.value, confirmed: true } : undefined, stamp: stampOf(row), decided: Boolean(row.decision && row.decision.choice !== "review"), result: row.result?.outcome ?? null, asked: Boolean(row.question && !row.decision && !row.result) })),
       cursor: page.isDone ? null : page.continueCursor,
     };
   },
@@ -486,8 +510,14 @@ export const existingFor = internalQuery({
     const links = await ctx.db.query("migrationLinks").withIndex("by_company_source_kind_external", (q) => q.eq("companyId", args.companyId).eq("source", args.source)).take(10000);
     const older = await ctx.db.query("importedRecords").withIndex("by_company_source_external", (q) => q.eq("companyId", args.companyId).eq("source", args.source)).take(5000);
     const services = (await ctx.db.query("services").withIndex("by_company_status", (q) => q.eq("companyId", args.companyId).eq("status", "active")).take(200)).filter((s) => s.publishedVersionId);
+    const team = (await Promise.all((["onboarding", "ready", "paused"] as const).map((status) => ctx.db.query("cleaners").withIndex("by_company_status", (q) => q.eq("companyId", args.companyId).eq("status", status)).take(2000)))).flat();
+    const history = await ctx.db.query("importedHistory").withIndex("by_company_customer_day", (q) => q.eq("companyId", args.companyId)).take(5000);
+    const owed = await ctx.db.query("openingBalances").withIndex("by_company_customer", (q) => q.eq("companyId", args.companyId)).take(5000);
     return {
       today,
+      cleaners: team.map((c) => ({ id: c._id, name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
+      history: history.map((h) => ({ customerId: h.customerId, day: h.day, ...(h.externalId ? { externalId: h.externalId } : {}) })),
+      balances: owed.map((b) => ({ customerId: b.customerId, reference: b.reference })),
       customers: customers.map((c) => ({ id: c._id, name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
       contacts: contacts.filter((c) => c.status === "active").map((c) => ({ customerId: c.customerId, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
       properties: properties.filter((p) => p.status === "active").map((p) => ({ id: p._id, customerId: p.customerId, line1: p.address.line1, ...(p.address.line2 ? { line2: p.address.line2 } : {}), postalCode: p.address.postalCode, ...(p.label ? { label: p.label } : {}) })),
@@ -516,7 +546,7 @@ const rowOutValidator = v.object({
 export const check = internalAction({
   args: { migrationId: v.id("migrations"), token: v.string() },
   handler: async (ctx, args): Promise<null> => {
-    type CheckRow = RowIn & { stamp: string; decided: boolean; result: string | null };
+    type CheckRow = RowIn & { stamp: string; decided: boolean; result: string | null; asked: boolean };
     type CheckMigration = { companyId: Id<"companies">; timezone: string; dateOrder: "mdy" | "dmy" | null; serviceMap: { name: string; serviceId: Id<"services"> | null }[]; groups: { key: string; accepted: boolean | null }[]; source: string | null };
     const rows: CheckRow[] = [];
     let cursor: string | null = null;
@@ -544,7 +574,8 @@ export const check = internalAction({
     const summary: Record<string, Record<string, number>> = {};
     const states = new Map(result.rows.map((row) => [row.id, row.state]));
     for (const row of rows) {
-      const bucket = (summary[row.kind] ??= { total: 0, ready: 0, update: 0, duplicate: 0, skip: 0, error: 0, review: 0, held: 0, awaiting: 0, written: 0 });
+      const bucket = (summary[row.kind] ??= { total: 0, ready: 0, update: 0, duplicate: 0, skip: 0, error: 0, review: 0, held: 0, awaiting: 0, written: 0, questions: 0 });
+      if (row.asked) bucket.questions += 1;
       const state = states.get(row.id)!;
       bucket.total += 1;
       bucket[state] += 1;
@@ -618,6 +649,7 @@ export const finishCheck = internalMutation({
 
 /** Checks again now, for the "Check again" button. */
 export const recheck = managerMutation({
+  support: { capability: "records.edit", summary: "checked the migration again" },
   args: {},
   handler: async (ctx) => {
     const migration = await requireMigration(ctx);
@@ -631,6 +663,7 @@ export const recheck = managerMutation({
 
 /** Says which Selestial service an old service name is, or that its visits aren't brought over (null). */
 export const mapService = managerMutation({
+  support: { capability: "records.edit", summary: "matched a service name in the migration" },
   args: { name: v.string(), serviceId: v.union(v.id("services"), v.null()) },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -650,6 +683,7 @@ export const mapService = managerMutation({
 
 /** Accepts or rejects one commercial-account grouping Selestial suggested. */
 export const decideGroup = managerMutation({
+  support: { capability: "records.edit", summary: "decided a commercial-account grouping in the migration" },
   args: { key: v.string(), accepted: v.boolean() },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -666,6 +700,7 @@ export const decideGroup = managerMutation({
  * "update_fields" name the existing record, which must be one the row was matched to.
  */
 export const decide = managerMutation({
+  support: { capability: "records.edit", summary: "decided records in the migration" },
   args: { rowIds: v.array(v.id("migrationRows")), choice: literals(CHOICES), targetId: v.optional(v.string()), fields: v.optional(v.array(v.string())) },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -676,7 +711,7 @@ export const decide = managerMutation({
     // Bulk choices are for genuinely similar problems: one kind of record, in one state.
     if (new Set(rows.map((r) => `${r.kind}|${r.state}`)).size > 1) throw userError("Choose rows of the same kind with the same problem to decide them together.");
     const kind = rows[0].kind;
-    if ((args.choice === "keep_existing" || args.choice === "update_fields") && kind !== "customers" && kind !== "properties") throw userError("This kind of record can be added or skipped.");
+    if ((args.choice === "keep_existing" && kind !== "customers" && kind !== "properties" && kind !== "cleaners") || (args.choice === "update_fields" && kind !== "customers")) throw userError("This kind of record can be added or skipped.");
     if (args.choice === "update_fields" && !args.fields?.length) throw userError("Choose which fields to update.");
     if (args.fields?.some((f) => !["email", "phone", "notes", "category", "address"].includes(f))) throw userError("Those fields can't be updated from an import.");
     const actor = byMember(ctx);
@@ -685,13 +720,14 @@ export const decide = managerMutation({
       if (row.state === "error" && args.choice !== "skip" && args.choice !== "review") throw userError(`Row ${row.index + 2} has problems to fix first: ${row.problems[0] ?? ""}`);
       let targetId = args.targetId;
       if (args.choice === "keep_existing" || args.choice === "update_fields") {
-        const candidates = row.matches.filter((m) => m.table === (kind === "customers" ? "customers" : "properties"));
+        const candidates = row.matches.filter((m) => m.table === (kind === "customers" ? "customers" : kind === "cleaners" ? "cleaners" : "properties"));
         if (targetId && !candidates.some((m) => m.id === targetId)) throw userError(`Row ${row.index + 2} wasn't matched to that record.`);
         if (!targetId && candidates.length !== 1) throw userError(`Choose which existing record row ${row.index + 2} is.`);
         targetId ??= candidates[0].id;
       }
       // A failed row can be decided again; its old result is cleared so the next run writes it.
-      await ctx.db.patch(row._id, { decision: { choice: args.choice, ...(targetId ? { targetId } : {}), ...(args.fields ? { fields: args.fields } : {}), by: actor, at: Date.now() }, ...(row.result?.outcome === "failed" ? { result: undefined } : {}) });
+      const staff = staffOf(ctx);
+      await ctx.db.patch(row._id, { decision: { choice: args.choice, ...(targetId ? { targetId } : {}), ...(args.fields ? { fields: args.fields } : {}), by: actor, at: Date.now(), ...(staff ? { staff } : {}) }, ...(row.result?.outcome === "failed" ? { result: undefined } : {}), ...(!staff ? { question: undefined } : {}) });
     }
     await scheduleCheck(ctx, migration);
     return null;
@@ -700,6 +736,7 @@ export const decide = managerMutation({
 
 /** Takes back a choice. */
 export const undecide = managerMutation({
+  support: { capability: "records.edit", summary: "took back a migration decision" },
   args: { rowIds: v.array(v.id("migrationRows")) },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -716,6 +753,7 @@ export const undecide = managerMutation({
 
 /** Sets customers' type, confirmed by a person. */
 export const setCategory = managerMutation({
+  support: { capability: "records.edit", summary: "set customer types in the migration" },
   args: { rowIds: v.array(v.id("migrationRows")), category: categoryValidator },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -736,6 +774,7 @@ export const setCategory = managerMutation({
  * overwritten by a re-check or a new mapping. Several rows can get the same value (a missing start time).
  */
 export const edit = managerMutation({
+  support: { capability: "records.edit", summary: "corrected values in the migration" },
   args: { rowIds: v.array(v.id("migrationRows")), field: v.string(), value: v.string() },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -748,7 +787,8 @@ export const edit = managerMutation({
       if (!(IMPORTABLE as readonly string[]).includes(row.kind)) throw userError("This kind of record isn't imported yet.");
       if (!FIELDS[row.kind as Importable].some((f) => f.key === args.field)) throw userError("That field isn't one Selestial reads for this record.");
       if (row.result && row.result.outcome !== "failed") throw userError(`Row ${row.index + 2} was already imported. Change it on the record itself.`);
-      await ctx.db.patch(row._id, { edits: { ...row.edits, [args.field]: value }, editedBy: actor, ...(row.result?.outcome === "failed" ? { result: undefined } : {}) });
+      const staff = staffOf(ctx);
+      await ctx.db.patch(row._id, { edits: { ...row.edits, [args.field]: value }, editedBy: actor, editedByStaff: staff, ...(row.result?.outcome === "failed" ? { result: undefined } : {}) });
     }
     await scheduleCheck(ctx, migration);
     return null;
@@ -757,6 +797,7 @@ export const edit = managerMutation({
 
 /** Puts back the original value of a field. */
 export const revertEdit = managerMutation({
+  support: { capability: "records.edit", summary: "put back an original value in the migration" },
   args: { rowId: v.id("migrationRows"), field: v.string() },
   handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
@@ -770,7 +811,31 @@ export const revertEdit = managerMutation({
   },
 });
 
-const FILTERS = ["all", "attention", "ready", "update", "duplicate", "review", "error", "skip", "held", "failed"] as const;
+/**
+ * Selestial staff, in a support session, leave the owner a question about rows they can't settle alone:
+ * which of two customers a booking is for, whether a person still works there. It waits for the owner.
+ */
+export const askOwner = managerMutation({
+  support: { capability: "records.edit", summary: "asked the owner about records in the migration" },
+  args: { rowIds: v.array(v.id("migrationRows")), text: v.string() },
+  handler: async (ctx, args) => {
+    const migration = await requireMigration(ctx);
+    editable(migration);
+    const staff = staffOf(ctx);
+    if (!staff) throw userError("Questions are for Selestial staff helping with your migration. You can decide these rows yourself.");
+    const words = args.text.replace(/\s+/g, " ").trim().slice(0, 500);
+    if (!words) throw userError("Write the question.");
+    for (const id of args.rowIds.slice(0, 200)) {
+      const row = await ownRow(ctx, migration, id);
+      await ctx.db.patch(row._id, { question: { text: words, staff, at: Date.now() } });
+    }
+    await noteAssist(ctx, migration);
+    await scheduleCheck(ctx, migration);
+    return null;
+  },
+});
+
+const FILTERS = ["all", "attention", "questions", "ready", "update", "duplicate", "review", "error", "skip", "held", "failed"] as const;
 
 function rowView(row: Doc<"migrationRows">) {
   return {
@@ -789,7 +854,9 @@ function rowView(row: Doc<"migrationRows">) {
     category: row.category ?? null,
     groupKey: row.groupKey ?? null,
     parsed: row.parsed ?? {},
-    decision: row.decision ? { choice: row.decision.choice, targetId: row.decision.targetId ?? null, fields: row.decision.fields ?? [] } : null,
+    decision: row.decision ? { choice: row.decision.choice, targetId: row.decision.targetId ?? null, fields: row.decision.fields ?? [], bySupport: Boolean(row.decision.staff) } : null,
+    editedBySupport: Boolean(row.editedByStaff),
+    question: row.question ? { text: row.question.text, at: row.question.at } : null,
     result: row.result ?? null,
   };
 }
@@ -808,6 +875,7 @@ export const rows = managerQuery({
         args.filter === "all" ||
         (args.filter === "attention" && (row.state === "error" || (NEEDS_CHOICE.has(row.state) && (!row.decision || row.decision.choice === "review")))) ||
         (args.filter === "failed" && row.result?.outcome === "failed") ||
+        (args.filter === "questions" && Boolean(row.question) && !row.result) ||
         row.state === args.filter;
       if (!ok) return false;
       if (!words) return true;
@@ -966,6 +1034,7 @@ export const stopImport = managerMutation({
 
 /** Goes back to Review & fix after an import, to fix what failed and import those rows. */
 export const reopen = managerMutation({
+  support: { capability: "records.edit", summary: "reopened the migration for review" },
   args: {},
   handler: async (ctx) => {
     const migration = await requireMigration(ctx);
@@ -991,14 +1060,14 @@ export const report = managerQuery({
     const problems: { kind: FileKind; file: string; row: number; name: string; outcome: string; reason: string }[] = [];
     const recent: { kind: FileKind; table: string; id: string; name: string }[] = [];
     const fileName = new Map(files.map((f) => [f._id, f.name]));
-    for (const kind of [...IMPORTABLE, "cleaners", "services", "history", "agreements", "balances", "other"] as FileKind[]) {
+    for (const kind of [...IMPORTABLE, "services", "agreements", "other"] as FileKind[]) {
       const rows = await ctx.db.query("migrationRows").withIndex("by_migration_kind", (q) => q.eq("migrationId", migration._id).eq("kind", kind)).take(LIMITS.rows);
       if (!rows.length) continue;
       const tally = { kind, source: rows.length, created: 0, updated: 0, linked: 0, skipped: 0, failed: 0, awaiting: 0, balanced: true };
       for (const row of rows) {
         const values = effective(row);
         const scheduled = kind === "recurring" || kind === "bookings";
-        const name = (scheduled ? [values.service, values.customerName].filter(Boolean).join(" · ") : values.name || [values.firstName, values.lastName].filter(Boolean).join(" ") || values.company || values.label || values.line1) || `Row ${row.index + 2}`;
+        const name = (scheduled || kind === "history" ? [values.service, values.customerName].filter(Boolean).join(" · ") : kind === "balances" ? [values.externalId, values.customerName].filter(Boolean).join(" · ") : values.name || [values.firstName, values.lastName].filter(Boolean).join(" ") || values.company || values.label || values.line1) || `Row ${row.index + 2}`;
         if (row.result) {
           tally[row.result.outcome] += 1;
           if (row.result.outcome === "failed") problems.push({ kind, file: fileName.get(row.fileId) ?? "", row: row.index + 2, name, outcome: "Failed", reason: row.result.reason ?? "" });
@@ -1015,17 +1084,22 @@ export const report = managerQuery({
     const links = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", migration._id)).take(10000);
     let heldVisits = 0;
     let heldPlans = 0;
+    let heldCleaners = 0;
     for (const link of links) {
       if (link.table === "jobs") {
         const job = await ctx.db.get(link.recordId as Id<"jobs">);
         if (job?.migration?.held) heldVisits += 1;
+      }
+      if (link.table === "cleaners") {
+        const cleaner = await ctx.db.get(link.recordId as Id<"cleaners">);
+        if (cleaner?.migration?.held) heldCleaners += 1;
       }
       if (link.table === "servicePlans") {
         const plan = await ctx.db.get(link.recordId as Id<"servicePlans">);
         if (plan?.migration?.held) heldPlans += 1;
       }
     }
-    return { kinds, problems: problems.slice(0, 2000), recent, held: { visits: heldVisits, plans: heldPlans }, status: migration.status, releasedAt: migration.releasedAt ?? null };
+    return { kinds, problems: problems.slice(0, 2000), recent, held: { visits: heldVisits, plans: heldPlans, cleaners: heldCleaners }, status: migration.status, releasedAt: migration.releasedAt ?? null };
   },
 });
 
@@ -1037,38 +1111,73 @@ export const report = managerQuery({
  * them is sent to anyone. Releasing doesn't message customers.
  */
 export const release = ownerMutation({
-  args: { confirm: v.literal(true) },
-  handler: async (ctx) => {
+  args: { confirm: v.literal(true), schedule: v.boolean(), team: v.boolean() },
+  handler: async (ctx, args) => {
     const migration = await requireMigration(ctx);
     if (migration.status !== "imported" && migration.status !== "released") throw userError("Import your records before releasing them.");
-    await ctx.db.patch(migration._id, { status: "released", releasedAt: Date.now(), releasedBy: ctx.member._id, updatedAt: Date.now() });
-    await recordEvent(ctx, { companyId: ctx.companyId, type: "migration.released", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId } });
-    await ctx.scheduler.runAfter(0, internal.migration.releaseChunk, { migrationId: migration._id, cursor: null, memberId: ctx.member._id });
+    if (!args.schedule && !args.team) throw userError("Choose what to release.");
+    const now = Date.now();
+    await ctx.db.patch(migration._id, { status: "released", releasedAt: now, releasedBy: ctx.member._id, updatedAt: now });
+    await recordEvent(ctx, { companyId: ctx.companyId, type: "migration.released", actor: byMember(ctx), subject: { table: "companies", id: ctx.companyId }, data: { schedule: args.schedule, team: args.team } });
+    await ctx.scheduler.runAfter(0, internal.migration.releaseChunk, { migrationId: migration._id, cursor: null, memberId: ctx.member._id, schedule: args.schedule, team: args.team });
     return null;
   },
 });
 
 export const releaseChunk = internalMutation({
-  args: { migrationId: v.id("migrations"), cursor: v.union(v.string(), v.null()), memberId: v.id("members") },
+  args: { migrationId: v.id("migrations"), cursor: v.union(v.string(), v.null()), memberId: v.id("members"), schedule: v.boolean(), team: v.boolean() },
   handler: async (ctx, args) => {
     const page = await ctx.db.query("migrationLinks").withIndex("by_migration", (q) => q.eq("migrationId", args.migrationId)).paginate({ numItems: 100, cursor: args.cursor });
     const actor: Actor = { kind: "member", memberId: args.memberId };
-    // Plans first in each page: a released plan books ahead, and skips days an imported visit already holds.
-    for (const link of page.page.filter((l) => l.table === "jobs")) {
-      const job = await ctx.db.get(link.recordId as Id<"jobs">);
-      if (!job?.migration?.held) continue;
-      await ctx.db.patch(job._id, { migration: { ...job.migration, held: false } });
-      await applyTemplate(ctx, (await ctx.db.get(job._id))!);
-      await ctx.scheduler.runAfter(0, internal.dispatch.cover, { jobId: job._id });
+    if (args.team) {
+      // Imported cleaners stay onboarding: released, they get the usual onboarding follow-ups, and work only once a person makes them active.
+      for (const link of page.page.filter((l) => l.table === "cleaners")) {
+        const cleaner = await ctx.db.get(link.recordId as Id<"cleaners">);
+        if (cleaner?.migration?.held) await ctx.db.patch(cleaner._id, { migration: { ...cleaner.migration, held: false } });
+      }
     }
-    for (const link of page.page.filter((l) => l.table === "servicePlans")) {
-      const plan = await ctx.db.get(link.recordId as Id<"servicePlans">);
-      if (!plan?.migration?.held) continue;
-      await ctx.db.patch(plan._id, { migration: { ...plan.migration, held: false }, state: plan.pausedFrom ? "paused" : "active", revision: plan.revision + 1, updatedAt: Date.now() });
-      await bookAhead(ctx, (await ctx.db.get(plan._id))!, actor);
+    if (args.schedule) {
+      for (const link of page.page.filter((l) => l.table === "jobs")) {
+        const job = await ctx.db.get(link.recordId as Id<"jobs">);
+        if (!job?.migration?.held) continue;
+        await ctx.db.patch(job._id, { migration: { ...job.migration, held: false } });
+        await applyTemplate(ctx, (await ctx.db.get(job._id))!);
+        await ctx.scheduler.runAfter(0, internal.dispatch.cover, { jobId: job._id });
+      }
+      // A released plan books ahead and skips days an imported visit already holds.
+      for (const link of page.page.filter((l) => l.table === "servicePlans")) {
+        const plan = await ctx.db.get(link.recordId as Id<"servicePlans">);
+        if (!plan?.migration?.held) continue;
+        await ctx.db.patch(plan._id, { migration: { ...plan.migration, held: false }, state: plan.pausedFrom ? "paused" : "active", revision: plan.revision + 1, updatedAt: Date.now() });
+        await bookAhead(ctx, (await ctx.db.get(plan._id))!, actor);
+      }
     }
     if (!page.isDone) await ctx.scheduler.runAfter(0, internal.migration.releaseChunk, { ...args, cursor: page.continueCursor });
     return null;
+  },
+});
+
+// ── On the client's profile ────────────────────────────────────────────────────────────────────────
+
+/** Past visits brought over from the old system: read-only, never jobs. */
+export const clientHistory = companyQuery({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.companyId !== ctx.companyId) return [];
+    const rows = await ctx.db.query("importedHistory").withIndex("by_company_customer_day", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id)).order("desc").take(200);
+    return rows.map((h) => ({ id: h._id, day: h.day, service: h.service ?? null, priceCents: h.priceCents ?? null, cleaner: h.cleaner ?? null, outcome: h.outcome ?? null, notes: h.notes ?? null, source: h.source }));
+  },
+});
+
+/** What the customer owed in the old system, by old invoice number. The Owner's, like the rest of billing. */
+export const clientBalances = ownerQuery({
+  args: { customerId: v.id("customers") },
+  handler: async (ctx, args) => {
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.companyId !== ctx.companyId) return { rows: [], totalCents: 0 };
+    const rows = await ctx.db.query("openingBalances").withIndex("by_company_customer", (q) => q.eq("companyId", ctx.companyId).eq("customerId", customer._id)).take(200);
+    return { rows: rows.map((b) => ({ id: b._id, amountCents: b.amountCents, reference: b.reference, issuedOn: b.issuedOn ?? null, dueOn: b.dueOn ?? null, notes: b.notes ?? null, source: b.source })), totalCents: rows.reduce((n, b) => n + b.amountCents, 0) };
   },
 });
 

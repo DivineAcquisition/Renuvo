@@ -116,14 +116,68 @@ This pass uses **no model**. Column, category and grouping suggestions come from
 - An interrupted import resumes from its checkpoint via the sweep, with a concurrent duplicate step, and ends with exactly 95 customers and no duplicates.
 - Another company can't read or decide this company's rows.
 
-## Not yet (phases 5–7)
+## Phase 5: the rest of the records, and assisted migration
 
-- **Record types:** cleaners and availability, services (beyond matching), service history, agreements and signature evidence, balances and invoice references, communication-preference consent evidence. Their files are kept and reported as "not transferred".
-- **Assisted migration:** wiring into the Admin Support Session work in progress elsewhere. Staff edits are to be attributed to the admin (`assistedBy` and the row `editedBy`/`decision.by` actors are ready for a staff actor). Staff must not approve messages or spending.
-- **Model-assisted review** with cost disclosure (free for assisted).
+Built November 20, 2026, after Admin Support Sessions (#124) merged.
+
+### Decisions (from the owner)
+
+| Question | Decision |
+|---|---|
+| Past visits | Read-only history on the client, never jobs |
+| Outstanding balances | Opening balances, reference only, by old invoice number |
+| Imported cleaners | Onboarding, no invitation, held until released |
+| Staff in a support session | Prepare only; the company's Owner or a Manager imports, and only the Owner releases |
+
+### New record kinds
+
+Import order: customers → properties → **cleaners** → recurring → bookings → **history** → **balances**.
+
+| Kind | What it becomes | Never |
+|---|---|---|
+| Cleaners | `cleaners` via the existing `createWorker` (onboarding, requirement template), `migration.held`, weekly availability windows when the file says something clear ("Mon-Fri 8am-4pm") | Employment status is never guessed: a missing or unclear value is a problem to fix. Unreadable availability is noted, not set. Someone marked terminated or inactive is skipped unless the owner picks "Import anyway". No invitation, onboarding follow-up or offer is sent while held (`lib/cleaners/followUps.ts` skips held cleaners) |
+| Service history | `importedHistory`, shown on the client's Services tab as "From Jobber" (or the source) | Not a job, so never paid, invoiced, reviewed, followed up or counted. Future dates are skipped with a pointer to the bookings file |
+| Balances | `openingBalances`, shown on the client's Billing tab (Owner only) with a total | Never a Selestial invoice, charged, reminded or added to what the client owes. Each needs its old invoice number; the same number twice is a duplicate, and a re-import links instead of adding. Zero balances are skipped. Credits are refused. A customer with several rows gets a "not a running total?" check |
+| Consent | Customer columns for all/texts/email/marketing opt-outs, kept as suppressions with their scope. "Consent recorded" text goes to the client's Owner-only note | No permission is created, ever: the old system's evidence didn't come with the file |
+| Agreements, services, other | Kept with the migration and reported as not transferred. Agreements point to Agreements › upload, where a signature is never assumed | |
+
+Templates now cover all seven kinds. Source cards say balances come over for reference only.
+
+### Assisted migration
+
+Uses the merged Admin Support Sessions (`docs/operations/03-support-sessions.md`); nothing is duplicated.
+
+- Every migration prep mutation (open, files, mapping, services, grouping, decisions, edits, categories, recheck, reopen) is opened to Manage-mode sessions under `records.edit`. Each change is written to `supportEvents` with a readable summary ("decided records in the migration"). View mode can read but not change.
+- **Attribution:**
+  - Rows keep the actual staff member and session (`decision.staff`, `editedByStaff`), and `migrations.assistedBy` lists who helped.
+  - The company sees "By Selestial Support", matching the rest of the platform.
+- **Questions for the owner:** staff can `askOwner` on rows they can't settle. The owner gets a banner, a "Questions" filter and the question on the record, and answers by deciding the row, which clears it.
+- **Limits:**
+  - `startImport` and `release` aren't opened to support sessions, so the backend refuses them there.
+  - The staff UI says the company imports and releases.
+  - Staff can't send messages or spend money: no migration function does either.
+- AI review stays off. Nothing is billed.
+
+### Release, split
+
+`release` takes `schedule` and `team`. The schedule part sends held visits to Dispatch and starts held plans; the team part un-holds cleaners, who stay onboarding and start getting the usual onboarding follow-ups. The Verify step describes each part, with counts, before the Owner confirms.
+
+### Tests
+
+The original 13, plus:
+
+- employment-status and availability rules;
+- an end-to-end run with team, history, balances and consent files: held onboarding cleaners with no follow-ups or invitations until the team is released, no jobs or invoices from history or balances, duplicate invoices counted once, scoped opt-outs, a consent note with no permission, balanced counts, and history and balances on the client;
+- an assisted run: View refused, Manage with the owner's grant, staff decisions and questions attributed and logged, import and release refused in the session, and the owner's answer clearing the question.
+
+Full suite: 121 files passing. Screenshots: `docs/screenshots/migration/*-p5-*.png` (the "$700" in the balance note there predates the fix that leaves skipped duplicates out of that total).
+
+## Not yet (phases 6–7)
+
 - **Undo** for untouched imported records, with targeted conflict resolution for anything edited, paid, messaged or used since.
-- **Full activation review:** per-agent capabilities, affected records, missing connections, expected volume and cost. Today's release covers Dispatch and recurring plans only.
+- **Full activation review:** per-agent capabilities, affected records, missing connections, expected volume and cost, with approvals. Today's release covers Dispatch, recurring plans and team follow-ups.
 - **Branded completion email:** only the in-app notice is sent now.
-- **Cleaner assignment conflicts and availability checks:** assignments in source files are noted, not imported.
-- Excel files and direct connector reads inside the migration.
+- **Model-assisted review** with cost disclosure (free for assisted migrations).
+- **Cleaner assignment conflicts:** assignments in booking files are noted, not imported.
+- Agreement documents inside the migration (they go through Agreements today), Excel files, and connector reads inside the migration.
 - **Verification against real export samples** from Jobber, Housecall Pro and BookingKoala.

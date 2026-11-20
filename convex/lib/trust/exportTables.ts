@@ -214,6 +214,8 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   // Migration (convex/lib/migration/schema.ts): the saved migration, its files and runs, and what each source record became.
   { table: "migrations", index: "by_company" },
   { table: "migrationLinks", index: "by_company_source_kind_external" },
+  { table: "importedHistory", index: "by_company_customer_day" },
+  { table: "openingBalances", index: "by_company_customer" },
 ];
 
 /** Company tables kept out of the export, and why. */

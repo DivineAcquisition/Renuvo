@@ -12,7 +12,7 @@ import { addMember, company, NOW, refusal, start, type T } from "../tests/harnes
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { analyze, type RowIn } from "./lib/migration/analyze";
-import { dateOrderOf, guessKind, guessMapping, isOptOut, parseCents, parseDay, parseFrequency, parseMinutes, parseTime, suggestCategory } from "./lib/migration/rules";
+import { dateOrderOf, guessKind, guessMapping, isOptOut, parseAvailability, parseCents, parseDay, parseEngagement, parseFrequency, parseMinutes, parseTime, suggestCategory } from "./lib/migration/rules";
 import { SOURCE_CARDS, templateCsv } from "./lib/migration/sources";
 import { blankSpec, type Spec } from "./lib/services/spec";
 
@@ -356,7 +356,7 @@ describe("A migration, end to end", () => {
     expect(await t.run(async (ctx) => (await ctx.db.query("properties").collect()).length)).toBe(5);
 
     // The Owner releases the schedule: visits go to Dispatch, and plans start booking ahead without doubling imported days.
-    await as.mutation(api.migration.release, { companyId, confirm: true });
+    await as.mutation(api.migration.release, { companyId, confirm: true, schedule: true, team: true });
     await settle(t);
     const released = await t.run(async (ctx) => ({ jobs: await ctx.db.query("jobs").collect(), plans: await ctx.db.query("servicePlans").collect() }));
     expect(released.plans.every((p) => p.state === "active" && p.migration?.held === false)).toBe(true);
@@ -370,7 +370,7 @@ describe("A migration, end to end", () => {
     const manager = await addMember(t, as, companyId, "mgr", "manager");
     const office = await addMember(t, as, companyId, "desk", "office");
     expect(await refusal(office.query(api.migration.view, { companyId }))).toBe("Not allowed.");
-    expect(await refusal(manager.mutation(api.migration.release, { companyId, confirm: true }))).toBe("Not allowed.");
+    expect(await refusal(manager.mutation(api.migration.release, { companyId, confirm: true, schedule: true, team: false }))).toBe("Not allowed.");
   });
 
   it("picks an interrupted import up from its checkpoint, without writing anything twice", async () => {
@@ -404,5 +404,193 @@ describe("A migration, end to end", () => {
     expect(await refusal(other.as.mutation(api.migration.decide, { companyId: other.companyId, rowIds: [rowId], choice: "skip" }))).toBe("Not found.");
     expect(await refusal(other.as.query(api.migration.view, { companyId }))).toBe("Not found.");
     expect((await other.as.query(api.migration.rows, { companyId: other.companyId, kind: "customers", filter: "all", offset: 0, limit: 10 })).total).toBe(0);
+  });
+});
+
+// ── Phase 5: team, history, balances, consent, assisted migration ────────────────────────────────────
+
+describe("More records: rules", () => {
+  it("never guesses employment status, and reads availability only when it's clear", () => {
+    expect(parseEngagement("W-2 employee")).toEqual({ engagement: "employee" });
+    expect(parseEngagement("1099")).toEqual({ engagement: "contractor" });
+    expect(parseEngagement("Subcontractor")).toEqual({ engagement: "subcontractor" });
+    expect(parseEngagement("Cleaner")).toMatchObject({ error: expect.stringContaining("Choose one") });
+    expect(parseEngagement("")).toMatchObject({ error: expect.stringContaining("doesn't guess") });
+    expect(parseAvailability("Mon-Fri 8am-4pm")).toEqual([1, 2, 3, 4, 5].map((weekday) => ({ weekday, startMinute: 480, endMinute: 960 })));
+    expect(parseAvailability("Sat 9:00-13:00; Sun 10am-2pm")).toEqual([{ weekday: 6, startMinute: 540, endMinute: 780 }, { weekday: 0, startMinute: 600, endMinute: 840 }]);
+    expect(parseAvailability("mornings mostly")).toBeNull();
+    expect(parseAvailability("")).toEqual([]);
+  });
+});
+
+const TEAM = `Employee ID,First Name,Last Name,Email,Phone,Worker Type,Skills,Service Areas,Availability,Status
+E1,Maria,Lopez,maria@example.com,512-555-0177,W-2 Employee,deep clean|move out,"78701, 78703",Mon-Fri 8am-4pm,Active
+E2,Jo,Park,jo@example.com,512-555-0178,,windows,78701,mornings mostly,Active
+E3,Old,Hand,old@example.com,512-555-0179,1099,,,,Terminated
+`;
+
+const HISTORY = `Visit ID,Customer ID,Service,Completed Date,Price,Cleaner,Status
+H1,101,Standard Clean,2027-02-12,$140.00,Maria,Completed
+H2,101,Standard Clean,2027-02-19,$140.00,Maria,Completed
+H3,101,Standard Clean,2027-04-02,$140.00,Maria,Completed
+`;
+
+const BALANCES = `Invoice #,Customer ID,Balance Due,Invoice Date,Due Date
+INV-9,101,$140.00,2027-02-12,2027-02-26
+INV-10,101,$280.00,2027-02-19,2027-03-05
+INV-10,101,$280.00,2027-02-19,2027-03-05
+INV-11,102,$0.00,2027-02-20,2027-03-06
+`;
+
+const CONSENT = `Customer ID,First Name,Last Name,Email,Phone,SMS Opt Out,Marketing Opt Out,SMS Consent
+201,Text,Stopper,ts@example.com,512-555-0201,Yes,,
+202,Promo,Avoider,pa@example.com,512-555-0202,,Unsubscribed,
+203,Said,Yes,sy@example.com,512-555-0203,,,Opted in 2024-05-01 via booking form
+`;
+
+describe("More records, end to end", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("adds the team as onboarding and held, keeps history read-only and balances as reference, and keeps consent scope", async () => {
+    const t = start();
+    const { as, companyId } = await company(t, "owner-c", "Gamma Cleaning");
+    await as.mutation(api.migration.open, { companyId });
+    await as.mutation(api.migration.save, { companyId, revision: 1, source: "jobber" });
+    await upload(t, as, companyId, "clients.csv", CUSTOMERS);
+    await upload(t, as, companyId, "team.csv", TEAM);
+    await upload(t, as, companyId, "history.csv", HISTORY);
+    await upload(t, as, companyId, "balances.csv", BALANCES);
+    await upload(t, as, companyId, "consent.csv", CONSENT);
+    const view = (await as.query(api.migration.view, { companyId }))!;
+    expect(view.files.map((f) => f.kind)).toEqual(["customers", "cleaners", "history", "balances", "customers"]);
+
+    const team = (await as.query(api.migration.rows, { companyId, kind: "cleaners", filter: "all", offset: 0, limit: 10 })).rows;
+    const person = (id: string) => team.find((r) => r.values.externalId === id)!;
+    expect(person("E1").state).toBe("ready");
+    expect(person("E2")).toMatchObject({ state: "error", problems: [expect.stringContaining("doesn't guess")] });
+    expect(person("E2").notes.join(" ")).toContain("couldn't read the availability");
+    expect(person("E3").state).toBe("skip");
+
+    const history = (await as.query(api.migration.rows, { companyId, kind: "history", filter: "all", offset: 0, limit: 10 })).rows;
+    expect(history.find((r) => r.values.externalId === "H3")).toMatchObject({ state: "skip" });
+    const balances = (await as.query(api.migration.rows, { companyId, kind: "balances", filter: "all", offset: 0, limit: 10 })).rows;
+    expect(balances.map((r) => r.state)).toEqual(["ready", "ready", "duplicate", "skip"]);
+    expect((await as.query(api.migration.view, { companyId }))!.migration.notes.map((n) => n.words).join(" ")).toContain("not a running total");
+
+    // The owner fills in Jo's employment status; skips the duplicate balance, the empty customer row and Harbor's second site question.
+    await as.mutation(api.migration.edit, { companyId, rowIds: [person("E2").id], field: "engagement", value: "Contractor" });
+    await as.mutation(api.migration.decide, { companyId, rowIds: [balances[2].id], choice: "skip" });
+    const clients = (await as.query(api.migration.rows, { companyId, kind: "customers", filter: "all", offset: 0, limit: 20 })).rows;
+    await as.mutation(api.migration.decide, { companyId, rowIds: clients.filter((r) => r.state === "error" || r.state === "review").map((r) => r.id).slice(0, 1), choice: "skip" });
+    await as.mutation(api.migration.decide, { companyId, rowIds: clients.filter((r) => r.state === "review").map((r) => r.id), choice: "skip" });
+    await settle(t);
+    await confirmColumns(t, as, companyId);
+    await as.mutation(api.migration.startImport, { companyId });
+    await settle(t);
+
+    const all = await t.run(async (ctx) => ({
+      cleaners: await ctx.db.query("cleaners").collect(),
+      windows: await ctx.db.query("availabilityWindows").collect(),
+      history: await ctx.db.query("importedHistory").collect(),
+      balances: await ctx.db.query("openingBalances").collect(),
+      invoices: await ctx.db.query("invoices").collect(),
+      jobs: await ctx.db.query("jobs").collect(),
+      followUps: await ctx.db.query("followUps").collect(),
+      suppressions: await ctx.db.query("suppressions").collect(),
+      permissions: await ctx.db.query("contactPermissions").collect(),
+      customers: await ctx.db.query("customers").collect(),
+      invitations: await ctx.db.query("invitations").collect(),
+    }));
+    expect(all.cleaners.map((c) => [c.name, c.engagement, c.status, c.migration?.held]).sort()).toEqual([["Jo Park", "contractor", "onboarding", true], ["Maria Lopez", "employee", "onboarding", true]]);
+    expect(all.windows).toHaveLength(5);
+    // History is read-only: no jobs, no invoices.
+    expect(all.history.map((h) => h.day).sort()).toEqual(["2027-02-12", "2027-02-19"]);
+    expect(all.jobs).toEqual([]);
+    expect(all.invoices).toEqual([]);
+    // Balances are reference only, once per old invoice.
+    expect(all.balances.map((b) => [b.reference, b.amountCents]).sort()).toEqual([["INV-10", 28000], ["INV-9", 14000]]);
+    // Consent scope: a texts-only stop, a marketing-only stop, and a recorded consent kept as a note, never a permission.
+    expect(all.permissions).toEqual([]);
+    const stops = all.suppressions.map((x) => [x.channel, x.address, x.scope]).sort();
+    expect(stops).toEqual([["email", "pa@example.com", "marketing"], ["email", "optout@example.com", "all"], ["sms", "+15125550105", "all"], ["sms", "+15125550201", "all"], ["sms", "+15125550202", "marketing"]].sort());
+    expect(all.customers.find((c) => c.name === "Said Yes")?.privateNotes).toContain("doesn't treat it as permission");
+    expect(all.invitations.filter((i) => i.email.includes("maria"))).toEqual([]);
+
+    // Held cleaners get no onboarding follow-up until the team is released.
+    await t.mutation(internal.cleanerFollowUps.sweep, {});
+    expect((await t.run((ctx) => ctx.db.query("followUps").collect())).length).toBe(all.followUps.length);
+    const report = (await as.query(api.migration.report, { companyId }))!;
+    expect(report.held.cleaners).toBe(2);
+    expect(report.kinds.every((k) => k.balanced)).toBe(true);
+    await as.mutation(api.migration.release, { companyId, confirm: true, schedule: false, team: true });
+    await settle(t);
+    expect((await t.run((ctx) => ctx.db.query("cleaners").collect())).every((c) => c.migration?.held === false && c.status === "onboarding")).toBe(true);
+
+    // On the client: history for everyone in the company, balances for the Owner.
+    const dana = all.customers.find((c) => c.name === "Dana Whitfield")!;
+    expect((await as.query(api.migration.clientHistory, { companyId, customerId: dana._id })).map((h) => h.day)).toEqual(["2027-02-19", "2027-02-12"]);
+    expect((await as.query(api.migration.clientBalances, { companyId, customerId: dana._id })).totalCents).toBe(42000);
+  });
+});
+
+describe("Assisted migration", () => {
+  const admin = { subject: "user_support_admin", email: "support@selestial.example", emailVerified: true, name: "Sam Support", fva: [1, 1] };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    process.env.STAFF_BOOTSTRAP_EMAIL = admin.email;
+    process.env.SUPPORT_ACCESS = "on";
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    delete process.env.STAFF_BOOTSTRAP_EMAIL;
+    delete process.env.SUPPORT_ACCESS;
+  });
+
+  it("lets staff prepare with the owner's permission, attributed to them, while the owner imports and releases", async () => {
+    const t = start();
+    const { as: owner, companyId } = await company(t, "owner-d", "Delta Cleaning");
+    const staff = t.withIdentity(admin);
+    const supportSessionId = await staff.mutation(api.support.start, { companyId, reason: "Assisted migration from Jobber" });
+    // View mode can read but not prepare.
+    expect(await refusal(staff.mutation(api.migration.open, { companyId, supportSessionId }))).toContain("view only");
+    await owner.mutation(api.support.grantManage, { companyId, hours: 4 });
+    await staff.mutation(api.support.switchToManage, { sessionId: supportSessionId, reason: "Prepare the migration with the owner" });
+    await staff.mutation(api.migration.open, { companyId, supportSessionId });
+    const storageId = await t.run((ctx) => ctx.storage.store(new Blob([CUSTOMERS], { type: "text/csv" })));
+    await staff.mutation(api.migration.addFile, { companyId, supportSessionId, storageId, name: "clients.csv" });
+    await settle(t);
+    const rows = (await staff.query(api.migration.rows, { companyId, supportSessionId, kind: "customers", filter: "all", offset: 0, limit: 20 })).rows;
+    const empty = rows.find((r) => r.state === "error")!;
+    const sam = rows.find((r) => r.values.externalId === "104")!;
+    await staff.mutation(api.migration.decide, { companyId, supportSessionId, rowIds: [empty.id], choice: "skip" });
+    await staff.mutation(api.migration.askOwner, { companyId, supportSessionId, rowIds: [sam.id], text: "Is Sam Existing the same person as your current client?" });
+    await settle(t);
+
+    // The owner sees the question and who decided what, as Selestial Support.
+    const mine = (await owner.query(api.migration.rows, { companyId, kind: "customers", filter: "questions", offset: 0, limit: 20 })).rows;
+    expect(mine.map((r) => r.question?.text)).toEqual(["Is Sam Existing the same person as your current client?"]);
+    const skipped = (await owner.query(api.migration.rows, { companyId, kind: "customers", filter: "skip", offset: 0, limit: 20 })).rows;
+    expect(skipped[0].decision).toMatchObject({ choice: "skip", bySupport: true });
+    const view = (await owner.query(api.migration.view, { companyId }))!;
+    expect(view.migration.assisted).toHaveLength(1);
+    expect(view.migration.summary.customers.questions).toBe(1);
+    // The record keeps the actual staff member; the session log shows each change.
+    const stored = await t.run(async (ctx) => (await ctx.db.get(empty.id))!);
+    expect(stored.decision?.staff?.staffId).toBeTruthy();
+    const events = await t.run((ctx) => ctx.db.query("supportEvents").collect());
+    expect(events.filter((e) => e.kind === "change").map((e) => e.summary)).toEqual(expect.arrayContaining(["added a file to the migration", "decided records in the migration", "asked the owner about records in the migration"]));
+
+    // Staff can't import or release: the owner does.
+    expect(await refusal(staff.mutation(api.migration.startImport, { companyId, supportSessionId }))).toContain("support session can't");
+    expect(await refusal(staff.mutation(api.migration.release, { companyId, supportSessionId, confirm: true, schedule: true, team: true }))).toContain("support session can't");
+    // Answering the question as the owner clears it.
+    await owner.mutation(api.migration.decide, { companyId, rowIds: [sam.id], choice: "skip" });
+    await settle(t);
+    expect((await owner.query(api.migration.rows, { companyId, kind: "customers", filter: "questions", offset: 0, limit: 20 })).total).toBe(0);
   });
 });

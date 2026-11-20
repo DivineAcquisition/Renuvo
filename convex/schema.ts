@@ -442,6 +442,8 @@ export default defineSchema({
     /** Their last answer to a check-in: still available, fewer jobs, a break until a date, or wanting to stop. */
     checkIn: v.optional(v.object({ answer: v.union(v.literal("available"), v.literal("fewer"), v.literal("break"), v.literal("stop")), at: v.number(), until: v.optional(v.number()), note: v.optional(v.string()) })),
     updatedAt: v.optional(v.number()),
+    /** Added by a migration and not released yet: no onboarding follow-up or offer reaches them until the Owner releases the team (convex/migration.ts). */
+    migration: v.optional(migrationMarkValidator),
   })
     .index("by_company_status", ["companyId", "status"])
     .index("by_company_subcontractor", ["companyId", "subcontractorId"]),
