@@ -1,0 +1,67 @@
+{
+  "tutorial": "jobber-export-visits",
+  "version": 1,
+  "title": "Export upcoming visits from Jobber",
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "name": "Eric",
+    "model": "eleven_multilingual_v2",
+    "settings": {
+      "stability": 0.55,
+      "similarity_boost": 0.75,
+      "style": 0.1
+    }
+  },
+  "status": "draft: narration follows the platform's help article; check every line against the recording before narrating",
+  "sampleData": "The platform's authorized demo account with sample clients only. No real names, emails, phone numbers, account ids or payment details on screen.",
+  "scenes": [
+    {
+      "id": "intro",
+      "narration": "This shows how to export your upcoming visits from Jobber.",
+      "capture": {
+        "kind": "manual",
+        "what": "Jobber dashboard."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "reports",
+      "narration": "Select Insights in the side navigation, then Reports. Under Work reports, choose Visits.",
+      "capture": {
+        "kind": "manual",
+        "what": "Insights > Reports > Visits."
+      },
+      "minSeconds": 5,
+      "poster": true
+    },
+    {
+      "id": "dates",
+      "narration": "Set the date filter to the weeks ahead you want to bring in.",
+      "capture": {
+        "kind": "manual",
+        "what": "Set Start within to the next 8 weeks."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "export",
+      "narration": "Click Export to CSV, and choose all columns. Jobber emails the file to you.",
+      "capture": {
+        "kind": "manual",
+        "what": "Export to CSV, all columns, confirmation."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "return",
+      "narration": "Return to Selestial and upload the file you just downloaded.",
+      "capture": {
+        "kind": "manual",
+        "what": "Open the email, download the CSV."
+      },
+      "minSeconds": 5,
+      "poster": false
+    }
+  ]
+}

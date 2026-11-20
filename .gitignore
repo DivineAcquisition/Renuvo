@@ -46,3 +46,7 @@ supabase/.branches
 supabase/.temp
 supabase/config.toml.bak
 .claude/worktrees/
+
+# Tutorial production: builds are regenerated; demo sign-ins never leave the machine.
+tutorials/build/
+tutorials/.auth/
