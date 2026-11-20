@@ -9,12 +9,15 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation } from "./_generated/server";
-import { staffMutation, staffQuery } from "./lib/builders";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { managerMutation, managerQuery, staffMutation, staffQuery } from "./lib/builders";
 import { notFound, userError } from "./lib/errors";
 import { AREAS, CLOSE_BY_HAND, KIND_LABELS, SEVERITIES, areaValidator, checkValidator, nextActor, severityRank, stateValidator, type Area, type Severity, type State } from "./lib/operations/catalog";
 import { DETECTORS, detectorFor } from "./lib/operations/detectors";
 import { reevaluate, resolveIncident, runDetector, stateWords, verifyIncident } from "./lib/operations/incidents";
+import { ALERT_CHANNELS, type AlertLine } from "./lib/operations/alerts";
+import { queueStaffAlert } from "./lib/operations/notify";
+import { incidentReference, ownerCard, ownerUpdate } from "./lib/operations/owner";
 import { text } from "./lib/text";
 
 const MINUTE = 60 * 1000;
@@ -251,6 +254,15 @@ export const incident = staffQuery({
       resolvedBy: found.resolvedBy ? (found.resolvedBy === "system" ? "Selestial (automatic check)" : staffNames.get(found.resolvedBy) ?? "Former staff") : null,
       assignedName: found.assignedTo ? staffNames.get(found.assignedTo) ?? "Former staff" : null,
       closeByHand: CLOSE_BY_HAND.has(found.kind),
+      // Who has been told during this open period (convex/lib/operations/notify.ts).
+      told: [
+        found.notified?.action ? "owner asked to act" : null,
+        found.notified?.interruption ? "owner told of the interruption" : null,
+        found.notified?.escalated ? "owner told staff took over" : null,
+        found.notified?.emailed ? "owner emailed" : null,
+        found.notified?.staff ? "staff alerted" : null,
+        found.notified?.support ? "company contacted support" : null,
+      ].filter((item): item is string => item !== null),
       updates: updates.map((update) => ({ id: update._id, kind: update.kind, words: update.words, at: update.at, by: update.by === "system" ? "Selestial" : staffNames.get(update.by) ?? "Former staff" })),
       parent: parent ? incidentRow(parent, names) : null,
       children: children.sort(bySeverityThenRecent).map((child) => incidentRow(child, names)),
@@ -335,3 +347,143 @@ export const resolve = staffMutation({
   },
 });
 
+
+// ── Staff alerts, grouped ────────────────────────────────────────────────────────────────────────
+
+/** What is waiting to go to staff, and to whom: active admins and support staff. */
+export const pendingAlerts = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("staffAlerts")
+      .withIndex("by_sent_at", (q) => q.eq("sentAt", 0))
+      .take(100);
+    if (rows.length === 0) return null;
+    const lines: AlertLine[] = [];
+    for (const row of rows) {
+      const incident = await ctx.db.get(row.incidentId);
+      if (!incident) continue;
+      const company = incident.companyId ? await ctx.db.get(incident.companyId) : null;
+      lines.push({ reason: row.reason, title: incident.title, company: company?.name ?? null, severity: incident.severity, reference: incidentReference(incident._id), at: row.at });
+    }
+    const staff = (await ctx.db.query("staff").take(200)).filter((row) => row.status === "active" && (row.role === "admin" || row.role === "support"));
+    const origin = process.env.ADMIN_ORIGIN?.trim() || process.env.APP_ORIGIN?.trim() || null;
+    return {
+      ids: rows.map((row) => row._id),
+      batch: { key: `${rows[0]._id}-${rows.length}`, lines, consoleUrl: origin ? `${origin.replace(/\/$/, "")}/staff/operations` : null },
+      recipients: staff.map((row) => ({ email: row.email, name: row.name })),
+    };
+  },
+});
+
+export const markAlertsSent = internalMutation({
+  args: { ids: v.array(v.id("staffAlerts")) },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    for (const id of args.ids) {
+      const row = await ctx.db.get(id);
+      if (row && row.sentAt === 0) await ctx.db.patch(id, { sentAt: now });
+    }
+    return null;
+  },
+});
+
+/** Every five minutes (convex/crons.ts): one grouped message per staff member, through every channel. */
+export const sendStaffAlerts = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ sent: number }> => {
+    const pending = await ctx.runQuery(internal.operations.pendingAlerts, {});
+    if (!pending) return { sent: 0 };
+    let ok = true;
+    for (const channel of ALERT_CHANNELS) if (!(await channel.send(pending.batch, pending.recipients))) ok = false;
+    // Kept waiting when a channel could not send, so the next run tries the same batch with the same key.
+    if (ok) await ctx.runMutation(internal.operations.markAlertsSent, { ids: pending.ids });
+    return { sent: ok ? pending.batch.lines.length : 0 };
+  },
+});
+
+// ── What the company sees ────────────────────────────────────────────────────────────────────────
+
+const RECOVERED_SHOWN_FOR = 3 * DAY;
+
+/**
+ * The company's own problems, in its words: what is wrong now, and what was fixed in the last three
+ * days. Owners and Managers, who can act on them. No provider codes, record ids or diagnostics.
+ */
+export const issues = managerQuery({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const open = await ctx.db
+      .query("incidents")
+      .withIndex("by_company_resolved", (q) => q.eq("companyId", ctx.companyId).eq("resolvedAt", 0))
+      .order("desc")
+      .take(50);
+    const recent = await ctx.db
+      .query("incidents")
+      .withIndex("by_company_resolved", (q) => q.eq("companyId", ctx.companyId).gt("resolvedAt", now - RECOVERED_SHOWN_FOR))
+      .order("desc")
+      .take(20);
+    const shape = async (incident: Doc<"incidents">) => {
+      const card = ownerCard(incident);
+      if (!card) return null;
+      const updates = await ctx.db
+        .query("incidentUpdates")
+        .withIndex("by_incident_at", (q) => q.eq("incidentId", incident._id))
+        .order("desc")
+        .take(20);
+      return {
+        id: incident._id,
+        reference: incidentReference(incident._id),
+        ...card,
+        since: incident.firstSeenAt,
+        checkedAt: incident.lastCheckedAt,
+        resolvedAt: incident.resolvedAt || null,
+        supportAsked: Boolean(incident.notified?.support),
+        updates: updates.flatMap((update) => {
+          const words = ownerUpdate(update);
+          return words ? [{ at: update.at, words }] : [];
+        }).slice(0, 8),
+      };
+    };
+    const openCards = (await Promise.all(open.map(shape))).filter((row) => row !== null);
+    const fixed = (await Promise.all(recent.map(shape))).filter((row) => row !== null);
+    // What needs the company first, then what Selestial is handling.
+    openCards.sort((a, b) => (a.tone === b.tone ? b.since - a.since : a.tone === "action" ? -1 : 1));
+    return { open: openCards, fixed };
+  },
+});
+
+/**
+ * "Contact support" on a card: tells Selestial staff, notes it on the incident, and hands back what the
+ * company's message should say, so nobody has to describe what Selestial already knows. The handoff has
+ * the reference, the affected work, the times and what was tried. Never secrets or message content.
+ */
+export const contactSupport = managerMutation({
+  args: { incidentId: v.id("incidents") },
+  handler: async (ctx, args) => {
+    const incident = await ctx.db.get(args.incidentId);
+    if (!incident || incident.companyId !== ctx.companyId) notFound();
+    const card = ownerCard(incident);
+    if (!card) notFound();
+    const now = Date.now();
+    const reference = incidentReference(incident._id);
+    if (!incident.notified?.support || now - incident.notified.support > DAY) {
+      await ctx.db.insert("incidentUpdates", { incidentId: incident._id, kind: "note", words: `${ctx.member.name} at the company asked Selestial support for help.`, by: "system", at: now });
+      await queueStaffAlert(ctx, incident._id, "owner_asked", now);
+      await ctx.db.patch(incident._id, { notified: { ...(incident.notified ?? {}), support: now } });
+    }
+    const when = (at: number) => new Intl.DateTimeFormat("en-US", { timeZone: ctx.company.timezone, dateStyle: "medium", timeStyle: "short" }).format(new Date(at));
+    const lines = [
+      `Reference: ${reference}`,
+      `Company: ${ctx.company.name}`,
+      `Problem: ${card.title}`,
+      `Affected: ${card.affected}`,
+      `First noticed: ${when(incident.firstSeenAt)}`,
+      `Last checked: ${when(incident.lastCheckedAt)}`,
+      `Status: ${incident.resolvedAt ? "Fixed" : stateWords(incident.state)}`,
+      `What Selestial has done: ${card.done}`,
+    ];
+    return { reference, subject: `Help with ${reference}: ${card.title}`, body: `${lines.join("\n")}\n\n(Add anything else you'd like us to know here.)` };
+  },
+});

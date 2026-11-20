@@ -389,6 +389,7 @@ function IncidentDetail({ id }: { id: Id<"incidents"> }) {
             <Fact label="Last checked">{time(incident.lastCheckedAt)}</Fact>
           </div>
           {incident.assignedName ? <Fact label="Assigned to">{incident.assignedName}</Fact> : null}
+          <Fact label="Told">{incident.told.length ? incident.told.join(" · ") : "Nobody yet"}</Fact>
           {!open ? (
             <Fact label="Resolved">
               {time(incident.resolvedAt!)} by {incident.resolvedBy}. {incident.evidence}

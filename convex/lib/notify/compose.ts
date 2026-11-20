@@ -401,6 +401,24 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
       return activation(ctx, company, "first", notice.ref, c);
     case "activation_summary":
       return activation(ctx, company, "summary", notice.ref, c);
+    case "service_attention": {
+      // Written from the incident as it is now: one that is already fixed sends nothing.
+      const id = notice.ref ? ctx.db.normalizeId("incidents", notice.ref) : null;
+      const incident = id ? await ctx.db.get(id) : null;
+      if (!incident || incident.companyId !== company._id || incident.resolvedAt !== 0) return { problem: "The problem was already fixed, so the email wasn't sent." };
+      return alertEmail({
+        ...c,
+        eyebrow: "Needs your attention",
+        subject: str(facts, "title") ?? "Something in Selestial needs your attention",
+        heading: str(facts, "title") ?? "Something needs your attention",
+        body: str(facts, "affected") ?? "",
+        tone: "warning",
+        note: str(facts, "done"),
+        button: { label: str(facts, "actionLabel") ?? "Open Selestial", path: str(facts, "actionPath") ?? "/app" },
+        essential: true,
+        because: "Selestial tells the Owner when something stops working and needs them, once per problem.",
+      });
+    }
     case "support_summary":
       return alertEmail({
         ...c,

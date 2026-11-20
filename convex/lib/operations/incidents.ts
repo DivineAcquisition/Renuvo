@@ -13,6 +13,7 @@ import type { Doc, Id } from "../../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../../_generated/server";
 import { KIND_LABELS, MAX_RELATED, OUTAGE_COMPANIES, OUTAGE_STARTED_WITHIN_MS, OUTAGE_WINDOW_MS, REOPEN_WITHIN_MS, severityRank, type Check, type Kind, type OpenState, type Severity } from "./catalog";
 import type { Detector, Finding, Related } from "./detectors";
+import { afterIncidentChange } from "./notify";
 
 /** The more a state needs a person, the higher it ranks; a group of records takes its worst. */
 const STATE_RANK: Record<OpenState, number> = { needs_staff: 4, waiting_owner: 3, waiting_provider: 2, recovering: 1, investigating: 0 };
@@ -62,8 +63,8 @@ export function summarize(findings: Finding[]): Summary {
   };
 }
 
-async function note(ctx: MutationCtx, incidentId: Id<"incidents">, kind: Doc<"incidentUpdates">["kind"], words: string, by: Doc<"incidentUpdates">["by"] = "system") {
-  await ctx.db.insert("incidentUpdates", { incidentId, kind, words: words.slice(0, 1000), by, at: Date.now() });
+async function note(ctx: MutationCtx, incidentId: Id<"incidents">, kind: Doc<"incidentUpdates">["kind"], words: string, by: Doc<"incidentUpdates">["by"] = "system", state?: Doc<"incidents">["state"]) {
+  await ctx.db.insert("incidentUpdates", { incidentId, kind, words: words.slice(0, 1000), by, at: Date.now(), ...(state ? { state } : {}) });
 }
 
 export async function openByKey(ctx: QueryCtx, key: string): Promise<Doc<"incidents"> | null> {
@@ -78,10 +79,11 @@ export async function upsertIncident(ctx: MutationCtx, check: Check, key: string
   const next = summarize(findings);
   const open = await openByKey(ctx, key);
   if (open) {
-    if (open.state !== next.state) await note(ctx, open._id, "state", `${stateWords(open.state as OpenState)} → ${stateWords(next.state as OpenState)}. ${next.nextAction}`);
+    if (open.state !== next.state) await note(ctx, open._id, "state", `${stateWords(open.state as OpenState)} → ${stateWords(next.state as OpenState)}. ${next.nextAction}`, "system", next.state);
     if (open.severity !== next.severity) await note(ctx, open._id, "severity", `Severity ${open.severity} → ${next.severity}.`);
     if (next.recoveryAttempts > open.recoveryAttempts) await note(ctx, open._id, "recovery", `Automatic recovery tried again: ${next.recoveryAttempts} ${next.recoveryAttempts === 1 ? "attempt" : "attempts"} so far.`);
     await ctx.db.patch(open._id, { ...next, firstSeenAt: Math.min(open.firstSeenAt, next.firstSeenAt), lastSeenAt: now, lastCheckedAt: now, updatedAt: now });
+    await afterIncidentChange(ctx, open, open._id, now);
     return open._id;
   }
   const recent = await ctx.db
@@ -90,18 +92,22 @@ export async function upsertIncident(ctx: MutationCtx, check: Check, key: string
     .order("desc")
     .first();
   if (recent) {
-    await ctx.db.patch(recent._id, { ...next, firstSeenAt: Math.min(recent.firstSeenAt, next.firstSeenAt), lastSeenAt: now, lastCheckedAt: now, resolvedAt: 0, resolvedBy: undefined, resolution: undefined, evidence: undefined, updatedAt: now });
-    await note(ctx, recent._id, "reopened", `Found again after it was resolved. ${next.impact}`);
+    // A new open period: who was told last time is forgotten, so this time is told once again.
+    await ctx.db.patch(recent._id, { ...next, firstSeenAt: Math.min(recent.firstSeenAt, next.firstSeenAt), lastSeenAt: now, lastCheckedAt: now, openedAt: now, notified: undefined, resolvedAt: 0, resolvedBy: undefined, resolution: undefined, evidence: undefined, updatedAt: now });
+    await note(ctx, recent._id, "reopened", `Found again after it was resolved. ${next.impact}`, "system", next.state);
+    await afterIncidentChange(ctx, null, recent._id, now);
     return recent._id;
   }
-  const id = await ctx.db.insert("incidents", { key, check, ...next, lastSeenAt: now, lastCheckedAt: now, resolvedAt: 0, updatedAt: now });
-  await note(ctx, id, "opened", `${KIND_LABELS[next.kind]}. ${next.impact}`);
+  const id = await ctx.db.insert("incidents", { key, check, ...next, lastSeenAt: now, lastCheckedAt: now, openedAt: now, resolvedAt: 0, updatedAt: now });
+  await note(ctx, id, "opened", `${KIND_LABELS[next.kind]}. ${next.impact}`, "system", next.state);
+  await afterIncidentChange(ctx, null, id, now);
   return id;
 }
 
 export async function resolveIncident(ctx: MutationCtx, incident: Doc<"incidents">, how: { by: "system" | Id<"staff">; resolution: string; evidence: string }, now: number) {
   await ctx.db.patch(incident._id, { state: "resolved", resolvedAt: now, resolvedBy: how.by, resolution: how.resolution, evidence: how.evidence, updatedAt: now });
-  await note(ctx, incident._id, "resolved", `${how.resolution} ${how.evidence}`, how.by);
+  await note(ctx, incident._id, "resolved", `${how.resolution} ${how.evidence}`, how.by, "resolved");
+  await afterIncidentChange(ctx, incident, incident._id, now);
 }
 
 /** Looks at every record an incident names again. The findings still there, or none. */
