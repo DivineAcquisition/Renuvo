@@ -71,7 +71,13 @@ Owner notices are already free of the messaging balance: `member_notice` is in t
   `messagingFunds` balance adjustments and `compliance.setSuspended`) still check only that the caller is
   staff. Phase 4 gates them with `billing.adjust` and an emergency-suspension capability.
 
+## What Phase 3 adds
+
+Owner recovery cards on Home and beside the affected work, notices to the company (in the app, and one
+email per problem when the Owner must act or an interruption is critical), grouped staff alert email, and
+a Contact support handoff ([04-owner-recovery.md](04-owner-recovery.md)).
+
 ## Not yet built
 
-Owner recovery cards and alerts, including staff email (Phase 3); pause, takeover, suspension and
+Pause, takeover, suspension and
 safe-retry controls, preview isolation, and the backup runbook (Phase 4). Nothing has been deployed.

@@ -50,6 +50,23 @@ export const operationsTables = {
     lastSeenAt: v.number(),
     /** When its check last confirmed the condition was still there. */
     lastCheckedAt: v.number(),
+    /** When this open period began: set on opening and on reopening, so notices are once per period. */
+    openedAt: v.optional(v.number()),
+    /**
+     * Who has been told during this open period (convex/lib/operations/notify.ts), so nobody is told twice:
+     * the owner that they must act, that work is interrupted, that Selestial's team took over, whether an
+     * email went, and whether staff were alerted. Cleared when it reopens.
+     */
+    notified: v.optional(
+      v.object({
+        action: v.optional(v.number()),
+        interruption: v.optional(v.number()),
+        escalated: v.optional(v.number()),
+        emailed: v.optional(v.number()),
+        staff: v.optional(v.number()),
+        support: v.optional(v.number()),
+      }),
+    ),
     assignedTo: v.optional(v.id("staff")),
     /** 0 while open; when it was resolved. */
     resolvedAt: v.number(),
@@ -80,9 +97,23 @@ export const operationsTables = {
       v.literal("resolved"),
     ),
     words: v.string(),
+    /** The state it moved to, for opened, reopened, state and resolved: what the owner's timeline is written from. */
+    state: v.optional(stateValidator),
     by: v.union(v.literal("system"), v.id("staff")),
     at: v.number(),
   }).index("by_incident_at", ["incidentId", "at"]),
+
+  /**
+   * Alerts waiting to go to Selestial staff, grouped into one message per person each time the sender runs
+   * (convex/lib/operations/alerts.ts). One per incident and reason per open period.
+   */
+  staffAlerts: defineTable({
+    incidentId: v.id("incidents"),
+    reason: v.union(v.literal("critical"), v.literal("needs_staff"), v.literal("recovery_exhausted"), v.literal("owner_asked")),
+    at: v.number(),
+    /** 0 while waiting; when it went out. */
+    sentAt: v.number(),
+  }).index("by_sent_at", ["sentAt", "at"]),
 
   monitorChecks: defineTable({
     check: checkValidator,
