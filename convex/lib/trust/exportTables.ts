@@ -87,6 +87,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "activationTasks", index: "by_company_state" },
   { table: "memberNotices", index: "by_company_dedupe" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
+  // Admin Support Sessions: when Selestial was in the workspace, why, and what it changed.
+  { table: "supportSessions", index: "by_company_started" },
+  { table: "supportGrants", index: "by_company_granted" },
+  { table: "supportEvents", index: "by_company_at" },
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
   { table: "chatActionSteps", index: "by_company_key" },
   { table: "chatArtifacts", index: "by_company_creator_updated" },
@@ -241,6 +245,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   migrationFiles: "Each uploaded export's name, columns and mapping; the rows it contained are what was imported, exported as clients, properties, plans and visits.",
   migrationRows: "Working copies of the rows of uploaded files while they were reviewed; what was imported is exported as clients, properties, plans and visits, and each one's source is in migrationLinks.",
   migrationRuns: "Progress records of background imports; their totals are in the migration and each record's result in migrationLinks.",
+  incidents: "Selestial's own operational records about the service (what broke, what recovery ran). What happened to the company's records is exported in those records and the event log.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 

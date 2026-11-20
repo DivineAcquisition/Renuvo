@@ -50,7 +50,9 @@ export const connectorTables = {
     connectedAt: v.number(),
     lastReadAt: v.optional(v.number()),
     disconnectedAt: v.optional(v.number()),
-  }).index("by_company_system", ["companyId", "system"]),
+  })
+    .index("by_company_system", ["companyId", "system"])
+    .index("by_status", ["status"]),
 
   /** The sealed credential for one connection, bound to its id. Never sent to a browser and never exported. */
   connectorCredentials: defineTable({

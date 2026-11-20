@@ -26,7 +26,7 @@ const RECORD_TOKEN = "convex";
  * session token can also be accepted by the record, but it has no email in it, and invitations and
  * company setup depend on a confirmed email. So the plain token is never used.
  */
-function useRecordAuth() {
+export function useRecordAuth() {
   const { isLoaded, isSignedIn, getToken, sessionId } = useAuth();
   // The service hands back a new function on every render. Keeping the newest one in a ref lets the
   // record's connection stay the same connection instead of signing in again each time.

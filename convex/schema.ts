@@ -30,6 +30,8 @@ import { salesSettingsValidator } from "./lib/sales/agentSchema";
 import { salesTables } from "./lib/sales/schema";
 import { setupTables } from "./lib/setup/schema";
 import { activationTables } from "./lib/activation/schema";
+import { operationsTables } from "./lib/operations/schema";
+import { supportTables } from "./lib/support/schema";
 import { connectorTables } from "./lib/connectors/schema";
 import { migrationMarkValidator, migrationTables } from "./lib/migration/schema";
 import { retentionSettingsValidator, retentionTables } from "./lib/retention/schema";
@@ -1012,6 +1014,10 @@ export default defineSchema({
   ...activationTables,
   // ── Retention: signals, cases, actions, feedback and customer links (convex/lib/retention/schema.ts) ─
   ...retentionTables,
+  // ── Operations: incidents, their history, and when each monitoring check last ran (convex/lib/operations) ─
+  ...operationsTables,
+  // ── Admin Support Sessions: staff inside a company, for a reason and a time (convex/lib/support) ─────
+  ...supportTables,
 
   // ── Events: append-only ────────────────────────────────────────────────────────────────────────
   events: defineTable({

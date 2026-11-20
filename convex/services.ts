@@ -294,6 +294,7 @@ const originValidator = v.union(v.literal("manual"), v.literal("template"), v.li
 
 /** Starts a new service as a draft: blank, from a template, from an imported row, or from research. Nothing is live. */
 export const startDraft = managerMutation({
+  support: { capability: "records.edit", summary: "started a service draft for you to review" },
   args: { category: categoryValidator, spec: v.optional(specValidator), origin: originValidator, templateId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     return createDraft(ctx, { category: args.category, spec: args.spec, origin: args.origin, templateId: args.templateId, via: "workspace", actor: byMember(ctx) });
@@ -321,6 +322,7 @@ export const editLive = managerMutation({
  * that changes the draft returns any change already submitted from it: that review was for older content.
  */
 export const saveDraft = managerMutation({
+  support: { capability: "records.edit", summary: "edited a service draft for you to review" },
   args: { serviceId: v.id("services"), expectedRevision: v.number(), spec: specValidator, step: v.string() },
   handler: async (ctx, args) => {
     const service = await ownedService(ctx, ctx.companyId, args.serviceId);
@@ -407,6 +409,7 @@ const noticeValidator = v.object({ required: v.boolean(), note: v.string() });
  * illustrative amounts or requirements) stop it here.
  */
 export const submit = managerMutation({
+  support: { capability: "records.edit", summary: "sent a service change to you for approval" },
   args: { serviceId: v.id("services"), expectedRevision: v.number(), reason: v.string(), customerNotice: noticeValidator, contractReview: noticeValidator, effectiveAt: v.optional(v.number()), evidence: v.optional(v.array(evidenceValidator)) },
   handler: async (ctx, args) => submitDraft(ctx, { ...args, actor: byMember(ctx) }),
 });

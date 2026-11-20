@@ -356,7 +356,9 @@ export const recruiterTables = {
     createdAt: v.number(),
   })
     .index("by_company", ["companyId"])
-    .index("by_address", ["address"]),
+    .index("by_address", ["address"])
+    // Operations checks (convex/lib/operations/detectors.ts) find expired and failing inboxes by status.
+    .index("by_status", ["status"]),
 
   /**
    * A mailbox's refresh token, encrypted (lib/recruiter/secrets.ts) and bound to its connection. No query

@@ -216,6 +216,7 @@ export const disconnectMailbox = ownerMutation({
 /** Reads the inbox now instead of at the next scheduled run. */
 export const readInboxNow = managerMutation({
   args: { connectionId: v.id("mailboxConnections") },
+  support: { capability: "agents.recover", summary: "read the hiring inbox again" },
   handler: async (ctx, args) => {
     const connection = await owned(ctx, args.connectionId);
     if (connection.status === "disconnected") throw userError("That inbox is disconnected.");

@@ -525,6 +525,7 @@ export const cancel = ownerMutation({
 /** Tries a failed or blocked task again. A task that already finished is not run twice. */
 export const retry = ownerMutation({
   args: { taskId: v.id("activationTasks") },
+  support: { capability: "agents.recover", summary: "tried failed first agent work again" },
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task || task.companyId !== ctx.companyId) notFound();
@@ -532,7 +533,7 @@ export const retry = ownerMutation({
     if (!activation || activation.status === "canceled") throw userError("This work was canceled. Start your agents again from Home.");
     if (task.state !== "failed" && !BLOCKED_STATES.includes(task.state)) throw userError(task.state === "working" || task.state === "queued" ? "It's already going." : "This task already finished. Its results are kept.");
     const now = Date.now();
-    await ctx.db.patch(task._id, { state: "queued", attempts: 0, blocker: undefined, nextRunAt: now, finishedAt: undefined, statusLine: "Queued again at your request.", steps: [...task.steps, { at: now, words: "You asked to try it again.", kind: "info" as const }].slice(-40), updatedAt: now });
+    await ctx.db.patch(task._id, { state: "queued", attempts: 0, blocker: undefined, nextRunAt: now, finishedAt: undefined, statusLine: ctx.support ? "Queued again by Selestial Support." : "Queued again at your request.", steps: [...task.steps, { at: now, words: ctx.support ? "Selestial Support tried it again." : "You asked to try it again.", kind: "info" as const }].slice(-40), updatedAt: now });
     if (activation.status !== "running") await ctx.db.patch(activation._id, { status: "running", finishedAt: undefined, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.activation.tick, { activationId: activation._id });
     return null;

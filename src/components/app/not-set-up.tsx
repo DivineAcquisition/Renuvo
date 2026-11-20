@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
 
 /** An honest screen for a piece that is not connected yet. It names the piece and never shows made-up data. */
-export function NotSetUp({ title, body, items }: { title: string; body: string; items?: string[] }) {
+export function NotSetUp({ title, body, items, action }: { title: string; body: string; items?: string[]; action?: { label: string; href: string } }) {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 sm:p-8">
@@ -21,8 +21,8 @@ export function NotSetUp({ title, body, items }: { title: string; body: string; 
             ))}
           </ul>
         ) : null}
-        <Link href="/" className="mt-6 inline-block text-sm font-medium text-brand-300 underline-offset-4 hover:underline">
-          Back to selestial.io
+        <Link href={action?.href ?? "/"} className="mt-6 inline-block text-sm font-medium text-brand-300 underline-offset-4 hover:underline">
+          {action?.label ?? "Back to selestial.io"}
         </Link>
       </div>
     </main>
