@@ -204,3 +204,8 @@ export async function dispatchJob(
     ...(fields.priceCents === null ? {} : { priceCents: fields.priceCents ?? PRICE }),
   });
 }
+
+/** A Selestial staff admin holding these granted capabilities (convex/lib/support/catalog.ts), as an admin would grant them. */
+export async function staffWith(t: T, identity: { subject: string; email: string; name: string }, capabilities: ("billing.adjust" | "communications.send" | "records.destroy" | "outbound.suspend")[]) {
+  await t.run((ctx) => ctx.db.insert("staff", { userId: identity.subject, email: identity.email.toLowerCase(), name: identity.name, role: "admin", status: "active", addedAt: Date.now(), addedBy: "console", capabilities }));
+}

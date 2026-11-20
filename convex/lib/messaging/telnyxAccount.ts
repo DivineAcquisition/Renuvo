@@ -9,6 +9,8 @@
  * is declared on these endpoints, so a call whose outcome is unknown is never simply repeated: the caller
  * looks for what it may have created first (by customer reference, campaign reference or brand name).
  */
+import { isNonProduction } from "../environment";
+
 const API = "https://api.telnyx.com/v2";
 
 type Fetcher = typeof fetch;
@@ -17,6 +19,8 @@ export type Answer<T> = { ok: true; value: T } | { ok: false; problem: string; r
 async function call<T>(fetcher: Fetcher, method: "GET" | "POST" | "PUT", path: string, body: unknown, read: (json: unknown) => T | null): Promise<Answer<T>> {
   const key = process.env.TELNYX_API_KEY?.trim();
   if (!key) return { ok: false, problem: "Telnyx's API key is not set on the deployment.", retryable: false };
+  // A backend that is not production never buys a number or files a registration (convex/lib/environment.ts).
+  if (method !== "GET" && isNonProduction()) return { ok: false, problem: "Not done: this is not the production backend, so nothing is bought or filed with Telnyx.", retryable: false };
   let response: Response;
   try {
     response = await fetcher(`${API}${path}`, {

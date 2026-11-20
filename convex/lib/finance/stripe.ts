@@ -20,6 +20,8 @@
  * the Connect webhook pointed at https://<deployment>.convex.site/webhooks/stripe). Unset: card
  * payments are unavailable and Finance says so; recording payments by hand keeps working.
  */
+import { isNonProduction } from "../environment";
+
 const BASE = "https://api.stripe.com";
 const TIMEOUT_MS = 15_000;
 
@@ -30,6 +32,8 @@ export function stripeConfig(): StripeConfig | null {
   const test = /^(sk|rk)_test_/.test(secretKey);
   const live = /^(sk|rk)_live_/.test(secretKey);
   if (!test && !live) return null;
+  // A backend that is not production never uses a live key, so nothing it does can charge a real card.
+  if (live && isNonProduction()) return null;
   const publishable = process.env.STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
   const pkOk = live ? publishable.startsWith("pk_live_") : publishable.startsWith("pk_test_");
   return { secretKey, publishableKey: pkOk ? publishable : null, livemode: live };

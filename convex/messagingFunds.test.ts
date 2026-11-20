@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dispatchTestEnv, flush, setup } from "../tests/dispatchHarness";
-import { addMember, HOUR, NOW, refusal, type T } from "../tests/harness";
+import { addMember, HOUR, NOW, refusal, type T, staffWith } from "../tests/harness";
 import { billing } from "../tests/setupBilling";
 import { api, internal } from "./_generated/api";
 import type { Actor } from "./lib/events";
@@ -190,6 +190,9 @@ describe("Messaging funds", () => {
     const s = await billed(0);
     process.env.STAFF_BOOTSTRAP_EMAIL = STAFF.email;
     const staff = s.t.withIdentity(STAFF);
+    // Billing adjustments are granted to a person: being staff, even an admin, is not enough.
+    expect(await refusal(staff.mutation(api.messagingFunds.supportCredit, { companyId: s.companyId, cents: 500, reason: "Goodwill after a carrier outage", key: "k0" }))).toBe("Not allowed.");
+    await staffWith(s.t, STAFF, ["billing.adjust"]);
     expect(await refusal(staff.mutation(api.messagingFunds.supportCredit, { companyId: s.companyId, cents: 500, reason: "x", key: "k1" }))).toMatch(/Say why/);
     const first = await staff.mutation(api.messagingFunds.supportCredit, { companyId: s.companyId, cents: 500, reason: "Goodwill after a carrier outage", key: "k1" });
     const again = await staff.mutation(api.messagingFunds.supportCredit, { companyId: s.companyId, cents: 500, reason: "Goodwill after a carrier outage", key: "k1" });

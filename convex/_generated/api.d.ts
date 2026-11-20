@@ -42,10 +42,6 @@ import type * as clientBilling from "../clientBilling.js";
 import type * as clientConversations from "../clientConversations.js";
 import type * as clientDocuments from "../clientDocuments.js";
 import type * as clientImports from "../clientImports.js";
-import type * as lib_tutorials_catalog from "../lib/tutorials/catalog.js";
-import type * as lib_migration_records from "../lib/migration/records.js";
-import type * as tutorials from "../tutorials.js";
-import type * as migrationImports from "../migrationImports.js";
 import type * as clientProperties from "../clientProperties.js";
 import type * as clientSales from "../clientSales.js";
 import type * as clients from "../clients.js";
@@ -243,6 +239,7 @@ import type * as lib_email_templates_gallery from "../lib/email/templates/galler
 import type * as lib_email_templates_platform from "../lib/email/templates/platform.js";
 import type * as lib_email_templates_shared from "../lib/email/templates/shared.js";
 import type * as lib_email_trustRequest from "../lib/email/trustRequest.js";
+import type * as lib_environment from "../lib/environment.js";
 import type * as lib_errors from "../lib/errors.js";
 import type * as lib_eventWords from "../lib/eventWords.js";
 import type * as lib_events from "../lib/events.js";
@@ -305,6 +302,7 @@ import type * as lib_messagingBilling_rates from "../lib/messagingBilling/rates.
 import type * as lib_messagingBilling_routes from "../lib/messagingBilling/routes.js";
 import type * as lib_messagingBilling_segments from "../lib/messagingBilling/segments.js";
 import type * as lib_messagingBilling_wording from "../lib/messagingBilling/wording.js";
+import type * as lib_migration_records from "../lib/migration/records.js";
 import type * as lib_notify_catalog from "../lib/notify/catalog.js";
 import type * as lib_notify_compose from "../lib/notify/compose.js";
 import type * as lib_notify_delivery from "../lib/notify/delivery.js";
@@ -448,6 +446,7 @@ import type * as lib_trust_exportTables from "../lib/trust/exportTables.js";
 import type * as lib_trust_requests from "../lib/trust/requests.js";
 import type * as lib_trust_seed from "../lib/trust/seed.js";
 import type * as lib_trust_staffSchema from "../lib/trust/staffSchema.js";
+import type * as lib_tutorials_catalog from "../lib/tutorials/catalog.js";
 import type * as links from "../links.js";
 import type * as media from "../media.js";
 import type * as members from "../members.js";
@@ -456,6 +455,7 @@ import type * as messagingBilling from "../messagingBilling.js";
 import type * as messagingFunds from "../messagingFunds.js";
 import type * as messagingNotices from "../messagingNotices.js";
 import type * as messagingUsage from "../messagingUsage.js";
+import type * as migrationImports from "../migrationImports.js";
 import type * as notifications from "../notifications.js";
 import type * as onboarding from "../onboarding.js";
 import type * as operations from "../operations.js";
@@ -478,6 +478,7 @@ import type * as recruiterMailbox from "../recruiterMailbox.js";
 import type * as recruiterTools from "../recruiterTools.js";
 import type * as requests from "../requests.js";
 import type * as requirements from "../requirements.js";
+import type * as restoration from "../restoration.js";
 import type * as retention from "../retention.js";
 import type * as retentionAgent from "../retentionAgent.js";
 import type * as retentionCare from "../retentionCare.js";
@@ -511,6 +512,7 @@ import type * as texting from "../texting.js";
 import type * as textingPublic from "../textingPublic.js";
 import type * as textingSetup from "../textingSetup.js";
 import type * as trust from "../trust.js";
+import type * as tutorials from "../tutorials.js";
 import type * as workforce from "../workforce.js";
 
 import type {
@@ -554,10 +556,6 @@ declare const fullApi: ApiFromModules<{
   clientConversations: typeof clientConversations;
   clientDocuments: typeof clientDocuments;
   clientImports: typeof clientImports;
-  "lib/tutorials/catalog": typeof lib_tutorials_catalog;
-  "lib/migration/records": typeof lib_migration_records;
-  tutorials: typeof tutorials;
-  migrationImports: typeof migrationImports;
   clientProperties: typeof clientProperties;
   clientSales: typeof clientSales;
   clients: typeof clients;
@@ -755,6 +753,7 @@ declare const fullApi: ApiFromModules<{
   "lib/email/templates/platform": typeof lib_email_templates_platform;
   "lib/email/templates/shared": typeof lib_email_templates_shared;
   "lib/email/trustRequest": typeof lib_email_trustRequest;
+  "lib/environment": typeof lib_environment;
   "lib/errors": typeof lib_errors;
   "lib/eventWords": typeof lib_eventWords;
   "lib/events": typeof lib_events;
@@ -817,6 +816,7 @@ declare const fullApi: ApiFromModules<{
   "lib/messagingBilling/routes": typeof lib_messagingBilling_routes;
   "lib/messagingBilling/segments": typeof lib_messagingBilling_segments;
   "lib/messagingBilling/wording": typeof lib_messagingBilling_wording;
+  "lib/migration/records": typeof lib_migration_records;
   "lib/notify/catalog": typeof lib_notify_catalog;
   "lib/notify/compose": typeof lib_notify_compose;
   "lib/notify/delivery": typeof lib_notify_delivery;
@@ -960,6 +960,7 @@ declare const fullApi: ApiFromModules<{
   "lib/trust/requests": typeof lib_trust_requests;
   "lib/trust/seed": typeof lib_trust_seed;
   "lib/trust/staffSchema": typeof lib_trust_staffSchema;
+  "lib/tutorials/catalog": typeof lib_tutorials_catalog;
   links: typeof links;
   media: typeof media;
   members: typeof members;
@@ -968,6 +969,7 @@ declare const fullApi: ApiFromModules<{
   messagingFunds: typeof messagingFunds;
   messagingNotices: typeof messagingNotices;
   messagingUsage: typeof messagingUsage;
+  migrationImports: typeof migrationImports;
   notifications: typeof notifications;
   onboarding: typeof onboarding;
   operations: typeof operations;
@@ -990,6 +992,7 @@ declare const fullApi: ApiFromModules<{
   recruiterTools: typeof recruiterTools;
   requests: typeof requests;
   requirements: typeof requirements;
+  restoration: typeof restoration;
   retention: typeof retention;
   retentionAgent: typeof retentionAgent;
   retentionCare: typeof retentionCare;
@@ -1023,6 +1026,7 @@ declare const fullApi: ApiFromModules<{
   textingPublic: typeof textingPublic;
   textingSetup: typeof textingSetup;
   trust: typeof trust;
+  tutorials: typeof tutorials;
   workforce: typeof workforce;
 }>;
 

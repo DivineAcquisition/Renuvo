@@ -312,7 +312,7 @@ describe("Messaging consent and the sending policy", () => {
     const profile = await s.as.query(api.compliance.profile, { companyId: s.companyId });
     expect(profile.suspendedAt).toBeGreaterThanOrEqual(NOW);
     expect(profile.readiness.operations.find((row) => row.key === "sms")).toMatchObject({ state: "blocked", label: "Texting is suspended" });
-    await s.t.withIdentity(STAFF).mutation(api.compliance.setSuspended, { companyId: s.companyId, suspended: false, note: "Resolved." });
+    await s.t.withIdentity(STAFF).mutation(api.compliance.setSuspended, { companyId: s.companyId, suspended: false, note: "Resolved with the carrier." });
     expect(await check(s)).toEqual({ ok: true });
     expect(mockOutbox).toEqual([]);
   });

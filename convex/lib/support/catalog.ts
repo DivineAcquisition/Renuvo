@@ -21,6 +21,8 @@ export const CAPABILITIES = [
   "billing.adjust",
   /** Deleting or cancelling things that cannot be brought back. None is opened to support sessions yet. */
   "records.destroy",
+  /** Emergency suspension: stop every outbound message for a company until it is lifted. */
+  "outbound.suspend",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 export const capabilityValidator = literals(CAPABILITIES);
@@ -32,11 +34,12 @@ export const CAPABILITY_LABELS: Record<Capability, { label: string; detail: stri
   "communications.send": { label: "Communication actions", detail: "Anything that reaches a customer, cleaner or applicant. Granted per person.", sensitive: true },
   "billing.adjust": { label: "Billing adjustments", detail: "Credits, balances, refunds and plans. Granted per person.", sensitive: true },
   "records.destroy": { label: "Destructive actions", detail: "Deleting or cancelling what cannot be restored. Granted per person.", sensitive: true },
+  "outbound.suspend": { label: "Emergency suspension", detail: "Stop every outbound message for a company until it is lifted. Admins have it; granted to others per person.", sensitive: true },
 };
 
 /** What each staff role holds without a grant. Reviewers work the request queues and open no workspace. */
 export const ROLE_CAPABILITIES: Record<"admin" | "support" | "reviewer", readonly Capability[]> = {
-  admin: ["workspace.view", "records.edit", "agents.recover"],
+  admin: ["workspace.view", "records.edit", "agents.recover", "outbound.suspend"],
   support: ["workspace.view", "records.edit", "agents.recover"],
   reviewer: [],
 };
