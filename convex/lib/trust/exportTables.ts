@@ -252,6 +252,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   migrationFiles: "Each uploaded export's name, columns and mapping; the rows it contained are what was imported, exported as clients, properties, plans and visits.",
   migrationRows: "Working copies of the rows of uploaded files while they were reviewed; what was imported is exported as clients, properties, plans and visits, and each one's source is in migrationLinks.",
   migrationRuns: "Progress records of background imports; their totals are in the migration and each record's result in migrationLinks.",
+  lockdownCompanies: "A restore's record of each company's sending and agent settings before Selestial paused them; the settings themselves are on the company, which is exported.",
   incidents: "Selestial's own operational records about the service (what broke, what recovery ran). What happened to the company's records is exported in those records and the event log.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };

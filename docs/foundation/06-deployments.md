@@ -42,6 +42,40 @@ backend has to be deployed by hand from `main`.
 5. Merge anything to `main` and check the production build log for "Production build: deploying the Convex
    backend". From then on, nobody deploys the live backend by hand.
 
+## Isolation: what a backend that is not production can do
+
+Production is decided by the deployment's own name (`convex/lib/environment.ts`, `PRODUCTION_DEPLOYMENTS`).
+Every other deployment (the test backend, a restored copy, anyone's own) is not production without
+any setting, and:
+
+- sends email (Resend), texts (Telnyx) and mailbox mail (Gmail) only to the addresses in its
+  `TEST_RECIPIENTS` setting (comma-separated emails and phone numbers); everything else is refused before it
+  reaches the provider;
+- refuses every Telnyx call that buys or files anything (numbers, brands, campaigns); lookups still work;
+- ignores live Stripe (`sk_live_`/`rk_live_`) and Autumn (`am_sk_live_`) keys, so card payments and
+  billing are simply unavailable with them: nothing it does can charge a real card.
+
+**Previews never touch the live record.** `scripts/build.mjs` builds a preview whose `NEXT_PUBLIC_CONVEX_URL`
+is the live backend with no backend at all (signed-in and link pages then say Selestial isn't available).
+Previews today also have no sign-in key (`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is Production only), so no one
+can sign in on one.
+
+### Still to do in the dashboards (not verified as done)
+
+1. **The test backend.** Step 1 below has not been done, or its key never reached Claude's environment:
+   on November 20, 2026 the `CONVEX_DEPLOY_KEY` in Claude's environment "Selestial" was the **live**
+   deployment's (`dev:terrific-avocet-835`). Create the test deployment, give it test provider keys and
+   `TEST_RECIPIENTS`, and replace the key in Claude's environment with the test deployment's (step 3).
+   Until then a session could deploy the live backend by hand; none has since the split.
+2. **Working previews.** In Vercel › selestial-ai › Environment Variables, give **Preview** its own
+   `NEXT_PUBLIC_CONVEX_URL` (the test backend's address) and a development Clerk publishable key. Today the
+   one value is shared by Production and Preview, so previews are built without a backend.
+3. **Production credentials, Production only.** `CONVEX_DEPLOY_KEY` and `CONVEX_PROD_DEPLOY_KEY` are
+   Production only (good). Several provider keys in Vercel (`TELNYX_API_KEY`, `STRIPE_SECRET_KEY`,
+   `CLAUDE_API_KEY`, `GOOGLE_PRIVATE_KEY`, others) are set for **Production and Preview**. The site itself
+   does not use most of them (the backend holds its own), but they should be Production only, or test keys
+   for Preview.
+
 ## Notes
 
 - Pull request previews use the live backend's address for reading (`NEXT_PUBLIC_CONVEX_URL`), so a preview

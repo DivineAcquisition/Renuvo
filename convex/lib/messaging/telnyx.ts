@@ -10,6 +10,7 @@
  * here whatever the number's messaging profile points at. Texts coming IN go to the profile's webhook,
  * so the company's number needs a profile whose webhook is https://<deployment>.convex.site/webhooks/telnyx.
  */
+import { sendBlocked } from "../environment";
 import type { MessagingProvider, SendInput, SendResult } from "./provider";
 
 const API = "https://api.telnyx.com/v2/messages";
@@ -44,6 +45,9 @@ export function telnyxProvider(fetcher: typeof fetch = fetch): MessagingProvider
   return {
     name: "telnyx",
     async send(input: SendInput): Promise<SendResult> {
+      // A backend that is not production texts only its test recipients (convex/lib/environment.ts).
+      const blocked = sendBlocked(input.to);
+      if (blocked) return { ok: false, retryable: false, problem: blocked };
       const key = process.env.TELNYX_API_KEY?.trim();
       if (!key) return { ok: false, retryable: false, problem: "Telnyx is chosen, but its API key is not set on the deployment." };
       if (!input.from) return { ok: false, retryable: false, problem: "The company has no texting number to send from." };

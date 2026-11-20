@@ -259,6 +259,7 @@ export const recordDispute = staffMutation({
 
 /** Selestial staff: a credit to a company's messaging balance (a goodwill credit or a correction), audited with its reason. */
 export const supportCredit = staffMutation({
+  capability: "billing.adjust",
   args: { companyId: v.id("companies"), cents: v.number(), reason: v.string(), key: v.string() },
   handler: async (ctx, args) => {
     const state = connectedOrRefuse();
@@ -274,6 +275,7 @@ export const supportCredit = staffMutation({
 
 /** Selestial staff: refunds one messaging charge, naming it. A charge can be refunded once. */
 export const supportRefund = staffMutation({
+  capability: "billing.adjust",
   args: { chargeId: v.id("messagingCharges"), reason: v.string() },
   handler: async (ctx, args) => {
     const reason = args.reason.trim();

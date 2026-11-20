@@ -77,7 +77,20 @@ Owner recovery cards on Home and beside the affected work, notices to the compan
 email per problem when the Owner must act or an interruption is critical), grouped staff alert email, and
 a Contact support handoff ([04-owner-recovery.md](04-owner-recovery.md)).
 
+## What Phase 4 adds
+
+- Isolation by deployment name: a backend that is not production reaches only `TEST_RECIPIENTS`, buys and
+  files nothing at Telnyx, and ignores live payment keys; previews are built without the live backend
+  (docs/foundation/06-deployments.md).
+- Staff controls behind capabilities: emergency suspension needs `outbound.suspend` and a reason;
+  messaging credits and refunds need `billing.adjust`.
+- Pausing explained to owners where they pause; suspension explained to staff. Both were already rechecked
+  at the moment of sending, with refusals final, so resuming never releases a backlog (now tested).
+- Restore tools (lock-down, status, verify, release) and the backup, restore and rollback runbook
+  ([05-recovery-runbook.md](05-recovery-runbook.md)).
+
 ## Not yet built
 
-Pause, takeover, suspension and
-safe-retry controls, preview isolation, and the backup runbook (Phase 4). Nothing has been deployed.
+A conversation-level takeover switch (today a person takes over per task, and agent follow-ups stop when a
+person replies), and a staff tool to record a provider's outcome for an unconfirmed message (today it is
+settled by the delivery report, or by editing the row after checking the provider).

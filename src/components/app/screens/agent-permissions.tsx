@@ -276,6 +276,16 @@ export function AgentPermissions() {
           </Button>
         ) : null}
       </div>
+      <details className="rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
+        <summary className="cursor-pointer font-medium text-strong">What pausing does</summary>
+        <ul className="mt-2 grid list-disc gap-1 pl-5 text-muted-foreground">
+          <li>A paused agent starts nothing new and sends nothing. A message it had planned is stopped at the moment it would have gone.</li>
+          <li>Incoming texts and emails are still received, opt-outs (STOP) are still honored, delivery reports still arrive, and billing still settles.</li>
+          <li>You and your team can still send messages and work every record yourselves.</li>
+          <li>A message the provider already accepted before you paused can&rsquo;t be recalled.</li>
+          <li>Resuming doesn&rsquo;t send a pile of old messages: what was stopped stays stopped, and the agent looks again at what is still worth doing.</li>
+        </ul>
+      </details>
       <FormError message={error} />
       <ul className="grid gap-3">
         {built.map((agent) => {

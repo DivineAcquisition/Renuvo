@@ -856,7 +856,9 @@ function CompanyActions({ company }: { company: { id: Id<"companies">; name: str
         <Button size="sm" variant="outline" loading={busy} disabled={!note.trim()} onClick={() => void run(async () => (await setSuspended({ companyId: company.id, suspended: false, note }), setDone("Sending resumed.")))}>
           Lift suspension
         </Button>
-        <p className="w-full text-xs text-muted-foreground">Suspending needs a note above, and stops every message for this company until lifted.</p>
+        <p className="w-full text-xs text-muted-foreground">
+          Emergency suspension (needs the Emergency suspension capability and a note above): every outbound text and email for this company, from people and agents, is refused at the moment it would go, until lifted. Incoming texts are still received and opt-outs (STOP) are still recorded and honored, but their confirmation replies aren&rsquo;t sent while suspended. Delivery reports and billing keep working. A message the provider already accepted can&rsquo;t be recalled. Lifting it releases nothing that was refused.
+        </p>
       </div>
       <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
         Plan: {company.plan === "operate" ? "Operate" : company.plan === "expand" ? "Expand" : "none verified"}. Plans are bought and changed through Autumn, never set here.
