@@ -1,7 +1,7 @@
 /**
  * Which host shows what. One Vercel project answers on several hosts, so the app decides what each
- * host serves: the public site, the signed-in workspace, the link pages sent in texts, and hosts that
- * are attached but not built yet.
+ * host serves: the public site, the signed-in workspace, the link pages sent in texts, the Selestial
+ * staff console, and hosts that are attached but not built yet.
  *
  * Host names come from settings, never from strings in this file. A host that no setting names
  * (localhost, a preview deployment, an old domain) is left alone and can reach every route. With no
@@ -26,14 +26,16 @@ export const HOST_SETTINGS: Record<HostRole, string> = {
 };
 
 /** Hosts that are attached to the project but have nothing built behind them yet. */
-export const UNBUILT_ROLES: readonly HostRole[] = ["admin", "docs", "status"];
+export const UNBUILT_ROLES: readonly HostRole[] = ["docs", "status"];
 
-/** What a person sees on a host that is not built. Admin does not say that it exists. */
+/** What a person sees on a host that is not built. */
 const UNBUILT_MESSAGE: Record<string, string> = {
-  admin: "Not found.",
   docs: "Not available yet.",
   status: "Not available yet.",
 };
+
+/** Where the staff host opens: the Operations workspace. */
+export const ADMIN_LANDING = "/staff/operations";
 
 /** The origin configured for each role. A role with no valid setting is absent. */
 export type HostMap = Partial<Record<HostRole, string>>;
@@ -100,7 +102,7 @@ export function roleOfHost(host: string, map: HostMap): HostRole | null {
 }
 
 /** Which host a path belongs to. "shared" paths are served on every host. */
-export type PathRole = "public" | "app" | "link" | "shared";
+export type PathRole = "public" | "app" | "link" | "admin" | "shared";
 
 const under = (pathname: string, base: string) => pathname === base || pathname.startsWith(`${base}/`);
 
@@ -109,7 +111,9 @@ export function roleOfPath(pathname: string): PathRole {
   // Crawler rules, icons, domain checks and Clerk's own proxy path are needed wherever the app answers.
   if (path === "/robots.txt" || path === "/icon.svg" || path === "/favicon.ico") return "shared";
   if (under(path, "/.well-known") || under(path, "/__clerk")) return "shared";
-  if (under(path, "/app") || under(path, "/staff") || isAuthPath(path)) return "app";
+  // The Selestial staff console. Sign-in stays on the workspace host, which staff share with everyone.
+  if (under(path, "/staff")) return "admin";
+  if (under(path, "/app") || isAuthPath(path)) return "app";
   // Link pages need no sign-in: cleaner links (/c), booking (/b) and notice unsubscribe pages (/n).
   if (under(path, "/c") || under(path, "/b") || under(path, "/n")) return "link";
   return "public";
@@ -156,6 +160,15 @@ export function decide(request: HostRequest, map: HostMap): Decision {
     if (path === "app") return { kind: "next", noindex };
     // The workspace host has no front page of its own: its root opens the workspace.
     if (request.pathname === "/" || request.pathname === "") return safe ? { kind: "redirect", to: `${map.app}/app` } : { kind: "not_found", message: "Not found." };
+    return send(path, request.pathname);
+  }
+
+  if (role === "admin") {
+    if (path === "admin") return { kind: "next", noindex };
+    // The staff host's root opens Operations.
+    if (request.pathname === "/" || request.pathname === "") return safe ? { kind: "redirect", to: `${map.admin}${ADMIN_LANDING}` } : { kind: "not_found", message: "Not found." };
+    // Sign-in, a company workspace opened in a support session (/app?support=...), and public pages
+    // each go to their own host, keeping the path and query.
     return send(path, request.pathname);
   }
 

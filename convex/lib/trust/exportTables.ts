@@ -87,6 +87,10 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "activationTasks", index: "by_company_state" },
   { table: "memberNotices", index: "by_company_dedupe" },
   // Company Chat (convex/lib/chat/schema.ts). The conversations themselves are not here: see NOT_EXPORTED.
+  // Admin Support Sessions: when Selestial was in the workspace, why, and what it changed.
+  { table: "supportSessions", index: "by_company_started" },
+  { table: "supportGrants", index: "by_company_granted" },
+  { table: "supportEvents", index: "by_company_at" },
   { table: "chatRuns", index: "by_company_started", omit: ["error"], why: "Run errors are words for the person who was chatting." },
   { table: "chatActionSteps", index: "by_company_key" },
   { table: "chatArtifacts", index: "by_company_creator_updated" },
@@ -235,6 +239,7 @@ export const NOT_EXPORTED: Readonly<Record<string, string>> = {
   googleTravel: "Cached drive times between rounded map points, recomputed as needed.",
   portalCodes: "Hashes of one-time codes that unlock a portal for ten minutes; nothing in them is about the business.",
   capacityHolds: "Short-lived reservations of a day's minutes while a booking waits; the booking keeps what matters.",
+  incidents: "Selestial's own operational records about the service (what broke, what recovery ran). What happened to the company's records is exported in those records and the event log.",
   trustRequests: "Requests to Selestial are Selestial's records about a person, answered through the privacy request process.",
 };
 

@@ -18,6 +18,7 @@ const ICON: Record<string, LucideIcon> = {
   compliance: ShieldCheck,
   agreements: ScrollTextIcon,
   activity: HistoryIcon,
+  "support-access": ShieldCheck,
 };
 
 export function SectionMark({ id, size = "md" }: { id: string; size?: "sm" | "md" | "lg" }) {

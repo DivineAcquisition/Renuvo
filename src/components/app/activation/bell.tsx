@@ -12,14 +12,14 @@ import { useState } from "react";
 import { AgentAvatar, type AgentId } from "@/components/app/agent";
 import { useCompany } from "@/components/app/company";
 import { useNow } from "@/components/app/use-now";
-import { AlertTriangle, Bell, CheckCircle2, Hand, Plug, Sparkles } from "@/components/icons";
+import { AlertTriangle, Bell, CheckCircle2, Hand, Plug, ShieldCheck, Sparkles } from "@/components/icons";
 import { Sheet, SheetPopup, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import { relative } from "./shared";
 
-const KIND_ICON = { first_result: Sparkles, asset_created: CheckCircle2, task_completed: CheckCircle2, approval_required: Hand, needs_information: Hand, needs_connection: Plug, failed: AlertTriangle, batch_finished: Sparkles } as const;
+const KIND_ICON = { first_result: Sparkles, asset_created: CheckCircle2, task_completed: CheckCircle2, approval_required: Hand, needs_information: Hand, needs_connection: Plug, failed: AlertTriangle, batch_finished: Sparkles, support_access: ShieldCheck } as const;
 
 export function NotificationBell() {
   const { companyId } = useCompany();

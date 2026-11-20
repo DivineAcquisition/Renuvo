@@ -135,7 +135,8 @@ export const activationTables = {
   })
     .index("by_activation", ["activationId"])
     .index("by_company_state", ["companyId", "state", "nextRunAt"])
-    .index("by_state_lease", ["state", "leaseUntil"]),
+    .index("by_state_lease", ["state", "leaseUntil"])
+    .index("by_state_updated", ["state", "updatedAt"]),
 
   /**
    * The in-app inbox: one row per person, so read state is theirs. Email notices are separate rows in the
@@ -144,7 +145,7 @@ export const activationTables = {
   memberNotices: defineTable({
     companyId: v.id("companies"),
     memberId: v.id("members"),
-    kind: literals(["first_result", "asset_created", "approval_required", "task_completed", "needs_information", "needs_connection", "failed", "batch_finished"] as const),
+    kind: literals(["first_result", "asset_created", "approval_required", "task_completed", "needs_information", "needs_connection", "failed", "batch_finished", "support_access"] as const),
     agent: v.optional(agentValidator),
     headline: v.string(),
     summary: v.string(),

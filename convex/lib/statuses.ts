@@ -15,7 +15,8 @@ export const AGENTS = ["sales", "recruiter", "dispatch", "retention"] as const;
 export type Agent = (typeof AGENTS)[number];
 export const agentValidator = literals(AGENTS);
 
-export const MEMBER_STATUSES = ["invited", "active", "removed"] as const;
+/** support: the company's Selestial Support member (convex/lib/support/access.ts). It cannot sign in and is never notified. */
+export const MEMBER_STATUSES = ["invited", "active", "removed", "support"] as const;
 export const memberStatusValidator = literals(MEMBER_STATUSES);
 
 /**
