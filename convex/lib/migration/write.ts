@@ -337,7 +337,7 @@ async function writePlan(ctx: WriteCtx, migration: Doc<"migrations">, row: Doc<"
     priceCents: null,
     firstVisit: null,
     scopeNote: (values.notes ?? "").slice(0, 1000),
-    preferredCleanerIds: [],
+    preferredCleanerIds: await preferredOf(ctx, row),
     ...(typeof p.endsOn === "string" ? { endsOn: p.endsOn } : {}),
     ...(p.paused ? { pausedFrom: startsOn! } : {}),
     skipped: [],
@@ -360,6 +360,23 @@ async function writePlan(ctx: WriteCtx, migration: Doc<"migrations">, row: Doc<"
   }
   await refreshClient(ctx, customer._id);
   return { outcome: "created", table: "servicePlans", id: planId, reason: [`Set up, waiting for release${minutes === null ? ". Length set to 2 hours: change it on the plan" : ""}.`, proposal ? "Its price is waiting for your approval in Services & Pricing." : typeof p.cents === "number" ? "Its price couldn't be proposed; set it in Services & Pricing." : ""].filter(Boolean).join(" "), proposal };
+}
+
+/** The preferred cleaner the check matched: someone already on the team, or a team row this import created. */
+async function preferredOf(ctx: WriteCtx, row: Doc<"migrationRows">): Promise<Id<"cleaners">[]> {
+  const p = row.parsed ?? {};
+  if (typeof p.cleanerId === "string") {
+    const id = ctx.db.normalizeId("cleaners", p.cleanerId);
+    const cleaner = id ? await ctx.db.get(id) : null;
+    if (cleaner && cleaner.companyId === ctx.companyId && cleaner.status !== "ended") return [cleaner._id];
+  }
+  if (typeof p.cleanerRowId === "string") {
+    const rowId = ctx.db.normalizeId("migrationRows", p.cleanerRowId);
+    const teamRow = rowId ? await ctx.db.get(rowId) : null;
+    const id = teamRow?.result?.table === "cleaners" && teamRow.result.id ? ctx.db.normalizeId("cleaners", teamRow.result.id) : null;
+    if (id) return [id];
+  }
+  return [];
 }
 
 // ── Upcoming visits ──────────────────────────────────────────────────────────────────────────────────
@@ -400,6 +417,7 @@ async function writeVisit(ctx: WriteCtx, migration: Doc<"migrations">, row: Doc<
     ...(live.spec.team.crewSize > 1 ? { requiredCrew: live.spec.team.crewSize } : {}),
     ...(values.notes ? { instructions: values.notes.slice(0, 4000) } : {}),
     ...(plan ? plan : {}),
+    ...(await preferredOf(ctx, row).then((ids) => (ids.length ? { preferredCleanerIds: ids } : {}))),
     // Held: Dispatch doesn't offer it and nothing is sent about it until the owner releases the migration.
     migration: { migrationId: migration._id, held: true },
     createdAt: Date.now(),

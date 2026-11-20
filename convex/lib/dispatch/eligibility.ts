@@ -18,6 +18,8 @@ export type JobFacts = {
   postalCode: string;
   timezone: string;
   travelBufferMinutes: number;
+  /** Cleaners to ask first when they qualify: the cleaner the customer had, kept from a migration or set on the plan. Never a bypass of any check. */
+  preferredCleanerIds?: string[];
 };
 
 /** Why this cleaner was already ruled out for this visit at this time. */
@@ -113,6 +115,8 @@ export type Candidate = {
   priorVisitsForCustomer: number;
   otherVisitsThatDay: number;
   pay: PayAnswer;
+  /** The customer's preferred cleaner for this visit, asked first. */
+  preferred?: boolean;
 };
 export type Excluded = { cleanerId: string; name: string } & Exclusion;
 
@@ -142,10 +146,12 @@ export function rankCleaners(cleaners: CleanerFacts[], job: JobFacts, rules: Rul
       continue;
     }
     const sameDay = otherVisitsThatDay(cleaner, job);
+    const preferred = job.preferredCleanerIds?.includes(cleaner.id) ?? false;
     candidates.push({
+      ...(preferred ? { preferred: true } : {}),
       cleanerId: cleaner.id,
       name: cleaner.name,
-      reasons: fitReasons(cleaner, job, sameDay),
+      reasons: [...(preferred ? ["is this customer's usual cleaner"] : []), ...fitReasons(cleaner, job, sameDay)],
       priorVisitsForCustomer: cleaner.priorVisitsForCustomer,
       otherVisitsThatDay: sameDay,
       pay: cleaner.pay,
@@ -153,6 +159,7 @@ export function rankCleaners(cleaners: CleanerFacts[], job: JobFacts, rules: Rul
   }
   candidates.sort(
     (a, b) =>
+      Number(b.preferred ?? false) - Number(a.preferred ?? false) ||
       b.priorVisitsForCustomer - a.priorVisitsForCustomer ||
       a.otherVisitsThatDay - b.otherVisitsThatDay ||
       a.name.localeCompare(b.name) ||

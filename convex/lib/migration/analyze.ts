@@ -67,7 +67,7 @@ export type Existing = {
   links: { kind: string; externalId: string; table: string; recordId: string }[];
   services: { id: string; name: string }[];
   /** The team already in Selestial, for spotting the same person twice. */
-  cleaners?: { id: string; name: string; email?: string; phone?: string }[];
+  cleaners?: { id: string; name: string; email?: string; phone?: string; windows?: { weekday: number; startMinute: number; endMinute: number }[] }[];
   /** History and opening balances already imported, so a repeat never counts them twice. */
   history?: { customerId: string; day: string; externalId?: string }[];
   balances?: { customerId: string; reference: string }[];
@@ -444,6 +444,60 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
     return { customer: customer.ref, property: property.ref };
   }
 
+  // ── Who did the work in the old system: matched to the team, never assigned ──
+  type Window = { weekday: number; startMinute: number; endMinute: number };
+  type CleanerMatch = { rowId?: string; cleanerId?: string; name: string; windows: Window[] | null; byFirstName: boolean };
+  const teamRows = cleaners.filter((r) => !endedStatus(r.values.status) && r.decision?.choice !== "skip");
+  function findCleaner(raw: string): CleanerMatch | { ambiguous: string[] } | null {
+    const want = nameKey(raw);
+    if (!want) return null;
+    const pool: CleanerMatch[] = [
+      ...teamRows.map((r) => ({ rowId: r.id, name: customerNameOf(r.values), windows: parseAvailability(r.values.availability), byFirstName: false })),
+      ...(existing.cleaners ?? []).map((c) => ({ cleanerId: c.id, name: c.name, windows: c.windows ?? [], byFirstName: false })),
+    ];
+    const exact = pool.filter((c) => nameKey(c.name) === want);
+    const pick = (list: CleanerMatch[], byFirstName: boolean) => {
+      // The same person in the team file and already on the team counts once: the one already on the team.
+      const distinct = [...new Map(list.map((c) => [nameKey(c.name), list.filter((x) => nameKey(x.name) === nameKey(c.name)).sort((a, b) => Number(Boolean(b.cleanerId)) - Number(Boolean(a.cleanerId)))[0]])).values()];
+      if (distinct.length === 1) return { ...distinct[0], byFirstName };
+      return distinct.length > 1 ? { ambiguous: distinct.map((c) => c.name) } : null;
+    };
+    const found = pick(exact, false);
+    if (found) return found;
+    if (want.includes(" ")) return null;
+    return pick(pool.filter((c) => nameKey(c.name).split(" ")[0] === want), true);
+  }
+  const fmt = (m: number) => `${Math.floor(m / 60) % 12 || 12}${m % 60 ? `:${String(m % 60).padStart(2, "0")}` : ""}${m < 720 ? "am" : "pm"}`;
+  const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const weekdayOf = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay();
+  /** Notes about the old system's cleaner for one visit or series, and the preferred cleaner to keep. */
+  function assignment(row: RowIn, result: RowOut, day: string | null, time: string | null, minutes: number | null, what: "visit" | "series") {
+    const raw = row.values.cleaner?.trim();
+    if (!raw) return null;
+    const match = findCleaner(raw);
+    if (!match) {
+      result.notes.push(`${raw} did this work in your old system, but no one by that name is on your team or in your team file. It comes over without a preferred cleaner.`);
+      return null;
+    }
+    if ("ambiguous" in match) {
+      result.notes.push(`Several people could be "${raw}" (${match.ambiguous.join(", ")}). Write the full name to keep one as the preferred cleaner.`);
+      return null;
+    }
+    result.notes.push(`${match.name}${match.byFirstName ? ` (matched from "${raw}")` : ""} is kept as the preferred cleaner: once released, Dispatch offers ${what === "visit" ? "this visit" : "these visits"} to them first if they're eligible. Nothing is assigned.`);
+    if (day && time) {
+      const start = Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+      const end = start + (minutes ?? 120);
+      const weekday = weekdayOf(day);
+      if (match.windows === null) result.notes.push(`${match.name}'s availability in your team file couldn't be read, so this wasn't checked against it.`);
+      else if (!match.windows.length) result.notes.push(`${match.name} has no weekly availability on file yet, so Dispatch can't offer them work until they set it.`);
+      else if (!match.windows.some((w) => w.weekday === weekday && w.startMinute <= start && w.endMinute >= end)) {
+        result.notes.push(`This is outside ${match.name}'s availability: ${WEEKDAYS[weekday]} ${fmt(start)}–${fmt(end)} isn't in their weekly hours. Dispatch will offer it to someone else unless their hours change.`);
+        result.parsed.assignmentIssue = true;
+      }
+    }
+    return match;
+  }
+
   // ── Recurring services ──
   type Series = { rowId: string; place: string; serviceId: string; schedule: Schedule; startsOn: string; days: Set<string>; sourceId?: string; claimed: Set<string> };
   const series: Series[] = [];
@@ -502,11 +556,17 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
     if ("cents" in price && price.cents !== null) result.notes.push(`The price in your file (${(price.cents / 100).toFixed(2)}) is proposed as this property's own price. Nothing is charged at it until you approve it in Services & Pricing.`);
     if (!row.values.price) result.notes.push("No price is in your file, so visits are priced by your Services & Pricing.");
     if (paused) result.notes.push(`It's marked "${row.values.status}" in your old system, so it's brought over paused.`);
-    if (row.values.cleaner) result.notes.push(`Assigned to ${row.values.cleaner} in your old system. Assignments aren't imported: once you release your schedule, Dispatch offers these visits to your team.`);
+    {
+      const startsOn = typeof result.parsed.startsOn === "string" ? result.parsed.startsOn : null;
+      const match = assignment(row, result, startsOn, time, minutes, "series");
+      if (match?.rowId) result.parsed.cleanerRowId = match.rowId;
+      if (match?.cleanerId) result.parsed.cleanerId = match.cleanerId;
+    }
   }
 
   // ── Upcoming bookings ──
   const seenVisit = new Map<string, RowIn>();
+  const booked: { row: RowIn; who: string; name: string; day: string; start: number; end: number }[] = [];
   for (const row of bookings) {
     const result = get(row.id);
     if (cancelledStatus(row.values.status)) {
@@ -539,7 +599,15 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
     if ("error" in price) fail(row.id, price.error);
     if (!row.values.price) result.notes.push("No price is in your file. None is added: Selestial prices it from your Services & Pricing when you release your schedule.");
     result.parsed = { day, time, minutes: length, cents: "cents" in price ? price.cents : null, serviceId };
-    if (row.values.cleaner) result.notes.push(`Assigned to ${row.values.cleaner} in your old system. Assignments aren't imported: once you release your schedule, Dispatch offers this visit to your team.`);
+    {
+      const match = assignment(row, result, day, time, length, "visit");
+      if (match?.rowId) result.parsed.cleanerRowId = match.rowId;
+      if (match?.cleanerId) result.parsed.cleanerId = match.cleanerId;
+      if (match && day && time) {
+        const start = Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+        booked.push({ row, who: match.cleanerId ?? match.rowId!, name: match.name, day, start, end: start + (length ?? 120) });
+      }
+    }
     if (!place || !day) continue;
     const placeKey = propertyKey(place.property, place.customer);
 
@@ -583,6 +651,16 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
       result.notes.push(planDate === day ? `A visit of the recurring service. The plan won't book ${day} a second time.` : `A moved visit of the recurring service: it stands for the ${planDate} visit, so the plan won't book that day too.`);
       break;
     }
+  }
+
+  // Double-bookings: the same preferred cleaner on two visits that overlap.
+  let doubleBooked = 0;
+  for (const a of booked) {
+    const clash = booked.find((b) => b !== a && b.who === a.who && b.day === a.day && b.start < a.end && a.start < b.end);
+    if (!clash) continue;
+    get(a.row.id).notes.push(`${a.name} is also down for row ${clash.row.index + 2} at the same time on ${a.day}. Both visits come over; Dispatch offers the second to someone else if they can't do both.`);
+    get(a.row.id).parsed.assignmentIssue = true;
+    doubleBooked += 1;
   }
 
   // ── Cleaners ──
@@ -754,6 +832,8 @@ export function analyze(input: { rows: RowIn[]; existing: Existing; context: Con
   if (errors) notes.push({ key: "errors", step: "review", words: `${plural(errors, "record")} ${errors === 1 ? "has" : "have"} missing or unreadable information. Fix them here, or skip them.`, tone: "attention" });
   const linked = bookings.filter((row) => get(row.id).parent?.planRowId).length;
   if (linked) notes.push({ key: "reconcile", step: "review", words: `${plural(linked, "upcoming booking")} ${linked === 1 ? "is a visit" : "are visits"} of your recurring services. Each is brought over once, and the plan won't book the same day again.`, tone: "done" });
+  const assignmentIssues = [...out.values()].filter((r) => r.parsed.assignmentIssue).length;
+  if (assignmentIssues) notes.push({ key: "assignments", step: "review", words: `${plural(assignmentIssues, "visit")} ${assignmentIssues === 1 ? "has" : "have"} a cleaner conflict from your old system${doubleBooked ? ` (${doubleBooked} double-booked)` : ""}, such as a time outside their availability. Nothing is assigned, so nothing breaks; Dispatch offers those visits to someone free.`, tone: "attention" });
   const several = [...owed.values()].filter((o) => o.rows > 1);
   if (several.length) notes.push({ key: "balances", step: "review", words: `${plural(several.length, "customer")} ${several.length === 1 ? "has" : "have"} more than one balance row (${several.slice(0, 2).map((o) => `${o.label}: ${o.rows} rows, $${(o.cents / 100).toFixed(2)}`).join("; ")}). Check they're separate invoices, not a running total, so nothing is counted twice.`, tone: "attention" });
   const categories = new Map<Category, number>();

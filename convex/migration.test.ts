@@ -729,3 +729,162 @@ describe("Undo, activation review and the completion email", () => {
     expect(b9.matches.map((m) => m.why).join(" ")).toContain("quick import in setup");
   });
 });
+
+// ── Phase 7: the rest of the brief's checklist ───────────────────────────────────────────────────────
+
+describe("Phase 7: assignments, partial failures, recurrence conflicts, households, ambiguous dates", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function start7(files: [string, string][]) {
+    const t = start();
+    const { as, companyId } = await company(t, "owner-7", "Seven Cleaning");
+    const serviceId = await publish(as, companyId, homeSpec());
+    await as.mutation(api.migration.open, { companyId });
+    await as.mutation(api.migration.save, { companyId, revision: 1, source: "spreadsheet" });
+    for (const [name, csv] of files) await upload(t, as, companyId, name, csv);
+    return { t, as, companyId, serviceId };
+  }
+  async function ready(t: T, as: As, companyId: Id<"companies">) {
+    await confirmColumns(t, as, companyId);
+    const revision = (await as.query(api.migration.view, { companyId }))!.migration.revision;
+    await as.mutation(api.migration.save, { companyId, revision, timezoneConfirmed: true });
+    await settle(t);
+  }
+
+  it("matches the old system's cleaner, flags double-bookings, time off their hours and unknown names, and keeps the match as preferred", async () => {
+    const clients = "Customer ID,First Name,Last Name,Email,Street,City,State,Zip\nA1,Ann,Lee,ann@example.com,1 Oak St,Austin,TX,78701\nA2,Bo,Diaz,bo@example.com,2 Oak St,Austin,TX,78701\n";
+    const team = "Employee ID,First Name,Last Name,Email,Phone,Worker Type,Availability\nE1,Maria,Lopez,maria@example.com,512-555-0177,Employee,Mon-Fri 8am-4pm\n";
+    const visits = [
+      "Booking ID,Customer ID,Service,Date,Start Time,End Time,Cleaner",
+      "V1,A1,Standard clean,2027-03-03,9:00 AM,11:00 AM,Maria",
+      "V2,A2,Standard clean,2027-03-03,10:00 AM,12:00 PM,Maria Lopez",
+      "V3,A1,Standard clean,2027-03-06,9:00 AM,11:00 AM,Maria Lopez",
+      "V4,A2,Standard clean,2027-03-10,9:00 AM,11:00 AM,Zed",
+    ].join("\n");
+    const { t, as, companyId } = await start7([["clients.csv", clients], ["team.csv", team], ["visits.csv", visits]]);
+    const rows = await rowsOf(as, companyId, "bookings");
+    const v = (id: string) => rows.find((r) => r.values.externalId === id)!;
+    expect(v("V1").notes.join(" ")).toContain('Maria Lopez (matched from "Maria") is kept as the preferred cleaner');
+    expect(v("V1").notes.join(" ")).toContain("also down for row 3");
+    expect(v("V2").notes.join(" ")).toContain("also down for row 2");
+    expect(v("V3").notes.join(" ")).toContain("outside Maria Lopez's availability: Saturday");
+    expect(v("V4").notes.join(" ")).toContain("no one by that name is on your team");
+    expect((await as.query(api.migration.view, { companyId }))!.migration.notes.map((n) => n.words).join(" ")).toContain("double-booked");
+    // Flags don't block: every visit is still ready.
+    expect(rows.map((r) => r.state)).toEqual(["ready", "ready", "ready", "ready"]);
+    await ready(t, as, companyId);
+    await as.mutation(api.migration.startImport, { companyId });
+    await settle(t);
+    const state = await t.run(async (ctx) => ({ maria: (await ctx.db.query("cleaners").collect())[0], jobs: await ctx.db.query("jobs").collect(), assignments: await ctx.db.query("assignments").collect() }));
+    expect(state.jobs.filter((j) => j.preferredCleanerIds?.[0] === state.maria._id)).toHaveLength(3);
+    expect(state.jobs.find((j) => !j.preferredCleanerIds)).toBeTruthy();
+    // Nothing is assigned.
+    expect(state.assignments).toEqual([]);
+  });
+
+  it("asks a qualifying preferred cleaner first, and never lets the preference bypass a check", async () => {
+    const { rankCleaners } = await import("./lib/dispatch/eligibility");
+    const base = { status: "ready" as const, skills: [], serviceAreas: ["78701"], windows: [{ weekday: 3, startMinute: 0, endMinute: 24 * 60 }], timeOff: [], held: [], blocking: [], ended: null, pay: { ok: true as const } };
+    const job = { span: { startsAt: Date.UTC(2027, 2, 3, 15), endsAt: Date.UTC(2027, 2, 3, 17) }, requiredSkills: [], postalCode: "78701", timezone: "America/Chicago", travelBufferMinutes: 0 };
+    const cleaners = [
+      { ...base, id: "veteran", name: "Vera", priorVisitsForCustomer: 9 },
+      { ...base, id: "usual", name: "Uma", priorVisitsForCustomer: 0 },
+      { ...base, id: "away", name: "Ava", priorVisitsForCustomer: 0, serviceAreas: ["99999"] },
+    ] as unknown as Parameters<typeof rankCleaners>[0];
+    expect(rankCleaners(cleaners, job).candidates.map((c) => c.cleanerId)).toEqual(["veteran", "usual"]);
+    const preferred = rankCleaners(cleaners, { ...job, preferredCleanerIds: ["usual", "away"] });
+    expect(preferred.candidates.map((c) => c.cleanerId)).toEqual(["usual", "veteran"]);
+    expect(preferred.candidates[0].reasons[0]).toBe("is this customer's usual cleaner");
+    // Out of area stays excluded even though preferred.
+    expect(preferred.excluded.map((e) => e.cleanerId)).toEqual(["away"]);
+  });
+
+  it("fails only the rows that can't be written, keeps the rest, and lets the owner import them again once fixed", async () => {
+    const clients = "Customer ID,First Name,Last Name,Email,Street,City,State,Zip\nA1,Ann,Lee,ann@example.com,1 Oak St,Austin,TX,78701\n";
+    const visits = "Booking ID,Customer ID,Service,Date,Start Time,End Time\nV1,A1,Standard clean,2027-03-03,9:00 AM,11:00 AM\nV2,A1,Standard clean,2027-03-04,9:00 AM,11:00 AM\n";
+    const { t, as, companyId, serviceId } = await start7([["clients.csv", clients], ["visits.csv", visits]]);
+    await ready(t, as, companyId);
+    // The service is archived after the check: the visits can't be written, the customer still can.
+    await t.run((ctx) => ctx.db.patch(serviceId, { status: "archived" }));
+    await as.mutation(api.migration.startImport, { companyId });
+    await settle(t);
+    let report = (await as.query(api.migration.report, { companyId }))!;
+    expect(report.kinds.find((k) => k.kind === "customers")).toMatchObject({ created: 1, balanced: true });
+    expect(report.kinds.find((k) => k.kind === "bookings")).toMatchObject({ failed: 2, created: 0, balanced: true });
+    expect(report.problems.filter((p) => p.outcome === "Failed").map((p) => p.reason)).toEqual([expect.stringContaining("isn't live"), expect.stringContaining("isn't live")]);
+    // Fixed: the service is live again; the owner decides the failed rows again and imports.
+    await t.run((ctx) => ctx.db.patch(serviceId, { status: "active" }));
+    await as.mutation(api.migration.reopen, { companyId });
+    await as.mutation(api.migration.recheck, { companyId });
+    await settle(t);
+    const failed = (await as.query(api.migration.rows, { companyId, kind: "bookings", filter: "failed", offset: 0, limit: 10 })).rows;
+    await as.mutation(api.migration.decide, { companyId, rowIds: failed.map((r) => r.id), choice: "create" });
+    await settle(t);
+    await as.mutation(api.migration.startImport, { companyId });
+    await settle(t);
+    report = (await as.query(api.migration.report, { companyId }))!;
+    expect(report.kinds.find((k) => k.kind === "bookings")).toMatchObject({ failed: 0, created: 2, balanced: true });
+    expect(await t.run(async (ctx) => (await ctx.db.query("customers").collect()).length)).toBe(1);
+  });
+
+  it("reconciles bookings with recurring series: one booking per series day, moved visits stand for their day", async () => {
+    const clients = "Customer ID,First Name,Last Name,Email,Street,City,State,Zip\nA1,Ann,Lee,ann@example.com,1 Oak St,Austin,TX,78701\n";
+    const recurring = "Recurring ID,Customer ID,Service,Frequency,Next Visit,Start Time,Duration\nR1,A1,Standard clean,Every 2 weeks,2027-03-03,9:00 AM,2 hours\n";
+    const visits = [
+      "Booking ID,Customer ID,Service,Date,Start Time,End Time,Recurring ID",
+      "V1,A1,Standard clean,2027-03-03,9:00 AM,11:00 AM,R1",
+      "V2,A1,Standard clean,2027-03-03,1:00 PM,3:00 PM,R1",
+      "V3,A1,Standard clean,2027-03-18,9:00 AM,11:00 AM,R1",
+      "V4,A1,Standard clean,2027-03-24,9:00 AM,11:00 AM,R1",
+    ].join("\n");
+    const { t, as, companyId } = await start7([["clients.csv", clients], ["recurring.csv", recurring], ["visits.csv", visits]]);
+    const rows = await rowsOf(as, companyId, "bookings");
+    const v = (id: string) => rows.find((r) => r.values.externalId === id)!;
+    expect(v("V1").parent?.planDate).toBe("2027-03-03");
+    // A second booking claiming the same series day is a duplicate, not a second plan visit.
+    expect(v("V2").state).toBe("duplicate");
+    // Moved by a day: it stands for the March 17 visit, so the plan won't book the 17th too.
+    expect(v("V3").parent?.planDate).toBe("2027-03-17");
+    expect(v("V3").notes.join(" ")).toContain("moved visit");
+    // Not near a series day: a separate visit, and it says so.
+    expect(v("V4").parent?.planDate).toBeUndefined();
+    expect(v("V4").notes.join(" ")).toContain("isn't near one of its visits");
+    await as.mutation(api.migration.decide, { companyId, rowIds: [v("V2").id], choice: "skip" });
+    await ready(t, as, companyId);
+    await as.mutation(api.migration.startImport, { companyId });
+    await settle(t);
+    await as.mutation(api.migration.release, { companyId, confirm: true, visits: false, plans: true, team: false });
+    await settle(t);
+    const jobs = await t.run((ctx) => ctx.db.query("jobs").collect());
+    const days = jobs.filter((j) => j.planDate).map((j) => j.planDate!).sort();
+    expect(new Set(days).size).toBe(days.length);
+    expect(days).toContain("2027-03-17");
+  });
+
+  it("never merges a household on a shared email, and waits for the owner on ambiguous dates", async () => {
+    const t0 = start();
+    const { as, companyId } = await company(t0, "owner-8", "Eight Cleaning");
+    await publish(as, companyId, homeSpec());
+    await as.mutation(api.clients.create, { companyId, type: "person", name: "Pat Rivera", kind: "home", contact: { name: "Pat Rivera", email: "rivera.family@example.com" }, addAnyway: true });
+    await as.mutation(api.migration.open, { companyId });
+    await upload(t0, as, companyId, "clients.csv", "Customer ID,First Name,Last Name,Email\nH1,Sam,Rivera,rivera.family@example.com\n");
+    await upload(t0, as, companyId, "visits.csv", "Booking ID,Customer ID,Service,Date,Start Time\nV1,H1,Standard clean,03/04/2027,9:00 AM\n");
+    const sam = (await rowsOf(as, companyId, "customers"))[0];
+    expect(sam.state).toBe("duplicate");
+    expect(sam.matches[0].why).toBe("Same email");
+    expect(sam.notes.join(" ")).toContain("household member");
+    // 03/04/2027 has no proof either way: the row waits, and nothing guesses.
+    let visit = (await rowsOf(as, companyId, "bookings"))[0];
+    expect(visit.state).toBe("error");
+    expect(visit.problems.join(" ")).toContain("Choose how your dates are written");
+    const revision = (await as.query(api.migration.view, { companyId }))!.migration.revision;
+    await as.mutation(api.migration.save, { companyId, revision, dateOrder: "dmy" });
+    await settle(t0);
+    visit = (await rowsOf(as, companyId, "bookings"))[0];
+    expect(visit.parsed.day).toBe("2027-04-03");
+  });
+});

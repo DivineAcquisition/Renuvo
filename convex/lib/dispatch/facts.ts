@@ -22,7 +22,10 @@ export async function jobAssignments(ctx: Db, job: Doc<"jobs">): Promise<Doc<"as
 
 export async function jobFacts(ctx: Db, company: Doc<"companies">, job: Doc<"jobs">): Promise<JobFacts> {
   const property = await ctx.db.get(job.propertyId);
+  const plan = job.planId ? await ctx.db.get(job.planId) : null;
+  const preferred = [...(job.preferredCleanerIds ?? []), ...(plan?.preferredCleanerIds ?? [])];
   return {
+    ...(preferred.length ? { preferredCleanerIds: [...new Set(preferred.map(String))] } : {}),
     span: { startsAt: job.startsAt, endsAt: job.endsAt },
     requiredSkills: job.requiredSkills,
     postalCode: property?.address.postalCode.trim().toUpperCase() ?? "",

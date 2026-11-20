@@ -523,7 +523,7 @@ export const existingFor = internalQuery({
     ].filter((r) => r.review !== "dismissed");
     return {
       today,
-      cleaners: team.map((c) => ({ id: c._id, name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}) })),
+      cleaners: await Promise.all(team.map(async (c) => ({ id: c._id, name: c.name, ...(c.email ? { email: c.email } : {}), ...(c.phone ? { phone: c.phone } : {}), windows: (await ctx.db.query("availabilityWindows").withIndex("by_company_cleaner", (q) => q.eq("companyId", args.companyId).eq("cleanerId", c._id)).take(28)).map((w) => ({ weekday: w.weekday, startMinute: w.startMinute, endMinute: w.endMinute })) }))),
       history: history.map((h) => ({ customerId: h.customerId, day: h.day, ...(h.externalId ? { externalId: h.externalId } : {}) })),
       balances: owed.map((b) => ({ customerId: b.customerId, reference: b.reference })),
       quick: quick.map((r) => ({ customerId: r.customerId, kind: r.kind as "appointment" | "recurring", ...(r.day ? { day: r.day } : {}) })),

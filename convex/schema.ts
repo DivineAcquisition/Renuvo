@@ -517,6 +517,8 @@ export default defineSchema({
     recovery: v.optional(v.object({ caseId: v.id("retentionCases"), originalJobId: v.optional(v.id("jobs")) })),
     /** Cleaners a person agreed not to send to this visit, for example after a customer asked for someone else. Dispatch does not offer it to them. */
     avoidCleanerIds: v.optional(v.array(v.id("cleaners"))),
+    /** Cleaners to ask first when they qualify, such as the cleaner the customer had in the old system. */
+    preferredCleanerIds: v.optional(v.array(v.id("cleaners"))),
     /** Written by a migration. While held, Dispatch doesn't offer it and no confirmation is sent (convex/migration.ts). */
     migration: v.optional(migrationMarkValidator),
     createdAt: v.number(),
