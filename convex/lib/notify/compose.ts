@@ -401,6 +401,20 @@ async function build(ctx: MutationCtx, message: Doc<"messages">, company: Doc<"c
       return activation(ctx, company, "first", notice.ref, c);
     case "activation_summary":
       return activation(ctx, company, "summary", notice.ref, c);
+    case "support_summary":
+      return alertEmail({
+        ...c,
+        eyebrow: "Support access",
+        subject: "What Selestial Support changed in your workspace",
+        heading: "Selestial Support finished helping",
+        body: str(facts, "summary") ?? "Selestial Support made changes in your workspace.",
+        tone: "info",
+        note: str(facts, "reason") ? `Why we were there: ${str(facts, "reason")}` : null,
+        facts: [{ label: "Changes", value: String(num(facts, "changes") ?? 0) }],
+        button: { label: "See support access history", path: "/app/settings/support-access" },
+        essential: true,
+        because: "Selestial tells the Owner whenever its support team changes something in the workspace.",
+      });
     case "weekly_digest": {
       const weekStart = num(facts, "weekStart");
       if (weekStart === null) return { problem: "The notice didn't say which week it was for." };

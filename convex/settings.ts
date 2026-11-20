@@ -44,6 +44,7 @@ export const business = companyQuery({
  * writes nothing and does not move the revision.
  */
 export const saveBusiness = ownerMutation({
+  support: { capability: "records.edit", summary: "updated your business settings" },
   args: {
     expectedRevision: v.number(),
     name: v.string(),

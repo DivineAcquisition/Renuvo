@@ -118,8 +118,13 @@ export const update = ownerMutation({
 /** The owner can pause one agent or all of them (brief, section 7). */
 export const setPausedAgents = ownerMutation({
   args: { agents: v.array(agentValidator) },
+  support: { capability: "agents.recover", summary: "paused agents" },
   handler: async (ctx, args) => {
     const pausedAgents = [...new Set(args.agents)];
+    // Selestial Support may pause an agent to stop a problem spreading. Only the company resumes one.
+    if (ctx.support && ctx.company.pausedAgents.some((agent) => !pausedAgents.includes(agent))) {
+      throw userError("Only the company can resume an agent. Selestial Support can pause one.", "not_allowed");
+    }
     await ctx.db.patch(ctx.companyId, { pausedAgents });
     await recordEvent(ctx, {
       companyId: ctx.companyId,

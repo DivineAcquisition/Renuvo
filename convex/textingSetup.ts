@@ -178,6 +178,7 @@ async function writable(ctx: MutationCtx, companyId: Id<"companies">, revision: 
 }
 
 export const save = ownerMutation({
+  support: { capability: "records.edit", summary: "corrected your texting registration details" },
   args: {
     revision: v.number(),
     step: v.optional(literals(SETUP_STEPS)),
@@ -328,6 +329,7 @@ const listWords = (words: string[]) => (words.length <= 1 ? (words[0] ?? "") : `
 /** Checks again that every link opens. Limited, because it fetches pages. */
 export const checkNow = ownerMutation({
   args: {},
+  support: { capability: "agents.recover", summary: "checked your texting pages again" },
   handler: async (ctx) => {
     const setup = await setupOf(ctx, ctx.companyId);
     if (!setup) notFound();

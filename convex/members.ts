@@ -20,7 +20,8 @@ export const list = companyQuery({
       .withIndex("by_company", (q) => q.eq("companyId", ctx.companyId))
       .take(200);
     return rows
-      .filter((row) => row.status !== "removed")
+      // The Selestial Support member is not part of the team; its work is listed under Support access history.
+      .filter((row) => row.status !== "removed" && row.status !== "support")
       .map((row) => ({ id: row._id, name: row.name, email: row.email, role: roleOf(row.role), status: row.status }));
   },
 });

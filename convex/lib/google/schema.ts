@@ -37,7 +37,8 @@ export const googleTables = {
   })
     .index("by_company", ["companyId"])
     .index("by_company_feature", ["companyId", "feature"])
-    .index("by_sub", ["googleSub"]),
+    .index("by_sub", ["googleSub"])
+    .index("by_status", ["status"]),
 
   googleCredentials: defineTable({
     companyId: v.id("companies"),

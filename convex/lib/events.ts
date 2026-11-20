@@ -92,6 +92,9 @@ export const subjectValidator = v.union(
   v.object({ table: v.literal("messagingTopUps"), id: v.id("messagingTopUps") }),
   v.object({ table: v.literal("messagingAttention"), id: v.id("messagingAttention") }),
   v.object({ table: v.literal("agentAccessRequests"), id: v.id("agentAccessRequests") }),
+  // Admin Support Sessions (convex/lib/support/schema.ts).
+  v.object({ table: v.literal("supportGrants"), id: v.id("supportGrants") }),
+  v.object({ table: v.literal("supportSessions"), id: v.id("supportSessions") }),
   // Services & Pricing (convex/lib/services/schema.ts).
   v.object({ table: v.literal("services"), id: v.id("services") }),
   v.object({ table: v.literal("serviceChanges"), id: v.id("serviceChanges") }),

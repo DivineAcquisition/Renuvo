@@ -74,6 +74,7 @@ export const create = companyMutation({
 
 /** Back to work, or a new next step: the next action and its deadline are both required. */
 export const setNextAction = companyMutation({
+  support: { capability: "records.edit", summary: "updated a task's next step" },
   args: { taskId: v.id("tasks"), nextAction: v.string(), dueAt: v.number() },
   handler: async (ctx, args) => {
     const task = await owned(ctx, args.taskId);
@@ -89,6 +90,7 @@ export const setNextAction = companyMutation({
 });
 
 export const wait = companyMutation({
+  support: { capability: "records.edit", summary: "marked a task as waiting" },
   args: { taskId: v.id("tasks"), waitingOn: waitingOnValidator, followUpAt: v.number() },
   handler: async (ctx, args) => {
     const task = await owned(ctx, args.taskId);
@@ -101,6 +103,7 @@ export const wait = companyMutation({
 
 /** Hands the task to a person with the open question and the time a decision is needed by. */
 export const escalate = companyMutation({
+  support: { capability: "records.edit", summary: "escalated a task" },
   args: { taskId: v.id("tasks"), openQuestion: v.string(), decideBy: v.number() },
   handler: async (ctx, args) => {
     const task = await owned(ctx, args.taskId);
@@ -110,6 +113,7 @@ export const escalate = companyMutation({
 });
 
 export const complete = companyMutation({
+  support: { capability: "records.edit", summary: "completed a task" },
   args: { taskId: v.id("tasks"), outcome: v.string() },
   handler: async (ctx, args) => {
     const task = await owned(ctx, args.taskId);
@@ -119,6 +123,7 @@ export const complete = companyMutation({
 });
 
 export const cancel = companyMutation({
+  support: { capability: "records.edit", summary: "cancelled a task" },
   args: { taskId: v.id("tasks"), reason: v.string() },
   handler: async (ctx, args) => {
     const task = await owned(ctx, args.taskId);
