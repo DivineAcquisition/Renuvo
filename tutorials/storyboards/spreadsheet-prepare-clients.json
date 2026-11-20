@@ -1,0 +1,68 @@
+{
+  "tutorial": "spreadsheet-prepare-clients",
+  "version": 1,
+  "title": "Prepare a client spreadsheet for Selestial",
+  "voice": { "provider": "elevenlabs", "voiceId": "cjVigY5qzO86Huf0OWal", "name": "Eric", "model": "eleven_multilingual_v2", "settings": { "stability": 0.55, "similarity_boost": 0.75, "style": 0.1 } },
+  "sampleData": "public/templates/selestial-clients.csv plus the rows below. Example names, example.com emails and 555 numbers only.",
+  "scenes": [
+    {
+      "id": "open-template",
+      "narration": "This shows how to prepare a client spreadsheet that Selestial can read. In Selestial's import step, choose Download the client template.",
+      "capture": {
+        "kind": "playwright",
+        "start": "/app/setup?step=records",
+        "actions": [
+          { "do": "highlight", "target": "text=Where are your records now?" },
+          { "do": "click", "target": "text=A spreadsheet" },
+          { "do": "wait", "ms": 600, "cut": true },
+          { "do": "highlight", "target": "text=Download the client template" },
+          { "do": "pause", "ms": 1500 }
+        ]
+      },
+      "focus": { "x": 300, "y": 180, "w": 1100, "h": 620 },
+      "minSeconds": 7
+    },
+    {
+      "id": "header-row",
+      "narration": "The template has one header row. Each column holds one detail: name, email, phone, and each part of the address.",
+      "capture": { "kind": "manual", "what": "The downloaded template open in Google Sheets. Slowly move the cursor along the header row." },
+      "focus": { "x": 0, "y": 140, "w": 1920, "h": 300 },
+      "minSeconds": 7
+    },
+    {
+      "id": "one-client-per-row",
+      "narration": "Put each client on their own row. Fill in the street, city, state and ZIP together. That's what creates the client's property in Selestial.",
+      "capture": { "kind": "manual", "what": "Type a third sample row: Morgan Example, morgan@example.com, 512-555-0102, 300 Sample Rd, Austin, TX, 78703. Highlight street to ZIP cells." },
+      "minSeconds": 9
+    },
+    {
+      "id": "tidy",
+      "narration": "Remove totals, blank rows and notes above the header, so the first row is always the header.",
+      "capture": { "kind": "manual", "what": "Start from a copy with a title line above the header and a totals row; delete both." },
+      "minSeconds": 6
+    },
+    {
+      "id": "save-csv",
+      "narration": "Save the sheet as a CSV file. In Google Sheets, choose File, then Download, then Comma-separated values.",
+      "capture": { "kind": "manual", "what": "File > Download > Comma-separated values (.csv). Show the download finishing." },
+      "focus": { "x": 0, "y": 0, "w": 1100, "h": 620 },
+      "minSeconds": 7
+    },
+    {
+      "id": "return",
+      "narration": "Return to Selestial and upload the file you just saved.",
+      "capture": {
+        "kind": "playwright",
+        "start": "/app/setup?step=records",
+        "actions": [
+          { "do": "highlight", "target": "text=Choose a spreadsheet of your clients" },
+          { "do": "upload", "target": "input[type=file]", "file": "tutorials/sample/selestial-clients-filled.csv" },
+          { "do": "highlight", "target": "text=Which column is which?" },
+          { "do": "pause", "ms": 2000 }
+        ]
+      },
+      "minSeconds": 5,
+      "poster": true
+    }
+  ]
+}

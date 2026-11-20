@@ -1,0 +1,76 @@
+{
+  "tutorial": "jobber-export-clients",
+  "version": 1,
+  "title": "Export your clients from Jobber",
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "name": "Eric",
+    "model": "eleven_multilingual_v2",
+    "settings": {
+      "stability": 0.55,
+      "similarity_boost": 0.75,
+      "style": 0.1
+    }
+  },
+  "status": "draft: narration follows the platform's help article; check every line against the recording before narrating",
+  "sampleData": "The platform's authorized demo account with sample clients only. No real names, emails, phone numbers, account ids or payment details on screen.",
+  "scenes": [
+    {
+      "id": "intro",
+      "narration": "This shows how to export your clients from Jobber as a CSV file. You'll need an admin account.",
+      "capture": {
+        "kind": "manual",
+        "what": "Jobber dashboard, signed in to the demo account. Cursor rests on the side navigation."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "clients",
+      "narration": "Click Clients in the side navigation.",
+      "capture": {
+        "kind": "manual",
+        "what": "Click Clients."
+      },
+      "minSeconds": 5,
+      "poster": true
+    },
+    {
+      "id": "more-actions",
+      "narration": "In the top right corner, click More Actions, then choose Export Clients.",
+      "capture": {
+        "kind": "manual",
+        "what": "Click More Actions, then Export Clients."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "format",
+      "narration": "Under Choose export format, select CSV, then click Export.",
+      "capture": {
+        "kind": "manual",
+        "what": "Select CSV, click Export. Show Jobber's confirmation."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "email",
+      "narration": "Jobber emails you the file. A large list may arrive as several files: download each one.",
+      "capture": {
+        "kind": "manual",
+        "what": "Demo mailbox: open Jobber's email, click the CSV attachment or link, show the download."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "return",
+      "narration": "Return to Selestial and upload the file you just downloaded.",
+      "capture": {
+        "kind": "manual",
+        "what": "Show the downloaded .csv in the browser's download list."
+      },
+      "minSeconds": 5,
+      "poster": false
+    }
+  ]
+}

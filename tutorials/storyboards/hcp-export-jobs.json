@@ -1,0 +1,67 @@
+{
+  "tutorial": "hcp-export-jobs",
+  "version": 1,
+  "title": "Export scheduled jobs from Housecall Pro",
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "name": "Eric",
+    "model": "eleven_multilingual_v2",
+    "settings": {
+      "stability": 0.55,
+      "similarity_boost": 0.75,
+      "style": 0.1
+    }
+  },
+  "status": "draft: narration follows the platform's help article; check every line against the recording before narrating",
+  "sampleData": "The platform's authorized demo account with sample clients only. No real names, emails, phone numbers, account ids or payment details on screen.",
+  "scenes": [
+    {
+      "id": "intro",
+      "narration": "This shows how to export your upcoming jobs from Housecall Pro.",
+      "capture": {
+        "kind": "manual",
+        "what": "Housecall Pro dashboard."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "jobs",
+      "narration": "Click Jobs in the left navigation bar. Click Edit columns, and include the customer, the scheduled date and the address.",
+      "capture": {
+        "kind": "manual",
+        "what": "Jobs > Edit columns."
+      },
+      "minSeconds": 5,
+      "poster": true
+    },
+    {
+      "id": "filter",
+      "narration": "Click Filter, set the scheduled date to the weeks ahead, then click Apply.",
+      "capture": {
+        "kind": "manual",
+        "what": "Filter > scheduled date > Apply."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "export",
+      "narration": "Click Actions in the top right, then Export, then Send file.",
+      "capture": {
+        "kind": "manual",
+        "what": "Actions > Export > Send file."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "return",
+      "narration": "Return to Selestial and upload the file you just downloaded.",
+      "capture": {
+        "kind": "manual",
+        "what": "Open the email, download the CSV."
+      },
+      "minSeconds": 5,
+      "poster": false
+    }
+  ]
+}

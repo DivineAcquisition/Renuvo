@@ -82,6 +82,11 @@ export const EXPORT_TABLES: readonly ExportTable[] = [
   { table: "websiteReads", index: "by_company_started" },
   { table: "clientImportRuns", index: "by_company_key" },
   { table: "importedRecords", index: "by_company_source_external" },
+  // Migration: records brought from another system, and the tutorials used to bring them (convex/lib/migration, lib/tutorials).
+  { table: "migrationImportRuns", index: "by_company_key" },
+  { table: "migrationRecords", index: "by_company_key" },
+  { table: "tutorialReports", index: "by_company" },
+  { table: "tutorialEvents", index: "by_company_tutorial" },
   // Activation: the first agent work an Owner started, and the in-app notices (convex/lib/activation/schema.ts).
   { table: "activations", index: "by_company_started" },
   { table: "activationTasks", index: "by_company_state" },

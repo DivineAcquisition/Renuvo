@@ -11,6 +11,7 @@ import { ChatProvider, useChat } from "@/components/app/chat/chat-context";
 import { AskButton, ChatPanel } from "@/components/app/chat/panel";
 import { SidebarChatList } from "@/components/app/chat/sessions";
 import { CompanyProvider, type Role, useCompany } from "@/components/app/company";
+import { TutorialHost } from "@/components/app/tutorials/host";
 import { DetailProvider, useDetail } from "@/components/app/detail-panel";
 import { useRun } from "@/components/app/form";
 import { missingSetup, NotSetUp } from "@/components/app/not-set-up";
@@ -205,12 +206,13 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, support, chi
     return (
       <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
         {banner ? <div className="[&>div]:top-0">{banner}</div> : null}
-        {children}
+        <TutorialHost>{children}</TutorialHost>
       </CompanyProvider>
     );
   }
   return (
     <CompanyProvider company={{ companyId, name: company.name, timezone: company.timezone, role }}>
+      <TutorialHost>
       <ChatProvider userId={userId} companyId={companyId}>
         <DetailProvider>
           <SidebarStateProvider userId={userId} companyId={companyId}>
@@ -231,6 +233,7 @@ function Workspace({ companyId, role, userId, businesses, onSwitch, support, chi
           </SidebarStateProvider>
         </DetailProvider>
       </ChatProvider>
+      </TutorialHost>
     </CompanyProvider>
   );
 }

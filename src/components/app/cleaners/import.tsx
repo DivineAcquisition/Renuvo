@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { useCompany } from "@/components/app/company";
 import { FormError, useRun } from "@/components/app/form";
 import { PageHeader } from "@/components/app/shell";
+import { TutorialCard, useSource } from "@/components/app/tutorials/offer";
 import { ArrowLeft, Check, FileSpreadsheet, TriangleAlert, Upload } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ const SAMPLE = "Name,Type,Phone,Email,Service areas,Skills\nRosa Diaz,Contractor
 
 export function ImportScreen() {
   const { companyId, role } = useCompany();
+  const [source] = useSource();
   const convex = useConvex();
   const importRows = useMutation(api.workforce.importRows);
   const { busy, error, run, setError } = useRun();
@@ -81,6 +83,11 @@ export function ImportScreen() {
         Cleaners
       </Link>
       <PageHeader title="Import cleaners" lead="Bring in a list from a spreadsheet. Nothing is written until you have reviewed every row." />
+      {step === 1 ? (
+        <div className="mb-5">
+          <TutorialCard placement="import.team" platform={source} />
+        </div>
+      ) : null}
       <ol className="mb-5 flex flex-wrap gap-2 text-sm" aria-label="Steps">
         {["Your list", "Match columns", "Review", "Done"].map((label, index) => (
           <li key={label} className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1", step === index + 1 ? "border-brand-500 bg-brand-500/8 font-medium text-strong" : step > index + 1 ? "border-success/40 text-success-foreground" : "border-border text-muted-foreground")} aria-current={step === index + 1 ? "step" : undefined}>

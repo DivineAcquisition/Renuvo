@@ -1,0 +1,76 @@
+{
+  "tutorial": "hcp-export-customers",
+  "version": 1,
+  "title": "Export your customers from Housecall Pro",
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "name": "Eric",
+    "model": "eleven_multilingual_v2",
+    "settings": {
+      "stability": 0.55,
+      "similarity_boost": 0.75,
+      "style": 0.1
+    }
+  },
+  "status": "draft: narration follows the platform's help article; check every line against the recording before narrating",
+  "sampleData": "The platform's authorized demo account with sample clients only. No real names, emails, phone numbers, account ids or payment details on screen.",
+  "scenes": [
+    {
+      "id": "intro",
+      "narration": "This shows how to export your customers from Housecall Pro. You'll need to be an admin.",
+      "capture": {
+        "kind": "manual",
+        "what": "Housecall Pro dashboard, demo account."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "customers",
+      "narration": "Select Customers in the left navigation bar.",
+      "capture": {
+        "kind": "manual",
+        "what": "Click Customers."
+      },
+      "minSeconds": 5,
+      "poster": true
+    },
+    {
+      "id": "actions",
+      "narration": "Click Actions on the right side, then choose Export.",
+      "capture": {
+        "kind": "manual",
+        "what": "Actions > Export."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "send",
+      "narration": "Confirm your email address, then click Send file.",
+      "capture": {
+        "kind": "manual",
+        "what": "Confirm email, Send file."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "email",
+      "narration": "The file comes from notifications at housecallpro dot com. If it hasn't arrived within an hour, check your spam folder.",
+      "capture": {
+        "kind": "manual",
+        "what": "Demo mailbox: open the email, download the CSV."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "return",
+      "narration": "Return to Selestial and upload the file you just downloaded.",
+      "capture": {
+        "kind": "manual",
+        "what": "Show the downloaded .csv."
+      },
+      "minSeconds": 5,
+      "poster": false
+    }
+  ]
+}

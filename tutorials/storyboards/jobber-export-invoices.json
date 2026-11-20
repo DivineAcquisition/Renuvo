@@ -1,0 +1,67 @@
+{
+  "tutorial": "jobber-export-invoices",
+  "version": 1,
+  "title": "Export invoices from Jobber",
+  "voice": {
+    "provider": "elevenlabs",
+    "voiceId": "cjVigY5qzO86Huf0OWal",
+    "name": "Eric",
+    "model": "eleven_multilingual_v2",
+    "settings": {
+      "stability": 0.55,
+      "similarity_boost": 0.75,
+      "style": 0.1
+    }
+  },
+  "status": "draft: narration follows the platform's help article; check every line against the recording before narrating",
+  "sampleData": "The platform's authorized demo account with sample clients only. No real names, emails, phone numbers, account ids or payment details on screen.",
+  "scenes": [
+    {
+      "id": "intro",
+      "narration": "This shows how to export past invoices from Jobber, to keep as each client's history.",
+      "capture": {
+        "kind": "manual",
+        "what": "Jobber dashboard."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "reports",
+      "narration": "Select Insights, then Reports. Under Financial reports, choose Invoices.",
+      "capture": {
+        "kind": "manual",
+        "what": "Insights > Reports > Invoices."
+      },
+      "minSeconds": 5,
+      "poster": true
+    },
+    {
+      "id": "dates",
+      "narration": "Choose the date range you want to keep.",
+      "capture": {
+        "kind": "manual",
+        "what": "Set a 12-month range."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "export",
+      "narration": "Click Email CSV. Jobber sends the file to the email you sign in with.",
+      "capture": {
+        "kind": "manual",
+        "what": "Email CSV, confirmation."
+      },
+      "minSeconds": 5
+    },
+    {
+      "id": "return",
+      "narration": "Return to Selestial and upload the file you just downloaded.",
+      "capture": {
+        "kind": "manual",
+        "what": "Open the email, download the CSV."
+      },
+      "minSeconds": 5,
+      "poster": false
+    }
+  ]
+}

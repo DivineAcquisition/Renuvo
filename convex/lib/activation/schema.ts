@@ -145,7 +145,7 @@ export const activationTables = {
   memberNotices: defineTable({
     companyId: v.id("companies"),
     memberId: v.id("members"),
-    kind: literals(["first_result", "asset_created", "approval_required", "task_completed", "needs_information", "needs_connection", "failed", "batch_finished", "support_access"] as const),
+    kind: literals(["first_result", "asset_created", "approval_required", "task_completed", "needs_information", "needs_connection", "failed", "batch_finished", "support_access", "service_issue", "service_recovered"] as const),
     agent: v.optional(agentValidator),
     headline: v.string(),
     summary: v.string(),

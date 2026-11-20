@@ -57,7 +57,7 @@ export type Priority = "critical" | "high" | "normal" | "digest";
 /** Who gets it, by role. "connector" adds the member who connected the thing it's about. */
 export type Audience = "owner" | "managers" | "everyone";
 
-export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "agent_acted", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect", "retention_serious", "retention_attention", "retention_outcome", "texting_progress", "texting_attention", "activation_result", "activation_summary", "support_summary"] as const;
+export const NOTICE_EVENTS = ["welcome", "security_change", "approval_needed", "approval_expiring", "agent_acted", "dispatch_escalation", "weekly_digest", "plan_payment_failed", "credits_exhausted", "customer_payment_failed", "inbox_reconnect", "retention_serious", "retention_attention", "retention_outcome", "texting_progress", "texting_attention", "activation_result", "activation_summary", "support_summary", "service_attention"] as const;
 export type NoticeEvent = (typeof NOTICE_EVENTS)[number];
 export const noticeEventValidator = v.union(...NOTICE_EVENTS.map((e) => v.literal(e)));
 
@@ -90,6 +90,7 @@ export const EVENT_INFO: Record<NoticeEvent, EventInfo> = {
   texting_attention: { category: "account", priority: "high", audience: "owner", owner: "selestial", when: "Business texting needs the Owner (a correction, a confirmation code or another number), or the carriers paused it." },
   activation_result: { category: "activity", priority: "normal", audience: "owner", owner: "selestial", when: "The first useful result of the agent work the Owner started is ready: a draft, a form, prepared follow-ups or a decision." },
   activation_summary: { category: "activity", priority: "normal", audience: "owner", owner: "selestial", when: "The first batch of agent work the Owner started has settled: what was made, what waits on them, and anything blocked." },
+  service_attention: { category: "account", priority: "high", audience: "owner", owner: "selestial", when: "Something in Selestial needs the Owner to act (reconnect an app, retry work, update an address), or a serious interruption begins. One email per problem, never one per retry." },
   support_summary: { category: "security", priority: "high", audience: "owner", owner: "selestial", when: "Selestial Support finished a session in which it changed something: what it changed, and why it was there." },
 };
 

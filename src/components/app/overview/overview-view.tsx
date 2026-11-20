@@ -45,6 +45,7 @@ export function OverviewView({
   approving,
   approveError,
   checklist,
+  attention,
 }: {
   data: OverviewData;
   /** "Your agents are working": the Owner's first agent work, when there is any (activation). */
@@ -58,6 +59,8 @@ export function OverviewView({
   approveError?: { id: string; message: string } | null;
   /** Shown under the briefing: for an Owner fresh from setup, what is left (components/app/setup/checklist.tsx). */
   checklist?: React.ReactNode;
+  /** Problems affecting the company's work and what Selestial is doing about them (components/app/issues). */
+  attention?: React.ReactNode;
 }) {
   const { now, timezone, today, decisions, schedule, team, activity, week } = data;
   const presence: Presence[] = (team ?? []).flatMap((department) => department.agents.map((agent) => ({ agent: agent.agent, name: agent.name, state: agent.state, line: presenceLine(agent, now, timezone) })));
@@ -68,6 +71,8 @@ export function OverviewView({
       ) : (
         <Skeleton className="h-56 rounded-2xl" />
       )}
+
+      {attention}
 
       {checklist}
 

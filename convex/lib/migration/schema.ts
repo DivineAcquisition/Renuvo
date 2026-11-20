@@ -14,6 +14,7 @@ import { scheduleValidator } from "../services/spec";
 import { literals } from "../statuses";
 import { CATEGORIES, FILE_KINDS } from "./rules";
 import { SOURCES } from "./sources";
+import { RECORD_KINDS } from "./records";
 
 export const MIGRATION_STEPS = ["source", "files", "organize", "review", "import", "verify"] as const;
 export type MigrationStep = (typeof MIGRATION_STEPS)[number];
@@ -31,7 +32,61 @@ export const OUTCOMES = ["created", "updated", "linked", "skipped", "failed"] as
 /** The Selestial staff member who did something in a support session. The company sees "Selestial Support". */
 export const staffRef = v.object({ staffId: v.id("staff"), sessionId: v.id("supportSessions") });
 
+// ── The quick records import in setup (convex/migrationImports.ts) ──
+export const recordKindValidator = literals(RECORD_KINDS);
+export const recordSourceValidator = v.union(v.literal("csv"), v.literal("jobber"), v.literal("housecall_pro"), v.literal("bookingkoala"));
+
+
 export const migrationTables = {
+  // Records brought in by the quick setup import: each belongs to a client already in Selestial, and none is a
+  // visit, a plan or an invoice until the owner sets one up (lib/migration/records.ts).
+  migrationRecords: defineTable({
+    companyId: v.id("companies"),
+    customerId: v.id("customers"),
+    /** The client's property at the row's street, when one matched. */
+    propertyId: v.optional(v.id("properties")),
+    kind: recordKindValidator,
+    source: recordSourceValidator,
+    /** Identifies the row across imports (records.ts recordKey). */
+    key: v.string(),
+    /** YYYY-MM-DD. An appointment's day, a schedule's first day, or a history record's date. */
+    day: v.optional(v.string()),
+    /** HH:MM on the company's clock. */
+    time: v.optional(v.string()),
+    endDay: v.optional(v.string()),
+    durationMinutes: v.optional(v.number()),
+    /** The frequency as the other system wrote it, and Selestial's schedule when it says one plainly. */
+    frequency: v.optional(v.string()),
+    cadence: v.optional(v.union(scheduleValidator, v.null())),
+    amountCents: v.optional(v.number()),
+    reference: v.optional(v.string()),
+    description: v.optional(v.string()),
+    status: v.optional(v.string()),
+    assignedTo: v.optional(v.string()),
+    /** review: waiting for the owner. set_up: they made a visit or plan from it. dismissed: they set it aside. History is always "reference". */
+    review: v.union(v.literal("review"), v.literal("set_up"), v.literal("dismissed"), v.literal("reference")),
+    runId: v.id("migrationImportRuns"),
+    createdAt: v.number(),
+  })
+    .index("by_company_key", ["companyId", "key"])
+    .index("by_company_kind", ["companyId", "kind", "review"])
+    .index("by_company_customer", ["companyId", "customerId", "kind"]),
+
+  migrationImportRuns: defineTable({
+    companyId: v.id("companies"),
+    importKey: v.string(),
+    kind: recordKindValidator,
+    source: recordSourceValidator,
+    label: v.string(),
+    results: v.array(v.object({ index: v.number(), name: v.string(), outcome: v.union(v.literal("created"), v.literal("skipped"), v.literal("failed")), reason: v.optional(v.string()) })),
+    created: v.number(),
+    skipped: v.number(),
+    failed: v.number(),
+    by: v.id("members"),
+    createdAt: v.number(),
+  }).index("by_company_key", ["companyId", "importKey"]),
+
+  // ── The guided migration (convex/migration.ts) ──
   migrations: defineTable({
     companyId: v.id("companies"),
     /** open: being prepared. importing: a run is writing. imported: written, being verified. released: the owner let agents work with it. */

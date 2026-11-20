@@ -1,0 +1,4 @@
+Name,Email,Phone,Street,Unit,City,State,ZIP,Property type,Frequency,Notes
+Avery Sample,avery@example.com,512-555-0100,100 Example St,,Austin,TX,78701,Home,Every 2 weeks,
+Sample Dental Office,office@example.com,512-555-0101,200 Sample Ave,Suite 3,Austin,TX,78702,Commercial,Weekly,
+Morgan Example,morgan@example.com,512-555-0102,300 Sample Rd,,Austin,TX,78703,Home,Once a month,
