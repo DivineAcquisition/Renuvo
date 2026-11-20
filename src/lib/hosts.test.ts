@@ -78,7 +78,9 @@ describe("which host a path belongs to", () => {
     expect(roleOfPath("/")).toBe("public");
     expect(roleOfPath("/sitemap.xml")).toBe("public");
     expect(roleOfPath("/legal/privacy")).toBe("public");
-    for (const path of ["/app", "/staff", "/staff/requests", "/app/approvals", "/app/agents/dispatch/schedule", "/login", "/signup", "/forgot-password", "/reset-password", "/auth/callback", "/auth/check-email", "/invite/abc.def", "/sign-in", "/sign-in/factor-one", "/sign-up"]) expect(roleOfPath(path)).toBe("app");
+    for (const path of ["/staff", "/staff/requests", "/staff/operations/billing"]) expect(roleOfPath(path)).toBe("admin");
+    expect(roleOfPath("/staffing")).toBe("public");
+    for (const path of ["/app", "/app/approvals", "/app/agents/dispatch/schedule", "/login", "/signup", "/forgot-password", "/reset-password", "/auth/callback", "/auth/check-email", "/invite/abc.def", "/sign-in", "/sign-in/factor-one", "/sign-up"]) expect(roleOfPath(path)).toBe("app");
     for (const path of ["/c", "/c/offer/abc", "/c/job/abc/photos", "/n/unsubscribe"]) expect(roleOfPath(path)).toBe("link");
     // A marketing page that only starts with the same letter stays public.
     expect(roleOfPath("/news")).toBe("public");
@@ -150,12 +152,48 @@ describe("the workspace host", () => {
     expect(get("app.example.test", "/legal/privacy")).toEqual(goesTo("https://www.example.test/legal/privacy"));
     expect(get("app.example.test", "/c/job/abc")).toEqual(goesTo("https://link.example.test/c/job/abc"));
   });
+
+  it("sends the staff console to the staff host", () => {
+    expect(get("app.example.test", "/staff/operations", FULL, "?x=1")).toEqual(goesTo("https://admin.example.test/staff/operations?x=1"));
+    expect(get("www.example.test", "/staff")).toEqual(goesTo("https://admin.example.test/staff"));
+  });
+});
+
+describe("the staff host", () => {
+  it("serves the staff console, and is not indexed", () => {
+    for (const path of ["/staff", "/staff/operations", "/staff/operations/attention", "/staff/companies"]) expect(get("admin.example.test", path)).toEqual(serves(true));
+    expect(indexable("admin.example.test", FULL)).toBe(false);
+  });
+
+  it("opens Operations from its root", () => {
+    expect(get("admin.example.test", "/")).toEqual(goesTo("https://admin.example.test/staff/operations"));
+  });
+
+  it("sends sign-in to the workspace host, remembering where staff were going", () => {
+    expect(get("admin.example.test", "/login", FULL, "?next=%2Fstaff%2Foperations")).toEqual(goesTo("https://app.example.test/login?next=%2Fstaff%2Foperations"));
+  });
+
+  it("opens a support session's company workspace on the workspace host, keeping the session in the query", () => {
+    expect(get("admin.example.test", "/app", FULL, "?support=abc123")).toEqual(goesTo("https://app.example.test/app?support=abc123"));
+  });
+
+  it("sends public pages to the public site and link pages to the link host", () => {
+    expect(get("admin.example.test", "/legal/privacy")).toEqual(goesTo("https://www.example.test/legal/privacy"));
+    expect(get("admin.example.test", "/c/offer/abc")).toEqual(goesTo("https://link.example.test/c/offer/abc"));
+  });
+
+  it("never replays a form post on another host", () => {
+    expect(decide({ host: "admin.example.test", pathname: "/", method: "POST" }, FULL)).toEqual({ kind: "not_found", message: "Not found." });
+    expect(decide({ host: "admin.example.test", pathname: "/app", method: "POST" }, FULL)).toEqual({ kind: "not_found", message: "Not found." });
+    expect(decide({ host: "admin.example.test", pathname: "/staff/operations", method: "POST" }, FULL)).toEqual(serves(true));
+  });
 });
 
 describe("the link host", () => {
   it("serves link pages only", () => {
     expect(get("link.example.test", "/c/offer/abc")).toEqual(serves(true));
     expect(get("link.example.test", "/app")).toEqual({ kind: "not_found", message: "Not found." });
+    expect(get("link.example.test", "/staff")).toEqual({ kind: "not_found", message: "Not found." });
     expect(get("link.example.test", "/sign-in")).toEqual({ kind: "not_found", message: "Not found." });
     expect(get("link.example.test", "/legal/privacy")).toEqual({ kind: "not_found", message: "Not found." });
     expect(indexable("link.example.test", FULL)).toBe(false);
@@ -168,8 +206,7 @@ describe("the link host", () => {
 
 describe("hosts that are not built", () => {
   it("show neither the public site nor the workspace", () => {
-    for (const path of ["/", "/app", "/sign-in", "/c/offer/abc", "/anything"]) {
-      expect(get("admin.example.test", path)).toEqual({ kind: "not_found", message: "Not found." });
+    for (const path of ["/", "/app", "/staff", "/sign-in", "/c/offer/abc", "/anything"]) {
       expect(get("docs.example.test", path)).toEqual({ kind: "not_found", message: "Not available yet." });
       expect(get("status.example.test", path)).toEqual({ kind: "not_found", message: "Not available yet." });
     }
@@ -184,7 +221,7 @@ describe("hosts that are not built", () => {
 describe("one page, one host", () => {
   it("never serves the same path on two configured hosts", () => {
     const hosts = ["www.example.test", "app.example.test", "link.example.test", "admin.example.test", "docs.example.test", "status.example.test"];
-    for (const path of ["/", "/legal/privacy", "/sitemap.xml", "/app", "/app/schedule", "/sign-in", "/sign-up", "/c/offer/abc"]) {
+    for (const path of ["/", "/legal/privacy", "/sitemap.xml", "/app", "/app/schedule", "/sign-in", "/sign-up", "/c/offer/abc", "/staff", "/staff/operations"]) {
       const served = hosts.filter((host) => get(host, path).kind === "next");
       expect(served, path).toHaveLength(1);
     }
@@ -192,9 +229,9 @@ describe("one page, one host", () => {
 
   it("redirects only to configured hosts", () => {
     const origins = new Set(Object.values(FULL));
-    const hosts = ["www.example.test", "app.example.test", "link.example.test"];
+    const hosts = ["www.example.test", "app.example.test", "link.example.test", "admin.example.test"];
     for (const host of hosts) {
-      for (const path of ["/", "/legal/privacy", "/app", "/sign-in", "/c/offer/abc"]) {
+      for (const path of ["/", "/legal/privacy", "/app", "/sign-in", "/c/offer/abc", "/staff/operations"]) {
         const decision = get(host, path);
         if (decision.kind === "redirect") expect(origins.has(new URL(decision.to).origin)).toBe(true);
       }
@@ -209,6 +246,11 @@ describe("partly set up", () => {
     expect(get("www.example.test", "/c/offer/abc", map)).toEqual(serves(false));
     // A host with no setting is still unknown, so it is not restricted.
     expect(get("app.example.test", "/", map)).toEqual(serves(false));
+  });
+
+  it("keeps the staff console on the workspace host until the staff host is set", () => {
+    const map = hostMap({ NEXT_PUBLIC_SITE_ORIGIN: "https://www.example.test", APP_ORIGIN: "https://app.example.test" });
+    expect(get("app.example.test", "/staff/operations", map)).toEqual(serves(true));
   });
 
   it("gives the link host a plain not-found at its root when there is no public site to send to", () => {

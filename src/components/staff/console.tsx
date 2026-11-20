@@ -1,9 +1,10 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
-import { useState } from "react";
+import { useParams, usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OpenWorkspaceDialog } from "@/components/staff/operations";
+import { AUTH, withNext } from "@/lib/auth/routes";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
@@ -41,10 +43,25 @@ function NotFound() {
   );
 }
 
+/**
+ * Signed out: off to sign-in, which remembers the page. On the staff host the sign-in page lives on the
+ * workspace host, and the person comes back here afterwards (src/lib/hosts.ts).
+ */
+function ToSignIn() {
+  const router = useRouter();
+  const pathname = usePathname();
+  useEffect(() => {
+    router.replace(withNext(AUTH.login, pathname));
+  }, [pathname, router]);
+  return null;
+}
+
 function StaffCheck({ children }: { children: React.ReactNode }) {
   const { isLoading, isAuthenticated } = useConvexAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const me = useQuery(api.staff.me, isAuthenticated ? {} : "skip");
-  if (isLoading || (isAuthenticated && me === undefined)) {
+  if (isLoaded && !isSignedIn) return <ToSignIn />;
+  if (isLoading || !isLoaded || (isAuthenticated && me === undefined)) {
     return (
       <div className="mx-auto max-w-6xl p-6" aria-busy="true" aria-label="Loading">
         <Skeleton className="h-10 w-60" />
@@ -75,7 +92,7 @@ function StaffShell({ role, children }: { role: "admin" | "support" | "reviewer"
     <div className="min-h-dvh bg-muted/50">
       <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5 sm:px-6">
-          <Link href="/staff" className="flex items-center gap-2 font-heading text-base text-strong">
+          <Link href="/staff/operations" className="flex items-center gap-2 font-heading text-base text-strong">
             <LogoMark className="size-7" />
             Selestial staff
           </Link>
