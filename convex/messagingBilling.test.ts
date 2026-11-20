@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dispatchTestEnv, flush, PHONES, setup } from "../tests/dispatchHarness";
-import { HOUR, NOW, refusal } from "../tests/harness";
+import { HOUR, NOW, refusal, staffWith } from "../tests/harness";
 import { billing } from "../tests/setupBilling";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -238,6 +238,7 @@ describe("Messaging billing", () => {
     const rows = await staff.query(api.messagingFunds.attention, {});
     expect(rows).toEqual([expect.objectContaining({ company: expect.any(String), kind: "overdraft_floor", balance: expect.any(Number) })]);
     expect(rows[0].balance).toBeLessThanOrEqual(OVERDRAFT_FLOOR);
+    await staffWith(s.t, STAFF, ["billing.adjust"]);
     await staff.mutation(api.messagingFunds.supportCredit, { companyId: s.companyId, cents: 1_000, reason: "Spam to the number; blocked with the carrier", key: `attention:${rows[0].id}` });
     await staff.mutation(api.messagingFunds.resolveAttention, { id: rows[0].id, note: "Spam to the number; blocked with the carrier" });
     await flush(s.t);

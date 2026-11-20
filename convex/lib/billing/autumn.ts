@@ -16,6 +16,7 @@
  * The secret key never leaves the server. Its prefix decides the environment: am_sk_test_ is the sandbox,
  * am_sk_live_ is production, and any other value is treated as not configured.
  */
+import { isNonProduction } from "../environment";
 import { AUTUMN } from "./catalog";
 
 export type AutumnEnv = "sandbox" | "production";
@@ -26,7 +27,8 @@ const TIMEOUT_MS = 10_000;
 export function autumnConfig(): { secretKey: string; env: AutumnEnv } | null {
   const secretKey = process.env.AUTUMN_SECRET_KEY?.trim() ?? "";
   if (secretKey.startsWith("am_sk_test_")) return { secretKey, env: "sandbox" };
-  if (secretKey.startsWith("am_sk_live_")) return { secretKey, env: "production" };
+  // A backend that is not production never bills through Autumn's live environment.
+  if (secretKey.startsWith("am_sk_live_")) return isNonProduction() ? null : { secretKey, env: "production" };
   return null;
 }
 

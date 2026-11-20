@@ -125,6 +125,27 @@ export const operationsTables = {
     found: v.optional(v.number()),
   }).index("by_check", ["check"]),
 
+  /**
+   * A restore's lock-down (convex/restoration.ts, docs/operations/05-recovery-runbook.md): every company's
+   * outbound sending suspended and agents paused until provider state is reconciled, with what each
+   * company had before, so release puts back exactly that.
+   */
+  lockdowns: defineTable({
+    reason: v.string(),
+    startedAt: v.number(),
+    releasedAt: v.optional(v.number()),
+    releaseNote: v.optional(v.string()),
+  }).index("by_started", ["startedAt"]),
+
+  lockdownCompanies: defineTable({
+    lockdownId: v.id("lockdowns"),
+    companyId: v.id("companies"),
+    priorSuspendedAt: v.optional(v.number()),
+    priorPausedAgents: v.array(v.string()),
+  })
+    .index("by_lockdown_company", ["lockdownId", "companyId"])
+    .index("by_lockdown", ["lockdownId"]),
+
   opsSignals: defineTable({
     kind: v.literal("webhook_failed"),
     /** Where it happened, for example the webhook path /webhooks/telnyx. */

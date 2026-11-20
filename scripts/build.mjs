@@ -11,6 +11,9 @@
  */
 import { spawnSync } from "node:child_process";
 
+/** The live backend. Keep convex/lib/environment.ts's copy the same (convex/environment.test.ts checks). */
+const PRODUCTION_DEPLOYMENTS = ["terrific-avocet-835"];
+
 const production = process.env.VERCEL_ENV === "production";
 const key = process.env.CONVEX_DEPLOY_KEY?.trim();
 
@@ -18,6 +21,19 @@ const run = (command, args) => {
   const result = spawnSync(command, args, { stdio: "inherit", env: process.env });
   process.exit(result.status ?? 1);
 };
+
+/**
+ * A preview must never read or write the live record. Vercel gives previews the production backend address
+ * unless its Preview setting says otherwise, so a preview built against the live backend is built with no
+ * backend at all: its signed-in and link pages say Selestial isn't available, and nothing reaches real data.
+ * Point Preview's NEXT_PUBLIC_CONVEX_URL at the test backend to get working previews.
+ */
+const backend = /^https?:\/\/([a-z0-9-]+)\.convex\.cloud\/?$/i.exec(process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ?? "");
+if (process.env.VERCEL_ENV === "preview" && backend && PRODUCTION_DEPLOYMENTS.includes(backend[1].toLowerCase())) {
+  console.log("Preview build: NEXT_PUBLIC_CONVEX_URL is the live backend, so it is left out. This preview shows no live data.");
+  delete process.env.NEXT_PUBLIC_CONVEX_URL;
+  delete process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+}
 
 if (production && key) {
   console.log("Production build: deploying the Convex backend, then building the site against it.");

@@ -25,6 +25,7 @@ import { notePortalAction, portalLinkForToken, portalLinkState, type PortalActio
 import { isManager, isOwner, roleOf, type Role } from "./roles";
 import { publicIdFor, type LinkKind } from "./sales/links";
 import { manageBasisHolds, recordSupportChange, redactingDb, requireSupport, type SupportContext, type SupportUse } from "./support/access";
+import { capabilitiesOf, type Capability } from "./support/catalog";
 
 type AnyValidators = Record<string, PropertyValidators[string]>;
 
@@ -237,13 +238,20 @@ export function staffQuery<V extends AnyValidators, R>(def: { args: V; handler: 
 }
 
 /** For Selestial staff only. `adminOnly` limits it to staff admins. */
-export function staffMutation<V extends AnyValidators, R>(def: { args: V; adminOnly?: boolean; handler: (ctx: MutationCtx & StaffAccess, args: ObjectType<V>) => R }): RegisteredMutation<"public", ObjectType<V>, R> {
+export function staffMutation<V extends AnyValidators, R>(def: {
+  args: V;
+  adminOnly?: boolean;
+  /** A staff capability the caller must hold (convex/lib/support/catalog.ts), beyond being staff. */
+  capability?: Capability;
+  handler: (ctx: MutationCtx & StaffAccess, args: ObjectType<V>) => R;
+}): RegisteredMutation<"public", ObjectType<V>, R> {
   return mutation({
     args: def.args,
     handler: async (ctx: MutationCtx, args: ObjectType<V>) => {
       const who = signedIn(await requireIdentity(ctx));
       const staff = await requireStaff(ctx, who, true);
       if (def.adminOnly && staff.role !== "admin") notAllowed();
+      if (def.capability && !capabilitiesOf(staff).has(def.capability)) notAllowed();
       return def.handler({ ...ctx, ...who, staff }, args);
     },
   } as any);

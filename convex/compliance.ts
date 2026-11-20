@@ -159,13 +159,21 @@ export const setRegistration = staffMutation({
   },
 });
 
-/** Selestial staff only. While suspended, the sending policy refuses every message for the company. */
+/**
+ * Emergency suspension, for staff holding `outbound.suspend`. While suspended, the sending policy refuses
+ * every outbound message for the company at the moment it would go: texts, emails and agents' messages.
+ * Incoming texts are still received and an opt-out (STOP) is still recorded and honored, though its
+ * confirmation reply is not sent while suspended; delivery reports and billing reconciliation keep working.
+ * Refused messages are not kept to go later, so lifting it never releases a backlog.
+ */
 export const setSuspended = staffMutation({
+  capability: "outbound.suspend",
   args: { companyId: v.id("companies"), suspended: v.boolean(), note: v.string() },
   handler: async (ctx, args) => {
     const company = await ctx.db.get(args.companyId);
     if (!company) notFound();
     const note = text(args.note, "The note", 500);
+    if (note.length < 10) throw userError("Say why, so the next person can tell what happened and when it can be lifted.");
     await ctx.db.patch(company._id, { suspendedAt: args.suspended ? (company.suspendedAt ?? Date.now()) : undefined });
     await recordEvent(ctx, {
       companyId: company._id,

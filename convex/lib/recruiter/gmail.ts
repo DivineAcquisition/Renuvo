@@ -16,6 +16,7 @@
  * NOT VERIFIED against Gmail itself in this build: no Google OAuth app exists yet. Request and response
  * shapes follow the Gmail API v1 reference as understood when this was written.
  */
+import { sendBlocked } from "../environment";
 import { MailboxAuthError, MailboxProviderError, type ListResult, type MailboxConnector, type MailboxScope } from "./mailbox";
 import type { MessageAttachment, MessageBody, MessageHeader } from "./mail";
 
@@ -332,6 +333,18 @@ export function replySubject(subject: string): string {
   return /^re:/i.test(clean) ? clean : `Re: ${clean}`;
 }
 
+/** The To address of a base64url MIME message, or "" when it has none (and so is never allowed on a test backend). */
+export function recipientOf(raw: string): string {
+  let text = "";
+  try {
+    text = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
+  } catch {
+    return "";
+  }
+  const line = /^To:\s*(.+)$/im.exec(text)?.[1] ?? "";
+  return (/<([^<>\s]+@[^<>\s]+)>/.exec(line)?.[1] ?? line).trim();
+}
+
 export type GmailSendResult = { ok: true; providerMessageId: string; delivered: false } | { ok: false; retryable: boolean; problem: string };
 
 /**
@@ -342,6 +355,9 @@ export type GmailSendResult = { ok: true; providerMessageId: string; delivered: 
  */
 export async function sendFromGmail(input: { token: string; raw: string; threadId?: string; fetch?: Fetch }): Promise<GmailSendResult> {
   const fetcher = input.fetch ?? fetch;
+  // A backend that is not production sends from a mailbox only to its test recipients (convex/lib/environment.ts).
+  const blocked = sendBlocked(recipientOf(input.raw));
+  if (blocked) return { ok: false, retryable: false, problem: blocked };
   const response = await fetcher(`${API}/messages/send`, { method: "POST", headers: { Authorization: `Bearer ${input.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ raw: input.raw, ...(input.threadId ? { threadId: input.threadId } : {}) }) });
   if (response.ok) {
     const body = (await response.json().catch(() => null)) as { id?: string } | null;

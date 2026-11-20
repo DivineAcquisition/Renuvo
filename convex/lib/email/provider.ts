@@ -5,6 +5,7 @@
  * A provider's answer is turned into plain words here. Its raw response and the API key never leave
  * this file: they are not returned, not logged and not stored.
  */
+import { sendBlocked } from "../environment";
 import { isVerifiedFrom } from "./senders";
 export type EmailInput = {
   to: string;
@@ -144,6 +145,17 @@ function resendProvider(apiKey: string, from: string): EmailProvider {
   };
 }
 
+/** A backend that is not production emails only its test recipients (convex/lib/environment.ts). */
+function testSafe(provider: EmailProvider): EmailProvider {
+  return {
+    name: provider.name,
+    async send(input) {
+      const blocked = sendBlocked(input.to);
+      return blocked ? { ok: false, retryable: false, problem: blocked } : provider.send(input);
+    },
+  };
+}
+
 /** The provider this deployment uses, from EMAIL_PROVIDER. Null means email is not connected. */
 export function emailProvider(): EmailProvider | null {
   const name = process.env.EMAIL_PROVIDER?.trim().toLowerCase();
@@ -151,7 +163,7 @@ export function emailProvider(): EmailProvider | null {
   if (name === "resend") {
     const apiKey = process.env.RESEND_API_KEY?.trim();
     const from = process.env.EMAIL_FROM?.trim();
-    return apiKey && from ? resendProvider(apiKey, from) : null;
+    return apiKey && from ? testSafe(resendProvider(apiKey, from)) : null;
   }
   return null;
 }
