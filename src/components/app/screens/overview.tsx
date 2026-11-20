@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { Suspense, useState } from "react";
 
+import { IssueCards } from "@/components/app/issues/issue-cards";
 import { useCompany } from "@/components/app/company";
 import { useDetail } from "@/components/app/detail-panel";
 import { messageOf } from "@/components/app/form";
@@ -78,6 +79,7 @@ export function OverviewScreen() {
       approving={approving}
       approveError={error}
       checklist={<SetupChecklist />}
+      attention={<IssueCards place="home" />}
     />
   );
 }

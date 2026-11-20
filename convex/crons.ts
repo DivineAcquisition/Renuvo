@@ -97,6 +97,8 @@ crons.interval("activation recovers and resumes first work", { minutes: 5 }, int
 // Operations: each monitoring check runs on its own schedule (convex/lib/operations/detectors.ts). Checks read
 // records through indexes only and never call a provider or a model; what they find becomes an incident.
 crons.interval("operations checks find and verify incidents", { minutes: 5 }, internal.operations.tick, {});
+// Staff alerts go out grouped: one message per staff member with everything waiting (convex/lib/operations/alerts.ts).
+crons.interval("operations alerts reach staff", { minutes: 5 }, internal.operations.sendStaffAlerts, {});
 // Admin Support Sessions past their hour end and send the owner their summary. Requests already refuse them.
 crons.interval("support sessions end when they expire", { minutes: 1 }, internal.support.expireDue, {});
 

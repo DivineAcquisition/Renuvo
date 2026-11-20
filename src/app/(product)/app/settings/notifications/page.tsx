@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { IssueCards } from "@/components/app/issues/issue-cards";
 import { EmailPreviews } from "@/components/app/settings/email-previews";
 import { NotificationPreferences } from "@/components/app/settings/notification-preferences";
 import { SectionPage } from "@/components/app/settings/section-page";
@@ -10,6 +11,7 @@ export default function Page() {
   return (
     <SectionPage id="notifications">
       <div className="grid gap-10">
+        <IssueCards place="notifications" />
         <NotificationPreferences />
         <section aria-labelledby="email-previews" className="grid gap-3">
           <div>
