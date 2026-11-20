@@ -78,7 +78,7 @@ export function FilesStep() {
           <p className="text-sm font-semibold text-strong">Drop CSV files here</p>
           <p className="text-xs text-muted-foreground">Up to {view.limits.files} files, 5 MB and {view.limits.rowsPerFile.toLocaleString()} rows each. Excel files: save as CSV first.</p>
         </div>
-        <input ref={input} type="file" accept=".csv,.tsv,.txt,text/csv" multiple className="sr-only" id="migration-files" onChange={(e) => e.target.files && void send(e.target.files)} disabled={locked} />
+        <input ref={input} type="file" accept=".csv,.tsv,.txt,text/csv" multiple className="sr-only" id="migration-files" aria-label="Choose CSV files to upload" onChange={(e) => e.target.files && void send(e.target.files)} disabled={locked} />
         <Button variant="primary" onClick={() => input.current?.click()} disabled={locked}>
           <FileSpreadsheet aria-hidden />
           Choose files

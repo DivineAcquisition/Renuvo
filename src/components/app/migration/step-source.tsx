@@ -107,7 +107,7 @@ export function SourceStep() {
               <button key={kind} type="button" aria-pressed={on} disabled={locked} onClick={() => toggle(kind)} className={cn("inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500", on ? "border-brand-500 bg-brand-500/10 text-strong" : "border-border text-muted-foreground hover:bg-muted")}>
                 {on ? <Check className="size-3" aria-hidden /> : null}
                 {KIND_LABELS[kind].label}
-                {!now ? <span className="rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">Coming next</span> : null}
+                {!now ? <span className="rounded-full bg-muted px-1.5 py-px text-[10px] text-strong">Coming next</span> : null}
               </button>
             );
           })}
@@ -149,7 +149,7 @@ function Chosen({ source }: { source: Source }) {
         {card.verifiedFrom ? (
           <>
             Checked against{" "}
-            <a className="text-brand-300 underline-offset-2 hover:underline" href={card.verifiedFrom.url} target="_blank" rel="noreferrer">
+            <a className="text-brand-300 underline underline-offset-2" href={card.verifiedFrom.url} target="_blank" rel="noreferrer">
               {card.name}&apos;s help center
             </a>{" "}
             on {new Date(`${card.verifiedFrom.checkedOn}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. Menus can change; tell us if these steps don&apos;t match.
@@ -176,5 +176,5 @@ function Chosen({ source }: { source: Source }) {
 
 function SourceMark({ id }: { id: Source }) {
   const letters: Record<Source, string> = { jobber: "J", housecall_pro: "HP", bookingkoala: "BK", spreadsheet: "CSV", other: "…", assisted: "S" };
-  return <span className="grid h-6 min-w-6 place-items-center rounded-md bg-muted px-1 text-[10px] font-bold text-muted-foreground">{letters[id]}</span>;
+  return <span className="grid h-6 min-w-6 place-items-center rounded-md bg-muted px-1 text-[10px] font-bold text-strong" aria-hidden>{letters[id]}</span>;
 }

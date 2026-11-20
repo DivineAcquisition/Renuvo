@@ -1,0 +1,106 @@
+[
+ {
+  "tag": "desktop",
+  "name": "1-source",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "name": "2-files",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "name": "3-organize",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "name": "4-review",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "name": "5-import-ready",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "name": "6-importing",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "name": "7-verify",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "name": "8-client",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "desktop",
+  "errors": []
+ },
+ {
+  "tag": "phone",
+  "name": "1-source",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "name": "2-files",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "name": "3-organize",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "name": "4-review",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "name": "5-import-ready",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "name": "6-importing",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "name": "7-verify",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "name": "8-client",
+  "overflow": 0,
+  "axe": []
+ },
+ {
+  "tag": "phone",
+  "errors": []
+ }
+]

@@ -80,7 +80,7 @@ function MappingEditor({ file }: { file: FileView }) {
         )
       }
     >
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Scrollable table">
         <table className="w-full min-w-[36rem] text-left text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>

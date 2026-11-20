@@ -236,10 +236,105 @@ The quick setup step says what it is and links to the guided migration. The guid
 
 Screenshots: `docs/screenshots/migration/*-p6-verify.png`. The first-visit date and the $0.025 rate formatting were fixed after the capture.
 
-## Not yet (phase 7 and beyond)
+## Phase 7: assignment checks, the brief's test checklist, visual verification
 
-- **Verification against real export samples** from Jobber, Housecall Pro and BookingKoala: still the most important open item.
-- **Model-assisted review** with cost disclosure (free for assisted migrations).
-- **Cleaner assignment conflicts:** assignments in booking files are noted, not imported.
-- Agreement documents inside the migration (they go through Agreements today), Excel files, and connector reads inside the migration.
-- **One importer:** merging the quick setup import and the guided migration into a single path.
+Built November 20, 2026, after main gained Operations phase 4 (#126; merged cleanly apart from one export-registry line).
+
+### Decisions (from the owner)
+
+| Question | Decision |
+|---|---|
+| Real export samples | The owner will provide them. Until they're checked, recognition is reported as unverified (see the final report) |
+| Cleaner assignments in files | Flag conflicts, and keep a matched cleaner as the preferred cleaner |
+
+### Assignment checks and preferred cleaners
+
+- **Matching.** The old system's cleaner is matched to the existing team or to the imported team file, by exact name or by a first name that fits exactly one person. The same person in both counts once, preferring the team record. Several possible matches, or none, are noted, not guessed.
+- **Flags, which never block a row:**
+  - double-bookings, meaning the same cleaner on overlapping visits;
+  - a visit outside the cleaner's weekly availability;
+  - no availability on file;
+  - availability that couldn't be read.
+  The assistant panel counts these conflicts.
+- **The match is kept as preferred, never assigned.** It's stored on the visit (`jobs.preferredCleanerIds`, new) or the plan (`servicePlans.preferredCleanerIds`, which existed but nothing read).
+- **Dispatch.** `lib/dispatch/facts.ts` passes a job's and its plan's preferred cleaners to `rankCleaners`, which asks a qualifying preferred cleaner first ("is this customer's usual cleaner"). Eligibility runs before ranking, so a preference never gets past a check: an out-of-area preferred cleaner stays excluded.
+
+### Tests added for the brief's checklist
+
+| Brief item | Where it's tested |
+|---|---|
+| Repeated files | Phase 1: re-run writes nothing; re-upload links. Phase 5: duplicate invoices counted once |
+| Interrupted imports | Phase 1: lease expiry plus sweep plus a concurrent duplicate step ends with exactly 95 customers. Undo resumes the same way |
+| Ambiguous dates | Rules tests; phase 7: a row waits until the owner picks day/month, then reads April 3 |
+| Multiple properties | Commercial grouping, the "several properties, say which" review, grouped sites becoming properties |
+| Duplicate contacts | Matches with reasons, keep-existing and update-fields; phase 7: a household sharing an email is flagged with the household note, never merged |
+| Recurrence conflicts | Phase 1: bookings reconciled to the plan series. Phase 7: a second booking on the same series day is a duplicate, a visit moved by a day stands for its series day, a far-off one is separate, and a release books no day twice |
+| Partial failures | Phase 7: a service archived mid-import fails only the visits, with the reason. The customer is created, counts balance, and after a fix the owner re-decides and imports |
+| Cross-company access | Phase 1: another company can't read or decide rows. Support sessions are bound to their company |
+| Consent preservation | Phases 1 and 5: no permission is ever created; opt-outs are kept with their scope; consent text becomes an Owner note. Phase 6: undo never removes an opt-out |
+| No unintended agent actions | Held visits, plans and team. Dispatch cover, plan booking, follow-up sweeps and ad conversions do nothing. No customer or cleaner messages. Release is per workflow and Owner-only |
+
+Migration tests: 25. Full suite after the merge: 125 files, 1,422 tests passing.
+
+### Visual verification
+
+One fresh scenario with every record kind, an existing client and a commercial account was rendered through every step, using the real components and query results captured from the backend. Each step was checked at 1440 and 390 wide: 8 screens at each width.
+
+- **Accessibility:** axe-core WCAG 2 A/AA scan. The first pass found five issues, now fixed:
+  - low contrast on the source-card monograms and the "Coming next" pills;
+  - a link marked by color only;
+  - an unlabeled file input;
+  - scrollable tables keyboard users couldn't reach (now focusable regions).
+  The final pass found no violations on any screen.
+- **Layout:** no horizontal overflow at 390 wide on any screen.
+- **Console:** no errors.
+- Results: `docs/screenshots/migration/final/` (screenshots and `accessibility.json`).
+
+## Final report
+
+### Supported today
+
+- **The guided workspace** at `/app/migration`: six steps, saved and resumable, opened from setup, Settings, the Clients empty state and a Home banner. Every entry point opens the same migration. It includes the assistant panel, real progress, and a desktop and phone layout.
+- **Sources:**
+  - Jobber, Housecall Pro, BookingKoala, spreadsheet and other systems by CSV.
+  - "Help from Selestial" through Admin Support Sessions.
+  - Read-only Jobber and Housecall Pro connections are mentioned only when configured, and are never called an integration for a CSV.
+  - Excel files are refused with Save-as-CSV steps.
+  - Templates for all seven record kinds.
+- **Records imported:**
+  - customers (person or business, categories, commercial accounts);
+  - properties (details, access, site contacts);
+  - team members (onboarding, held, availability);
+  - recurring services (held plans, price proposals);
+  - upcoming bookings (held visits, reconciled with plans, preferred cleaners);
+  - service history (read-only);
+  - opening balances (reference only);
+  - opt-outs, kept with their scope.
+- **Review:**
+  - Deterministic dates, times, money and recurrence. Nothing invented.
+  - Duplicates matched with reasons and never merged without a choice. Relationships linked only when certain.
+  - Inline corrections the owner owns; bulk actions for similar problems; owner questions from staff.
+- **Import:** background and resumable. Retries and re-uploads never copy anything. Parents come before dependents. Each row gets its own result, and failures are isolated.
+- **After the import:**
+  - A reconciled report with links and a downloadable CSV of everything not imported.
+  - An in-app notice and a branded email to the Owner.
+  - Per-workflow activation review and release.
+  - Owner-only undo of untouched records, with reasons for what stays.
+- **Assisted migration:** staff prepare in Manage sessions under `records.edit`, attributed and logged. Staff can't import, release or undo.
+
+### Verified against real export samples
+
+- **None yet.** Column recognition for Jobber, Housecall Pro and BookingKoala has only been tested against files written for the tests. The owner is providing real exports. When they arrive, they'll be added as test fixtures and any column the guessers miss will be fixed.
+- Housecall Pro's export steps (menu path, emailed CSV, Admins only) were checked against its official help center on November 20, 2026. Jobber's and BookingKoala's help sites couldn't be read, and their cards say so.
+
+### Not supported
+
+- Excel files, and connector reads inside the migration (CSV only).
+- Agreement documents inside the migration: they go through Agreements, where a signature is never assumed.
+- Services as new Selestial services: bookings are matched to existing live services instead.
+- Payments, saved cards, subscriptions, bank details and credits.
+- Model-assisted review: no AI reads files, and nothing is billed. Planned free for assisted migrations.
+- Assigning cleaners: matches are only preferences that Dispatch weighs.
+- A universal rollback: undo covers untouched records only.
+- One importer: the quick setup import and the guided migration still coexist, labeled, with cross-importer duplicate checks.
+

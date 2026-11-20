@@ -42,7 +42,7 @@ export function VerifyStep() {
       />
 
       <Section title="What moved" lead={balanced ? "Each count is reconciled with the rows in your files: they add up exactly." : "Some counts don't add up yet; an import may still be running."}>
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Scrollable table">
           <table className="w-full min-w-[38rem] text-left text-xs">
             <thead className="bg-muted/40 text-muted-foreground">
               <tr>

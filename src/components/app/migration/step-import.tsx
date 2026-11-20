@@ -81,7 +81,7 @@ export function ImportStep() {
 
       {!running && readiness ? (
         <Section title={run ? "Import again" : "Ready to import?"} lead={run ? "Records you fixed or decided since the last import are written now. Everything already imported is left as it is." : undefined}>
-          <div className="overflow-x-auto rounded-xl border border-border">
+          <div className="overflow-x-auto rounded-xl border border-border" tabIndex={0} role="region" aria-label="Scrollable table">
             <table className="w-full min-w-[34rem] text-left text-xs">
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
