@@ -33,7 +33,7 @@ export function SetupFunnel() {
           </h1>
           <p className="text-sm text-muted-foreground">New companies that started setup in the window, and how far they got.</p>
         </div>
-        <SegmentedControl label="Window" hideLabel density="compact" value={String(days)} options={WINDOWS.map((value) => ({ id: String(value), label: `${value} days` }))} onChange={(value) => setDays(Number(value))} />
+        <SegmentedControl label="Window" hideLabel density="compact" value={String(days)} options={WINDOWS.map((value) => ({ id: String(value), label: `${value} days` }))} onChange={(value) => setDays(Number(value) as (typeof WINDOWS)[number])} />
       </div>
       {!funnel ? (
         <Skeleton className="h-72 rounded-2xl" />

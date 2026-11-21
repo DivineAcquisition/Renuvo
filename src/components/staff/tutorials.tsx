@@ -202,7 +202,7 @@ function Metrics() {
           </h2>
           <p className="text-sm text-muted-foreground">Counts only. A finished video is not evidence that anyone exported anything.</p>
         </div>
-        <SegmentedControl label="Window" hideLabel density="compact" value={String(days)} options={WINDOWS.map((value) => ({ id: String(value), label: `${value} days` }))} onChange={(value) => setDays(Number(value))} />
+        <SegmentedControl label="Window" hideLabel density="compact" value={String(days)} options={WINDOWS.map((value) => ({ id: String(value), label: `${value} days` }))} onChange={(value) => setDays(Number(value) as (typeof WINDOWS)[number])} />
       </div>
       {!metrics ? (
         <Skeleton className="h-64 rounded-2xl" />
