@@ -101,7 +101,8 @@ export function SwitchRow({
         <Switch id={id} checked={checked} onChange={onChange} disabled={disabled} readOnly={readOnly} labelledBy={`${id}-title`} describedBy={described} density={density} className="mt-0.5" />
       </div>
       {consequence ? <Consequence id={`${id}-consequence`}>{consequence}</Consequence> : null}
-      {requirement ? <Requirement id={`${id}-requirement`}>{requirement}</Requirement> : null}
+      {/* Pass a <Requirement> (it carries whether the need is met); the row only gives it an id to be described by. */}
+      {requirement ? <div id={`${id}-requirement`}>{requirement}</div> : null}
       {showEffect ? (
         <p id={`${id}-effect`} className="text-[11px] text-muted-foreground" aria-live="polite">
           {EFFECT_WORDS[effect!]}
