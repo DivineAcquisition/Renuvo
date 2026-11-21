@@ -24,6 +24,11 @@ function offsetMinutes(at: number, timezone: string): number {
   return Math.round((local - Math.floor(at / 60000) * 60000) / 60000);
 }
 
+/** Whether the zone's clocks change between two instants (a daylight-saving start or end). */
+export function crossesClockChange(startsAt: number, endsAt: number, timezone: string): boolean {
+  return offsetMinutes(endsAt, timezone) !== offsetMinutes(startsAt, timezone);
+}
+
 const sameDay = (a: number, b: number, timezone: string) => new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date(a)) === new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date(b));
 
 /** "9:00–11:30 AM", sharing the AM/PM when both are on the same side. */
@@ -53,7 +58,7 @@ export function ScheduleSummary({ startsAt, endsAt, timezone, arrivalWindowMinut
   }
   const minutes = Math.round((endsAt - startsAt) / 60000);
   const overnight = !sameDay(startsAt, endsAt, timezone);
-  const shift = offsetMinutes(endsAt, timezone) - offsetMinutes(startsAt, timezone);
+  const shift = crossesClockChange(startsAt, endsAt, timezone) ? 1 : 0;
   const arrivalEnd = arrivalWindowMinutes ? startsAt + arrivalWindowMinutes * 60000 : null;
   return (
     <div className={cn("grid gap-0.5 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs", className)} aria-live="polite">
