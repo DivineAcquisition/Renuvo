@@ -112,7 +112,7 @@ export function SelectionPreview() {
 
       <section className="grid gap-3">
         <SwitchRow title="Ask several cleaners at once" checked={broadcast} onChange={setBroadcast} effect="on-save" dirty={broadcast} consequence={broadcast ? "Dispatch offers each job to up to 3 cleaners together. The first to accept gets it." : "Dispatch asks one cleaner at a time."} requirement={<Requirement>Needs an approved business texting number.</Requirement>} />
-        <Consequence>A consequence on its own, for a choice that isn't a switch.</Consequence>
+        <Consequence>A consequence on its own, for a choice that isn&apos;t a switch.</Consequence>
       </section>
 
       <section className="grid gap-2">
