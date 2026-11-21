@@ -10,6 +10,7 @@ import type { DraftBody } from "../../../../convex/lib/sales/draft";
 import type { PaymentPolicy } from "../../../../convex/lib/sales/schema";
 import { ChoiceCard, fieldClass, FormSection } from "./kit";
 import type { Working } from "./use-draft";
+import { SelectInput } from "@/components/app/form";
 
 type Summary = FunctionReturnType<typeof api.sales.price>;
 
@@ -77,13 +78,13 @@ export function PaymentSection({ n, working, setBody, summary, done }: { n: numb
         {agreement.required ? (
           <label className="grid max-w-md gap-1.5 text-sm">
             <span className="font-medium text-strong">Agreement</span>
-            <select className={fieldClass()} value={agreement.docType ?? ""} onChange={(e) => setBody((b) => ({ ...b, agreement: { ...b.agreement, docType: e.target.value } }))}>
+            <SelectInput className={fieldClass()} value={agreement.docType ?? ""} onChange={(e) => setBody((b) => ({ ...b, agreement: { ...b.agreement, docType: e.target.value } }))}>
               {types.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
         ) : null}
       </fieldset>

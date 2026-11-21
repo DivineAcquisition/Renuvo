@@ -5,7 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { Unavailable } from "@/components/app/settings/guard";
 import { useBusinessDraft } from "@/components/app/settings/business-draft";
 import { SaveBar as SaveArea } from "@/components/app/settings/save-bar";
-import { Field, TextInput } from "@/components/app/form";
+import { Field, TextInput, SelectInput } from "@/components/app/form";
 import { Plus, Search, Trash2, X } from "@/components/icons";
 import { Panel } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,7 @@ function TimeZonePicker({ value, disabled, onChange }: { value: string; disabled
           className="block min-h-10 w-full rounded-t-lg border border-b-0 border-border bg-card py-2 pr-3 pl-8 text-sm text-strong placeholder:text-muted-foreground/70 focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30"
         />
       </div>
-      <select
+      <SelectInput
         id={`${id}-select`}
         size={6}
         value={value}
@@ -85,7 +85,7 @@ function TimeZonePicker({ value, disabled, onChange }: { value: string; disabled
               ))}
           </optgroup>
         ))}
-      </select>
+      </SelectInput>
       <span id={`${id}-hint`} className="text-xs text-muted-foreground">
         Selected: <span className="font-medium text-strong">{timeZoneLabel(value)}</span>. Bookings, deadlines and your booking hours use this clock.
       </span>

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 
 import { cadenceLabel, cadenceProblem, weekdayOf, type Cadence } from "../../../../convex/lib/sales/cadence";
 import { fieldClass, WEEKDAYS } from "./kit";
+import { SelectInput } from "@/components/app/form";
 
 const CADENCES: { kind: Cadence["kind"]; label: string }[] = [
   { kind: "weekly", label: "Weekly" },
@@ -61,25 +62,25 @@ export function CadencePicker({ name, cadence, onChange, anchorDate }: { name: s
       {cadence?.kind === "every_2_weeks" || cadence?.kind === "every_4_weeks" ? (
         <label className="grid max-w-56 gap-1.5 text-sm">
           <span className="font-medium text-strong">Day of the week</span>
-          <select className={fieldClass()} value={cadence.weekday} onChange={(e) => onChange({ ...cadence, weekday: Number(e.target.value) })}>
+          <SelectInput className={fieldClass()} value={cadence.weekday} onChange={(e) => onChange({ ...cadence, weekday: Number(e.target.value) })}>
             {WEEKDAYS.map((label, day) => (
               <option key={label} value={day}>
                 {label}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
       ) : null}
       {cadence?.kind === "monthly" ? (
         <label className="grid max-w-56 gap-1.5 text-sm">
           <span className="font-medium text-strong">Day of the month</span>
-          <select className={fieldClass()} value={cadence.dayOfMonth} onChange={(e) => onChange({ kind: "monthly", dayOfMonth: Number(e.target.value) })}>
+          <SelectInput className={fieldClass()} value={cadence.dayOfMonth} onChange={(e) => onChange({ kind: "monthly", dayOfMonth: Number(e.target.value) })}>
             {DAY_OF_MONTH.map((d) => (
               <option key={d} value={d}>
                 {dayWord(d)}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
       ) : null}
       {cadence?.kind === "twice_monthly" ? (
@@ -87,13 +88,13 @@ export function CadencePicker({ name, cadence, onChange, anchorDate }: { name: s
           {[0, 1].map((i) => (
             <label key={i} className="grid w-40 gap-1.5 text-sm">
               <span className="font-medium text-strong">{i === 0 ? "First day" : "Second day"}</span>
-              <select className={fieldClass()} value={cadence.days[i] ?? 1} onChange={(e) => onChange({ kind: "twice_monthly", days: cadence.days.map((d, j) => (j === i ? Number(e.target.value) : d)) })}>
+              <SelectInput className={fieldClass()} value={cadence.days[i] ?? 1} onChange={(e) => onChange({ kind: "twice_monthly", days: cadence.days.map((d, j) => (j === i ? Number(e.target.value) : d)) })}>
                 {DAY_OF_MONTH.map((d) => (
                   <option key={d} value={d}>
                     {dayWord(d)}
                   </option>
                 ))}
-              </select>
+              </SelectInput>
             </label>
           ))}
         </div>

@@ -13,6 +13,7 @@ import { sampleInputs } from "../../../../convex/lib/services/store";
 import { addOnWord, areaWord, minutesWords, scheduleLabel } from "../../../../convex/lib/services/words";
 import { formatCents, InfoTip, NumberInput, Segmented, Stepper } from "./shared";
 import { AnimatedMoney, MarginMeter, PriceChange, SPLIT_COLORS, SplitBar, type SplitPart } from "./visuals";
+import { SelectInput } from "@/components/app/form";
 
 /** Sensible first inputs for a spec: the middle of its range, with every required question answered plainly. */
 export function defaultInput(spec: Spec): QuoteInput {
@@ -51,27 +52,27 @@ export function JobInputs({ spec, input, onInput, compact, fromBooking }: { spec
         {spec.modifiers.condition.enabled ? (
           <label className="grid grid-cols-1 gap-1.5 text-sm">
             <span className="font-medium text-strong">Condition</span>
-            <select className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.condition ?? spec.modifiers.condition.levels[0]?.id ?? ""} onChange={(event) => set({ condition: event.target.value })}>
+            <SelectInput className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.condition ?? spec.modifiers.condition.levels[0]?.id ?? ""} onChange={(event) => set({ condition: event.target.value })}>
               {spec.modifiers.condition.levels.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.label}
                   {l.requiresWalkthrough ? " (walkthrough)" : ""}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
         ) : null}
         {!fromBooking && spec.modifiers.recurring.enabled && p.method !== "recurring_package" ? (
           <label className="grid grid-cols-1 gap-1.5 text-sm">
             <span className="font-medium text-strong">How often</span>
-            <select className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.schedule ?? ""} onChange={(event) => set({ schedule: (event.target.value || undefined) as QuoteInput["schedule"] })}>
+            <SelectInput className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={input.schedule ?? ""} onChange={(event) => set({ schedule: (event.target.value || undefined) as QuoteInput["schedule"] })}>
               <option value="">One time</option>
               {spec.modifiers.recurring.options.map((o) => (
                 <option key={o.schedule} value={o.schedule}>
                   {scheduleLabel(o.schedule)}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
         ) : null}
         {!fromBooking && spec.modifiers.area.enabled ? (
@@ -141,14 +142,14 @@ export function JobInputs({ spec, input, onInput, compact, fromBooking }: { spec
                     {q.required ? <span className="text-muted-foreground"> (required)</span> : null}
                   </span>
                   {q.kind === "choice" || q.kind === "yes_no" ? (
-                    <select className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={String(value ?? "")} onChange={(event) => setAnswer(event.target.value || undefined)}>
+                    <SelectInput className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" value={String(value ?? "")} onChange={(event) => setAnswer(event.target.value || undefined)}>
                       <option value="">Not answered</option>
                       {(q.kind === "yes_no" ? ["yes", "no"] : q.options).map((o) => (
                         <option key={o} value={o}>
                           {o}
                         </option>
                       ))}
-                    </select>
+                    </SelectInput>
                   ) : (
                     <input className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong" type={q.kind === "number" ? "number" : "text"} value={value === undefined ? "" : String(value)} onChange={(event) => setAnswer(q.kind === "number" ? (event.target.value === "" ? undefined : Number(event.target.value)) : event.target.value)} />
                   )}

@@ -15,6 +15,7 @@ import { Captions, Maximize, Minimize, Pause, Play, RefreshCw, TriangleAlert, Vo
 import { cn } from "@/lib/utils";
 
 import type { Media } from "../../../../convex/lib/tutorials/catalog";
+import { SelectInput } from "@/components/app/form";
 
 export type PlayerEvent = "play_started" | "play_completed" | "play_failed";
 
@@ -262,7 +263,7 @@ export function TutorialPlayer({ media, title, onEvent }: { media: Media; title:
         <label className="sr-only" htmlFor={`speed-${attempt}`}>
           Playback speed
         </label>
-        <select
+        <SelectInput
           id={`speed-${attempt}`}
           value={speed}
           onChange={(e) => {
@@ -277,7 +278,7 @@ export function TutorialPlayer({ media, title, onEvent }: { media: Media; title:
               {value}×
             </option>
           ))}
-        </select>
+        </SelectInput>
         <button type="button" className={cn(control, captions && "bg-white/15")} onClick={toggleCaptions} aria-label="Captions" aria-pressed={captions}>
           <Captions className="size-5" aria-hidden />
         </button>

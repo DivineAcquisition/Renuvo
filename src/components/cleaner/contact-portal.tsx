@@ -15,6 +15,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "./shell";
 import { fmt, useMinute, zoned } from "./time";
+import { SelectInput } from "@/components/app/form";
 
 type View = Extract<FunctionReturnType<typeof api.contactPortal.view>, { state: "active" }>;
 
@@ -108,13 +109,13 @@ function AwayCard({ view, token }: { view: View; token: string }) {
       ) : null}
       <label className="grid gap-1 text-sm">
         Who
-        <select value={form.cleanerId} onChange={(event) => setForm({ ...form, cleanerId: event.target.value })} className={input}>
+        <SelectInput value={form.cleanerId} onChange={(event) => setForm({ ...form, cleanerId: event.target.value })} className={input}>
           {view.workers.map((worker) => (
             <option key={worker.cleanerId} value={worker.cleanerId}>
               {worker.name}
             </option>
           ))}
-        </select>
+        </SelectInput>
       </label>
       <div className="grid grid-cols-2 gap-2">
         <label className="grid gap-1 text-sm">

@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { FormError, messageOf } from "@/components/app/form";
+import { FormError, messageOf, SelectInput } from "@/components/app/form";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { CheckCircle2, CircleDashed, Lock } from "@/components/icons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -98,13 +98,13 @@ export function AiModels() {
                   {row.optional ? " · optional" : ""}
                 </span>
                 <span className="ml-auto flex items-center gap-2">
-                  <select aria-label={`Evaluation for ${row.label}`} value={evaluation} disabled={!row.implemented} onChange={(event) => update({ evaluation: event.target.value as Evaluation })} className="h-8 rounded-lg border border-border bg-card px-2 text-xs">
+                  <SelectInput aria-label={`Evaluation for ${row.label}`} value={evaluation} disabled={!row.implemented} onChange={(event) => update({ evaluation: event.target.value as Evaluation })} className="h-8 rounded-lg border border-border bg-card px-2 text-xs">
                     {EVALUATIONS.map(([value, label]) => (
                       <option key={value} value={value}>
                         {label}
                       </option>
                     ))}
-                  </select>
+                  </SelectInput>
                   <button type="button" role="switch" aria-checked={enabled} aria-label={`${row.label} on`} disabled={!row.implemented} onClick={() => update({ enabled: !enabled })} className={cn("relative inline-flex h-6 w-11 rounded-full border transition-colors disabled:opacity-40", enabled ? "border-brand-600 bg-brand-500" : "border-border bg-muted")}>
                     <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white shadow transition-transform", enabled ? "translate-x-5.5" : "translate-x-0.5")} />
                   </button>

@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "@/components/cleaner/shell";
 import { Check } from "@/components/icons";
+import { SelectInput } from "@/components/app/form";
 
 type Answer = string | number | boolean | string[];
 type Answers = Record<string, Answer>;
@@ -90,12 +91,12 @@ function FieldInput({ field, value, onChange }: { field: Field; value: Answer | 
     return (
       <label className="flex flex-col gap-1 text-sm">
         {label}
-        <select data-testid={id} className={`${inputClass} select-native cursor-pointer pr-10`} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
+        <SelectInput data-testid={id} className={`${inputClass} select-native cursor-pointer pr-10`} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
           <option value="">Choose…</option>
           {(field.options ?? []).map((option) => (
             <option key={option} value={option}>{option}</option>
           ))}
-        </select>
+        </SelectInput>
       </label>
     );
   }

@@ -12,7 +12,7 @@ import { useState, useSyncExternalStore } from "react";
 
 import { useChat, useOfferChatContext } from "@/components/app/chat/chat-context";
 import { useCompany } from "@/components/app/company";
-import { FormError, useRun } from "@/components/app/form";
+import { FormError, useRun, SelectInput } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
 import { NewVisitForm } from "@/components/app/screens/forms";
 import { ArrowLeft, Mail, MessageSquareText, Phone } from "@/components/icons";
@@ -99,14 +99,14 @@ export function TabNav({ customerId, active, canSeeBilling, onPick }: { customer
     <>
       <label className="grid gap-1 text-sm sm:hidden">
         <span className="sr-only">Section</span>
-        <select value={active} onChange={(event) => onPick(event.target.value as TabId)} className="min-h-10 rounded-lg border border-border bg-card px-3 text-strong">
+        <SelectInput value={active} onChange={(event) => onPick(event.target.value as TabId)} className="min-h-10 rounded-lg border border-border bg-card px-3 text-strong">
           {TABS.map((t) => (
             <option key={t.id} value={t.id}>
               {t.label}
               {t.id === "billing" && !canSeeBilling ? " (Owner only)" : ""}
             </option>
           ))}
-        </select>
+        </SelectInput>
       </label>
       <nav aria-label="Client sections" className="hidden border-b border-border sm:block">
         <ul className="-mb-px flex gap-1 overflow-x-auto">

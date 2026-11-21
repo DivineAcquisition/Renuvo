@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { FormError, useRun } from "@/components/app/form";
+import { FormError, useRun, SelectInput } from "@/components/app/form";
 import { ArrowLeft } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -53,13 +53,13 @@ export function ImportReview({ importId }: { importId: string }) {
       {data.state === "review" ? (
         <label className="grid max-w-xs gap-1.5 text-sm">
           <span className="font-medium text-strong">Kind of cleaning for new drafts</span>
-          <select className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={category} onChange={(e) => setCategory(e.target.value as Category)}>
+          <SelectInput className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={category} onChange={(e) => setCategory(e.target.value as Category)}>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {CATEGORY_LABELS[c]}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
       ) : null}
       <ul className="grid grid-cols-1 gap-3">
@@ -101,14 +101,14 @@ export function ImportReview({ importId }: { importId: string }) {
                     </label>
                     <label className="grid grid-cols-1 gap-1.5 text-sm">
                       <span className="font-medium text-strong">Unit {row.unitRaw ? <span className="font-normal text-muted-foreground">(read “{row.unitRaw}”)</span> : null}</span>
-                      <select className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={method} onChange={(e) => set({ method: e.target.value as Method })}>
+                      <SelectInput className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={method} onChange={(e) => set({ method: e.target.value as Method })}>
                         <option value="">Unclear: choose one</option>
                         {UNITS.map((u) => (
                           <option key={u.id} value={u.id}>
                             {u.label}
                           </option>
                         ))}
-                      </select>
+                      </SelectInput>
                     </label>
                   </div>
                   {row.scope ? <p className="text-sm text-muted-foreground">Scope read: {row.scope}</p> : null}

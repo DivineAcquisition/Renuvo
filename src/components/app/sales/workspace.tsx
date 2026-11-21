@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { FormError, messageOf } from "@/components/app/form";
+import { FormError, messageOf, SelectInput } from "@/components/app/form";
 import { ArrowLeft, ChatIcon, ChevronDown, Eye, Save } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -171,13 +171,13 @@ export function SalesWorkspace({ draftId }: { draftId: Id<"salesDrafts"> }) {
           />
           <label className="text-sm">
             <span className="sr-only">Service category</span>
-            <select className="min-h-9 rounded-lg border border-border bg-card px-2.5 text-sm text-strong" value={working.segment} onChange={(e) => update({ segment: e.target.value as Segment })}>
+            <SelectInput className="min-h-9 rounded-lg border border-border bg-card px-2.5 text-sm text-strong" value={working.segment} onChange={(e) => update({ segment: e.target.value as Segment })}>
               {SEGMENTS.filter((s) => working.mode === "booking" || s.id !== "residential").map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <SaveStatus state={state} onReload={reload} />

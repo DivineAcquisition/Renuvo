@@ -3,7 +3,7 @@
 import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 
-import { TextInput } from "@/components/app/form";
+import { TextInput, SelectInput } from "@/components/app/form";
 import { TriangleAlert } from "@/components/icons";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { addLocalDays, clock, dayName, localDate, localDayStart, zonedInstant } from "@/lib/app/format";
@@ -153,13 +153,13 @@ export function Filter({ label, value, onChange, options }: { label: string; val
   return (
     <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
       {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="min-h-8 cursor-pointer rounded-lg border border-border bg-card px-2 py-1 text-xs font-medium text-strong focus-visible:outline-2 focus-visible:outline-brand-500/30">
+      <SelectInput value={value} onChange={(event) => onChange(event.target.value)} className="min-h-8 cursor-pointer rounded-lg border border-border bg-card px-2 py-1 text-xs font-medium text-strong focus-visible:outline-2 focus-visible:outline-brand-500/30">
         {options.map((option) => (
           <option key={option.id} value={option.id}>
             {option.label}
           </option>
         ))}
-      </select>
+      </SelectInput>
     </label>
   );
 }

@@ -29,6 +29,7 @@ export type SelectProps<V extends string> = ListState & {
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
+  "data-testid"?: string;
 };
 
 const EMPTY = "__selestial_empty__";
@@ -58,6 +59,7 @@ export function Select<V extends string>({ value, onValueChange, options, placeh
         aria-labelledby={aria["aria-labelledby"] ?? (aria["aria-label"] ? undefined : field?.labelId)}
         aria-describedby={joinIds(aria["aria-describedby"], field?.describedBy)}
         aria-invalid={invalid || undefined}
+        data-testid={aria["data-testid"]}
         className={cn(fieldSurface, controlHeight[density], controlPadding[density], "flex cursor-pointer items-center gap-2 text-left data-[disabled]:cursor-not-allowed", focusRing, invalid && "border-destructive/60", className)}
       >
         <SelectPrimitive.Value className="min-w-0 flex-1 truncate">

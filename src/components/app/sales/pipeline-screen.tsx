@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { FormError, messageOf } from "@/components/app/form";
+import { FormError, messageOf, SelectInput } from "@/components/app/form";
 import { PageHeader } from "@/components/app/shell";
 import { Plus } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -98,13 +98,13 @@ export function PipelineScreen() {
           </label>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium text-strong">Kind</span>
-            <select className={fieldClass()} value={form.segment} onChange={(e) => setForm({ ...form, segment: e.target.value as keyof typeof SEGMENTS })}>
+            <SelectInput className={fieldClass()} value={form.segment} onChange={(e) => setForm({ ...form, segment: e.target.value as keyof typeof SEGMENTS })}>
               {Object.entries(SEGMENTS).map(([id, label]) => (
                 <option key={id} value={id}>
                   {label}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
           <label className="grid gap-1.5 text-sm">
             <span className="font-medium text-strong">Source</span>
@@ -209,7 +209,7 @@ export function PipelineScreen() {
                         <label className="sr-only" htmlFor={`stage-of-${row._id}`}>
                           Move to stage
                         </label>
-                        <select
+                        <SelectInput
                           id={`stage-of-${row._id}`}
                           className="min-h-8 rounded-lg border border-border bg-card px-2 text-xs"
                           value=""
@@ -224,7 +224,7 @@ export function PipelineScreen() {
                               {s.label}
                             </option>
                           ))}
-                        </select>
+                        </SelectInput>
                       </div>
                     ) : null}
                   </article>

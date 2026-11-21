@@ -21,6 +21,7 @@ import { BottomBar, Editable, Field, Notice, Pill, StepHeading } from "./parts";
 import { Faqs } from "./step-service";
 import { TrustRow } from "./step-start";
 import { moneyExact } from "./theme";
+import { SelectInput } from "@/components/app/form";
 
 // ── Details and agreement ────────────────────────────────────────────────────────────────────────
 
@@ -46,14 +47,14 @@ function QuestionInput({ q, value, onChange }: { q: CustomQuestion; value: unkno
           ))}
         </div>
       ) : q.type === "choice" ? (
-        <select id={id} className="bk-input" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
+        <SelectInput id={id} className="bk-input" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
           <option value="">Choose…</option>
           {q.options.map((o) => (
             <option key={o} value={o}>
               {o}
             </option>
           ))}
-        </select>
+        </SelectInput>
       ) : (
         <div id={id} className="flex flex-wrap gap-2">
           {q.options.map((o) => {

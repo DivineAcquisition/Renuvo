@@ -35,6 +35,7 @@ type Shared<V extends string> = ListState & {
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
+  "data-testid"?: string;
 };
 
 const unavailable = <V extends string>(value: V): Option<V> => ({ value, label: "No longer available", description: "This was chosen before but can't be found now. Keep it, or clear it and choose again.", disabled: true, unavailable: true });
@@ -149,6 +150,7 @@ export function SearchableSelect<V extends string>({ value, onValueChange, optio
           placeholder={placeholder}
           aria-label={aria["aria-label"]}
           aria-labelledby={aria["aria-labelledby"]}
+          data-testid={aria["data-testid"]}
           aria-describedby={joinIds(aria["aria-describedby"], field?.describedBy, current?.unavailable ? `${field?.controlId ?? id}-unavailable` : undefined)}
           aria-invalid={invalid || undefined}
           className="h-full min-w-0 flex-1 bg-transparent text-sm text-strong outline-none placeholder:text-muted-foreground/70"

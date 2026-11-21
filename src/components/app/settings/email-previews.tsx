@@ -7,6 +7,7 @@ import { Panel } from "@/components/app/shell";
 import { cn } from "@/lib/utils";
 
 import { PREVIEWS, type Preview } from "../../../../convex/lib/email/templates/gallery";
+import { SelectInput } from "@/components/app/form";
 
 type Width = "desktop" | "mobile";
 const noSubscription = () => () => {};
@@ -108,7 +109,7 @@ export function EmailPreviews() {
       {/* On a phone, one menu instead of a long list. */}
       <label className="grid gap-1 text-sm lg:hidden">
         <span className="font-medium text-strong">Email</span>
-        <select value={id} onChange={(event) => setId(event.target.value)} className="h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong">
+        <SelectInput value={id} onChange={(event) => setId(event.target.value)} className="h-10 rounded-lg border border-border bg-card px-3 text-sm text-strong">
           {groups.map((g) => (
             <optgroup key={g.kind} label={g.label}>
               {PREVIEWS.filter((p) => p.kind === g.kind).map((p) => (
@@ -118,7 +119,7 @@ export function EmailPreviews() {
               ))}
             </optgroup>
           ))}
-        </select>
+        </SelectInput>
       </label>
       <nav aria-label="Emails" className="hidden content-start gap-4 lg:grid">
         {groups.map((g) => (

@@ -8,7 +8,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { messageOf } from "@/components/app/form";
+import { messageOf, SelectInput } from "@/components/app/form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -98,7 +98,7 @@ function TutorialRow({ row }: { row: Row }) {
         </div>
         <label className="grid gap-1 text-xs text-muted-foreground">
           State
-          <select
+          <SelectInput
             value={row.state}
             onChange={(event) => run(setState({ tutorialId: row.id, state: event.target.value as State }))}
             className="h-9 rounded-lg border border-border bg-background px-2 text-sm text-strong"
@@ -108,7 +108,7 @@ function TutorialRow({ row }: { row: Row }) {
                 {STATE_WORDS[state]}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
       </div>
 
