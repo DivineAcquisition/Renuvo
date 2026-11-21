@@ -80,6 +80,7 @@ const NAV = [
   { href: "/staff/companies", label: "Companies" },
   { href: "/staff/setup", label: "Setup funnel" },
   { href: "/staff/tutorials", label: "Tutorials" },
+  { href: "/staff/selection", label: "Selection system" },
   { href: "/staff/texting", label: "Texting" },
   { href: "/staff/messaging", label: "Messaging money" },
   { href: "/staff/agent-requests", label: "Agent requests" },

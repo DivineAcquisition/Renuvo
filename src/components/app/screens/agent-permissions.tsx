@@ -6,7 +6,8 @@ import { useId, useState } from "react";
 
 import { AgentAvatar, STATE } from "@/components/app/agent";
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
+import { Field, FormError, TextInput, useRun } from "@/components/app/form";
+import { Select } from "@/components/ui/selection";
 import { ChevronDown, Info, PauseCircleIcon, Play } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,26 +69,25 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
                 Saved
               </span>
             ) : null}
-            <SelectInput
+            <Select
               aria-labelledby={`${id}-label`}
-              className="w-full py-1.5 sm:w-auto sm:min-w-48"
+              aria-describedby={`${id}-effect`}
+              className="w-full sm:w-auto sm:min-w-52"
               disabled={busy}
               value={pending ?? action.level}
-              onChange={(event) => {
+              options={LEVELS.filter((level) => rank(level.id) <= rank(action.ceiling)).map((level) => ({ value: level.id, label: level.label, description: level.meaning }))}
+              onValueChange={(level) => {
+                if (!level) return;
                 setSaved(false);
-                const level = event.target.value as Level;
                 // Money never moves without review until the Owner has said how much.
                 if (action.money && rank(level) > rank("propose")) return setPending(level);
                 setPending(null);
                 void save(level);
               }}
-            >
-              {LEVELS.filter((level) => rank(level.id) <= rank(action.ceiling)).map((level) => (
-                <option key={level.id} value={level.id}>
-                  {level.label}
-                </option>
-              ))}
-            </SelectInput>
+            />
+            <span id={`${id}-effect`} className="sr-only">
+              Changes apply as soon as you choose, except a spending action, which asks for limits first.
+            </span>
           </span>
         ) : (
           <span className="rounded-md border border-border bg-muted px-2 py-1 text-xs font-medium text-strong">{levelLabel(action.level)}</span>
@@ -229,6 +229,7 @@ function AgentCard({ agent, actions, paused, owner, credits, live, texting, onTo
         </button>
         {open ? (
           <div id={panel} className="px-4 pb-2 sm:px-5">
+            {owner ? <p className="pb-1 text-xs text-muted-foreground">A change here applies as soon as you choose it. An action that spends money asks for its limits first.</p> : null}
             <ul className="divide-y divide-border">
               {actions.map((action) => (
                 <PermissionRow key={`${action.key}:${action.level}:${action.perActionCents}:${action.perDayCents}`} action={action} canEdit={owner} />

@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Guard } from "@/components/app/settings/guard";
 import { Info } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
+import { SegmentedControl, Switch } from "@/components/ui/selection";
 import { CHANGE_STATE_WORDS, centsFrom, dollarsText } from "@/lib/app/services";
 import { cn } from "@/lib/utils";
 
@@ -218,23 +219,9 @@ export function Stepper({ label, value, onValue, min = 0, max = 99, unit, disabl
   );
 }
 
-/** The switch itself: a button with role="switch", its state in words for screen readers. */
-export function SwitchButton({ id, checked, onChange, disabled, labelledBy, className }: { id?: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; labelledBy?: string; className?: string }) {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-labelledby={labelledBy}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500/50 disabled:opacity-50", checked ? "border-brand-600 bg-brand-500" : "border-border bg-muted", className)}
-    >
-      <span className="sr-only">{checked ? "On" : "Off"}</span>
-      <span aria-hidden className={cn("inline-block size-5 rounded-full bg-white shadow transition-transform motion-reduce:transition-none", checked ? "translate-x-5" : "translate-x-0.5")} />
-    </button>
-  );
+/** The switch itself, from the shared selection system. Kept under its old name for Services screens. */
+export function SwitchButton(props: { id?: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; labelledBy?: string; className?: string }) {
+  return <Switch {...props} />;
 }
 
 /** An on/off switch with words beside it. Status never depends on color alone. */
@@ -246,31 +233,14 @@ export function Toggle({ label, description, tip, checked, onChange, disabled }:
         <FieldLabel htmlFor={id} label={label} tip={tip} className="text-sm" />
         {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
       </div>
-      <SwitchButton id={id} checked={checked} onChange={onChange} disabled={disabled} className="mt-0.5" />
+      <Switch id={id} checked={checked} onChange={onChange} disabled={disabled} className="mt-0.5" />
     </div>
   );
 }
 
 /** A small set of choices shown side by side, as radio buttons a keyboard can move through. */
 export function Segmented<T extends string>({ label, value, options, onChange, disabled, tip, className }: { label: string; value: T; options: readonly { id: T; label: string; hint?: string }[]; onChange: (value: T) => void; disabled?: boolean; tip?: React.ReactNode; className?: string }) {
-  const name = useId();
-  return (
-    <fieldset className={cn("grid grid-cols-1 gap-1.5 text-sm", className)} disabled={disabled}>
-      <legend className="mb-1.5 flex items-center gap-0.5 font-medium text-strong">
-        {label}
-        {tip ? <InfoTip label={label}>{tip}</InfoTip> : null}
-      </legend>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((option) => (
-          <label key={option.id} className={cn("cursor-pointer rounded-lg border px-3 py-1.5 text-sm transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500/40", value === option.id ? "border-brand-500 bg-brand-500/[0.08] font-medium text-strong" : "border-border bg-card text-muted-foreground hover:border-brand-500/40")}>
-            <input type="radio" className="sr-only" name={name} value={option.id} checked={value === option.id} onChange={() => onChange(option.id)} />
-            {option.label}
-            {option.hint ? <span className="ml-1 text-xs text-muted-foreground">{option.hint}</span> : null}
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
+  return <SegmentedControl label={label} value={value} options={options} onChange={onChange} disabled={disabled} className={className} tip={tip ? <InfoTip label={label}>{tip}</InfoTip> : null} />;
 }
 
 /** A section heading. A short line of context can sit under it, or its explanation can wait behind a tip. */

@@ -2958,3 +2958,34 @@ textarea.bk-input {
     transform: none;
   }
 }
+
+/*
+ * Selection system: the pieces that cannot be utility classes.
+ *
+ * Every selection control takes its accent from --sel-accent, which falls back to the brand violet.
+ * A public page (booking, applicant, cleaner) sets --sel-accent to the customer's own colour on its
+ * wrapper so shared controls carry the customer's branding, not the workspace's.
+ *
+ * Native checkboxes and radios that have not moved to the shared components yet still pick up the
+ * accent, so they read as the same family. An explicit accent-[...] class on one still wins.
+ */
+@layer base {
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--sel-accent, var(--brand));
+  }
+}
+
+@layer components {
+  .select-native {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238b8fa3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+    background-position: right 0.65rem center;
+    background-repeat: no-repeat;
+    background-size: 1rem;
+  }
+  .select-native:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+}

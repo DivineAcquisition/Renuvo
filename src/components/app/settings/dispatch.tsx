@@ -9,6 +9,7 @@ import { Field, messageOf, TextInput } from "@/components/app/form";
 import { Guard } from "@/components/app/settings/guard";
 import { SaveBar, useSavedDraft, useUnsavedWarning } from "@/components/app/settings/save-bar";
 import { Panel } from "@/components/app/shell";
+import { Requirement, SwitchRow } from "@/components/ui/selection";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { api } from "../../../../convex/_generated/api";
@@ -64,16 +65,12 @@ function fieldErrors(form: Form): Partial<Record<NumberKey, string>> {
   return out;
 }
 
-function Checkbox({ checked, disabled, onChange, title, detail }: { checked: boolean; disabled: boolean; onChange: (value: boolean) => void; title: string; detail: React.ReactNode }) {
-  return (
-    <label className="flex items-start gap-2.5 text-sm text-strong sm:col-span-2">
-      <input type="checkbox" className="mt-1" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
-      <span>
-        <span className="font-medium">{title}</span>
-        <span className="block text-xs text-muted-foreground">{detail}</span>
-      </span>
-    </label>
-  );
+/** What asking several cleaners at once does with the numbers on this form. Read from the form, so it matches what will be saved. */
+function offerEffect(form: Form): string {
+  const size = Number.isInteger(num(form.broadcastSize)) ? num(form.broadcastSize) : null;
+  const window = Number.isInteger(num(form.offerWindowMinutes)) ? num(form.offerWindowMinutes) : null;
+  if (form.broadcastEnabled) return `Dispatch offers each job to ${size ? `up to ${size}` : "a few"} cleaners together. The first to accept gets it.`;
+  return `Dispatch asks one cleaner at a time.${window ? ` Each has ${window} minutes to accept before the next cleaner is asked.` : ""}`;
 }
 
 function DispatchForm({ settings, policy, canEdit }: { settings: Settings; policy: Policy; canEdit: boolean }) {
@@ -82,6 +79,8 @@ function DispatchForm({ settings, policy, canEdit }: { settings: Settings; polic
   const savePolicy = useMutation(api.dispatchOps.setPolicy);
   const saved = useMemo(() => formFrom(settings, policy), [settings, policy]);
   const { value: form, dirty, stale, change, reset } = useSavedDraft(saved);
+  // Read-only: whether Dispatch's texts are covered, from the same readiness the Team page shows.
+  const texts = useQuery(api.texting.agentTexting, { companyId })?.find((row) => row.agent === "dispatch");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -125,12 +124,15 @@ function DispatchForm({ settings, policy, canEdit }: { settings: Settings; polic
         <div className="grid gap-4 sm:grid-cols-2">
           {field("offerWindowMinutes")}
           {field("travelBufferMinutes")}
-          <Checkbox
+          <SwitchRow
+            className="sm:col-span-2"
             checked={form.broadcastEnabled}
             disabled={!canEdit}
             onChange={(value) => set({ broadcastEnabled: value })}
             title="Ask several cleaners at once"
-            detail="The job goes to a few cleaners together, and the first to accept gets it. Off means cleaners are asked one at a time."
+            effect="on-save"
+            dirty={form.broadcastEnabled !== saved.broadcastEnabled}
+            consequence={offerEffect(form)}
           />
           {form.broadcastEnabled ? field("broadcastSize") : null}
         </div>
@@ -161,18 +163,33 @@ function DispatchForm({ settings, policy, canEdit }: { settings: Settings; polic
         <div className="grid gap-4 sm:grid-cols-2">
           {field("beforePhotosRequired")}
           {field("afterPhotosRequired")}
-          <Checkbox
+          <SwitchRow
+            className="sm:col-span-2"
             checked={form.sendBeforePhotoLink}
             disabled={!canEdit}
             onChange={(value) => set({ sendBeforePhotoLink: value })}
             title="Text the before-photo link when the cleaner checks in"
-            detail={
-              <>
-                Needs your business texting number.{" "}
-                <Link href="/app/settings/integrations" className="font-medium text-brand-600 underline-offset-2 hover:underline">
-                  Check Connected apps
-                </Link>
-              </>
+            effect="on-save"
+            dirty={form.sendBeforePhotoLink !== saved.sendBeforePhotoLink}
+            consequence={form.sendBeforePhotoLink ? "When a cleaner checks in, Dispatch texts them the link for their before photos." : "No text is sent at check-in."}
+            requirement={
+              texts ? (
+                <Requirement met={texts.state === "ready" || texts.state === "partly"}>
+                  {texts.words}{" "}
+                  {texts.state === "ready" || texts.state === "partly" ? null : (
+                    <Link href="/app/texting" className="font-medium text-brand-600 underline-offset-2 hover:underline">
+                      Set up business texting
+                    </Link>
+                  )}
+                </Requirement>
+              ) : (
+                <Requirement>
+                  Needs an approved business texting number.{" "}
+                  <Link href="/app/settings/integrations" className="font-medium text-brand-600 underline-offset-2 hover:underline">
+                    Check Connected apps
+                  </Link>
+                </Requirement>
+              )
             }
           />
         </div>
