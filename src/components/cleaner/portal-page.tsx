@@ -20,7 +20,7 @@ import { cleanerTextWording } from "../../../convex/lib/texting/wording";
 import { ContactPortal } from "./contact-portal";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "./shell";
 import { fmt, useMinute, zoned } from "./time";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, RadioButtonGroup } from "@/components/ui/selection";
 
 type View = Extract<FunctionReturnType<typeof api.portal.view>, { state: "active"; jobs: unknown }>;
 type Step = View["steps"][number];
@@ -556,13 +556,13 @@ function CheckInCard({ view, token, onTab }: { view: View; token: string; onTab:
   return (
     <Card title={`Are you still looking for work with ${view.company}?`}>
       <p className="text-sm text-muted-foreground">We have not had work with you for a while. Nothing changes until you tell us, and there is no wrong answer.</p>
-      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Your answer">
+      <RadioButtonGroup className="grid grid-cols-2 gap-2" aria-label="Your answer">
         {options.map((option) => (
           <button key={option.id} type="button" role="radio" aria-checked={answer === option.id} onClick={() => setAnswer(option.id)} className={cn("min-h-12 rounded-xl border px-3 text-sm font-medium", answer === option.id ? "border-brand-500 bg-brand-500/10 text-brand-300" : "border-border bg-background")}>
             {option.label}
           </button>
         ))}
-      </div>
+      </RadioButtonGroup>
       {answer === "break" ? (
         <label className="grid gap-1 text-sm">
           Back on

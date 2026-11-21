@@ -21,7 +21,7 @@ export { Checkbox, CheckboxRow, tableSelection, type CheckboxProps } from "./che
 export { ChoiceChips } from "./chips";
 export { SelectionCard, SelectionCards } from "./cards";
 export { MultiSelect, SearchableSelect } from "./combobox";
-export { RadioGroup, SegmentedControl } from "./radio";
+export { RadioButtonGroup, RadioGroup, SegmentedControl } from "./radio";
 export { Select, type SelectProps } from "./select";
 export { Consequence, Requirement, Switch, SwitchRow, type SwitchEffect } from "./switch";
 export { FieldSource, FieldSuggestion, sourceWords, suggestionState, useSuggestion, type Source, type SourceKind } from "./assist";

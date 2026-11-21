@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PLATFORM_WORDS, STATE_WORDS, STATES, type Media, type State } from "../../../convex/lib/tutorials/catalog";
+import { SegmentedControl } from "@/components/ui/selection";
 
 type Row = NonNullable<ReturnType<typeof useQuery<typeof api.tutorials.staffList>>>[number];
 
@@ -201,13 +202,7 @@ function Metrics() {
           </h2>
           <p className="text-sm text-muted-foreground">Counts only. A finished video is not evidence that anyone exported anything.</p>
         </div>
-        <div className="flex gap-1" role="group" aria-label="Window">
-          {WINDOWS.map((value) => (
-            <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)} className={days === value ? "rounded-lg bg-brand-500/10 px-3 py-1.5 text-sm font-semibold text-brand-700" : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:text-strong"}>
-              {value} days
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Window" hideLabel density="compact" value={String(days)} options={WINDOWS.map((value) => ({ id: String(value), label: `${value} days` }))} onChange={(value) => setDays(Number(value))} />
       </div>
       {!metrics ? (
         <Skeleton className="h-64 rounded-2xl" />

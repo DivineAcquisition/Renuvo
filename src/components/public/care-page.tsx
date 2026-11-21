@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, ChoiceChips, RadioButtonGroup } from "@/components/ui/selection";
 
 type View = NonNullable<FunctionReturnType<typeof api.retentionCare.view>>;
 type Active = Extract<View, { state: "active"; customerName: string }>;
@@ -62,16 +62,7 @@ function AreaPicker({ value, onChange }: { value: string[]; onChange: (next: str
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="text-sm font-medium">Where? Choose any that apply</legend>
-      <div className="flex flex-wrap gap-2">
-        {AREAS.map((area) => {
-          const on = value.includes(area);
-          return (
-            <button key={area} type="button" aria-pressed={on} onClick={() => onChange(on ? value.filter((a) => a !== area) : [...value, area])} className={cn("min-h-10 rounded-full border px-3.5 text-sm font-medium", on ? "border-brand-500 bg-brand-500/15 text-strong" : "border-border bg-card text-foreground")}>
-              {area}
-            </button>
-          );
-        })}
-      </div>
+      <ChoiceChips aria-label="Where" options={AREAS.map((area) => ({ value: area, label: area }))} value={value} onValueChange={onChange} />
     </fieldset>
   );
 }
@@ -120,13 +111,13 @@ function Feedback({ token, view }: { token: string; view: Active }) {
     <>
       {view.purpose === "feedback" ? (
         <Card title="How did it go?">
-          <div role="radiogroup" aria-label="Rating from 1 to 5" className="flex gap-2">
+          <RadioButtonGroup aria-label="Rating from 1 to 5" className="flex gap-2">
             {[1, 2, 3, 4, 5].map((value) => (
               <button key={value} type="button" role="radio" aria-checked={rating === value} onClick={() => setRating(value)} className={cn("flex min-h-12 flex-1 items-center justify-center rounded-xl border text-base font-semibold", rating === value ? "border-brand-500 bg-brand-500/15 text-strong" : "border-border bg-card")}>
                 {value}
               </button>
             ))}
-          </div>
+          </RadioButtonGroup>
           <p className="flex justify-between text-xs text-muted-foreground">
             <span>1 is poor</span>
             <span>5 is excellent</span>

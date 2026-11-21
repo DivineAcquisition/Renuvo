@@ -29,6 +29,7 @@ import { PRIORITY_INFO } from "../../../../convex/lib/setup/path";
 import type { Priority } from "../../../../convex/lib/setup/schema";
 import { ActivationReview } from "./review";
 import { relative, StateBadge, STEP_DOT, type TaskState } from "./shared";
+import { RadioButtonGroup } from "@/components/ui/selection";
 
 const AGENT_ORDER: AgentId[] = ["sales", "recruiter", "dispatch", "retention"];
 
@@ -388,7 +389,7 @@ function StartCard({ focus, again }: { focus: Priority | null; again?: boolean }
       </Button>
       <Modal open={open} onClose={() => setOpen(false)} title="Start your agents" description="Selestial will begin the work shown below. You can leave this page—we’ll notify you when results are ready.">
         <div className="grid gap-4">
-          <div role="radiogroup" aria-label="Focus" className="grid grid-cols-2 gap-2">
+          <RadioButtonGroup aria-label="Focus" className="grid grid-cols-2 gap-2">
             {FOCUS_CHOICES.map((value) => (
               <button
                 key={value}
@@ -402,7 +403,7 @@ function StartCard({ focus, again }: { focus: Priority | null; again?: boolean }
                 <span className="block text-xs font-normal text-muted-foreground">{PRIORITY_INFO.find((p) => p.id === value)?.title}</span>
               </button>
             ))}
-          </div>
+          </RadioButtonGroup>
           {chosen ? <ActivationReview focus={chosen} /> : null}
           {error ? (
             <p className="text-sm text-destructive-foreground" role="alert">

@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, SegmentedControl } from "@/components/ui/selection";
 
 type Asset = { assetId: string; kind: "image" | "video" | "logo"; origin: "original" | "composed" | "generated"; realWork: boolean; label: string; contentType: string; url: string | null; marketingPermission: { at: number; note: string } | null; generation: { model: string; provider: string; prompt: string; provenance: string; jobId: string } | null; sources: string[]; selectedFor: string[]; createdAt: number };
 
@@ -445,19 +445,7 @@ function Generator({ assets, allowance }: { assets: Asset[]; allowance: { images
         }}
       >
         <p className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">Generated media is labelled as AI generated everywhere it appears and is never real before/after evidence. Real job photos cannot be sent for generation or editing; compose them instead.</p>
-        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="What to make">
-          {(
-            [
-              ["image_generate", "New image"],
-              ["image_edit", "Edit an image"],
-              ["video_generate", "Video"],
-            ] as const
-          ).map(([value, label]) => (
-            <button key={value} type="button" role="radio" aria-checked={kind === value} onClick={() => setKind(value)} className={cn("h-8 rounded-full border px-3 text-xs font-medium", kind === value ? "border-brand-500/40 bg-brand-500/10 text-brand-300" : "border-border text-muted-foreground hover:text-strong")}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="What to make" hideLabel density="compact" value={kind} options={[{ id: "image_generate", label: "New image" }, { id: "image_edit", label: "Edit an image" }, { id: "video_generate", label: "Video" }]} onChange={setKind} />
         <label className="grid gap-1 text-xs font-medium text-strong">
           Prompt
           <textarea value={prompt} maxLength={4000} rows={4} onChange={(event) => setPrompt(event.target.value)} placeholder={isVideo ? "A bright, tidy living room in morning light, slow camera pan, no people" : "A friendly illustration of a sparkling kitchen, flat style, brand purple accents"} className="rounded-xl border border-border bg-card p-3 text-sm" />

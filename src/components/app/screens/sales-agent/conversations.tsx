@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../../convex/_generated/api";
 import { OpportunityDrawer } from "./drawer";
 import { AttentionBadge, ChannelIcon, Empty, StageBadge, useOpportunityParam } from "./shared";
+import { SegmentedControl } from "@/components/ui/selection";
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -56,14 +57,14 @@ export function SalesConversationsScreen() {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <TextInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or words" aria-label="Search conversations" className="pl-9" />
         </div>
-        <div className="inline-flex flex-wrap rounded-lg border border-border bg-card p-0.5" role="group" aria-label="Show">
-          {FILTERS.map((row) => (
-            <button key={row.id} type="button" aria-pressed={filter === row.id} onClick={() => setFilter(row.id)} className={cn("min-h-8 rounded-md px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500", filter === row.id ? "bg-brand-500/10 text-strong" : "text-muted-foreground hover:text-strong")}>
-              {row.label}
-              {rows && row.id !== "all" ? <span className="ml-1 tabular-nums opacity-70">{count(row.id)}</span> : null}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          label="Show"
+          hideLabel
+          density="compact"
+          value={filter}
+          options={FILTERS.map((row) => ({ id: row.id, label: rows && row.id !== "all" ? <>{row.label}<span className="ml-1 tabular-nums opacity-70">{count(row.id)}</span></> : row.label }))}
+          onChange={setFilter}
+        />
       </div>
 
       {rows === undefined ? (

@@ -8,7 +8,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "@/components/cleaner/shell";
 import { Check } from "@/components/icons";
 import { SelectInput } from "@/components/app/form";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, RadioButtonGroup } from "@/components/ui/selection";
 
 type Answer = string | number | boolean | string[];
 type Answers = Record<string, Answer>;
@@ -52,14 +52,14 @@ function FieldInput({ field, value, onChange }: { field: Field; value: Answer | 
       <fieldset className="flex flex-col gap-2 text-sm">
         <legend className="mb-1 font-medium">{field.label}{field.required ? " *" : ""}</legend>
         {/* Yes and No are exclusive, so they are radios. Nothing is chosen until the applicant answers. */}
-        <div className="flex gap-2" role="radiogroup" aria-label={field.label}>
+        <RadioButtonGroup className="flex gap-2" aria-label={field.label}>
           {[true, false].map((option) => (
             <button key={String(option)} type="button" role="radio" data-testid={`${id}-${option ? "yes" : "no"}`} aria-checked={value === option} onClick={() => onChange(option)} className={`${choiceClass} min-h-12 flex-1 rounded-xl px-4 text-base ${value === option ? choiceOn : choiceOff}`}>
               {value === option ? <Check className="size-4" aria-hidden /> : null}
               {option ? "Yes" : "No"}
             </button>
           ))}
-        </div>
+        </RadioButtonGroup>
       </fieldset>
     );
   }

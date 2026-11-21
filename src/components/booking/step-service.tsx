@@ -16,7 +16,7 @@ import { copyOf, sectionOn, useBooking, type SessionView } from "./context";
 import { BottomBar, Editable, Notice, Pill, StepHeading } from "./parts";
 import { TrustRow } from "./step-start";
 import { money, moneyExact } from "./theme";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, RadioButtonGroup } from "@/components/ui/selection";
 
 type Offer = SessionView["offers"][number];
 
@@ -105,28 +105,28 @@ function Choices({ offer }: { offer: Offer }) {
       {offer.conditions.length ? (
         <fieldset>
           <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-[color:var(--bk-muted-text)]">Condition</legend>
-          <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+          <RadioButtonGroup aria-label="Condition" className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
             {offer.conditions.map((c, i) => (
-              <button key={c.id} type="button" aria-pressed={(sel.condition ?? offer.conditions[0].id) === c.id} onClick={() => void update({ condition: c.id })} className={chip((sel.condition ?? offer.conditions[0].id) === c.id || (!sel.condition && i === 0))}>
+              <button key={c.id} type="button" role="radio" aria-checked={(sel.condition ?? offer.conditions[0].id) === c.id} onClick={() => void update({ condition: c.id })} className={chip((sel.condition ?? offer.conditions[0].id) === c.id || (!sel.condition && i === 0))}>
                 {c.label}
               </button>
             ))}
-          </div>
+          </RadioButtonGroup>
         </fieldset>
       ) : null}
       {offer.frequencies.length ? (
         <fieldset>
           <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-[color:var(--bk-muted-text)]">How often</legend>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" aria-pressed={!sel.schedule} onClick={() => void update({ schedule: undefined })} className={chip(!sel.schedule)}>
+          <RadioButtonGroup aria-label="How often" className="flex flex-wrap gap-2">
+            <button type="button" role="radio" aria-checked={!sel.schedule} onClick={() => void update({ schedule: undefined })} className={chip(!sel.schedule)}>
               One time
             </button>
             {offer.frequencies.map((f) => (
-              <button key={f.schedule} type="button" aria-pressed={sel.schedule === f.schedule} onClick={() => void update({ schedule: f.schedule })} className={chip(sel.schedule === f.schedule)}>
+              <button key={f.schedule} type="button" role="radio" aria-checked={sel.schedule === f.schedule} onClick={() => void update({ schedule: f.schedule })} className={chip(sel.schedule === f.schedule)}>
                 {f.label} · {f.discount}
               </button>
             ))}
-          </div>
+          </RadioButtonGroup>
         </fieldset>
       ) : null}
       {offer.extras.length ? (
@@ -158,21 +158,21 @@ function Choices({ offer }: { offer: Offer }) {
               {q.required ? <span className="text-red-700"> *</span> : null}
             </p>
             {q.kind === "choice" ? (
-              <div className="flex flex-wrap gap-2">
+              <RadioButtonGroup aria-label={q.label} className="flex flex-wrap gap-2">
                 {q.options.map((o) => (
-                  <button key={o} type="button" aria-pressed={answer === o} className={chip(answer === o)} onClick={() => void update({ answers: { ...sel.answers, [q.id]: o } })}>
+                  <button key={o} type="button" role="radio" aria-checked={answer === o} className={chip(answer === o)} onClick={() => void update({ answers: { ...sel.answers, [q.id]: o } })}>
                     {o}
                   </button>
                 ))}
-              </div>
+              </RadioButtonGroup>
             ) : q.kind === "yes_no" ? (
-              <div className="flex gap-2">
+              <RadioButtonGroup aria-label={q.label} className="flex gap-2">
                 {[true, false].map((b) => (
-                  <button key={String(b)} type="button" aria-pressed={answer === b} className={chip(answer === b)} onClick={() => void update({ answers: { ...sel.answers, [q.id]: b } })}>
+                  <button key={String(b)} type="button" role="radio" aria-checked={answer === b} className={chip(answer === b)} onClick={() => void update({ answers: { ...sel.answers, [q.id]: b } })}>
                     {b ? "Yes" : "No"}
                   </button>
                 ))}
-              </div>
+              </RadioButtonGroup>
             ) : (
               <input className="bk-input" aria-label={q.label} inputMode={q.kind === "number" ? "numeric" : undefined} defaultValue={answer === undefined ? "" : String(answer)} onBlur={(e) => e.target.value !== "" && void update({ answers: { ...sel.answers, [q.id]: q.kind === "number" ? Number(e.target.value) : e.target.value } })} />
             )}

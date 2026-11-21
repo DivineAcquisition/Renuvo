@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 import { PREVIEWS, type Preview } from "../../../../convex/lib/email/templates/gallery";
 import { SelectInput } from "@/components/app/form";
+import { SegmentedControl } from "@/components/ui/selection";
 
 type Width = "desktop" | "mobile";
 const noSubscription = () => () => {};
@@ -24,21 +25,14 @@ function inScheme(html: string, scheme: Scheme): string {
 
 function Toggle<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: { id: T; label: string; icon: React.ComponentType<{ className?: string }> }[]; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-border bg-muted/60 p-0.5">
-      {options.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          role="radio"
-          aria-checked={value === o.id}
-          onClick={() => onChange(o.id)}
-          className={cn("inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors", value === o.id ? "bg-card text-strong shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-strong")}
-        >
-          <o.icon className="size-3.5" />
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label={label}
+      hideLabel
+      density="compact"
+      value={value}
+      onChange={onChange}
+      options={options.map((o) => ({ id: o.id, label: <span className="inline-flex items-center gap-1.5"><o.icon className="size-3.5" />{o.label}</span> }))}
+    />
   );
 }
 

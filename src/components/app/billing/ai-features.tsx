@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
+import { Switch } from "@/components/ui/selection";
 
 /**
  * The AI features an Owner switches, as cards. Each depends on a capability Selestial runs: a feature
@@ -75,20 +76,7 @@ export function AiFeatures() {
                 {!available && !on ? (
                   <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[0.6875rem] font-medium text-muted-foreground">Not available yet</span>
                 ) : (
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={item.label}
-                    disabled={!data.canChange || pending !== null}
-                    onClick={() => toggle(item.key)}
-                    className={cn(
-                      "relative inline-flex h-6 w-11 shrink-0 rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-60",
-                      on ? "border-brand-600 bg-brand-500" : "border-border bg-muted",
-                    )}
-                  >
-                    <motion.span layout transition={{ type: "spring", bounce: 0.25, duration: 0.35 }} className={cn("absolute top-0.5 size-4.5 rounded-full bg-white shadow", on ? "right-0.5" : "left-0.5")} />
-                  </button>
+                  <Switch checked={on} label={item.label} disabled={!data.canChange || pending !== null} onChange={() => toggle(item.key)} />
                 )}
               </div>
               <div className="relative">

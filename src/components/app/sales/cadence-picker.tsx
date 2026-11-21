@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { cadenceLabel, cadenceProblem, weekdayOf, type Cadence } from "../../../../convex/lib/sales/cadence";
 import { fieldClass, WEEKDAYS } from "./kit";
 import { SelectInput } from "@/components/app/form";
+import { ChoiceChips } from "@/components/ui/selection";
 
 const CADENCES: { kind: Cadence["kind"]; label: string }[] = [
   { kind: "weekly", label: "Weekly" },
@@ -47,15 +48,8 @@ export function CadencePicker({ name, cadence, onChange, anchorDate }: { name: s
         ))}
       </div>
       {cadence?.kind === "weekly" ? (
-        <div role="group" aria-label="Days of the week" className="flex flex-wrap gap-1.5">
-          {WEEKDAYS.map((label, day) => {
-            const on = cadence.weekdays.includes(day);
-            return (
-              <button key={label} type="button" aria-pressed={on} onClick={() => onChange({ kind: "weekly", weekdays: on ? cadence.weekdays.filter((d) => d !== day) : [...cadence.weekdays, day].sort() })} className={cn("min-w-12 rounded-lg border px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-brand-500", on ? "border-brand-500 bg-brand-500 text-white" : "border-border text-strong")}>
-                {label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap gap-1.5">
+          <ChoiceChips aria-label="Days of the week" density="compact" options={WEEKDAYS.map((label, day) => ({ value: String(day), label }))} value={cadence.weekdays.map(String)} onValueChange={(next) => onChange({ kind: "weekly", weekdays: next.map(Number).sort((a, b) => a - b) })} />
           <span className="self-center text-xs text-muted-foreground">Several days make several visits a week.</span>
         </div>
       ) : null}

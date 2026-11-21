@@ -18,7 +18,7 @@ import { quote as runQuote, type PropertyExtra, type QuoteInput } from "../../..
 import type { Spec } from "../../../../convex/lib/services/spec";
 import { visitScope } from "../../../../convex/lib/services/operations";
 import { lowerFirst } from "../../../../convex/lib/services/words";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, ChoiceChips } from "@/components/ui/selection";
 
 const KINDS = [
   { id: "home", label: "Home" },
@@ -186,22 +186,7 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
       <fieldset>
         <legend className="text-sm font-medium text-strong">Days they said they can work</legend>
         <p className="text-xs text-muted-foreground">Choose only what the cleaner told you. With none chosen, no hours are recorded and they cannot be offered visits yet.</p>
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {DAYS.map((day, index) => {
-            const on = days.includes(index);
-            return (
-              <button
-                key={day}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setDays((current) => (on ? current.filter((value) => value !== index) : [...current, index].sort()))}
-                className={`min-h-9 rounded-lg border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500 ${on ? "border-brand-500/60 bg-brand-500/10 text-strong" : "border-border bg-background text-muted-foreground"}`}
-              >
-                {day}
-              </button>
-            );
-          })}
-        </div>
+        <ChoiceChips className="mt-1.5" aria-label="Days they said they can work" density="compact" options={DAYS.map((day, index) => ({ value: String(index), label: day }))} value={days.map(String)} onValueChange={(next) => setDays(next.map(Number).sort((a, b) => a - b))} />
       </fieldset>
       <div className="grid grid-cols-2 gap-3">
         <Field label="From">

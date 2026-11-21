@@ -22,7 +22,7 @@ import { Faqs } from "./step-service";
 import { TrustRow } from "./step-start";
 import { moneyExact } from "./theme";
 import { SelectInput } from "@/components/app/form";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, ChoiceChips, RadioButtonGroup } from "@/components/ui/selection";
 
 // ── Details and agreement ────────────────────────────────────────────────────────────────────────
 
@@ -40,13 +40,13 @@ function QuestionInput({ q, value, onChange }: { q: CustomQuestion; value: unkno
       ) : q.type === "date" ? (
         <input id={id} type="date" className="bk-input" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />
       ) : q.type === "yes_no" ? (
-        <div id={id} role="radiogroup" className="flex gap-2">
+        <RadioButtonGroup id={id} className="flex gap-2">
           {[true, false].map((b) => (
             <button key={String(b)} type="button" role="radio" aria-checked={value === b} className={chip(value === b)} onClick={() => onChange(b)}>
               {b ? "Yes" : "No"}
             </button>
           ))}
-        </div>
+        </RadioButtonGroup>
       ) : q.type === "choice" ? (
         <SelectInput id={id} className="bk-input" value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value || undefined)}>
           <option value="">Choose…</option>
@@ -57,17 +57,7 @@ function QuestionInput({ q, value, onChange }: { q: CustomQuestion; value: unkno
           ))}
         </SelectInput>
       ) : (
-        <div id={id} className="flex flex-wrap gap-2">
-          {q.options.map((o) => {
-            const list = (value as string[]) ?? [];
-            const on = list.includes(o);
-            return (
-              <button key={o} type="button" aria-pressed={on} className={chip(on)} onClick={() => onChange(on ? list.filter((x) => x !== o) : [...list, o])}>
-                {o}
-              </button>
-            );
-          })}
-        </div>
+        <ChoiceChips aria-label={q.label} options={q.options.map((o) => ({ value: o, label: o }))} value={(value as string[]) ?? []} onValueChange={onChange} />
       )}
     </Field>
   );

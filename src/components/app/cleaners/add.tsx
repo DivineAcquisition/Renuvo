@@ -18,6 +18,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { Engagement } from "./bits";
 import { profilePath } from "./state";
+import { ChoiceChips } from "@/components/ui/selection";
 
 const TYPES: { value: Engagement; label: string; help: string }[] = [
   { value: "employee", label: "Employee", help: "On your payroll." },
@@ -175,16 +176,7 @@ export function AddCleanerDialog({ onClose, onAdded }: { onClose: () => void; on
         <fieldset className="grid gap-2">
           <legend className="mb-1 text-sm font-medium text-strong">Weekly hours they said they can work</legend>
           <p className="-mt-1 text-xs text-muted-foreground">Optional now. They can give or confirm these from their portal later.</p>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days">
-            {DAYS.map((day) => {
-              const on = days.includes(day.value);
-              return (
-                <button key={day.value} type="button" aria-pressed={on} onClick={() => setDays(on ? days.filter((value) => value !== day.value) : [...days, day.value])} className={cn("h-9 min-w-12 rounded-lg border px-2.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500", on ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-card text-strong hover:border-brand-500/40")}>
-                  {day.label}
-                </button>
-              );
-            })}
-          </div>
+          <ChoiceChips aria-label="Days" density="compact" options={DAYS.map((day) => ({ value: String(day.value), label: day.label }))} value={days.map(String)} onValueChange={(next) => setDays(DAYS.filter((day) => next.includes(String(day.value))).map((day) => day.value))} />
           {days.length > 0 ? (
             <div className="grid max-w-xs grid-cols-2 gap-2">
               <Field label="From">

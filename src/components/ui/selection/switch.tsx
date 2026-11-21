@@ -11,7 +11,7 @@ import { focusRing, type Density } from "./tokens";
  * Kept as a plain button rather than a library primitive because it already has everything a switch
  * needs (Space and Enter toggle, a real focus, a disabled state) and its markup is relied on by tests.
  */
-export function Switch({ id, checked, onChange, disabled, readOnly, labelledBy, describedBy, className, density = "default" }: { id?: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; readOnly?: boolean; labelledBy?: string; describedBy?: string; className?: string; density?: Density }) {
+export function Switch({ id, checked, onChange, disabled, readOnly, labelledBy, describedBy, label, className, density = "default" }: { id?: string; checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean; readOnly?: boolean; labelledBy?: string; describedBy?: string; /** The name, when no visible label points at it. */ label?: string; className?: string; density?: Density }) {
   const small = density === "compact";
   return (
     <button
@@ -20,6 +20,7 @@ export function Switch({ id, checked, onChange, disabled, readOnly, labelledBy, 
       role="switch"
       aria-checked={checked}
       aria-labelledby={labelledBy}
+      aria-label={label}
       aria-describedby={describedBy}
       aria-readonly={readOnly || undefined}
       disabled={disabled}

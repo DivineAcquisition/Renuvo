@@ -32,7 +32,7 @@ import { VisitRow } from "./parts";
 import { SalesPlans, SalesWork, useClientSales } from "./sales";
 import type { Profile } from "./profile";
 import { ImportedRecords } from "@/components/app/setup/migration";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, SegmentedControl } from "@/components/ui/selection";
 
 type Plan = NonNullable<ReturnType<typeof useQuery<typeof api.servicePlans.forClient>>>["plans"][number];
 
@@ -50,13 +50,7 @@ export function ServicesTab({ profile }: { profile: Profile }) {
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="group" aria-label="Show" className="inline-flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1">
-          {SERVICE_VIEWS.map((v) => (
-            <button key={v.id} type="button" aria-pressed={view === v.id} onClick={() => setView(v.id)} className={cn("rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-brand-500/50", view === v.id ? "bg-brand-500/10 text-brand-300" : "text-muted-foreground hover:text-strong")}>
-              {v.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Show" hideLabel density="compact" value={view} options={SERVICE_VIEWS.map((v) => ({ id: v.id, label: v.label }))} onChange={setView} />
         <ActionMenu
           label="Create a booking or proposal"
           className="h-9 rounded-lg border border-border bg-card px-3 text-sm font-medium text-strong hover:bg-muted"

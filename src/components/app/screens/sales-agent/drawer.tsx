@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { ActionCard, AttentionBadge, BookingChecklist, FollowUpTimeline, LOST_WORDS, NextStep, OpenLink, QualificationChecklist, QUOTE_STATE, QuotePreview, RunTimeline, StageBadge, Thread, type ChecklistRow, type Detail, type Stage } from "./shared";
+import { SegmentedControl } from "@/components/ui/selection";
 
 const TABS = [
   { id: "summary", label: "Summary" },
@@ -435,12 +436,8 @@ function Conversation({ detail, now }: { detail: Detail; now: number }) {
     <div className="grid gap-4">
       <Thread rows={detail.thread} now={now} timezone={timezone} />
       <div className="grid gap-2.5 rounded-xl border border-border bg-background p-3.5">
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="What to write">
-          {(["reply", "note"] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={mode === value} onClick={() => setMode(value)} className={cn("min-h-8 rounded-md px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500", mode === value ? "bg-brand-500/10 text-strong" : "text-muted-foreground hover:text-strong")}>
-              {value === "reply" ? "Reply to the customer" : "Note for the team"}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl label="What to write" hideLabel density="compact" value={mode} options={[{ id: "reply", label: "Reply to the customer" }, { id: "note", label: "Note for the team" }]} onChange={setMode} />
           {mode === "reply" ? (
             <SelectInput value={channel} onChange={(event) => setChannel(event.target.value as "sms" | "email")} className="ml-auto w-auto min-w-28" aria-label="Send by">
               <option value="sms" disabled={!canText}>

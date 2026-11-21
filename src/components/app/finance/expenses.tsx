@@ -20,7 +20,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { FinanceNav } from "./finance-screen";
 import { Chip, Empty, Notice, eyebrow } from "./kit";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, SegmentedControl } from "@/components/ui/selection";
 
 /**
  * Finance › Expenses. Receipts the Owner snaps or uploads (Selestial reads them into drafts), expenses
@@ -225,21 +225,7 @@ export function ExpensesTab({ nav }: { nav: Nav }) {
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div role="radiogroup" aria-label="Show" className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 sm:mx-0 sm:px-0">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={filter === f.id}
-                  onClick={() => nav.set({ filter: f.id === "review" ? null : f.id })}
-                  className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500", filter === f.id ? "border-brand-500/50 bg-brand-500/10 text-strong" : "border-border bg-card text-muted-foreground hover:text-strong")}
-                >
-                  {f.label}
-                  {f.id in data.counts ? <span className="text-xs tabular-nums text-muted-foreground">{data.counts[f.id as keyof typeof data.counts]}</span> : null}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl label="Show" hideLabel density="compact" value={filter} options={FILTERS.map((f) => ({ id: f.id, label: <>{f.label}{f.id in data.counts ? <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{data.counts[f.id as keyof typeof data.counts]}</span> : null}</> }))} onChange={(id) => nav.set({ filter: id === "review" ? null : id })} />
             <div className="ml-auto flex gap-2">
               {filter === "review" && ready.length > 0 ? (
                 <Button size="sm" variant="default" onClick={() => setDialog("record")}>

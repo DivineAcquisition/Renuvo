@@ -2,7 +2,7 @@
 
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -100,7 +100,7 @@ export function SegmentedControl<V extends string>({
 }: {
   label: string;
   value: V | "" | null;
-  options: readonly { id: V; label: string; hint?: string }[];
+  options: readonly { id: V; label: React.ReactNode; hint?: string }[];
   onChange: (value: V) => void;
   disabled?: boolean;
   tip?: React.ReactNode;
@@ -137,5 +137,44 @@ export function SegmentedControl<V extends string>({
         })}
       </div>
     </fieldset>
+  );
+}
+
+/**
+ * Keyboard behaviour for a group of custom `role="radio"` buttons whose look is their own (an illustrated
+ * booking card, a tip grid, a 1–5 rating). Arrow keys move and choose, Home and End jump to the ends, and
+ * only the chosen button (or the first) is in the Tab order, the way a native radio group behaves. Each
+ * button keeps its own onClick, aria-checked and styling.
+ */
+export function RadioButtonGroup({ children, className, id, ...aria }: { children: React.ReactNode; className?: string; id?: string; "aria-label"?: string; "aria-labelledby"?: string; "aria-describedby"?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const radios = () => [...(ref.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? [])];
+  useEffect(() => {
+    const all = radios();
+    const enabled = all.filter((radio) => !radio.disabled);
+    const current = enabled.find((radio) => radio.getAttribute("aria-checked") === "true") ?? enabled[0];
+    for (const radio of all) radio.tabIndex = radio === current ? 0 : -1;
+  });
+  return (
+    <div
+      ref={ref}
+      id={id}
+      role="radiogroup"
+      {...aria}
+      className={className}
+      onKeyDown={(event) => {
+        const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+        if (!keys.includes(event.key)) return;
+        const enabled = radios().filter((radio) => !radio.disabled);
+        const at = enabled.indexOf(document.activeElement as HTMLButtonElement);
+        if (at === -1 || enabled.length === 0) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? 0 : event.key === "End" ? enabled.length - 1 : (at + (event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length;
+        enabled[next].focus();
+        enabled[next].click();
+      }}
+    >
+      {children}
+    </div>
   );
 }
