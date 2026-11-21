@@ -7,7 +7,7 @@
 import { useState } from "react";
 
 import { Field } from "@/components/app/form";
-import { Briefcase, Globe, Home } from "@/components/icons";
+import { BriefcaseBusiness as Briefcase, Globe, Home } from "@/components/icons";
 import {
   Checkbox,
   CheckboxRow,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { CheckCircle2, ChevronDown, CircleHelp, FileText, Globe, ListChecks, Sparkles, UserCheck } from "@/components/icons";
+import { CheckCircle2, ChevronDown, CircleHelp, FileText, Globe, ListChecks, Sparkles, UserCheckIcon as UserCheck } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 import { focusRing } from "./tokens";
