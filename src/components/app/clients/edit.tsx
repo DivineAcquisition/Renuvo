@@ -15,6 +15,8 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { ContactRow, PropertyRow } from "./parts";
 import { Checkbox } from "@/components/ui/selection";
+import { useConfirm } from "@/components/ui/fields/confirm";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 type Profile = NonNullable<ReturnType<typeof useQuery<typeof api.clients.profile>>>;
 
@@ -190,6 +192,7 @@ export function ContactForm({ customerId, contact, properties, onDone }: { custo
   const save = useMutation(api.clients.saveContact);
   const remove = useMutation(api.clients.removeContact);
   const { busy, error, run } = useRun();
+  const { ask, element: confirmDialog } = useConfirm();
   const [form, setForm] = useState({ name: contact?.name ?? "", title: contact?.title ?? "", email: contact?.email ?? "", phone: contact?.phone ?? "" });
   const [roles, setRoles] = useState<string[]>(contact?.roles ?? []);
   const [sites, setSites] = useState<string[]>(contact?.propertyIds ?? []);
@@ -213,10 +216,10 @@ export function ContactForm({ customerId, contact, properties, onDone }: { custo
           <TextInput value={form.title} onChange={set("title")} maxLength={80} />
         </Field>
         <Field label="Email">
-          <TextInput type="email" value={form.email} onChange={set("email")} />
+          <EmailInput value={form.email} onChange={(text) => set("email")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
         <Field label="Phone">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
       </div>
       <fieldset className="grid gap-2 sm:grid-cols-2">
@@ -246,10 +249,23 @@ export function ContactForm({ customerId, contact, properties, onDone }: { custo
         </fieldset>
       ) : null}
       <FormError message={error} />
+      {confirmDialog}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Actions busy={busy} label={contact ? "Save contact" : "Add contact"} onCancel={onDone} />
         {contact && !contact.roles.includes("primary") ? (
-          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => window.confirm(`Remove ${contact.name} from this client?`) && void run(async () => (await remove({ companyId, contactId: contact.id as Id<"clientContacts"> }), onDone()))}>
+          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() =>
+              void ask({
+                title: `Remove ${contact.name} from this client?`,
+                body: "They are taken off this client's contacts.",
+                confirmLabel: "Remove contact",
+                cancelLabel: "Keep contact",
+                tone: "danger",
+                action: async () => {
+                  await remove({ companyId, contactId: contact.id as Id<"clientContacts"> });
+                  onDone();
+                },
+              })
+            }>
             Remove contact
           </Button>
         ) : null}

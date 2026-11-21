@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
+import { NumberField } from "@/components/ui/fields";
 
 function Stepper({ workflow }: { workflow: string }) {
   const at = WORKFLOW_ORDER.indexOf(workflow as never);
@@ -211,7 +212,7 @@ export function ReviewAndSignatures({ detail }: { detail: Detail }) {
             ) : null}
             <div className="flex flex-wrap items-end gap-2">
               <Field label="Open for (days)">
-                <TextInput inputMode="numeric" value={days} onChange={(event) => setDays(event.target.value)} className="w-24" />
+                <NumberField value={days} onChange={(text) => setDays(text)} className="w-24" suffix="days" stepper />
               </Field>
               <Button size="sm" variant="primary" loading={busy} disabled={!blockers || blockers.blockers.length > 0} onClick={() => void run(() => send({ companyId, agreementId: id, expiresInDays: Number(days) || undefined }))}>
                 Send version {detail.currentVersion} for signature

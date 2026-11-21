@@ -20,6 +20,7 @@ import { timeZoneLabel } from "@/lib/app/timezones";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
+import { NumberField } from "@/components/ui/fields";
 
 function RecruitingInner() {
   const { companyId, role } = useCompany();
@@ -167,7 +168,7 @@ function RecruitingFormView({ saved, timezone, canEdit, companyId }: { saved: Re
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  useUnsavedWarning(dirty);
+  const leaveGuard = useUnsavedWarning(dirty, undefined, "the Recruiter's hiring settings");
   const problems = useMemo(() => (form && canEdit ? recruitingProblems(form) : []), [form, canEdit]);
   if (!form) return null;
   const savedKeys = new Set(saved.onboardingRequirements.map((row) => row.key));
@@ -218,14 +219,12 @@ function RecruitingFormView({ saved, timezone, canEdit, companyId }: { saved: Re
           {reminders.map((value, index) => (
             <li key={index} className="flex flex-wrap items-center gap-2 text-sm">
               <span className="w-24 font-medium text-strong">Reminder {index + 1}</span>
-              <TextInput
+              <NumberField
                 aria-label={`Reminder ${index + 1}, hours after the invitation`}
-                inputMode="numeric"
                 value={value}
                 disabled={!canEdit}
-                onChange={(event) => set("followUpHours", reminders.map((row, i) => (i === index ? event.target.value : row)))}
-                className="w-24 py-1.5"
-              />
+                onChange={(text) => set("followUpHours", reminders.map((row, i) => (i === index ? text : row)))}
+                className="w-24 py-1.5" />
               <span className="text-muted-foreground">hours after the invitation{hoursWords(value) ? ` (${hoursWords(value)})` : ""}</span>
               {canEdit ? (
                 <Button
@@ -375,6 +374,7 @@ function RecruitingFormView({ saved, timezone, canEdit, companyId }: { saved: Re
         </div>
       </details>
 
+      {leaveGuard}
       <SaveBar
         canEdit={canEdit}
         dirty={dirty}

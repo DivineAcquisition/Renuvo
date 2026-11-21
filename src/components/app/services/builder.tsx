@@ -25,6 +25,7 @@ import { ServicePreview } from "./preview";
 import { PropertyPrices } from "./property-prices";
 import { ChangeBadge, day, Empty, Notice, SectionTitle, Toggle, when } from "./shared";
 import { BasicsStep, ExtrasStep, PricingStep, ScopeStep, TeamStep, type StepProps } from "./steps";
+import { useConfirm } from "@/components/ui/fields/confirm";
 
 type View = NonNullable<ReturnType<typeof useQuery<typeof api.services.service>>>;
 
@@ -336,6 +337,7 @@ function ReviewStep({ view, spec, edit, kept, revision, dirty, blockers, warning
   const submit = useMutation(api.services.submit);
   const discard = useMutation(api.services.discardDraft);
   const { busy, error, run } = useRun();
+  const { ask, element: confirmDialog } = useConfirm();
   const [reason, setReason] = useState("");
   const [notice, setNotice] = useState({ required: false, note: "" });
   const [contracts, setContracts] = useState({ required: false, note: "" });
@@ -345,6 +347,7 @@ function ReviewStep({ view, spec, edit, kept, revision, dirty, blockers, warning
   const onlyConfirmations = blockers.every((b) => b.step === "review" || /Confirm/.test(b.message));
   return (
     <div className="grid grid-cols-1 gap-6">
+      {confirmDialog}
       <SectionTitle title="Review" tip="Check what changes, confirm what only you can, and send it for review. Nothing is live until the Owner publishes it." />
       <div>
         <p className="text-sm font-medium text-strong">{view.live ? `What changes from live version ${view.live.version}` : "What this adds"}</p>
@@ -449,13 +452,20 @@ function ReviewStep({ view, spec, edit, kept, revision, dirty, blockers, warning
           <Button
             variant="ghost"
             disabled={busy}
-            onClick={() => {
-              if (!window.confirm(view.live ? "Throw away this draft? The live version is not affected." : "Throw away this draft? This service has never been live, so it will be removed.")) return;
-              void run(async () => {
-                const { removed } = await discard({ companyId, serviceId: view.service.id });
-                router.push(removed ? SERVICES_ROOT : `${SERVICES_ROOT}/${view.service.id}`);
-              });
-            }}
+            onClick={() =>
+              void ask({
+                title: "Throw away this draft?",
+                body: view.live ? "Your edits since the live version are deleted. The live version is not affected." : "This service has never been live, so the whole service is removed.",
+                details: [{ label: "Service", value: view.service.name }],
+                confirmLabel: "Throw away the draft",
+                cancelLabel: "Keep the draft",
+                tone: "danger",
+                action: async () => {
+                  const { removed } = await discard({ companyId, serviceId: view.service.id });
+                  router.push(removed ? SERVICES_ROOT : `${SERVICES_ROOT}/${view.service.id}`);
+                },
+              })
+            }
           >
             Discard draft
           </Button>
@@ -476,6 +486,7 @@ function LiveService({ view, costs }: { view: View; costs: Parameters<typeof Ser
   const archive = useMutation(api.services.requestArchive);
   const router = useRouter();
   const { busy, error, run } = useRun();
+  const { ask, element: confirmDialog } = useConfirm();
   if (!view.live) {
     return (
       <Empty title="Nothing to show yet" action={<Link href={SERVICES_ROOT} className={buttonVariants({ variant: "secondary", size: "sm" })}>All services</Link>}>
@@ -486,6 +497,7 @@ function LiveService({ view, costs }: { view: View; costs: Parameters<typeof Ser
   const spec = view.live.spec;
   return (
     <div className="grid grid-cols-1 gap-5">
+      {confirmDialog}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link href={SERVICES_ROOT} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-strong">
@@ -557,10 +569,15 @@ function LiveService({ view, costs }: { view: View; costs: Parameters<typeof Ser
                         size="xs"
                         variant="ghost"
                         disabled={busy}
-                        onClick={() => {
-                          if (!window.confirm(`Start a draft from version ${v.version}? It goes through review like any change.`)) return;
-                          void run(async () => rollback({ companyId, serviceId: view.service.id, version: v.version, replaceDraft: false }));
-                        }}
+                        onClick={() =>
+                          void ask({
+                            title: `Start a draft from version ${v.version}?`,
+                            body: "The live version stays as it is. The new draft goes through review like any other change.",
+                            confirmLabel: "Start the draft",
+                            cancelLabel: "Cancel",
+                            action: () => rollback({ companyId, serviceId: view.service.id, version: v.version, replaceDraft: false }),
+                          })
+                        }
                       >
                         <RollbackIcon aria-hidden /> Roll back to this
                       </Button>

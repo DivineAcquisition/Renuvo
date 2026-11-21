@@ -31,6 +31,7 @@ import {
   type RecordKind,
 } from "../../../../convex/lib/migration/records";
 import type { Placement, Platform } from "../../../../convex/lib/tutorials/catalog";
+import { FileDetails } from "@/components/ui/fields";
 
 type Checked = FunctionReturnType<typeof api.migrationImports.check>;
 type Result = FunctionReturnType<typeof api.migrationImports.commit>["results"][number];
@@ -49,7 +50,7 @@ export function RecordImport({ kind, platform = null }: { kind: RecordKind; plat
   const commit = useMutation(api.migrationImports.commit);
   const input = useRef<HTMLInputElement>(null);
   const focusUpload = () => input.current?.focus();
-  const [file, setFile] = useState<{ name: string; header: string[]; rows: string[][]; key: string } | null>(null);
+  const [file, setFile] = useState<{ name: string; size: number; header: string[]; rows: string[][]; key: string } | null>(null);
   const [mapping, setMapping] = useState<Partial<Record<RecordField, number>>>({});
   const [checked, setChecked] = useState<Checked | null>(null);
   const [results, setResults] = useState<Result[] | null>(null);
@@ -72,7 +73,7 @@ export function RecordImport({ kind, platform = null }: { kind: RecordKind; plat
     if (parsed.length < 2) return setError(`The file needs a header row and at least one ${words.one}.`);
     if (parsed.length - 1 > RECORD_ROW_LIMIT) return setError(`Import up to ${RECORD_ROW_LIMIT} rows at a time. Split the file and import each part.`);
     const [header, ...body] = parsed;
-    setFile({ name: chosen.name, header, rows: body, key: `${kind}:${chosen.name}:${chosen.size}:${chosen.lastModified}` });
+    setFile({ name: chosen.name, size: chosen.size, header, rows: body, key: `${kind}:${chosen.name}:${chosen.size}:${chosen.lastModified}` });
     setMapping(guessRecordMapping(kind, header));
   }
 
@@ -137,14 +138,7 @@ export function RecordImport({ kind, platform = null }: { kind: RecordKind; plat
           />
         </label>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
-          <FileSpreadsheet className="size-4 text-muted-foreground" aria-hidden />
-          <span className="font-medium text-strong">{file.name}</span>
-          <span className="text-muted-foreground">· {file.rows.length} rows</span>
-          <Button variant="ghost" size="xs" className="ml-auto" onClick={() => setFile(null)}>
-            Choose another file
-          </Button>
-        </div>
+        <FileDetails name={file.name} type="text/csv" size={file.size} state="ready" counts={[{ label: "Rows", value: file.rows.length }]} onReplace={() => setFile(null)} />
       )}
 
       {file && !results ? (

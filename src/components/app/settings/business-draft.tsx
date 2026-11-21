@@ -93,7 +93,7 @@ function LoadedDraft({ children }: { children: React.ReactNode }) {
   }, [companyId, dirty, edits, problems.length, saveBusiness, saved, stale]);
 
   // Leaving Settings with unsaved edits asks first. Moving between Settings pages keeps the draft.
-  useUnsavedWarning(dirty, staysInSettings);
+  const leaveGuard = useUnsavedWarning(dirty, staysInSettings, "your business details");
 
   const value: BusinessState = {
     saved,
@@ -111,7 +111,12 @@ function LoadedDraft({ children }: { children: React.ReactNode }) {
     save,
     discard,
   };
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return (
+    <Context.Provider value={value}>
+      {children}
+      {leaveGuard}
+    </Context.Provider>
+  );
 }
 
 const NOTHING = () => undefined;

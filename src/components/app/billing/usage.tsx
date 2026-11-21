@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Checkbox, SegmentedControl } from "@/components/ui/selection";
+import { ListInput, NumberField } from "@/components/ui/fields";
 
 type Usage = Extract<NonNullable<ReturnType<typeof useQuery<typeof api.billingUsage.usage>>>, { connected: true }>;
 
@@ -608,13 +609,13 @@ function SpendingControls({ data }: { data: Usage }) {
     approvalThreshold: text(controls?.approvalThreshold ?? controls?.perRunLimit),
     autonomousMonthly: text(controls?.autonomousMonthly),
     lowBalance: text(controls?.lowBalance),
-    alertPercents: (controls?.alertPercents ?? [50, 80, 100]).join(", "),
+    alertPercents: (controls?.alertPercents ?? [50, 80, 100]).map(String),
     budgets: Object.fromEntries(Object.entries(controls?.agentBudgets ?? {}).map(([key, value]) => [key, String(value)])) as Record<string, string>,
     autoCap: text(controls?.autoTopUp.maxPerMonth),
   }));
   const [saved, setSaved] = useState(false);
   const number = (value: string) => (value.trim() ? Number(value.replace(/,/g, "")) : null);
-  const set = (key: Exclude<keyof typeof form, "budgets">, value: string) => {
+  const set = <K extends Exclude<keyof typeof form, "budgets">>(key: K, value: (typeof form)[K]) => {
     setSaved(false);
     setForm((current) => ({ ...current, [key]: value }));
   };
@@ -643,7 +644,7 @@ function SpendingControls({ data }: { data: Usage }) {
                 autonomousMonthly: number(form.autonomousMonthly),
                 lowBalance: number(form.lowBalance),
                 agentBudgets: Object.fromEntries(Object.entries(form.budgets).filter(([, value]) => value.trim()).map(([key, value]) => [key, Number(value.replace(/,/g, ""))])),
-                alertPercents: form.alertPercents.split(",").map((value) => Number(value.trim())).filter((value) => value > 0),
+                alertPercents: form.alertPercents.map(Number).filter((value) => value > 0).sort((a, b) => a - b),
                 autoTopUp: { enabled: false, maxPerMonth: number(form.autoCap) ?? undefined },
               });
               setSaved(true);
@@ -651,26 +652,26 @@ function SpendingControls({ data }: { data: Usage }) {
           }}
         >
           <Field label="Maximum per piece of work (hard limit)" hint="Nothing larger starts. Empty: no maximum.">
-            <TextInput inputMode="numeric" value={form.maxPerExecution} onChange={(event) => set("maxPerExecution", event.target.value)} />
+            <NumberField value={form.maxPerExecution} onChange={(text) => set("maxPerExecution", text)} />
           </Field>
           <Field label="Approval threshold" hint="Work estimated above this waits for the Owner. Empty: none.">
-            <TextInput inputMode="numeric" value={form.approvalThreshold} onChange={(event) => set("approvalThreshold", event.target.value)} />
+            <NumberField value={form.approvalThreshold} onChange={(text) => set("approvalThreshold", text)} />
           </Field>
           <Field label="Monthly budget for automatic work (hard limit)" hint="Work no one asked for, such as reading the hiring inbox. When it is used, those emails are read by rules instead.">
-            <TextInput inputMode="numeric" value={form.autonomousMonthly} onChange={(event) => set("autonomousMonthly", event.target.value)} />
+            <NumberField value={form.autonomousMonthly} onChange={(text) => set("autonomousMonthly", text)} />
           </Field>
           <Field label="Low-balance alert (credits)" hint="Tell the Owner when available credits fall below this.">
-            <TextInput inputMode="numeric" value={form.lowBalance} onChange={(event) => set("lowBalance", event.target.value)} />
+            <NumberField value={form.lowBalance} onChange={(text) => set("lowBalance", text)} suffix="credits" />
           </Field>
-          <Field label="Usage alerts (% of monthly credits)" hint="For example 50, 80, 100.">
-            <TextInput value={form.alertPercents} onChange={(event) => set("alertPercents", event.target.value)} />
+          <Field label="Usage alerts (% of monthly credits)" hint="The Owner is told when monthly use reaches each of these.">
+            <ListInput value={form.alertPercents} onChange={(next) => set("alertPercents", next)} validate={(entry) => (/^\d{1,3}$/.test(entry) && Number(entry) >= 1 && Number(entry) <= 100 ? null : `“${entry}” isn't a whole percent from 1 to 100.`)} normalize={(entry) => entry.trim().replace(/%$/, "")} noun="alert" placeholder="Type a percent, like 80" max={10} />
           </Field>
           <fieldset className="sm:col-span-2 lg:col-span-3">
             <legend className="text-sm font-medium text-strong">Monthly budget per agent (hard limit, optional)</legend>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               {data.budgetAgents.map((agent) => (
                 <Field key={agent.key} label={agent.label}>
-                  <TextInput inputMode="numeric" placeholder="No budget" value={form.budgets[agent.key] ?? ""} onChange={(event) => setForm((current) => ({ ...current, budgets: { ...current.budgets, [agent.key]: event.target.value } }))} />
+                  <NumberField placeholder="No budget" value={form.budgets[agent.key] ?? ""} onChange={(text) => setForm((current) => ({ ...current, budgets: { ...current.budgets, [agent.key]: text } }))} />
                 </Field>
               ))}
             </div>
@@ -680,7 +681,7 @@ function SpendingControls({ data }: { data: Usage }) {
             <p className="text-muted-foreground">Not available yet. Credits are never bought without you. When automatic top-ups arrive, they stay off until you turn them on, and never go past this monthly purchase cap.</p>
             <div className="mt-2 max-w-xs">
               <Field label="Monthly purchase cap (credits)">
-                <TextInput inputMode="numeric" value={form.autoCap} onChange={(event) => set("autoCap", event.target.value)} />
+                <NumberField value={form.autoCap} onChange={(text) => set("autoCap", text)} suffix="credits" />
               </Field>
             </div>
           </div>

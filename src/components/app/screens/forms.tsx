@@ -19,6 +19,9 @@ import type { Spec } from "../../../../convex/lib/services/spec";
 import { visitScope } from "../../../../convex/lib/services/operations";
 import { lowerFirst } from "../../../../convex/lib/services/words";
 import { Checkbox, ChoiceChips } from "@/components/ui/selection";
+import { AssistedTextArea, CountField, DurationField, EmailInput, PhoneInput, organizeIntoSteps, type WritingAction } from "@/components/ui/fields";
+
+const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
 
 const KINDS = [
   { id: "home", label: "Home" },
@@ -53,7 +56,11 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
   // The place picked from address search. Typing in the street field afterwards drops it, so a changed
   // address never keeps the old map location.
   const [place, setPlace] = useState<{ placeId: string; lat?: number; lng?: number } | null>(null);
-  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    // A changed city, state or ZIP no longer matches the picked map location, so it is dropped.
+    if (key === "city" || key === "region" || key === "postalCode") setPlace(null);
+    setForm((current) => ({ ...current, [key]: event.target.value }));
+  };
   return (
     <form
       className="grid gap-3"
@@ -86,10 +93,10 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
           </SelectInput>
         </Field>
         <Field label="Email (optional)">
-          <TextInput type="email" value={form.email} onChange={set("email")} />
+          <EmailInput value={form.email} onChange={(text) => set("email")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
         <Field label="Phone (optional)">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
       </div>
       <AddressField
@@ -102,7 +109,7 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
         }}
         onPick={({ placeId, lat, lng, ...picked }) => {
           setPlace({ placeId, lat, lng });
-          setForm((current) => ({ ...current, line1: picked.line1, line2: picked.line2 ?? "", city: picked.city, region: picked.region, postalCode: picked.postalCode }));
+          setForm((current) => ({ ...current, line1: picked.line1, line2: picked.line2 || current.line2, city: picked.city, region: picked.region, postalCode: picked.postalCode }));
         }}
       />
       {form.line2 ? (
@@ -174,7 +181,7 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
           </SelectInput>
         </Field>
         <Field label="Phone (optional)">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
         <Field label="Skills (optional)" hint="Separate with commas.">
           <TextInput value={form.skills} onChange={set("skills")} />
@@ -423,7 +430,7 @@ export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?
         </div>
       ) : null}
       <Field label="Scope" hint="What the cleaner will be told to do.">
-        <TextArea value={form.scope} onChange={set("scope")} required rows={2} />
+        <AssistedTextArea value={form.scope} onChange={(text) => setForm((current) => ({ ...current, scope: text }))} required rows={3} actions={STEPS} />
       </Field>
       <Field label="Skills needed (optional)" hint="Separate with commas. Only cleaners with these skills can be offered the visit.">
         <TextInput value={form.skills} onChange={set("skills")} />
@@ -441,10 +448,10 @@ export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Cleaners needed" hint="The visit is staffed only when this many have accepted.">
-          <TextInput inputMode="numeric" value={form.crew} onChange={set("crew")} required />
+          <CountField value={form.crew} onChange={(text) => setForm((current) => ({ ...current, crew: text }))} required noun={["cleaner", "cleaners"]} min={1} max={20} />
         </Field>
         <Field label="Arrival window, minutes" hint="0 means arrive at the start time. 30 means any time in the half hour after it.">
-          <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} />
+          <DurationField value={form.arrival} onChange={(text) => setForm((current) => ({ ...current, arrival: text }))} min={0} max={240} step={15} stepper />
         </Field>
         <Field label="Must be finished by, day (optional)" hint="For example a guest check-in.">
           <TextInput type="date" value={form.deadlineDate} onChange={set("deadlineDate")} />
@@ -453,8 +460,8 @@ export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?
           <TextInput type="time" value={form.deadlineTime} onChange={set("deadlineTime")} />
         </Field>
       </div>
-      <Field label="Instructions for the crew (optional)" hint="What the crew needs to know that is not the scope. A cleaner sees it only after they accept.">
-        <TextArea value={form.instructions} onChange={set("instructions")} rows={2} maxLength={4000} />
+      <Field label="Instructions for the crew (optional)" hint="What the crew needs to know that is not the scope.">
+        <AssistedTextArea value={form.instructions} onChange={(text) => setForm((current) => ({ ...current, instructions: text }))} rows={3} maxLength={4000} audience={{ label: "Visible to the assigned cleaner after they accept." }} actions={STEPS} />
       </Field>
       <p className="text-xs text-muted-foreground">Times are on the company’s clock ({timezone}). A new visit has no cleaner until one accepts it.</p>
       <FormError message={error} />

@@ -32,6 +32,8 @@ import { PerformanceSection } from "./performance";
 import { FollowUpsCard, PortalAccessCard, RequirementActions, SkillClaims } from "./onboarding-review";
 import { profilePath, SECTIONS, type SectionId } from "./state";
 import { Checkbox } from "@/components/ui/selection";
+import { DurationField, EmailInput, ListInput, numberProblem, PhoneInput, zipProblem } from "@/components/ui/fields";
+import { useSkillSuggestions } from "@/components/app/skill-suggestions";
 
 export type Profile = FunctionReturnType<typeof api.cleanerProfile.profile>;
 
@@ -167,8 +169,6 @@ export function ProfileActions({ profile }: { profile: Profile }) {
   );
 }
 
-const list = (value: string) => value.split(/[,;\n]/).map((part) => part.trim()).filter(Boolean);
-
 function EditDetailsDialog({ profile, onClose }: { profile: Profile; onClose: () => void }) {
   const { companyId } = useCompany();
   const update = useMutation(api.cleanerProfile.updateDetails);
@@ -177,20 +177,23 @@ function EditDetailsDialog({ profile, onClose }: { profile: Profile; onClose: ()
     name: profile.name,
     phone: profile.phone ?? "",
     email: profile.email ?? "",
-    areas: profile.areas.serviceAreas.join(", "),
-    preferred: profile.areas.preferredAreas.join(", "),
+    areas: profile.areas.serviceAreas,
+    preferred: profile.areas.preferredAreas,
     travel: profile.areas.maxTravelMinutes?.toString() ?? "",
-    skills: profile.skills.join(", "),
+    skills: profile.skills,
   });
-  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: event.target.value });
+  const skillSuggestions = useSkillSuggestions();
+  const set = (key: "name") => (event: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: event.target.value });
+  const travelProblem = numberProblem(form.travel, { min: 0, max: 600 });
   return (
     <Modal open onClose={onClose} title={`Edit ${profile.name}`} description="Contact details, areas and confirmed skills. Pay and engagement changes are requests that an authorized person decides.">
       <form
         className="grid gap-3"
         onSubmit={(event) => {
           event.preventDefault();
+          if (travelProblem) return;
           void run(async () => {
-            await update({ companyId, cleanerId: profile.cleanerId, name: form.name, phone: form.phone, email: form.email, serviceAreas: list(form.areas), preferredAreas: list(form.preferred), maxTravelMinutes: form.travel.trim() ? Number(form.travel) : null, skills: list(form.skills) });
+            await update({ companyId, cleanerId: profile.cleanerId, name: form.name, phone: form.phone, email: form.email, serviceAreas: form.areas, preferredAreas: form.preferred, maxTravelMinutes: form.travel.trim() ? Number(form.travel) : null, skills: form.skills });
             onClose();
           });
         }}
@@ -199,26 +202,26 @@ function EditDetailsDialog({ profile, onClose }: { profile: Profile; onClose: ()
           <TextInput value={form.name} onChange={set("name")} required autoComplete="off" />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Mobile phone">
-            <TextInput value={form.phone} onChange={set("phone")} inputMode="tel" autoComplete="off" />
+          <Field label="Mobile phone" hint="A valid number is not permission to text. Texting follows their recorded consent.">
+            <PhoneInput value={form.phone} onChange={(phone) => setForm({ ...form, phone })} autoComplete="off" />
           </Field>
           <Field label="Email">
-            <TextInput type="email" value={form.email} onChange={set("email")} autoComplete="off" />
+            <EmailInput value={form.email} onChange={(email) => setForm({ ...form, email })} autoComplete="off" />
           </Field>
         </div>
-        <Field label="Service areas" hint="Postal codes, separated by commas. Dispatch offers work only inside these.">
-          <TextInput value={form.areas} onChange={set("areas")} />
+        <Field label="Service areas" hint="ZIP codes. Dispatch offers work only inside these. Paste a list to add several.">
+          <ListInput value={form.areas} onChange={(areas) => setForm({ ...form, areas })} validate={zipProblem} noun="ZIP code" placeholder="Type a ZIP code and press Enter" />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Preferred areas" hint="A few of the service areas they like most.">
-            <TextInput value={form.preferred} onChange={set("preferred")} />
+          <Field label="Preferred areas" hint="A few of their service areas they like most.">
+            <ListInput value={form.preferred} onChange={(preferred) => setForm({ ...form, preferred })} suggestions={form.areas.map((area) => ({ value: area }))} allowCustom={false} noun="area" placeholder={form.areas.length ? "Choose from their service areas" : "Add service areas first"} disabled={form.areas.length === 0 && form.preferred.length === 0} />
           </Field>
-          <Field label="Travel limit (minutes)" hint="Shown to Dispatch; not enforced, since there are no drive times yet.">
-            <TextInput value={form.travel} onChange={set("travel")} inputMode="numeric" />
+          <Field label="Travel limit" hint="Shown to Dispatch; not enforced, since there are no drive times yet. Leave empty for no limit.">
+            <DurationField value={form.travel} onChange={(travel) => setForm({ ...form, travel })} min={0} max={600} step={15} stepper />
           </Field>
         </div>
-        <Field label="Confirmed skills" hint="Skills a person confirmed. Dispatch matches jobs against these.">
-          <TextInput value={form.skills} onChange={set("skills")} />
+        <Field label="Confirmed skills" hint="Dispatch uses these skills when matching this cleaner to visits. Adding one records what you confirmed with them; it is not a check of training or qualification.">
+          <ListInput value={form.skills} onChange={(skills) => setForm({ ...form, skills })} suggestions={skillSuggestions} noun="skill" placeholder="Type a skill, or pick one from your services" />
         </Field>
         <FormError message={error} />
         <div className="flex justify-end gap-2">

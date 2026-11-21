@@ -27,7 +27,7 @@ function AddressInputs({ value, onChange }: { value: Address; onChange: (value: 
         value={value.line1}
         required
         onChange={(line1) => onChange({ ...value, line1, placeId: undefined, lat: undefined, lng: undefined })}
-        onPick={(picked) => onChange({ line1: picked.line1, line2: picked.line2, city: picked.city, region: picked.region, postalCode: picked.postalCode, placeId: picked.placeId, lat: picked.lat, lng: picked.lng })}
+        onPick={(picked) => onChange({ line1: picked.line1, line2: picked.line2 || value.line2, city: picked.city, region: picked.region, postalCode: picked.postalCode, placeId: picked.placeId, lat: picked.lat, lng: picked.lng })}
       />
       <label className="grid gap-1.5 text-sm sm:col-span-3">
         <span className="font-medium text-strong">City</span>

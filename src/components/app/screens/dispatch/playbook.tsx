@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../../convex/_generated/api";
 import { Checkbox } from "@/components/ui/selection";
+import { NumberField } from "@/components/ui/fields";
 
 type Policy = FunctionReturnType<typeof api.dispatchOps.policy>;
 type Settings = FunctionReturnType<typeof api.dispatch.settings>;
@@ -183,7 +184,7 @@ function NumbersForm({ section, policy, settings, canEdit }: { section: Exclude<
           return (
             <Field key={row.key} label={row.label} hint={`${row.hint} ${limit ? `From ${limit.min} to ${limit.max}.` : ""}`}>
               <span className="flex items-center gap-2">
-                <TextInput inputMode="numeric" disabled={!canEdit} value={form[row.key]} onChange={(event) => setForm((current) => ({ ...current, [row.key]: event.target.value }))} className="w-28" />
+                <NumberField disabled={!canEdit} value={form[row.key]} onChange={(text) => setForm((current) => ({ ...current, [row.key]: text }))} className="w-28" />
                 <span className="text-xs text-muted-foreground">{row.unit}</span>
               </span>
             </Field>

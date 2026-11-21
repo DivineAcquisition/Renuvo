@@ -14,6 +14,7 @@ import { Panel } from "@/components/app/shell";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
+import { EmailInput } from "@/components/ui/fields";
 
 type Section = { group: string; label: string; answered: number; total: number; questions: Q[] };
 
@@ -157,7 +158,7 @@ export function PartiesAndLinks({ detail, editable }: { detail: Detail; editable
                 <TextInput value={party.name} disabled={!editable} onChange={(event) => edit(index, { name: event.target.value })} />
               </Field>
               <Field label="Email for signing">
-                <TextInput type="email" value={party.email ?? ""} disabled={!editable} onChange={(event) => edit(index, { email: event.target.value })} />
+                <EmailInput value={party.email ?? ""} disabled={!editable} onChange={(text) => edit(index, { email: text })} />
               </Field>
               <Field label="Order">
                 <TextInput inputMode="numeric" value={String(party.order ?? index + 1)} disabled={!editable} onChange={(event) => edit(index, { order: Number(event.target.value) || undefined })} />

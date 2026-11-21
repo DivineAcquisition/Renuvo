@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { CLOSURE_WORDS, CriteriaList, EvidenceTrace, JourneyTimeline, PipelineFlow, RECOMMENDATION, SOURCE_WORDS, STAGE_WORDS, STEPS, stepOf, WhoActs, type ApplicationDetail, type ApplicationRow, type TraceStep } from "./shared";
+import { EmailInput } from "@/components/ui/fields";
 
 /** Applicants: everyone in the pipeline, by step, with one opened beside the list. */
 export function ApplicantsScreen() {
@@ -139,7 +140,7 @@ function AddApplicant() {
         ))}
       </SelectInput>
       <TextInput aria-label="Name" placeholder="Name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
-      <TextInput aria-label="Email" type="email" placeholder="Email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
+      <EmailInput aria-label="Email" placeholder="Email" value={form.email} onChange={(text) => setForm({ ...form, email: text })} required />
       <TextInput aria-label="Phone" placeholder="Phone (optional)" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
       <Button type="submit" size="sm" variant="primary" loading={busy}>
         Add

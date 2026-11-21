@@ -15,6 +15,7 @@ import { money } from "@/lib/app/format";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { ProgressRing } from "./shared";
+import { NumberField } from "@/components/ui/fields";
 
 type Need = NonNullable<ReturnType<typeof useQuery<typeof api.hiringNeeds.list>>>[number];
 
@@ -167,7 +168,7 @@ function NewRole({ onDone }: { onDone: () => void }) {
             </SelectInput>
           </Field>
           <Field label="Openings">
-            <TextInput inputMode="numeric" value={form.openings} onChange={(event) => set("openings", event.target.value)} />
+            <NumberField value={form.openings} onChange={(text) => set("openings", text)} />
           </Field>
         </div>
         <p className="text-xs text-muted-foreground sm:col-span-2">Pay, questions and screening criteria are added once the role exists. No criterion may concern a protected characteristic.</p>

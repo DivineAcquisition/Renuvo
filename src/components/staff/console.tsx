@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
+import { EmailInput, NumberField } from "@/components/ui/fields";
 
 /**
  * Selestial's own staff console: the public request queues, the trust records the public pages are
@@ -82,6 +83,7 @@ const NAV = [
   { href: "/staff/setup", label: "Setup funnel" },
   { href: "/staff/tutorials", label: "Tutorials" },
   { href: "/staff/selection", label: "Selection system" },
+  { href: "/staff/fields", label: "Form fields" },
   { href: "/staff/texting", label: "Texting" },
   { href: "/staff/messaging", label: "Messaging money" },
   { href: "/staff/agent-requests", label: "Agent requests" },
@@ -968,7 +970,7 @@ export function StaffPeople() {
               <TextInput value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
             </Field>
             <Field label="Email" className="sm:col-span-2">
-              <TextInput type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
+              <EmailInput value={form.email} onChange={(text) => setForm({ ...form, email: text })} required />
             </Field>
             <Field label="Role">
               <SelectInput value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as StaffRole })}>
@@ -1220,7 +1222,7 @@ function RegistrationFee({ requestId }: { requestId: Id<"textingRequests"> }) {
     >
       <p className="w-full text-xs text-muted-foreground">Registration fee at actual cost, as the carrier registry billed it. The same fee entered twice is charged once.</p>
       <TextInput value={what} onChange={(event) => setWhat(event.target.value)} placeholder="What it is, e.g. Campaign vetting" aria-label="What the fee is" required className="max-w-xs" />
-      <TextInput value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="15.00" aria-label="Amount in dollars" inputMode="decimal" required className="w-24" />
+      <NumberField value={amount} onChange={(text) => setAmount(text)} placeholder="15.00" aria-label="Amount in dollars" required className="w-24" precision={2} />
       <Button type="submit" size="sm" variant="outline" loading={busy} disabled={!cents}>
         Charge fee
       </Button>
@@ -1294,7 +1296,7 @@ function AttentionItem({ row }: { row: AttentionRow }) {
           }}
         >
           <TextInput value={note} onChange={(event) => setNote(event.target.value)} placeholder="What was done, e.g. Spoke to the Owner; spam blocked" aria-label="What was done" required className="max-w-md" />
-          <TextInput value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Credit $ (optional)" aria-label="Credit in dollars, optional" inputMode="decimal" className="w-36" />
+          <NumberField value={amount} onChange={(text) => setAmount(text)} placeholder="Credit $ (optional)" aria-label="Credit in dollars, optional" className="w-36" precision={2} />
           <Button type="submit" size="sm" variant="outline" loading={busy}>
             {cents ? `Credit ${dollars(cents)} and close` : "Close"}
           </Button>

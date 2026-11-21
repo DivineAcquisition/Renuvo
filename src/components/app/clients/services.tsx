@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
+import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { Modal } from "@/components/app/modal";
 import { NewVisitForm } from "@/components/app/screens/forms";
 import { JobInputs, defaultInput } from "@/components/app/services/preview";
@@ -33,6 +33,9 @@ import { SalesPlans, SalesWork, useClientSales } from "./sales";
 import type { Profile } from "./profile";
 import { ImportedRecords } from "@/components/app/setup/migration";
 import { Checkbox, SegmentedControl } from "@/components/ui/selection";
+import { AssistedTextArea, DurationField, organizeIntoSteps, type WritingAction } from "@/components/ui/fields";
+
+const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
 
 type Plan = NonNullable<ReturnType<typeof useQuery<typeof api.servicePlans.forClient>>>["plans"][number];
 
@@ -338,7 +341,7 @@ function PlanForm({ profile, onDone }: { profile: Profile; onDone: () => void })
           <TextInput type="time" value={form.startTime} onChange={set("startTime")} required />
         </Field>
         <Field label="Arrival window, min">
-          <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} />
+          <DurationField value={form.arrival} onChange={(text) => setForm((current) => ({ ...current, arrival: text }))} min={0} max={240} step={15} stepper />
         </Field>
       </div>
       {spec ? (
@@ -360,7 +363,7 @@ function PlanForm({ profile, onDone }: { profile: Profile; onDone: () => void })
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Notes for the crew (optional)">
-          <TextArea rows={2} value={form.scopeNote} onChange={set("scopeNote")} maxLength={1000} />
+          <AssistedTextArea rows={3} value={form.scopeNote} onChange={(text) => setForm((current) => ({ ...current, scopeNote: text }))} maxLength={1000} actions={STEPS} />
         </Field>
         <Field label="Agreement (optional)" hint="The customer agreement these terms come from.">
           <SelectInput value={form.agreementId} onChange={set("agreementId")}>
@@ -451,7 +454,7 @@ function PlanChange({ plan, action, onDone }: { plan: Plan; action: "pause" | "e
               <TextInput type="time" value={form.startTime} onChange={set("startTime")} />
             </Field>
             <Field label="Arrival window, min">
-              <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} />
+              <DurationField value={form.arrival} onChange={(text) => setForm((current) => ({ ...current, arrival: text }))} min={0} max={240} step={15} stepper />
             </Field>
           </>
         ) : null}

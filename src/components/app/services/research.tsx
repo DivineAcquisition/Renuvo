@@ -23,6 +23,7 @@ import { BASIS_LABELS, comparableRange } from "../../../../convex/lib/services/r
 import { Empty, formatCents, InfoTip, Notice, SectionTitle, when } from "./shared";
 import { PriceStrip } from "./visuals";
 import { Checkbox } from "@/components/ui/selection";
+import { MoneyField } from "@/components/ui/fields";
 
 const BASIS_TONE: Record<string, "info" | "warning" | "success" | "outline"> = { advertised_starting: "warning", estimated: "info", firm_published: "success", company_data: "success", ai_inference: "outline" };
 
@@ -186,7 +187,7 @@ function SourceRows({ sources, setSources }: { sources: OwnerSource[]; setSource
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
               <Field label="Price shown">
-                <TextInput value={s.price} inputMode="decimal" onChange={(e) => set({ price: e.target.value })} placeholder="129" />
+                <MoneyField value={s.price} onChange={(text) => set({ price: text })} placeholder="129" />
               </Field>
               <Field label="Per">
                 <TextInput value={s.unit} onChange={(e) => set({ unit: e.target.value })} />

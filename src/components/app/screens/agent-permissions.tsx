@@ -16,6 +16,7 @@ import { centsFrom, money } from "@/lib/app/format";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
+import { MoneyField } from "@/components/ui/fields";
 
 /** The four permission levels, in the owner's words. The ids are the permission engine's and do not change. */
 export const LEVELS = [
@@ -109,10 +110,10 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Most it can spend at once ($)">
-              <TextInput inputMode="decimal" value={perAction} onChange={(event) => setPerAction(event.target.value)} placeholder="50.00" required />
+              <MoneyField value={perAction} onChange={(text) => setPerAction(text)} placeholder="50.00" required />
             </Field>
             <Field label="Most it can spend in a day ($)">
-              <TextInput inputMode="decimal" value={perDay} onChange={(event) => setPerDay(event.target.value)} placeholder="200.00" required />
+              <MoneyField value={perDay} onChange={(text) => setPerDay(text)} placeholder="200.00" required />
             </Field>
           </div>
           <div className="flex gap-2">

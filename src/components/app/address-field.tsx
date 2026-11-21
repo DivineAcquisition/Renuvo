@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Field, TextInput } from "@/components/app/form";
 import { MapPin } from "@/components/icons";
 import { details, mapsKey, newSession, suggest, type PickedAddress, type Suggestion } from "@/lib/app/address";
+import { joinIds, markComposite, useFieldControl } from "@/components/ui/selection/field-context";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -80,7 +81,7 @@ export function AddressField({ label, value, onChange, onPick, required, disable
   }
 
   const input = (
-    <TextInput
+    <AddressInput
       value={value}
       onChange={(event) => {
         typed.current = true;
@@ -113,11 +114,11 @@ export function AddressField({ label, value, onChange, onPick, required, disable
   );
 
   return (
-    <Field label={label} hint={problem ?? hint ?? (enabled ? "Start typing and pick your address, or type it in full." : undefined)} className={className}>
-      <span className="relative block">
+    <Field label={label} required={required} hint={problem ?? hint ?? (enabled ? "Start typing and pick your address, or type it in full. You can add a unit or suite on the next line." : undefined)} className={className}>
+      <AddressBox>
         {input}
         {enabled && open && shown.length > 0 ? (
-          <ul id={list} role="listbox" aria-label={`Suggested addresses for ${label}`} className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-lg border border-border bg-card p-1 shadow-lg">
+          <ul id={list} role="listbox" aria-label={`Suggested addresses for ${label}`} className="absolute inset-x-0 top-full z-[80] mt-1 max-h-72 overflow-auto rounded-xl border border-border bg-popover shadow-lg shadow-black/10 p-1 shadow-lg">
             {shown.map((option, index) => (
               <li
                 key={option.placeId}
@@ -141,7 +142,21 @@ export function AddressField({ label, value, onChange, onPick, required, disable
             </li>
           </ul>
         ) : null}
-      </span>
+      </AddressBox>
     </Field>
   );
+}
+
+/**
+ * The street input and its suggestion list, as one control inside the Field. It is marked composite so
+ * the Field labels the input itself (by id) and puts the hint on the input, not on a wrapper.
+ */
+function AddressBox({ children }: { children: React.ReactNode }) {
+  return <span className="relative block">{children}</span>;
+}
+markComposite(AddressBox);
+
+function AddressInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const field = useFieldControl();
+  return <TextInput {...props} id={field?.controlId} aria-describedby={joinIds(props["aria-describedby"], field?.describedBy)} aria-invalid={field?.invalid || undefined} />;
 }

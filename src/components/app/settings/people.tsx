@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { api } from "../../../../convex/_generated/api";
+import { useConfirm } from "@/components/ui/fields/confirm";
 
 const ROLE_WORDS: Record<string, string> = {
   owner: "Everything, including people, authority, rules and billing.",
@@ -24,9 +25,11 @@ export function PeopleAccess() {
   const setRole = useMutation(api.members.setRole);
   const remove = useMutation(api.members.remove);
   const { busy, error, run } = useRun();
+  const { ask, element: confirmDialog } = useConfirm();
   const owner = role === "owner";
   return (
     <div className="grid gap-5">
+      {confirmDialog}
       <Panel title="People">
         {members ? (
           <ul className="divide-y divide-border">
@@ -56,9 +59,20 @@ export function PeopleAccess() {
                         size="sm"
                         variant="ghost"
                         disabled={busy}
-                        onClick={() => {
-                          if (window.confirm(`Remove ${member.name}? They lose access at once. Records they made stay.`)) void run(() => remove({ companyId, memberId: member.id }));
-                        }}
+                        onClick={() =>
+                          void ask({
+                            title: `Remove ${member.name}'s access?`,
+                            body: "They lose access to this company at once. Records they made stay.",
+                            details: [
+                              { label: "Email", value: member.email },
+                              { label: "Role", value: member.role },
+                            ],
+                            confirmLabel: "Remove access",
+                            cancelLabel: "Keep access",
+                            tone: "danger",
+                            action: () => remove({ companyId, memberId: member.id }),
+                          })
+                        }
                       >
                         Remove access
                       </Button>
