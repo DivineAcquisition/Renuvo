@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { sourceWords, suggestionState } from "./assist";
 import { joinIds } from "./field-context";
+import { addressLine, agreementTypeOptions, cleanerOption, customerOption, propertyOption, serviceOption } from "./records";
 import { groupOptions, matches } from "./types";
 
 describe("suggestions", () => {
@@ -57,5 +58,45 @@ describe("options", () => {
   it("joins description ids without blanks or repeats", () => {
     expect(joinIds("a", undefined, "a b", null, "")).toBe("a b");
     expect(joinIds(undefined, false)).toBeUndefined();
+  });
+});
+
+describe("record options", () => {
+  it("tells customers apart by contact details, and searches them", () => {
+    const option = customerOption({ _id: "c1", name: "Ana Ortiz", type: "business", email: "ana@example.com", phone: "512-555-0101" });
+    expect(option).toMatchObject({ value: "c1", label: "Ana Ortiz", meta: "Business · ana@example.com · 512-555-0101" });
+    expect(matches(option, "555-0101")).toBe(true);
+    expect(customerOption({ _id: "c2", name: "Ben" }).meta).toBeUndefined();
+  });
+
+  it("shows a property's full address and its customer", () => {
+    const address = { line1: "12 Main St", line2: "Apt 4", city: "Austin", region: "TX", postalCode: "78701" };
+    expect(addressLine(address)).toBe("12 Main St, Apt 4, Austin, TX 78701");
+    expect(propertyOption({ _id: "p1", label: "Lake house", address }, "Ana Ortiz")).toMatchObject({ label: "Lake house", meta: "12 Main St, Apt 4, Austin, TX 78701 · Ana Ortiz" });
+    expect(propertyOption({ _id: "p2", address }).label).toBe("12 Main St, Austin");
+    expect(matches(propertyOption({ _id: "p2", address }), "78701")).toBe(true);
+  });
+
+  it("lists a cleaner's confirmed skills and never claims availability it doesn't have", () => {
+    const option = cleanerOption({ _id: "k1", name: "Rosa", skills: ["deep", "move-out", "windows", "ovens"] });
+    expect(option.meta).toBe("deep, move-out, windows +1");
+    expect(String(option.meta)).not.toMatch(/available/i);
+    expect(matches(option, "ovens")).toBe(true);
+    expect(cleanerOption({ _id: "k2", name: "Sam" }).meta).toBeUndefined();
+  });
+
+  it("shows a service's published price only when it has one", () => {
+    expect(serviceOption({ id: "s1", name: "Standard", startingPriceCents: 15000, durationMinutes: 120 }).meta).toBe("From $150 · 120 min");
+    expect(serviceOption({ id: "s2", name: "Custom" }).meta).toBeUndefined();
+  });
+
+  it("keeps each family of agreement kinds together without changing their keys", () => {
+    const options = agreementTypeOptions([
+      { key: "a", label: "Service agreement", family: "Customers" },
+      { key: "b", label: "Contractor agreement", family: "Workers" },
+      { key: "c", label: "Cancellation policy", family: "Customers" },
+    ]);
+    expect(options.map((o) => o.value)).toEqual(["a", "c", "b"]);
+    expect(groupOptions(options).map((g) => g.group)).toEqual(["Customers", "Workers"]);
   });
 });

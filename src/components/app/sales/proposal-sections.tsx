@@ -5,7 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { FormError, messageOf, SelectInput } from "@/components/app/form";
+import { Field, FormError, messageOf, SelectInput } from "@/components/app/form";
 import { JobInputs, defaultInput } from "@/components/app/services/preview";
 import { MoneyInput } from "@/components/app/services/shared";
 import { Copy, Eye, Plus, Trash2 } from "@/components/icons";
@@ -23,7 +23,7 @@ import { CustomerSection } from "./customer-section";
 import { Chip, fieldClass, FormSection, ReadyLine, SummaryRow } from "./kit";
 import { servicesFor } from "./service-section";
 import type { DraftData, Working } from "./use-draft";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, propertyOption, SearchableSelect, SegmentedControl } from "@/components/ui/selection";
 
 type Summary = FunctionReturnType<typeof api.sales.price>;
 type Preview = FunctionReturnType<typeof api.proposals.preview>;
@@ -129,18 +129,9 @@ export function ProposalWorkspace({ data, working, update, setBody, summary, flu
                 <span className="font-medium text-strong">Name</span>
                 <input className={fieldClass()} value={site.label} placeholder={str ? `Property ${i + 1}` : `Site ${i + 1}`} onChange={(e) => setSite(site.key, { label: e.target.value })} />
               </label>
-              <label className="grid gap-1.5 text-sm">
-                <span className="font-medium text-strong">Address</span>
-                <SelectInput className={fieldClass()} value={site.propertyId ?? ""} onChange={(e) => setSite(site.key, { propertyId: e.target.value || undefined })} disabled={!customer}>
-                  <option value="">{customer ? "Choose an address" : "Choose the client first"}</option>
-                  {data.properties.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.label ? `${p.label} · ` : ""}
-                      {p.address.line1}, {p.address.city}
-                    </option>
-                  ))}
-                </SelectInput>
-              </label>
+              <Field label="Address">
+                <SearchableSelect value={site.propertyId ?? ""} onValueChange={(next) => setSite(site.key, { propertyId: next ?? undefined })} disabled={!customer} options={data.properties.map((p) => propertyOption(p, customer?.name))} placeholder={customer ? "Search this client's addresses" : "Choose the client first"} emptyText="This client has no saved addresses yet." />
+              </Field>
               <div className="flex justify-end sm:col-span-2">
                 <Button size="sm" variant="ghost" onClick={() => setProposal((p) => ({ ...p, sites: p.sites.filter((s) => s.key !== site.key) }))}>
                   <Trash2 aria-hidden className="size-4" /> Remove
@@ -165,14 +156,18 @@ export function ProposalWorkspace({ data, working, update, setBody, summary, flu
               <div key={site.key} className="grid gap-2 rounded-xl border border-border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium text-strong">{site.label || "Site"}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(["not_needed", "needed"] as const).map((choice) => (
-                      <label key={choice} className={`cursor-pointer rounded-lg border px-2.5 py-1 text-xs ${(site.assessment ?? "not_needed") === choice || (choice === "needed" && (site.assessment === "requested" || site.assessment === "completed")) ? "border-brand-500 bg-brand-500/8 text-strong" : "border-border text-muted-foreground"}`}>
-                        <input type="radio" className="sr-only" checked={(site.assessment ?? "not_needed") === choice} onChange={() => setSite(site.key, { assessment: choice })} disabled={site.assessment === "requested" || site.assessment === "completed"} />
-                        {choice === "not_needed" ? "Priced from what we know" : "Needs a walkthrough"}
-                      </label>
-                    ))}
-                  </div>
+                  <SegmentedControl
+                    label={`How ${site.label || "this site"} is priced`}
+                    hideLabel
+                    density="compact"
+                    value={site.assessment === "requested" || site.assessment === "completed" ? "needed" : (site.assessment ?? "not_needed")}
+                    onChange={(choice) => setSite(site.key, { assessment: choice })}
+                    disabled={site.assessment === "requested" || site.assessment === "completed"}
+                    options={[
+                      { id: "not_needed", label: "Priced from what we know" },
+                      { id: "needed", label: "Needs a walkthrough" },
+                    ]}
+                  />
                 </div>
                 {site.assessment === "needed" ? (
                   <Button size="sm" variant="outline" disabled={busy || !site.propertyId} onClick={() => run(async () => (await requestAssessment({ companyId, draftId: data.draft._id, siteKey: site.key }), "Walkthrough requested. A task was opened to agree the time."))}>
@@ -248,7 +243,7 @@ export function ProposalWorkspace({ data, working, update, setBody, summary, flu
                     </span>
                   </label>
                 ) : null}
-                {!site.perTurnover ? <CadencePicker name={`cadence-${site.key}`} cadence={site.cadence} onChange={(cadence) => setSite(site.key, { cadence })} /> : null}
+                {!site.perTurnover ? <CadencePicker cadence={site.cadence} onChange={(cadence) => setSite(site.key, { cadence })} /> : null}
                 {preview ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     {preview.fields.map((field) => (

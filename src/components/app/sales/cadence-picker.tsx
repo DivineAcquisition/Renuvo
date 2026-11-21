@@ -1,11 +1,10 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 
 import { cadenceLabel, cadenceProblem, weekdayOf, type Cadence } from "../../../../convex/lib/sales/cadence";
 import { fieldClass, WEEKDAYS } from "./kit";
 import { SelectInput } from "@/components/app/form";
-import { ChoiceChips } from "@/components/ui/selection";
+import { ChoiceChips, SegmentedControl } from "@/components/ui/selection";
 
 const CADENCES: { kind: Cadence["kind"]; label: string }[] = [
   { kind: "weekly", label: "Weekly" },
@@ -35,18 +34,10 @@ const DAY_OF_MONTH = [...Array.from({ length: 28 }, (_, i) => i + 1), 29, 30, 31
 const dayWord = (d: number) => (d === 0 ? "Last day" : String(d));
 
 /** How often: each cadence is its own choice, so every 4 weeks is never monthly and every 2 weeks never twice a month. */
-export function CadencePicker({ name, cadence, onChange, anchorDate }: { name: string; cadence: Cadence | undefined; onChange: (cadence: Cadence) => void; anchorDate?: string }) {
+export function CadencePicker({ cadence, onChange, anchorDate }: { cadence: Cadence | undefined; onChange: (cadence: Cadence) => void; anchorDate?: string }) {
   return (
-    <fieldset className="grid gap-3">
-      <legend className="mb-1 text-sm font-medium text-strong">How often</legend>
-      <div role="radiogroup" aria-label="How often" className="flex flex-wrap gap-1.5">
-        {CADENCES.map((option) => (
-          <label key={option.kind} className={cn("cursor-pointer rounded-lg border px-3 py-1.5 text-sm focus-within:outline-2 focus-within:outline-brand-500", cadence?.kind === option.kind ? "border-brand-500 bg-brand-500/8 font-medium text-strong" : "border-border text-muted-foreground hover:text-strong")}>
-            <input type="radio" className="sr-only" name={name} checked={cadence?.kind === option.kind} onChange={() => onChange(defaultCadence(option.kind, anchorDate))} />
-            {option.label}
-          </label>
-        ))}
-      </div>
+    <div className="grid gap-3">
+      <SegmentedControl label="How often" value={cadence?.kind ?? null} onChange={(kind) => onChange(defaultCadence(kind, anchorDate))} options={CADENCES.map((option) => ({ id: option.kind, label: option.label }))} />
       {cadence?.kind === "weekly" ? (
         <div className="flex flex-wrap gap-1.5">
           <ChoiceChips aria-label="Days of the week" density="compact" options={WEEKDAYS.map((label, day) => ({ value: String(day), label }))} value={cadence.weekdays.map(String)} onValueChange={(next) => onChange({ kind: "weekly", weekdays: next.map(Number).sort((a, b) => a - b) })} />
@@ -94,6 +85,6 @@ export function CadencePicker({ name, cadence, onChange, anchorDate }: { name: s
         </div>
       ) : null}
       {cadence && cadenceProblem(cadence) ? <p className="text-sm text-destructive-foreground">{cadenceProblem(cadence)}</p> : cadence ? <p className="text-xs text-muted-foreground">{cadenceLabel(cadence)}</p> : null}
-    </fieldset>
+    </div>
   );
 }

@@ -56,7 +56,7 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
         <span className="min-w-0 flex-1 basis-full text-sm text-strong sm:basis-auto">
           <span id={`${id}-label`}>{action.label}</span>
-          {action.ceiling === "propose" ? <span className="block text-xs text-muted-foreground">Always needs your approval.</span> : null}
+          {action.ceiling === "propose" ? <span className="block text-xs text-muted-foreground">Always needs your approval.</span> : <span className="block text-xs text-muted-foreground">{LEVELS[rank(action.level)]?.meaning}</span>}
           {spends ? (
             <span className="block text-xs text-muted-foreground">
               Spends up to {money(action.perActionCents!)} each time and {money(action.perDayCents!)} a day without asking. Anything more needs your approval.
@@ -76,7 +76,8 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
               className="w-full sm:w-auto sm:min-w-52"
               disabled={busy}
               value={pending ?? action.level}
-              options={LEVELS.filter((level) => rank(level.id) <= rank(action.ceiling)).map((level) => ({ value: level.id, label: level.label, description: level.meaning }))}
+              // Levels past the ceiling stay in the list, disabled with the reason, so the owner sees why they can't be chosen.
+              options={LEVELS.map((level) => ({ value: level.id, label: level.label, description: level.meaning, ...(rank(level.id) > rank(action.ceiling) ? { disabled: true, disabledReason: `Not allowed for this action. The most it can do is “${levelLabel(action.ceiling)}”.` } : {}) }))}
               onValueChange={(level) => {
                 if (!level) return;
                 setSaved(false);
@@ -87,7 +88,7 @@ export function PermissionRow({ action, canEdit }: { action: Action; canEdit: bo
               }}
             />
             <span id={`${id}-effect`} className="sr-only">
-              Changes apply as soon as you choose, except a spending action, which asks for limits first.
+              {LEVELS[rank(pending ?? action.level)]?.meaning} Changes apply as soon as you choose{action.money ? ", except letting it spend without approval, which asks for limits first" : ""}.
             </span>
           </span>
         ) : (

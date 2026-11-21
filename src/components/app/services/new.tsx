@@ -9,6 +9,7 @@ import { Field, FormError, TextArea, TextInput, useRun } from "@/components/app/
 import { FileSpreadsheet, Plus, Sparkles, TemplateIcon, Upload } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl, SelectionCards } from "@/components/ui/selection";
 import { importPath, SERVICES_ROOT, servicePath } from "@/lib/app/services";
 import { cn } from "@/lib/utils";
 
@@ -223,14 +224,7 @@ function ImportPricing() {
       <Field label="Your price list" hint="One service per line, like “Standard clean — $150 per visit — kitchen, baths, floors”. For a spreadsheet, a header row with Service, Price, Unit and Description helps.">
         <TextArea rows={8} value={text} onChange={(event) => setText(event.target.value)} placeholder={"Standard clean — $150 per visit — kitchen, baths, floors\nDeep clean — $280 per visit\nWindows — $8 per window"} />
       </Field>
-      <div className="flex flex-wrap gap-4 text-sm">
-        <label className="inline-flex items-center gap-2">
-          <input type="radio" name="kind" checked={kind === "text"} onChange={() => setKind("text")} /> One service per line
-        </label>
-        <label className="inline-flex items-center gap-2">
-          <input type="radio" name="kind" checked={kind === "csv"} onChange={() => setKind("csv")} /> Spreadsheet (CSV)
-        </label>
-      </div>
+      <SegmentedControl label="How the list is written" value={kind} onChange={setKind} options={[{ id: "text", label: "One service per line" }, { id: "csv", label: "Spreadsheet (CSV)" }]} />
       <FormError message={error} />
       <div className="flex flex-wrap gap-2">
         <Button
@@ -278,18 +272,9 @@ function Blank() {
       <Field label="Name customers will see">
         <TextInput value={name} onChange={(event) => setName(event.target.value)} placeholder="Standard clean" maxLength={80} />
       </Field>
-      <fieldset>
-        <legend className="mb-1.5 text-sm font-medium text-strong">Kind of cleaning</legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {CATEGORIES.map((c) => (
-            <label key={c} className={cn("cursor-pointer rounded-xl border p-3 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500/40", category === c ? "border-brand-500 bg-brand-500/[0.06]" : "border-border hover:border-brand-500/40")}>
-              <input type="radio" className="sr-only" name="category" checked={category === c} onChange={() => setCategory(c)} />
-              <span className="block font-medium text-strong">{CATEGORY_LABELS[c]}</span>
-              <span className="block text-xs text-muted-foreground">{CATEGORY_BLURB[c]}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <Field label="Kind of cleaning">
+        <SelectionCards type="single" columns={3} value={category} onValueChange={setCategory} options={CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABELS[c], description: CATEGORY_BLURB[c] }))} />
+      </Field>
       <FormError message={error} />
       <div>
         <Button

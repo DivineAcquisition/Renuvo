@@ -28,3 +28,4 @@ export { FieldSource, FieldSuggestion, sourceWords, suggestionState, useSuggesti
 export { useFieldControl } from "./field-context";
 export type { Density } from "./tokens";
 export type { ListState, Option } from "./types";
+export { addressLine, agreementTypeOption, agreementTypeOptions, cleanerOption, customerOption, propertyOption, serviceOption } from "./records";

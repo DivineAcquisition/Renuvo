@@ -29,7 +29,7 @@ import { CategoryChips, ClientMark, day, EmptyState, RelationshipBadge, Staffing
 import { ClientQuickView } from "./quick-view";
 import { ActionMenu } from "./menu";
 import { rememberScroll, takeScroll, useDirectoryState, viewOf, type DirectoryState } from "./state";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, tableSelection } from "@/components/ui/selection";
 
 type Overview = FunctionReturnType<typeof api.clients.overview>;
 type Row = FunctionReturnType<typeof api.clients.directory>["page"][number];
@@ -369,16 +369,28 @@ function DirectoryTable({ state, view, canManage, owners, onQuickView, onBook, o
       return next;
     });
   const open = () => rememberScroll();
+  // Bulk actions act only on loaded rows that are selected; a selection hidden by a filter change is not acted on.
+  const chosen = rows.filter((r) => selected.has(r.customerId));
+  const table = tableSelection({
+    pageSize: rows.length,
+    selectedOnPage: chosen.length,
+    allMatching: false,
+    unloaded: paged.status !== "Exhausted",
+    noun: "clients",
+    onSelectPage: () => setSelected(new Set(rows.map((r) => r.customerId))),
+    onClear: () => setSelected(new Set()),
+  });
   return (
     <div>
-      {canManage && selected.size ? <BulkBar rows={rows.filter((r) => selected.has(r.customerId))} owners={owners} onDone={() => setSelected(new Set())} /> : null}
+      {canManage && chosen.length ? <BulkBar rows={chosen} owners={owners} onDone={() => setSelected(new Set())} /> : null}
+      {canManage && table.banner ? <div className="px-4 pt-2">{table.banner}</div> : null}
       <table className="hidden w-full text-left text-sm md:table">
         <caption className="sr-only">Clients in this view</caption>
         <thead className="border-b border-border text-xs text-muted-foreground">
           <tr>
             {canManage ? (
               <th scope="col" className="w-10 py-2 pl-4">
-                <Checkbox aria-label="Select every client shown" checked={rows.length > 0 && rows.every((r) => selected.has(r.customerId))} onCheckedChange={(checked) => setSelected(checked ? new Set(rows.map((r) => r.customerId)) : new Set())} />
+                {table.header}
               </th>
             ) : null}
             <th scope="col" className={cn("py-2 font-medium", canManage ? "pl-2" : "pl-4")}>

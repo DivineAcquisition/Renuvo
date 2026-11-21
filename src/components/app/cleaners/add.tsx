@@ -18,7 +18,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { Engagement } from "./bits";
 import { profilePath } from "./state";
-import { ChoiceChips } from "@/components/ui/selection";
+import { ChoiceChips, SelectionCards } from "@/components/ui/selection";
 import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 const TYPES: { value: Engagement; label: string; help: string }[] = [
@@ -91,18 +91,9 @@ export function AddCleanerDialog({ onClose, onAdded }: { onClose: () => void; on
           <TextInput value={form.name} onChange={set("name")} required autoComplete="off" autoFocus />
         </Field>
 
-        <fieldset className="grid gap-2">
-          <legend className="mb-1.5 text-sm font-medium text-strong">How they work with you</legend>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {TYPES.map((type) => (
-              <label key={type.value} className={cn("flex cursor-pointer flex-col rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500", form.engagement === type.value ? "border-brand-500 bg-brand-500/8" : "border-border hover:border-brand-500/40")}>
-                <input type="radio" name="engagement" value={type.value} checked={form.engagement === type.value} onChange={() => setForm({ ...form, engagement: type.value })} className="sr-only" />
-                <span className="text-sm font-medium text-strong">{type.label}</span>
-                <span className="text-xs text-muted-foreground">{type.help}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <Field label="How they work with you">
+          <SelectionCards type="single" columns={3} name="engagement" value={form.engagement} onValueChange={(engagement) => setForm({ ...form, engagement })} options={TYPES.map((type) => ({ value: type.value, label: type.label, description: type.help }))} />
+        </Field>
 
         {form.engagement === "subcontractor" ? (
           <div className="grid gap-3 rounded-xl border border-border bg-muted/30 p-3">

@@ -3,7 +3,7 @@
 import { useId, useMemo, useState } from "react";
 
 import { Field, TextArea, TextInput, SelectInput } from "@/components/app/form";
-import { Calculator, Check, ChevronDown, Footprints, Gauge, HandCoinsIcon, HouseIcon, LayoutGrid, ListChecks, type LucideIcon, MapPin, MoonIcon, Plus, PriceTagIcon, RefreshCw, ScaleIcon, Sparkles, Square, Trash2, TrendingUp, User, Users, Zap } from "@/components/icons";
+import { Calculator, ChevronDown, Footprints, Gauge, HandCoinsIcon, HouseIcon, LayoutGrid, ListChecks, type LucideIcon, MapPin, MoonIcon, Plus, PriceTagIcon, RefreshCw, ScaleIcon, Sparkles, Square, Trash2, TrendingUp, User, Users, Zap } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { millicentsFrom, newId, rateText } from "@/lib/app/services";
 import { cn } from "@/lib/utils";
@@ -13,7 +13,7 @@ import { CATEGORIES, CATEGORY_LABELS, defaultPricing, defaultStr, METHOD_LABELS,
 import { areaWord, minutesWords, scheduleLabel } from "../../../../convex/lib/services/words";
 import { defaultInput, ScheduleCalendar } from "./preview";
 import { AudienceTag, FieldLabel, formatCents, InfoTip, LabeledField, MoneyInput, NumberInput, SectionTitle, Segmented, Stepper, SwitchButton, Toggle } from "./shared";
-import { Checkbox, ChoiceChips } from "@/components/ui/selection";
+import { Checkbox, ChoiceChips, SelectionCards } from "@/components/ui/selection";
 import { AssistedTextArea, ListInput, NumberField, organizeIntoSteps, type WritingAction, zipProblem } from "@/components/ui/fields";
 
 const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
@@ -208,28 +208,17 @@ function MethodPicker({ value, onPick, disabled }: { value: PricingMethod; onPic
   const shown = [...COMMON_METHODS, ...others.filter((m) => more || m === value)];
   return (
     <div className="grid grid-cols-1 gap-2">
-      <fieldset disabled={disabled}>
-        <legend className="sr-only">Pricing method</legend>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {shown.map((m) => {
-            const { Icon, example } = METHOD_LOOK[m];
-            const selected = value === m;
-            return (
-              <label key={m} className={cn("flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500/40", selected ? "border-brand-500 bg-brand-500/[0.06]" : "border-border bg-card hover:border-brand-500/40")}>
-                <input type="radio" className="sr-only" name="method" checked={selected} onChange={() => onPick(m)} />
-                <span aria-hidden className={cn("grid size-9 shrink-0 place-items-center rounded-lg transition-colors", selected ? "bg-brand-500 text-white" : "bg-brand-500/10 text-brand-300")}>
-                  <Icon className="size-5" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium text-strong">{METHOD_LABELS[m].label}</span>
-                  <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">e.g. {example}</span>
-                </span>
-                {selected ? <Check aria-hidden className="size-4 shrink-0 text-brand-300" /> : null}
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
+      <SelectionCards
+        type="single"
+        aria-label="Pricing method"
+        value={value}
+        onValueChange={onPick}
+        disabled={disabled}
+        options={shown.map((m) => {
+          const { Icon, example } = METHOD_LOOK[m];
+          return { value: m, label: METHOD_LABELS[m].label, description: `e.g. ${example}`, icon: <Icon className="size-5" aria-hidden /> };
+        })}
+      />
       <button type="button" aria-expanded={more} onClick={() => setMore((v) => !v)} className="inline-flex w-fit items-center gap-1 rounded-md text-sm font-medium text-brand-300 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500/40">
         {more ? "Fewer ways to price" : `More ways to price (${others.length})`}
         <ChevronDown aria-hidden className={cn("size-4 transition-transform motion-reduce:transition-none", more && "rotate-180")} />

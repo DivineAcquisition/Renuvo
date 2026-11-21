@@ -12,6 +12,7 @@ import { useSyncExternalStore } from "react";
 
 import { useCompany } from "@/components/app/company";
 import { CircleHelp, ExternalLink, LifeBuoy, PlayCircle, X } from "@/components/icons";
+import { SegmentedControl } from "@/components/ui/selection";
 import { cn } from "@/lib/utils";
 
 import { matches, NO_EXPORT, PLATFORM_WORDS, TUTORIALS, type Placement, type Platform, type Task } from "../../../../convex/lib/tutorials/catalog";
@@ -210,17 +211,5 @@ export function useSource(): [Platform | null, (next: Platform) => void] {
 }
 
 export function SourcePicker({ value, onChange }: { value: Platform | null; onChange: (next: Platform) => void }) {
-  return (
-    <fieldset className="grid gap-2">
-      <legend className="mb-1 text-sm font-medium text-strong">Where are your records now?</legend>
-      <div className="flex flex-wrap gap-2">
-        {SOURCE_CHOICES.map((choice) => (
-          <label key={choice.id} className={cn("inline-flex min-h-10 cursor-pointer items-center rounded-full border px-3.5 text-sm has-focus-visible:outline-2 has-focus-visible:outline-brand-500", value === choice.id ? "border-brand-500 bg-brand-500/10 font-medium text-strong" : "border-border text-muted-foreground hover:text-strong")}>
-            <input type="radio" name="migration-source" value={choice.id} checked={value === choice.id} onChange={() => onChange(choice.id)} className="sr-only" />
-            {choice.label}
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
+  return <SegmentedControl label="Where are your records now?" value={value} onChange={onChange} options={SOURCE_CHOICES} />;
 }

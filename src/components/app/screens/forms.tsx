@@ -18,7 +18,8 @@ import { quote as runQuote, type PropertyExtra, type QuoteInput } from "../../..
 import type { Spec } from "../../../../convex/lib/services/spec";
 import { visitScope } from "../../../../convex/lib/services/operations";
 import { lowerFirst } from "../../../../convex/lib/services/words";
-import { Checkbox, ChoiceChips } from "@/components/ui/selection";
+import { Checkbox, ChoiceChips, customerOption, propertyOption, SearchableSelect, serviceOption } from "@/components/ui/selection";
+import { markComposite } from "@/components/ui/selection/field-context";
 import { AssistedTextArea, CountField, DurationField, EmailInput, PhoneInput, organizeIntoSteps, type WritingAction } from "@/components/ui/fields";
 
 const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
@@ -220,16 +221,11 @@ function PropertySelect({ customerId, value, onChange }: { customerId: Id<"custo
   const { companyId } = useCompany();
   const found = useQuery(api.customers.get, { companyId, customerId });
   return (
-    <SelectInput value={value} onChange={(event) => onChange(event.target.value)} required disabled={!found}>
-      <option value="">{found ? "Choose a property" : "Loading…"}</option>
-      {found?.properties.map((property) => (
-        <option key={property._id} value={property._id}>
-          {property.label ?? `${property.address.line1}, ${property.address.city}`}
-        </option>
-      ))}
-    </SelectInput>
+    <SearchableSelect value={value} onValueChange={(next) => onChange(next ?? "")} options={(found?.properties ?? []).map((property) => propertyOption(property))} loading={found === undefined} placeholder="Search this customer's properties" emptyText="This customer has no properties yet. Add one on their profile." required />
   );
 }
+// Its SearchableSelect names itself from the Field, so the Field must not wrap it in a label.
+markComposite(PropertySelect);
 
 type Template = { id: string; name: string; scope: string; skills: string[]; startingPriceCents?: number; durationMinutes: number; defaultCrew: number };
 
@@ -242,14 +238,7 @@ function TemplateField({ serviceId, onChoose }: { serviceId: string; onChoose: (
   const template = templates.find((service) => service.id === serviceId);
   return (
     <Field label="Service template" hint={template ? `${template.durationMinutes} minutes, ${template.defaultCrew} ${template.defaultCrew === 1 ? "cleaner" : "cleaners"}. Fields below can still be changed.` : "Optional. Fills the fields below from Settings."}>
-      <SelectInput value={serviceId} onChange={(event) => onChoose(templates.find((service) => service.id === event.target.value) ?? null)}>
-        <option value="">No template</option>
-        {templates.map((service) => (
-          <option key={service.id} value={service.id}>
-            {service.name}
-          </option>
-        ))}
-      </SelectInput>
+      <SearchableSelect value={serviceId} onValueChange={(next) => onChoose(templates.find((service) => service.id === next) ?? null)} options={templates.map(serviceOption)} placeholder="No template" />
     </Field>
   );
 }
@@ -377,14 +366,7 @@ export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Customer">
-          <SelectInput value={form.customerId} onChange={(event) => setForm((current) => ({ ...current, customerId: event.target.value, propertyId: "" }))} required>
-            <option value="">{customers ? "Choose a customer" : "Loading…"}</option>
-            {customers?.map((customer) => (
-              <option key={customer._id} value={customer._id}>
-                {customer.name}
-              </option>
-            ))}
-          </SelectInput>
+          <SearchableSelect value={form.customerId} onValueChange={(next) => setForm((current) => ({ ...current, customerId: next ?? "", propertyId: "" }))} options={(customers ?? []).map(customerOption)} loading={customers === undefined} placeholder="Search customers by name, email or phone" required />
         </Field>
         <Field label="Property">
           {form.customerId ? (

@@ -32,7 +32,7 @@ import { VisitRow } from "./parts";
 import { SalesPlans, SalesWork, useClientSales } from "./sales";
 import type { Profile } from "./profile";
 import { ImportedRecords } from "@/components/app/setup/migration";
-import { Checkbox, SegmentedControl } from "@/components/ui/selection";
+import { Checkbox, SegmentedControl, SelectionCards } from "@/components/ui/selection";
 import { AssistedTextArea, DurationField, organizeIntoSteps, type WritingAction } from "@/components/ui/fields";
 
 const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
@@ -307,21 +307,17 @@ function PlanForm({ profile, onDone }: { profile: Profile; onDone: () => void })
           </SelectInput>
         </Field>
       </div>
-      <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium text-strong">Kind of plan</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {[
-            { id: "recurring", label: "Recurring", detail: "A calendar of visits, booked ahead." },
-            { id: "standing", label: "Standing arrangement", detail: "Agreed terms for a rental; turnovers booked one by one." },
-          ].map((o) => (
-            <label key={o.id} className="cursor-pointer rounded-xl border border-border px-3 py-2 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-500/[0.06]">
-              <input type="radio" name="kind" className="sr-only" checked={form.kind === o.id} onChange={() => setForm((c) => ({ ...c, kind: o.id }))} />
-              <span className="block font-medium text-strong">{o.label}</span>
-              <span className="block text-xs text-muted-foreground">{o.detail}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <Field label="Kind of plan">
+        <SelectionCards
+          type="single"
+          value={form.kind}
+          onValueChange={(kind) => setForm((c) => ({ ...c, kind }))}
+          options={[
+            { value: "recurring", label: "Recurring", description: "A calendar of visits, booked ahead." },
+            { value: "standing", label: "Standing arrangement", description: "Agreed terms for a rental; turnovers booked one by one." },
+          ]}
+        />
+      </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         {form.kind === "recurring" ? (
           <Field label="How often">

@@ -145,6 +145,7 @@ export function tableSelection({
   onSelectAllMatching,
   onClear,
   noun = "records",
+  unloaded = false,
 }: {
   /** Rows shown on this page. */
   pageSize: number;
@@ -158,6 +159,8 @@ export function tableSelection({
   onSelectAllMatching?: () => void;
   onClear: () => void;
   noun?: string;
+  /** More records match but aren't loaded yet, and there is no way to select them all at once. The banner says only the loaded ones are selected. */
+  unloaded?: boolean;
 }) {
   const all = allMatching || (pageSize > 0 && selectedOnPage === pageSize);
   const some = !all && selectedOnPage > 0;
@@ -177,6 +180,10 @@ export function tableSelection({
           <button type="button" onClick={onSelectAllMatching} className={cn("font-medium text-[var(--sel-accent,var(--brand))] underline-offset-2 hover:underline", focusRing)}>
             Select all {matching.toLocaleString("en-US")} matching {noun}
           </button>
+        </p>
+      ) : all && unloaded ? (
+        <p role="status" className="text-xs text-strong">
+          All {pageSize} {noun} shown are selected. More match but aren&apos;t loaded yet, and aren&apos;t included.
         </p>
       ) : null,
   };

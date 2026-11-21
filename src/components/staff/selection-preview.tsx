@@ -9,8 +9,13 @@ import { useState } from "react";
 import { Field } from "@/components/app/form";
 import { BriefcaseBusiness as Briefcase, Globe, Home } from "@/components/icons";
 import {
+  agreementTypeOptions,
   Checkbox,
   CheckboxRow,
+  cleanerOption,
+  customerOption,
+  propertyOption,
+  serviceOption,
   ChoiceChips,
   Consequence,
   FieldSource,
@@ -43,6 +48,22 @@ const CATEGORIES: Option[] = [
 
 const ROWS = Array.from({ length: 5 }, (_, at) => `Visit ${at + 1}`);
 
+// Records shaped like the real queries, run through the same builders the app's pickers use.
+const RECORD_CUSTOMERS = [
+  customerOption({ _id: "r1", name: "Ana Ortiz", type: "person", email: "ana@example.com", phone: "(512) 555-0101" }),
+  customerOption({ _id: "r2", name: "Ana Ortiz", type: "business", email: "office@ortizdental.example" }),
+  customerOption({ _id: "r3", name: "Ben Carter" }),
+];
+const PROPERTY = { line1: "12 Main St", line2: "Apt 4", city: "Austin", region: "TX", postalCode: "78701" };
+const RECORD_PROPERTIES = [propertyOption({ _id: "p1", label: "Lake house", address: PROPERTY }, "Ana Ortiz"), propertyOption({ _id: "p2", address: { ...PROPERTY, line1: "900 Congress Ave", line2: undefined } }, "Ana Ortiz")];
+const RECORD_CLEANERS = [cleanerOption({ _id: "k1", name: "Rosa Diaz", skills: ["deep clean", "move-out", "windows", "ovens"], availabilityConfirmedAt: Date.UTC(2026, 10, 3) }), cleanerOption({ _id: "k2", name: "Sam Lee" })];
+const RECORD_SERVICES = [serviceOption({ id: "s1", name: "Standard clean", startingPriceCents: 15000, durationMinutes: 120, scope: "Kitchen, bathrooms, floors and dusting throughout." }), serviceOption({ id: "s2", name: "Post-construction" })];
+const RECORD_KINDS = agreementTypeOptions([
+  { key: "service", label: "Service agreement", family: "Customers" },
+  { key: "contractor", label: "Independent contractor agreement", family: "Workers" },
+  { key: "cancellation", label: "Cancellation policy", family: "Customers" },
+]);
+
 export function SelectionPreview() {
   const [exchange, setExchange] = useState<string | null>(null);
   const [customer, setCustomer] = useState<string | null>("c9");
@@ -58,6 +79,8 @@ export function SelectionPreview() {
   const [inputs, setInputs] = useState("v1");
   const [picked, setPicked] = useState<string[]>([]);
   const [allMatching, setAllMatching] = useState(false);
+  const [record, setRecord] = useState<Record<string, string | null>>({});
+  const pick = (key: string) => (value: string | null) => setRecord((current) => ({ ...current, [key]: value }));
   const suggestion = useSuggestion({ current: area, proposed: "Austin, Round Rock, Cedar Park", basedOn: "v1", inputs, set: setArea });
   const table = tableSelection({ pageSize: ROWS.length, selectedOnPage: picked.length, matching: 48, allMatching, onSelectPage: () => setPicked(ROWS), onSelectAllMatching: () => setAllMatching(true), onClear: () => {
       setPicked([]);
@@ -92,6 +115,36 @@ export function SelectionPreview() {
         </Field>
         <Field label="Customers to notify" hint="MultiSelect with an earlier choice that can't be found, and a limit of 5.">
           <MultiSelect value={many} onValueChange={setMany} options={CUSTOMERS} max={5} visibleChips={3} />
+        </Field>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        <h2 className="text-sm font-semibold text-strong sm:col-span-2">Record pickers</h2>
+        <Field label="Customer" hint="Two Ana Ortiz records, told apart by type and contact.">
+          <SearchableSelect value={record.customer ?? null} onValueChange={pick("customer")} options={RECORD_CUSTOMERS} placeholder="Search customers by name, email or phone" />
+        </Field>
+        <Field label="Property" hint="Address and customer.">
+          <SearchableSelect value={record.property ?? null} onValueChange={pick("property")} options={RECORD_PROPERTIES} placeholder="Search this customer's properties" />
+        </Field>
+        <Field label="Cleaner" hint="Confirmed skills, and when weekly hours were last confirmed. Never “available”.">
+          <SearchableSelect value={record.cleaner ?? null} onValueChange={pick("cleaner")} options={RECORD_CLEANERS} placeholder="Search cleaners by name or skill" />
+        </Field>
+        <Field label="Service template" hint="Published price and length, only when set.">
+          <SearchableSelect value={record.service ?? null} onValueChange={pick("service")} options={RECORD_SERVICES} placeholder="No template" />
+        </Field>
+        <Field label="Kind of agreement" hint="Grouped by who it applies to.">
+          <Select value={record.kind ?? null} onValueChange={pick("kind")} options={RECORD_KINDS} emptyLabel="Let Selestial choose" placeholder="Let Selestial choose" />
+        </Field>
+        <Field label="Agent permission" hint="A level past the action's ceiling stays listed, with why.">
+          <Select
+            value={record.level ?? "propose"}
+            onValueChange={pick("level")}
+            options={[
+              { value: "off", label: "Off", description: "The agent never does this." },
+              { value: "propose", label: "Ask me first", description: "The agent prepares it. You approve, change or skip it." },
+              { value: "execute_and_report", label: "Act and notify me", description: "The agent does it and tells you each time.", disabled: true, disabledReason: "Not allowed for this action. The most it can do is “Ask me first”." },
+            ]}
+          />
         </Field>
       </section>
 
@@ -134,6 +187,7 @@ export function SelectionPreview() {
       </section>
 
       <section className="grid gap-2">
+        {tableSelection({ pageSize: 25, selectedOnPage: 25, allMatching: false, unloaded: true, noun: "clients", onSelectPage: () => undefined, onClear: () => undefined }).banner}
         {table.banner}
         <table className="w-full text-sm">
           <thead>

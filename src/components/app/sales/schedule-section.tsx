@@ -14,8 +14,8 @@ import type { DraftBody } from "../../../../convex/lib/sales/draft";
 import { CadencePicker } from "./cadence-picker";
 import { Chip, fieldClass, FormSection, minutesToTime } from "./kit";
 import type { DraftData, Working } from "./use-draft";
-import { SelectInput } from "@/components/app/form";
-import { Checkbox } from "@/components/ui/selection";
+import { Field, SelectInput } from "@/components/app/form";
+import { Checkbox, cleanerOption, SearchableSelect } from "@/components/ui/selection";
 
 type Summary = FunctionReturnType<typeof api.sales.price>;
 
@@ -77,7 +77,7 @@ export function ScheduleSection({ n, data, working, setBody, summary, done, comp
 
   return (
     <FormSection n={n} id="schedule" title={recurring ? "Schedule & cadence" : "Schedule"} lead={`Times are on the company's clock (${data.timezone.replace(/_/g, " ")}).`} done={done}>
-      {recurring ? <CadencePicker name="cadence" cadence={cadence} onChange={setCadence} anchorDate={schedule.date} /> : null}
+      {recurring ? <CadencePicker cadence={cadence} onChange={setCadence} anchorDate={schedule.date} /> : null}
 
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="grid gap-1.5 text-sm">
@@ -133,18 +133,9 @@ export function ScheduleSection({ n, data, working, setBody, summary, done, comp
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1.5 text-sm">
-          <span className="font-medium text-strong">Preferred cleaner</span>
-          <SelectInput className={fieldClass()} value={schedule.preferredCleanerId ?? ""} onChange={(e) => setSchedule({ preferredCleanerId: e.target.value || undefined })}>
-            <option value="">No preference</option>
-            {(cleaners ?? []).map((c) => (
-              <option key={c._id} value={c._id}>
-                {c.name}
-              </option>
-            ))}
-          </SelectInput>
-          <span className="text-xs text-muted-foreground">A preference, not an assignment. Dispatch asks this cleaner first, and the visit is covered only when someone accepts.</span>
-        </label>
+        <Field label="Preferred cleaner" hint="A preference, not an assignment. Dispatch asks this cleaner first, and the visit is covered only when someone accepts.">
+          <SearchableSelect value={schedule.preferredCleanerId ?? ""} onValueChange={(next) => setSchedule({ preferredCleanerId: next ?? undefined })} options={(cleaners ?? []).map(cleanerOption)} loading={cleaners === undefined} placeholder="No preference" />
+        </Field>
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium text-strong">Access or timing constraints</span>
           <textarea className={fieldClass("min-h-20 py-2")} placeholder="For example: must finish by 2 PM, gate code given day before" value={schedule.constraints ?? ""} onChange={(e) => setSchedule({ constraints: e.target.value })} />

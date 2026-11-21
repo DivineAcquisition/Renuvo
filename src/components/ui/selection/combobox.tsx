@@ -135,6 +135,7 @@ export function SearchableSelect<V extends string>({ value, onValueChange, optio
       value={current}
       onValueChange={(next: unknown) => onValueChange(next ? (next as Option<V>).value : null)}
       itemToStringLabel={(option: Option<V> | null) => (option ? option.label : "")}
+      itemToStringValue={(option: Option<V> | null) => (option ? option.value : "")}
       isItemEqualToValue={(a: Option<V> | null, b: Option<V> | null) => a?.value === b?.value}
       filter={onSearchChange ? null : (option: Option<V>, query: string) => matches(option, query)}
       onInputValueChange={(query: string) => search(query)}
@@ -250,6 +251,7 @@ export function MultiSelect<V extends string>({
         value={chosen}
         onValueChange={(next: unknown) => onValueChange(((next as Option<V>[] | null) ?? []).map((option) => option.value))}
         itemToStringLabel={(option: Option<V> | null) => (option ? option.label : "")}
+        itemToStringValue={(option: Option<V> | null) => (option ? option.value : "")}
         isItemEqualToValue={(a: Option<V> | null, b: Option<V> | null) => a?.value === b?.value}
         filter={onSearchChange ? null : (option: Option<V>, query: string) => matches(option, query)}
         onInputValueChange={(query: string) => search(query)}

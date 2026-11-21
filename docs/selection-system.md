@@ -17,7 +17,8 @@ Every way a person chooses something in Selestial goes through `@/components/ui/
 | A few short independent choices | `ChoiceChips` |
 | A continuing behaviour, on or off | `SwitchRow` with `effect="immediate"` or `effect="on-save"` |
 | Where a value came from / what an agent proposes / what a choice does | `FieldSource`, `FieldSuggestion`, `Consequence`, `Requirement` |
-| Table "this page" vs "all matching" | `tableSelection()` |
+| Table "this page" vs "all matching" (or "only what's loaded") | `tableSelection()` |
+| Options for customers, properties, cleaners, services, agreement kinds | `customerOption`, `propertyOption`, `cleanerOption`, `serviceOption`, `agreementTypeOptions` |
 
 Action menus (Edit, Delete) are not selections and keep Menu semantics.
 
@@ -48,6 +49,22 @@ Public pages keep the customer's branding: the booking theme sets `--sel-accent`
 
 `Field` connects its label, hint and error to the focusable element. A native control is wrapped in the label as before. A composite control (`Select`, `SearchableSelect`, `MultiSelect`, `RadioGroup`, `SelectionCards`) reads the ids from context and names its own trigger, input or group, since copying aria props onto a non-focusable wrapper leaves the control unnamed. `Field` also takes `aside` for a source chip or suggestion that has its own buttons and must not sit inside the label.
 
+## Business records
+
+Record pickers use `SearchableSelect` with options from `records.ts`, so the same record reads the same way everywhere:
+
+- **Customer:** name, then Business / email / phone; search matches email and phone.
+- **Property:** label (or first line), then the full address and the customer.
+- **Cleaner:** confirmed skills (three, then "+n") and the date weekly hours were last confirmed. Never "available": nothing here knows whether a cleaner is free at a given time; the server checks that when an offer is sent.
+- **Service:** published starting price and length, only when the service has them.
+- **Agreement kind:** grouped by family.
+
+Builders read only what the caller's query already returned for the current person (pay, private notes and access instructions are never read). A field that isn't there isn't shown.
+
+Migrated to record pickers: visit offer (cleaner), new visit (customer, property, service template), proposal sites (property), proposal schedule (preferred cleaner), agreements new/upload/link (customer, worker, property, kind), new invoice (customer), retention case (customer).
+
+The combobox serializes the stored id (not the label) into its hidden form input, so a `name`d SearchableSelect submits the same value a native select did. `required` is enforced by the same hidden input.
+
 ## Rollout status
 
 Every selection control in the app now draws from the shared system:
@@ -58,7 +75,8 @@ Every selection control in the app now draws from the shared system:
 
 ### Kept on purpose
 
-- **Native radios (32):** native `<input type="radio">` groups inside styled labels already have correct semantics, arrow keys, form submission and focus, and take the shared accent through `--sel-accent`.
+- **Native radios (22):** groups with a visible native radio inside a styled label already have correct semantics, arrow keys, form submission and focus, and take the shared accent through `--sel-accent`. Card and chip groups that hid the radio and showed the choice by colour alone (pricing method, kind of cleaning, cleaner engagement, kind of client, kind of plan, cadence, walkthrough need, migration source, services import format) moved to `SelectionCards` or `SegmentedControl`, which always show a mark or weight change. What remains hidden-radio is the sales `ChoiceCard` (draws its own radio mark), the clients view filter, and public/marketing pages that carry their own branding (proposal, quote, pay, autonomy dial, early access).
+- **Applicant form chips:** custom `role="radio"` / `role="checkbox"` buttons with a visible tick, in the applicant page's own look.
 - **Native select (1):** the marketing early-access form relies on the browser's own required-field validation and FormData.
 - **Native checkbox (1):** the early-access SMS consent box, read from FormData on submit.
 - **Toggle buttons (19 `aria-pressed`):** actions or view filters, not form values. Show password, mute, captions, full screen, import add/skip, dashboard focus tiles, recruiter pipeline steps, integration cards, booking date and time pickers, texting number picking, the clients view nav and attention filters.

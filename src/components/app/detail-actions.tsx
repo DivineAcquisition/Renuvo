@@ -5,7 +5,8 @@ import { useState } from "react";
 
 import { canManage, useCompany } from "@/components/app/company";
 import { DispatchView } from "@/components/app/dispatch-view";
-import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
+import { Field, FormError, TextInput, useRun } from "@/components/app/form";
+import { cleanerOption, SearchableSelect } from "@/components/ui/selection";
 import { HoldButton } from "@/components/app/hold-button";
 import { useNow } from "@/components/app/use-now";
 import { Modal } from "@/components/app/modal";
@@ -84,14 +85,7 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
       }}
     >
       <Field label="Cleaner" hint="Only cleaners marked ready are listed. The offer is refused if they cannot work this time.">
-        <SelectInput value={cleanerId} onChange={(event) => setCleanerId(event.target.value)} required>
-          <option value="">Choose a cleaner</option>
-          {cleaners.map((cleaner) => (
-            <option key={cleaner._id} value={cleaner._id}>
-              {cleaner.name}
-            </option>
-          ))}
-        </SelectInput>
+        <SearchableSelect value={cleanerId} onValueChange={(next) => setCleanerId(next ?? "")} options={cleaners.map(cleanerOption)} placeholder="Search cleaners by name or skill" required />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Their pay for this visit">

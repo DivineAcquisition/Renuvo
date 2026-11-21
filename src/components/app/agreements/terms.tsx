@@ -13,7 +13,7 @@ import { Panel } from "@/components/app/shell";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, cleanerOption, customerOption, propertyOption, SearchableSelect } from "@/components/ui/selection";
 import { EmailInput } from "@/components/ui/fields";
 
 type Section = { group: string; label: string; answered: number; total: number; questions: Q[] };
@@ -221,25 +221,21 @@ export function PartiesAndLinks({ detail, editable }: { detail: Detail; editable
             </Field>
             {kind === "properties" ? (
               <Field label="Customer">
-                <SelectInput value={customerId} onChange={(event) => (setCustomerId(event.target.value), setRecordId(""))}>
-                  <option value="">Choose…</option>
-                  {customers?.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </SelectInput>
+                <SearchableSelect value={customerId} onValueChange={(next) => (setCustomerId(next ?? ""), setRecordId(""))} options={(customers ?? []).map(customerOption)} loading={customers === undefined} placeholder="Search customers" />
               </Field>
             ) : (
               <span className="hidden sm:block" />
             )}
             <Field label={KINDS.find((k) => k.id === kind)!.label}>
-              <SelectInput value={recordId} onChange={(event) => setRecordId(event.target.value)}>
-                <option value="">Choose…</option>
-                {kind === "customers" ? customers?.map((c) => <option key={c._id} value={c._id}>{c.name}</option>) : null}
-                {kind === "cleaners" ? cleaners?.map((c) => <option key={c._id} value={c._id}>{c.name}</option>) : null}
-                {kind === "properties" ? property?.properties.map((p) => <option key={p._id} value={p._id}>{p.label ?? `${p.address.line1}, ${p.address.city}`}</option>) : null}
-              </SelectInput>
+              <SearchableSelect
+                key={kind}
+                value={recordId}
+                onValueChange={(next) => setRecordId(next ?? "")}
+                options={kind === "customers" ? (customers ?? []).map(customerOption) : kind === "cleaners" ? (cleaners ?? []).map(cleanerOption) : (property?.properties ?? []).map((p) => propertyOption(p, property?.customer.name))}
+                loading={kind === "customers" ? customers === undefined : kind === "cleaners" ? cleaners === undefined : Boolean(customerId) && property === undefined}
+                disabled={kind === "properties" && !customerId}
+                placeholder={kind === "properties" && !customerId ? "Choose the customer first" : "Search…"}
+              />
             </Field>
             <Button size="sm" variant="secondary" disabled={!recordId} onClick={() => void run(async () => { await link({ companyId, agreementId: detail.id as Id<"agreements">, link: { table: kind, id: recordId } }); setRecordId(""); })}>
               Link

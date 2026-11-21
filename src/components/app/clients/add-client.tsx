@@ -13,11 +13,10 @@ import { useCompany } from "@/components/app/company";
 import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
 import { Button } from "@/components/ui/button";
 import { clientPath, PROPERTY_KIND_LABELS } from "@/lib/app/clients";
-import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, SelectionCards } from "@/components/ui/selection";
 import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 type Duplicate = { customerId: Id<"customers">; name: string; reason: string; status: string };
@@ -120,15 +119,17 @@ export function AddClientForm({ onDone, onCreated }: { onDone: () => void; onCre
         void submit(refused.length > 0);
       }}
     >
-      <div role="radiogroup" aria-label="Kind of client" className="grid grid-cols-2 gap-2">
-        {(["person", "business"] as const).map((option) => (
-          <label key={option} className={cn("cursor-pointer rounded-xl border px-3 py-2.5 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500/40", type === option ? "border-brand-500 bg-brand-500/[0.07]" : "border-border hover:border-brand-500/40")}>
-            <input type="radio" className="sr-only" name="client-type" checked={type === option} onChange={() => setType(option)} />
-            <span className="block font-medium text-strong">{option === "person" ? "A person or household" : "A business"}</span>
-            <span className="block text-xs text-muted-foreground">{option === "person" ? "Homes and personal rentals" : "Offices, sites, property managers, hosts"}</span>
-          </label>
-        ))}
-      </div>
+      <SelectionCards
+        type="single"
+        aria-label="Kind of client"
+        className="grid-cols-2"
+        value={type}
+        onValueChange={setType}
+        options={[
+          { value: "person", label: "A person or household", description: "Homes and personal rentals" },
+          { value: "business", label: "A business", description: "Offices, sites, property managers, hosts" },
+        ]}
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={type === "business" ? "Business name" : "Name"}>
           <TextInput value={form.name} onChange={set("name")} required maxLength={160} autoComplete={type === "person" ? "name" : "organization"} />

@@ -22,7 +22,7 @@ import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { CaseDrawer } from "./drawer";
 import { CaseCardView, Empty, useCaseParam } from "./shared";
-import { Checkbox } from "@/components/ui/selection";
+import { Checkbox, customerOption, SearchableSelect } from "@/components/ui/selection";
 
 function NewCase({ open, onClose, onOpened }: { open: boolean; onClose: () => void; onOpened: (id: string) => void }) {
   const { companyId } = useCompany();
@@ -39,14 +39,7 @@ function NewCase({ open, onClose, onOpened }: { open: boolean; onClose: () => vo
     <Modal open={open} onClose={onClose} title="Open a case" description="Record what was reported, linked to the service it is about. Retention gathers that visit's record and prepares a first step for you to review.">
       <div className="grid gap-3">
         <Field label="Customer">
-          <SelectInput value={customerId} onChange={(event) => (setCustomerId(event.target.value), setJobId(""))}>
-            <option value="">Choose a customer</option>
-            {(customers ?? []).map((row) => (
-              <option key={row._id} value={row._id}>
-                {row.name}
-              </option>
-            ))}
-          </SelectInput>
+          <SearchableSelect value={customerId} onValueChange={(next) => (setCustomerId(next ?? ""), setJobId(""))} options={(customers ?? []).map(customerOption)} loading={customers === undefined} placeholder="Search customers by name, email or phone" />
         </Field>
         <Field label="The service this is about" hint={customerId && sources && !sources.visits.length ? "No completed visit is on record for this customer." : "A case about a visit can read its scope, checklist and photos."}>
           <SelectInput value={jobId} onChange={(event) => setJobId(event.target.value)} disabled={!sources}>
