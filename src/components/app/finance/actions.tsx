@@ -13,6 +13,7 @@ import { MANUAL_METHODS, clientKey, moneyInput, parseMoney, todayKey, usd } from
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
+import { MoneyField } from "@/components/ui/fields";
 
 /**
  * The confirmations behind every money action. Each one shows, before anything runs, exactly what will
@@ -85,7 +86,7 @@ function RecordPaymentForm({ invoiceId, owedCents, onDone }: { invoiceId: Id<"in
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Amount received" error={amountError} hint={`${usd(owedCents)} is still owed`}>
-          <TextInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+          <MoneyField value={amount} onChange={(text) => setAmount(text)} autoFocus />
         </Field>
         <Field label="How you were paid">
           <SelectInput value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
@@ -151,7 +152,7 @@ function CreditForm({ invoiceId, onDone }: { invoiceId: Id<"invoices">; onDone: 
       }}
     >
       <Field label="Amount to credit">
-        <TextInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25.00" autoFocus />
+        <MoneyField value={amount} onChange={(text) => setAmount(text)} placeholder="25.00" autoFocus />
       </Field>
       <Field label="Reason" hint="Shown on the customer's statement">
         <TextInput value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="Arrived late, 20 minutes" />
@@ -202,7 +203,7 @@ function RefundForm({ paymentId, refundableCents, onDone }: { paymentId: Id<"pay
       }}
     >
       <Field label="Amount to refund" hint={`Up to ${usd(refundableCents)} from this payment`}>
-        <TextInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+        <MoneyField value={amount} onChange={(text) => setAmount(text)} autoFocus />
       </Field>
       <Field label="Reason" hint="Kept with the refund and shown on the customer's statement">
         <TextInput value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} placeholder="Oven wasn't cleaned" />

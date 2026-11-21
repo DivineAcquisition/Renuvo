@@ -16,6 +16,7 @@ import { centsFrom, clock, zonedInstant } from "@/lib/app/format";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { Detail } from "../../../convex/details";
+import { DurationField, MoneyField } from "@/components/ui/fields";
 
 /** A button that first asks for a few words (a reason, a note, an outcome), then acts. */
 function WithWords({ label, placeholder, confirm, required = true, variant = "outline", onSubmit }: { label: string; placeholder: string; confirm: string; required?: boolean; variant?: "outline" | "ghost" | "destructive-outline"; onSubmit: (words: string) => Promise<unknown> }) {
@@ -94,10 +95,10 @@ function OfferForm({ jobId, now }: { jobId: Id<"jobs">; now: number }) {
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Their pay for this visit">
-          <TextInput inputMode="decimal" value={pay} onChange={(event) => setPay(event.target.value)} placeholder="0.00" required />
+          <MoneyField value={pay} onChange={(text) => setPay(text)} placeholder="0.00" required />
         </Field>
         <Field label="Minutes to answer">
-          <TextInput inputMode="numeric" value={minutes} onChange={(event) => setMinutes(event.target.value)} required />
+          <DurationField value={minutes} onChange={(text) => setMinutes(text)} required stepper />
         </Field>
       </div>
       <FormError message={error} />

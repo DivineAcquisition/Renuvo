@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { NumberField } from "@/components/ui/fields";
 
 const AUTHORITY: Record<string, string> = {
   off: "Dispatch is switched off for this, so a person offers the visit.",
@@ -159,13 +160,11 @@ function DispatchSettingsForm({ settings, canEdit }: { settings: { offerWindowMi
         {rows.map((row) => (
           <label key={row.key} className="grid gap-1.5 text-sm">
             <span className="font-medium text-strong">{row.label}</span>
-            <input
-              inputMode="numeric"
+            <NumberField
               disabled={!canEdit}
               value={form[row.key]}
-              onChange={(event) => setForm((current) => ({ ...current, [row.key]: event.target.value }))}
-              className="block min-h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-strong focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30 disabled:opacity-70"
-            />
+              onChange={(text) => setForm((current) => ({ ...current, [row.key]: text }))}
+              className="block min-h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-strong focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30 disabled:opacity-70" />
             <span className="text-xs text-muted-foreground">{row.hint}</span>
           </label>
         ))}

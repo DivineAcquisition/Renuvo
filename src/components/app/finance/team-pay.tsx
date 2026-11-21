@@ -20,6 +20,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { FinanceNav } from "./finance-screen";
 import { Chip, Empty, Notice, eyebrow } from "./kit";
 import { Checkbox, RadioButtonGroup, SegmentedControl } from "@/components/ui/selection";
+import { MoneyField, PercentField } from "@/components/ui/fields";
 
 /**
  * Finance › Team Pay. Each cleaner's earnings per completed job, worked out by Selestial from their pay
@@ -539,7 +540,7 @@ function AdjustDialog({ open, onClose, earningId }: { open: boolean; onClose: ()
           ))}
         </RadioButtonGroup>
         <Field label="Amount">
-          <TextInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="15.00" />
+          <MoneyField value={amount} onChange={(text) => setAmount(text)} placeholder="15.00" />
         </Field>
         <Field label="Reason">
           <TextInput value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="Stayed an extra 30 minutes for the oven" />
@@ -567,7 +568,7 @@ function TipDialog({ open, onClose, jobId }: { open: boolean; onClose: () => voi
     <Modal open={open} onClose={onClose} title="Record a tip" description="A tip the customer gave outside the pay page. All of it goes to this job's crew, split evenly.">
       <form className="grid gap-4" onSubmit={(event) => (event.preventDefault(), cents && void run(async () => (await record({ companyId, jobId, amountCents: cents, note: note || null, confirmedReceived: confirmed }), onClose())))}>
         <Field label="Tip">
-          <TextInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="20.00" />
+          <MoneyField value={amount} onChange={(text) => setAmount(text)} placeholder="20.00" />
         </Field>
         <Field label="Note" hint="Optional">
           <TextInput value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Cash left on the counter" />
@@ -950,7 +951,7 @@ function PayMethodEditor({ cleaner }: { cleaner: NonNullable<FunctionReturnType<
       <p className="text-sm font-medium text-strong">How {cleaner.name.split(" ")[0]} is paid</p>
       {employee ? (
         <Field label="Hourly rate">
-          <TextInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="22.00" />
+          <MoneyField value={amount} onChange={(text) => setAmount(text)} placeholder="22.00" />
         </Field>
       ) : (
         <>
@@ -979,11 +980,11 @@ function PayMethodEditor({ cleaner }: { cleaner: NonNullable<FunctionReturnType<
             </Field>
           ) : kind === "share" ? (
             <Field label="Share of each job" hint="Of the job price before tax">
-              <TextInput inputMode="decimal" value={percent} onChange={(e) => setPercent(e.target.value)} placeholder="40" />
+              <PercentField value={percent} onChange={(text) => setPercent(text)} placeholder="40" precision={2} />
             </Field>
           ) : (
             <Field label="Amount per job">
-              <TextInput inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="90.00" />
+              <MoneyField value={amount} onChange={(text) => setAmount(text)} placeholder="90.00" />
             </Field>
           )}
         </>

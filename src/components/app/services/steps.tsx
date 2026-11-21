@@ -14,6 +14,7 @@ import { areaWord, minutesWords, scheduleLabel } from "../../../../convex/lib/se
 import { defaultInput, ScheduleCalendar } from "./preview";
 import { AudienceTag, FieldLabel, formatCents, InfoTip, LabeledField, MoneyInput, NumberInput, SectionTitle, Segmented, Stepper, SwitchButton, Toggle } from "./shared";
 import { Checkbox, ChoiceChips } from "@/components/ui/selection";
+import { ListInput, NumberField, zipProblem } from "@/components/ui/fields";
 
 export type StepProps = { spec: Spec; edit: (change: (spec: Spec) => Spec) => void; disabled: boolean };
 
@@ -442,19 +443,17 @@ function AreaRate({ spec, edit, disabled }: StepProps) {
         <FieldLabel htmlFor={rateId} label="Rate" tip="Fractions of a cent are kept: 0.085 is eight and a half cents." />
         <div className="flex min-h-10 items-center rounded-lg border border-border bg-card focus-within:border-brand-500/60 focus-within:outline-2 focus-within:outline-brand-500/30">
           <span className="pl-3 text-muted-foreground">$</span>
-          <input
+          <NumberField
             id={rateId}
-            inputMode="decimal"
             disabled={disabled}
             className="w-full bg-transparent px-1.5 py-2 tabular-nums outline-none"
             value={text ?? rateText(p.rateMillicents)}
-            onChange={(event) => {
-              setText(event.target.value);
-              const value = millicentsFrom(event.target.value);
+            onChange={(text) => {
+              setText(text);
+              const value = millicentsFrom(text);
               if (value !== null) edit((s) => ({ ...s, pricing: { ...p, rateMillicents: value } }));
             }}
-            onBlur={() => setText(null)}
-          />
+            onBlur={() => setText(null)} precision={2} />
           <span className="pr-3 text-xs text-muted-foreground">per {unit}</span>
         </div>
       </div>
@@ -607,8 +606,8 @@ function QuestionsEditor({ spec, edit, disabled }: StepProps) {
               <Trash2 aria-hidden />
             </Button>
             {q.kind === "choice" ? (
-              <Field label="Choices" hint="Separate with commas." className="sm:col-span-3">
-                <TextInput disabled={disabled} value={q.options.join(", ")} onChange={(e) => set(q.id, { options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean) })} />
+              <Field label="Choices" hint="Each answer a customer can pick." className="sm:col-span-3">
+                <ListInput disabled={disabled} value={q.options} onChange={(options) => set(q.id, { options })} noun="choice" placeholder="Type a choice and press Enter" />
               </Field>
             ) : null}
             <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-3">
@@ -992,8 +991,8 @@ export function ExtrasStep({ spec, edit, disabled }: StepProps) {
                   <Trash2 aria-hidden />
                 </Button>
               </div>
-              <Field label="Postal codes" hint="Separate with commas.">
-                <TextInput disabled={disabled} value={zone.postalCodes.join(", ")} onChange={(e) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, postalCodes: e.target.value.split(/[,\s]+/).filter(Boolean) } : z)) } })} />
+              <Field label="ZIP codes" hint="Paste a list to add several at once.">
+                <ListInput disabled={disabled} value={zone.postalCodes} onChange={(postalCodes) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, postalCodes } : z)) } })} validate={zipProblem} noun="ZIP code" placeholder="Type a ZIP code and press Enter" />
               </Field>
               <AdjustmentInput label="Adds" value={zone.adjustment} disabled={disabled} base="the cleaning" onChange={(adjustment) => setM({ area: { ...m.area, zones: m.area.zones.map((z) => (z.id === zone.id ? { ...z, adjustment } : z)) } })} />
             </div>

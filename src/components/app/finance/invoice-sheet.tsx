@@ -21,6 +21,7 @@ import { InvoiceMessages } from "./messages";
 import { CreditDialog, IssueDialog, RecordPaymentDialog, RefundDialog, RequestBalanceDialog, VoidInvoiceDialog, VoidPaymentDialog } from "./actions";
 import { Chip, Notice, StateBadge, eyebrow } from "./kit";
 import { Checkbox } from "@/components/ui/selection";
+import { NumberField } from "@/components/ui/fields";
 
 type Detail = FunctionReturnType<typeof api.finance.invoice>;
 
@@ -514,11 +515,11 @@ function DraftEditor({ detail }: { detail: Detail }) {
                 <div className="grid grid-cols-3 gap-2 sm:contents">
                   <label className="grid gap-1">
                     <span className="text-[11px] text-muted-foreground sm:sr-only">Qty</span>
-                    <input value={line.qtyText} inputMode="decimal" onChange={(e) => update(line.id, { qtyText: e.target.value })} className="h-9 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 text-right text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-brand-500/40" />
+                    <NumberField value={line.qtyText} onChange={(text) => update(line.id, { qtyText: text })} className="h-9 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 text-right text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-brand-500/40" precision={2} />
                   </label>
                   <label className="grid gap-1">
                     <span className="text-[11px] text-muted-foreground sm:sr-only">{line.kind === "discount" ? "Amount off" : "Price"}</span>
-                    <input value={line.priceText} inputMode="decimal" placeholder="0.00" onChange={(e) => update(line.id, { priceText: e.target.value })} className="h-9 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 text-right text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-brand-500/40" />
+                    <NumberField value={line.priceText} placeholder="0.00" onChange={(text) => update(line.id, { priceText: text })} className="h-9 w-full min-w-0 rounded-lg border border-border bg-card px-2.5 text-right text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-brand-500/40" precision={2} />
                   </label>
                   <span className="grid gap-1">
                     <span className="text-[11px] text-muted-foreground sm:sr-only">Amount</span>
@@ -583,7 +584,7 @@ function DraftEditor({ detail }: { detail: Detail }) {
         {depositOn ? (
           <label className="grid max-w-48 gap-1 text-sm">
             <span className="font-medium text-strong">Deposit</span>
-            <input value={deposit} inputMode="decimal" placeholder="50.00" onChange={(e) => (setDeposit(e.target.value), touch())} className="h-9 rounded-lg border border-border bg-card px-2.5 text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-brand-500/40" />
+            <NumberField value={deposit} placeholder="50.00" onChange={(text) => (setDeposit(text), touch())} className="h-9 rounded-lg border border-border bg-card px-2.5 text-sm tabular-nums focus-visible:outline-2 focus-visible:outline-brand-500/40" precision={2} />
           </label>
         ) : null}
         <label className="grid gap-1 text-sm">

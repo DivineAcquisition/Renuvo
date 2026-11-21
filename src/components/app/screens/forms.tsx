@@ -19,6 +19,7 @@ import type { Spec } from "../../../../convex/lib/services/spec";
 import { visitScope } from "../../../../convex/lib/services/operations";
 import { lowerFirst } from "../../../../convex/lib/services/words";
 import { Checkbox, ChoiceChips } from "@/components/ui/selection";
+import { CountField, DurationField } from "@/components/ui/fields";
 
 const KINDS = [
   { id: "home", label: "Home" },
@@ -445,10 +446,10 @@ export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Cleaners needed" hint="The visit is staffed only when this many have accepted.">
-          <TextInput inputMode="numeric" value={form.crew} onChange={set("crew")} required />
+          <CountField value={form.crew} onChange={(text) => setForm((current) => ({ ...current, crew: text }))} required noun={["cleaner", "cleaners"]} min={1} max={20} />
         </Field>
         <Field label="Arrival window, minutes" hint="0 means arrive at the start time. 30 means any time in the half hour after it.">
-          <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} />
+          <DurationField value={form.arrival} onChange={(text) => setForm((current) => ({ ...current, arrival: text }))} min={0} max={240} step={15} stepper />
         </Field>
         <Field label="Must be finished by, day (optional)" hint="For example a guest check-in.">
           <TextInput type="date" value={form.deadlineDate} onChange={set("deadlineDate")} />

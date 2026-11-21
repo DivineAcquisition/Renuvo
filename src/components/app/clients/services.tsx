@@ -33,6 +33,7 @@ import { SalesPlans, SalesWork, useClientSales } from "./sales";
 import type { Profile } from "./profile";
 import { ImportedRecords } from "@/components/app/setup/migration";
 import { Checkbox, SegmentedControl } from "@/components/ui/selection";
+import { DurationField } from "@/components/ui/fields";
 
 type Plan = NonNullable<ReturnType<typeof useQuery<typeof api.servicePlans.forClient>>>["plans"][number];
 
@@ -338,7 +339,7 @@ function PlanForm({ profile, onDone }: { profile: Profile; onDone: () => void })
           <TextInput type="time" value={form.startTime} onChange={set("startTime")} required />
         </Field>
         <Field label="Arrival window, min">
-          <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} />
+          <DurationField value={form.arrival} onChange={(text) => setForm((current) => ({ ...current, arrival: text }))} min={0} max={240} step={15} stepper />
         </Field>
       </div>
       {spec ? (
@@ -451,7 +452,7 @@ function PlanChange({ plan, action, onDone }: { plan: Plan; action: "pause" | "e
               <TextInput type="time" value={form.startTime} onChange={set("startTime")} />
             </Field>
             <Field label="Arrival window, min">
-              <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} />
+              <DurationField value={form.arrival} onChange={(text) => setForm((current) => ({ ...current, arrival: text }))} min={0} max={240} step={15} stepper />
             </Field>
           </>
         ) : null}

@@ -26,6 +26,8 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { EFFECT_WORDS, ENGAGEMENT_SHORT, type Engagement } from "./bits";
 import { CLEANERS_PATH } from "./state";
 import { Checkbox } from "@/components/ui/selection";
+import { ListInput, NumberField } from "@/components/ui/fields";
+import { useSkillSuggestions } from "@/components/app/skill-suggestions";
 
 type Definition = FunctionReturnType<typeof api.requirements.template>["definitions"][number];
 
@@ -137,6 +139,7 @@ function EditDialog({ definition, onClose }: { definition: Definition | null; on
   const retire = useMutation(api.requirements.retireDefinition);
   const apply = useMutation(api.workforce.applyTemplateTo);
   const { busy, error, run } = useRun();
+  const skillSuggestions = useSkillSuggestions();
   const [form, setForm] = useState({
     label: definition?.label ?? "",
     description: definition?.description ?? "",
@@ -146,7 +149,7 @@ function EditDialog({ definition, onClose }: { definition: Definition | null; on
     reviewer: definition?.reviewer ?? ("manager" as "manager" | "owner"),
     validForDays: definition?.validForDays?.toString() ?? "",
     providedBy: definition?.providedBy ?? "",
-    forServices: definition?.forServices.join(", ") ?? "",
+    forServices: definition?.forServices ?? [],
     cleanerCompletes: definition?.cleanerCompletes ?? true,
   });
   const [savedKey, setSavedKey] = useState<string | null>(null);
@@ -200,7 +203,7 @@ function EditDialog({ definition, onClose }: { definition: Definition | null; on
                 reviewer: form.reviewer,
                 validForDays: form.validForDays.trim() ? Number(form.validForDays) : null,
                 providedBy: form.kind === "equipment" ? ((form.providedBy || "cleaner") as "company" | "cleaner" | "crew") : null,
-                forServices: form.forServices.split(",").map((part) => part.trim()).filter(Boolean),
+                forServices: form.forServices,
                 cleanerCompletes: form.cleanerCompletes,
               });
               if (definition) onClose();
@@ -251,7 +254,7 @@ function EditDialog({ definition, onClose }: { definition: Definition | null; on
               </SelectInput>
             </Field>
             <Field label="Valid for (days)" hint="Leave empty if it does not expire.">
-              <TextInput value={form.validForDays} onChange={(event) => set("validForDays", event.target.value)} inputMode="numeric" />
+              <NumberField value={form.validForDays} onChange={(text) => set("validForDays", text)} suffix="days" stepper />
             </Field>
           </div>
           {form.kind === "equipment" ? (
@@ -263,8 +266,8 @@ function EditDialog({ definition, onClose }: { definition: Definition | null; on
               </SelectInput>
             </Field>
           ) : null}
-          <Field label="Only for these services (optional)" hint="Service names or skills, separated by commas. Empty means every job.">
-            <TextInput value={form.forServices} onChange={(event) => set("forServices", event.target.value)} placeholder="commercial, post-construction" />
+          <Field label="Only for these services (optional)" hint="Service names or skills. With none, it applies to every job.">
+            <ListInput value={form.forServices} onChange={(next) => set("forServices", next)} suggestions={skillSuggestions} noun="service" placeholder="Type a service or skill" />
           </Field>
           <label className="flex items-center gap-2 text-sm text-strong">
             <Checkbox checked={form.cleanerCompletes} onCheckedChange={(checked) => set("cleanerCompletes", checked)} />

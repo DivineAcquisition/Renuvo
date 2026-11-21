@@ -30,6 +30,7 @@ import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { BasisTag, Flag, StatusPill, type ActionRow, type Detail, type Entry } from "./shared";
 import { Checkbox } from "@/components/ui/selection";
+import { DurationField, MoneyField } from "@/components/ui/fields";
 
 const TOOLS = [
   { id: "explain_attention", label: "Explain why this needs attention" },
@@ -215,7 +216,7 @@ function ActionCard({ action, detail, now, timezone }: { action: ActionRow; deta
                 label="Crew pay for this visit is worked out from"
                 hint={`Used the way the price is on a paid visit: each cleaner's pay for the correction comes from this amount. The customer is charged nothing.${action.visit?.payHintCents ? ` For reference, the original price in proportion to the time is ${money(action.visit.payHintCents)}.` : ""}`}
               >
-                <TextInput inputMode="decimal" placeholder="0.00" value={pay} onChange={(event) => setPayText(event.target.value)} />
+                <MoneyField placeholder="0.00" value={pay} onChange={(text) => setPayText(text)} />
               </Field>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
@@ -313,12 +314,12 @@ function ProposeRemedy({ detail, timezone }: { detail: Detail; timezone: string 
                 <TextInput type="time" value={time} onChange={(event) => setTime(event.target.value)} />
               </Field>
               <Field label="Minutes">
-                <TextInput inputMode="numeric" value={minutes} onChange={(event) => setMinutes(event.target.value)} />
+                <DurationField value={minutes} onChange={(text) => setMinutes(text)} stepper />
               </Field>
             </div>
             {detail.can.owner ? (
               <Field label="Crew pay is worked out from" hint="Your decision for this visit. Leave it empty to set it later; the visit is not booked until it is set.">
-                <TextInput inputMode="decimal" placeholder="0.00" value={crewPay} onChange={(event) => setCrewPay(event.target.value)} />
+                <MoneyField placeholder="0.00" value={crewPay} onChange={(text) => setCrewPay(text)} />
               </Field>
             ) : (
               <p className="text-xs text-muted-foreground">The Owner sets what the crew is paid for a correction visit before it is booked.</p>
@@ -332,7 +333,7 @@ function ProposeRemedy({ detail, timezone }: { detail: Detail; timezone: string 
         {kind === "credit" || kind === "refund" ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Amount" hint={kind === "refund" ? "The Owner approves every refund and issues it in Finance." : "The Owner records the credit in Finance's ledger."}>
-              <TextInput inputMode="decimal" placeholder="0.00" value={amount} onChange={(event) => setAmount(event.target.value)} />
+              <MoneyField placeholder="0.00" value={amount} onChange={(text) => setAmount(text)} />
             </Field>
             {detail.invoices ? (
               <Field label="Invoice">

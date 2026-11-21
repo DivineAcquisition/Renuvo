@@ -21,6 +21,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { FinanceNav } from "./finance-screen";
 import { Chip, Empty, Notice, eyebrow } from "./kit";
 import { Checkbox, SegmentedControl } from "@/components/ui/selection";
+import { MoneyField, NumberField } from "@/components/ui/fields";
 
 /**
  * Finance › Expenses. Receipts the Owner snaps or uploads (Selestial reads them into drafts), expenses
@@ -489,10 +490,10 @@ function ExpenseFields({ form, set, categories, unclear, around }: { form: FormS
           <TextInput type="date" value={form.spentOn} onChange={(e) => set({ spentOn: e.target.value })} className={mark("date")} />
         </Field>
         <Field label="Amount paid, tax included" hint={hint("amount")}>
-          <TextInput inputMode="decimal" value={form.amount} onChange={(e) => set({ amount: e.target.value })} placeholder="48.37" className={mark("amount")} />
+          <MoneyField value={form.amount} onChange={(text) => set({ amount: text })} placeholder="48.37" className={mark("amount")} />
         </Field>
         <Field label="Sales tax" hint={hint("tax") ?? "Optional"}>
-          <TextInput inputMode="decimal" value={form.tax} onChange={(e) => set({ tax: e.target.value })} placeholder="3.99" className={mark("tax")} />
+          <NumberField value={form.tax} onChange={(text) => set({ tax: text })} placeholder="3.99" className={mark("tax")} precision={2} />
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">

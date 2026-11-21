@@ -18,6 +18,7 @@ import { api } from "../../../../../convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { NotConnected } from "./shared";
 import { Checkbox } from "@/components/ui/selection";
+import { NumberField } from "@/components/ui/fields";
 
 type Settings = FunctionReturnType<typeof api.retentionAgent.settings>;
 
@@ -52,7 +53,7 @@ function Rules({ data }: { data: Settings }) {
           <TextArea rows={2} disabled={!edit} value={guarantee} onChange={(event) => setGuarantee(event.target.value)} />
         </Field>
         <Field label="Days it covers">
-          <TextInput inputMode="numeric" disabled={!edit} value={days} onChange={(event) => setDays(event.target.value)} />
+          <NumberField disabled={!edit} value={days} onChange={(text) => setDays(text)} suffix="days" stepper />
         </Field>
       </div>
       <Field label="Public review page" hint="Shown to everyone who gives feedback, whatever they answered. Nobody is steered to or away from it.">
@@ -75,16 +76,16 @@ function Rules({ data }: { data: Settings }) {
       </label>
       <div className="grid gap-3 sm:grid-cols-4">
         <Field label="Days a customer link stays open">
-          <TextInput inputMode="numeric" disabled={!edit} value={linkDays} onChange={(event) => setLinkDays(event.target.value)} />
+          <NumberField disabled={!edit} value={linkDays} onChange={(text) => setLinkDays(text)} suffix="days" stepper />
         </Field>
         <Field label="Hours to act on a concern">
-          <TextInput inputMode="numeric" disabled={!edit} value={due} onChange={(event) => setDue(event.target.value)} />
+          <NumberField disabled={!edit} value={due} onChange={(text) => setDue(text)} suffix="hours" stepper />
         </Field>
         <Field label="Days to wait for a customer">
-          <TextInput inputMode="numeric" disabled={!edit} value={quiet} onChange={(event) => setQuiet(event.target.value)} />
+          <NumberField disabled={!edit} value={quiet} onChange={(text) => setQuiet(text)} suffix="days" stepper />
         </Field>
         <Field label="Days before a renewal">
-          <TextInput inputMode="numeric" disabled={!edit} value={lead} onChange={(event) => setLead(event.target.value)} />
+          <NumberField disabled={!edit} value={lead} onChange={(text) => setLead(text)} suffix="days" stepper />
         </Field>
       </div>
       <fieldset className="grid gap-2">

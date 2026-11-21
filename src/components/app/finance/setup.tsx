@@ -18,6 +18,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { Notice, Section } from "./kit";
 import { Checkbox } from "@/components/ui/selection";
+import { PercentField } from "@/components/ui/fields";
 
 type Settings = FunctionReturnType<typeof api.finance.settings>;
 
@@ -275,10 +276,7 @@ function InvoiceSettings({ data }: { data: Settings }) {
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Sales tax rate" hint="Leave empty if you don't charge tax. Selestial doesn't file tax." error={Number.isNaN(taxBps) ? "Enter a percentage like 8.25" : null}>
-            <div className="relative">
-              <TextInput inputMode="decimal" value={tax} onChange={(e) => setTax(e.target.value)} placeholder="8.25" className="pr-8" />
-              <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-            </div>
+            <PercentField value={tax} onChange={(text) => setTax(text)} placeholder="8.25" precision={3} />
           </Field>
           <Field label="Tax name on invoices">
             <TextInput value={taxLabel} maxLength={40} onChange={(e) => setTaxLabel(e.target.value)} />
@@ -378,10 +376,7 @@ function TeamPaySettings({ data }: { data: Settings }) {
               {rows.map((row, i) => (
                 <li key={row.id ?? `new-${i}`} className="grid grid-cols-[minmax(0,1fr)_6.5rem_auto] items-center gap-2">
                   <TextInput aria-label="Tier name" value={row.name} maxLength={30} onChange={(e) => change(i, { name: e.target.value })} />
-                  <div className="relative">
-                    <TextInput aria-label={`${row.name || "Tier"} share`} inputMode="decimal" value={row.percent} onChange={(e) => change(i, { percent: e.target.value })} className="pr-7" />
-                    <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">%</span>
-                  </div>
+                  <PercentField aria-label={`${row.name || "Tier"} share`} value={row.percent} onChange={(text) => change(i, { percent: text })} precision={2} />
                   <Button
                     size="icon-sm"
                     variant="ghost"

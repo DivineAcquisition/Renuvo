@@ -31,6 +31,7 @@ type Base = {
   density?: Density;
   id?: string;
   name?: string;
+  autoFocus?: boolean;
   className?: string;
   "aria-label"?: string;
   "aria-describedby"?: string;
@@ -61,7 +62,7 @@ export function numberProblem(text: string, { min, max, precision = 0, required 
  * while it happens, so the cursor stays put; the stepper moves by `step` and stays inside min and max.
  * The form's own validation and the server's stay authoritative; this only says what it can see.
  */
-export function NumberField({ value, onChange, min, max, step = 1, precision = 0, disabled, readOnly, required, placeholder, stepper = false, preview, density = "default", id, name, className, prefix, suffix, onBlur, ...aria }: Base & { prefix?: React.ReactNode; suffix?: React.ReactNode; onBlur?: () => void }) {
+export function NumberField({ value, onChange, min, max, step = 1, precision = 0, disabled, readOnly, required, placeholder, stepper = false, preview, density = "default", id, name, autoFocus, className, prefix, suffix, onBlur, ...aria }: Base & { prefix?: React.ReactNode; suffix?: React.ReactNode; onBlur?: () => void }) {
   const field = useFieldControl();
   const own = useId();
   const inputId = id ?? field?.controlId ?? own;
@@ -100,6 +101,7 @@ export function NumberField({ value, onChange, min, max, step = 1, precision = 0
           <input
             id={inputId}
             name={name}
+            autoFocus={autoFocus}
             inputMode={precision > 0 ? "decimal" : "numeric"}
             autoComplete="off"
             value={value}

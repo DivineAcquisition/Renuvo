@@ -29,6 +29,7 @@ import { AgentCard, PropertyCard, VisitRow, type PropertyRow } from "./parts";
 import type { Profile } from "./profile";
 import { Checkbox } from "@/components/ui/selection";
 import { useConfirm } from "@/components/ui/fields/confirm";
+import { NumberField } from "@/components/ui/fields";
 
 type Detail = NonNullable<ReturnType<typeof useQuery<typeof api.clientProperties.detail>>>;
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -403,8 +404,8 @@ function PropertyForm({ profile, property, onDone }: { profile: Profile; propert
         <legend className="px-1 text-sm font-medium text-strong">{str ? "The rental" : site ? "The site" : "The home"}</legend>
         {str ? (
           <>
-            <Field label="Beds to make"><TextInput inputMode="numeric" value={form.beds} onChange={set("beds")} /></Field>
-            <Field label="Guests"><TextInput inputMode="numeric" value={form.maxGuests} onChange={set("maxGuests")} /></Field>
+            <Field label="Beds to make"><NumberField value={form.beds} onChange={(text) => setForm((current) => ({ ...current, beds: text }))} min={0} max={99} stepper /></Field>
+            <Field label="Guests"><NumberField value={form.maxGuests} onChange={(text) => setForm((current) => ({ ...current, maxGuests: text }))} min={0} max={99} stepper /></Field>
             <Field label="Laundry">
               <SelectInput value={form.laundry} onChange={set("laundry")}>
                 <option value="">Not recorded</option>
@@ -419,9 +420,9 @@ function PropertyForm({ profile, property, onDone }: { profile: Profile; propert
           </>
         ) : site ? (
           <>
-            <Field label="Size, sq ft"><TextInput inputMode="numeric" value={form.squareFeet} onChange={set("squareFeet")} /></Field>
-            <Field label="Floors"><TextInput inputMode="numeric" value={form.floors} onChange={set("floors")} /></Field>
-            <Field label="People on site"><TextInput inputMode="numeric" value={form.occupants} onChange={set("occupants")} /></Field>
+            <Field label="Size, sq ft"><NumberField value={form.squareFeet} onChange={(text) => setForm((current) => ({ ...current, squareFeet: text }))} suffix="sq ft" min={0} /></Field>
+            <Field label="Floors"><NumberField value={form.floors} onChange={(text) => setForm((current) => ({ ...current, floors: text }))} min={0} max={99} stepper /></Field>
+            <Field label="People on site"><NumberField value={form.occupants} onChange={(text) => setForm((current) => ({ ...current, occupants: text }))} min={0} max={99} stepper /></Field>
             <div className="grid gap-1.5 text-sm sm:col-span-3">
               <span className="font-medium text-strong">Service days</span>
               <div className="flex flex-wrap gap-1.5">
@@ -441,11 +442,11 @@ function PropertyForm({ profile, property, onDone }: { profile: Profile; propert
           </>
         ) : (
           <>
-            <Field label="Bedrooms"><TextInput inputMode="numeric" value={form.bedrooms} onChange={set("bedrooms")} /></Field>
-            <Field label="Bathrooms"><TextInput inputMode="numeric" value={form.bathrooms} onChange={set("bathrooms")} /></Field>
-            <Field label="Half baths"><TextInput inputMode="numeric" value={form.halfBaths} onChange={set("halfBaths")} /></Field>
-            <Field label="Size, sq ft"><TextInput inputMode="numeric" value={form.squareFeet} onChange={set("squareFeet")} /></Field>
-            <Field label="Floors"><TextInput inputMode="numeric" value={form.floors} onChange={set("floors")} /></Field>
+            <Field label="Bedrooms"><NumberField value={form.bedrooms} onChange={(text) => setForm((current) => ({ ...current, bedrooms: text }))} min={0} max={99} stepper /></Field>
+            <Field label="Bathrooms"><NumberField value={form.bathrooms} onChange={(text) => setForm((current) => ({ ...current, bathrooms: text }))} min={0} max={99} stepper /></Field>
+            <Field label="Half baths"><NumberField value={form.halfBaths} onChange={(text) => setForm((current) => ({ ...current, halfBaths: text }))} min={0} max={99} stepper /></Field>
+            <Field label="Size, sq ft"><NumberField value={form.squareFeet} onChange={(text) => setForm((current) => ({ ...current, squareFeet: text }))} suffix="sq ft" min={0} /></Field>
+            <Field label="Floors"><NumberField value={form.floors} onChange={(text) => setForm((current) => ({ ...current, floors: text }))} min={0} max={99} stepper /></Field>
             <Field label="Pets"><TextInput value={form.pets} onChange={set("pets")} maxLength={200} /></Field>
           </>
         )}

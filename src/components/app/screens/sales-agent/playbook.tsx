@@ -25,6 +25,7 @@ import { centsFrom } from "@/lib/app/format";
 import { api } from "../../../../../convex/_generated/api";
 import { ReadinessPanel } from "./shared";
 import { Checkbox } from "@/components/ui/selection";
+import { MoneyField } from "@/components/ui/fields";
 
 type Playbook = FunctionReturnType<typeof api.salesInquiries.playbook>;
 type Settings = Playbook["settings"];
@@ -267,7 +268,7 @@ function Editor({ playbook, justSaved, onSaved }: { playbook: Playbook; justSave
             </Field>
           ) : settings.booking.deposit.kind === "fixed" ? (
             <Field label="Amount ($)">
-              <TextInput inputMode="decimal" value={depositAmount} disabled={!can} placeholder="50.00" onChange={(event) => (setSaved(false), setDepositAmount(event.target.value))} />
+              <MoneyField value={depositAmount} disabled={!can} placeholder="50.00" onChange={(text) => (setSaved(false), setDepositAmount(text))} />
             </Field>
           ) : (
             <span />
@@ -288,7 +289,7 @@ function Editor({ playbook, justSaved, onSaved }: { playbook: Playbook; justSave
             <TextInput inputMode="numeric" value={String(settings.quotes.validDays)} disabled={!can} onChange={(event) => patch("quotes", { ...settings.quotes, validDays: Math.max(1, Math.min(90, Number(event.target.value.replace(/\D/g, "")) || 1)) })} />
           </Field>
           <Field label="Always review quotes above ($)" hint="Leave empty to review only what your permissions require.">
-            <TextInput inputMode="decimal" value={reviewAbove} disabled={!can} placeholder="No amount" onChange={(event) => (setSaved(false), setReviewAbove(event.target.value))} />
+            <MoneyField value={reviewAbove} disabled={!can} placeholder="No amount" onChange={(text) => (setSaved(false), setReviewAbove(text))} />
           </Field>
           <Field label="Payment terms" className="sm:col-span-2">
             <TextArea value={settings.quotes.paymentTerms} disabled={!can} rows={2} onChange={(event) => patch("quotes", { ...settings.quotes, paymentTerms: event.target.value })} />

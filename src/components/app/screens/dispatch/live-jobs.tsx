@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../../convex/_generated/api";
 import { arrivalLabel, deliveryOf, GroupBadge, Incomplete, RangePicker, Staffing, useRange } from "./shared";
+import { NumberField } from "@/components/ui/fields";
 
 type Live = FunctionReturnType<typeof api.dispatchViews.liveJobs>;
 type LiveJob = Live["jobs"][number];
@@ -174,7 +175,7 @@ function CrewMember({ job, member, now, timezone }: { job: LiveJob; member: Memb
           >
             {form === "eta" ? (
               <div className="grid grid-cols-[6rem_1fr] gap-2">
-                <TextInput inputMode="numeric" value={eta} onChange={(event) => setEta(event.target.value)} aria-label="Minutes until they arrive" required />
+                <NumberField value={eta} onChange={(text) => setEta(text)} aria-label="Minutes until they arrive" required />
                 <TextInput autoFocus value={words} onChange={(event) => setWords(event.target.value)} placeholder="What they told you, and how" aria-label="What they told you" required maxLength={500} />
               </div>
             ) : (
