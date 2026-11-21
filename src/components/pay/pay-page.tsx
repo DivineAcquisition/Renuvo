@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { RadioButtonGroup } from "@/components/ui/selection";
 
 type View = NonNullable<FunctionReturnType<typeof api.pay.view>>;
 
@@ -191,7 +192,7 @@ function Pay({ token, view, onStarted }: { token: string; view: View; onStarted:
         <fieldset className="mt-4 grid gap-2">
           <legend className="text-sm font-medium text-strong">Add a tip for your crew?</legend>
           <p className="-mt-1 text-xs text-muted-foreground">All of it goes to {crewWords(tips.crew)}, who cleaned for you. Optional.</p>
-          <div role="radiogroup" aria-label="Tip" className="grid grid-cols-5 gap-1.5">
+          <RadioButtonGroup aria-label="Tip" className="grid grid-cols-5 gap-1.5">
             {(["none", 15, 20, 25, "custom"] as const).map((choice) => (
               <button
                 key={choice}
@@ -208,7 +209,7 @@ function Pay({ token, view, onStarted }: { token: string; view: View; onStarted:
                 )}
               </button>
             ))}
-          </div>
+          </RadioButtonGroup>
           {tipChoice === "custom" ? (
             <span className="relative">
               <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">$</span>

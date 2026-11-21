@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { ChannelIcon, plural } from "./shared";
+import { RadioButtonGroup } from "@/components/ui/selection";
 
 type Waiting = FunctionReturnType<typeof api.salesActions.waiting>;
 type Item = Waiting["pending"][number];
@@ -196,13 +197,13 @@ function FirstBatch({ batchId, items, owner, messaging }: { batchId: Id<"salesBa
             <li key={item.actionId} className={cn("grid gap-3 rounded-xl border bg-background p-3.5", state === "send" ? "border-brand-500/40" : "border-border opacity-80")}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-strong">{item.customer}</p>
-                <div className="inline-flex rounded-lg border border-border bg-card p-0.5" role="group" aria-label={`Decision for ${item.customer}`}>
+                <RadioButtonGroup className="inline-flex rounded-lg border border-border bg-card p-0.5" aria-label={`Decision for ${item.customer}`}>
                   {(["send", "skip"] as const).map((value) => (
                     <button
                       key={value}
                       type="button"
                       disabled={!owner || busy || (value === "send" && Boolean(item.stale))}
-                      aria-pressed={state === value}
+                      role="radio" aria-checked={state === value}
                       onClick={() => setChoice((before) => ({ ...before, [item.actionId]: value }))}
                       className={cn("inline-flex min-h-8 items-center gap-1 rounded-md px-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-brand-500 disabled:cursor-not-allowed disabled:opacity-50", state === value ? (value === "send" ? "bg-brand-500 text-white" : "bg-muted text-strong") : "text-muted-foreground hover:text-strong")}
                     >
@@ -210,7 +211,7 @@ function FirstBatch({ batchId, items, owner, messaging }: { batchId: Id<"salesBa
                       {value === "send" ? "Send" : "Set aside"}
                     </button>
                   ))}
-                </div>
+                </RadioButtonGroup>
               </div>
               <Preview item={item} body={bodies[item.actionId] ?? item.editable} onBody={(value) => setBodies((before) => ({ ...before, [item.actionId]: value }))} editing={editing === item.actionId} disabled={busy} />
               {owner && item.recipient.channel === "sms" && state === "send" ? <SegmentEstimate body={(bodies[item.actionId] ?? item.editable).replace("{link}", "https://app.selestial.com/q/xxxxxxxxxxxxxxxxxxxxxxxx")} agent /> : null}

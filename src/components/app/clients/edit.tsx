@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { ContactRow, PropertyRow } from "./parts";
+import { Checkbox } from "@/components/ui/selection";
 
 type Profile = NonNullable<ReturnType<typeof useQuery<typeof api.clients.profile>>>;
 
@@ -222,7 +223,7 @@ export function ContactForm({ customerId, contact, properties, onDone }: { custo
         <legend className="mb-1 text-sm font-medium text-strong">Roles</legend>
         {ROLES.map((role) => (
           <label key={role.id} className="flex cursor-pointer items-start gap-2 rounded-xl border border-border px-3 py-2 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-500/[0.06]">
-            <input type="checkbox" checked={roles.includes(role.id)} onChange={(event) => setRoles((current) => (event.target.checked ? [...current, role.id] : current.filter((r) => r !== role.id)))} className="mt-1 accent-brand-500" />
+            <Checkbox checked={roles.includes(role.id)} onCheckedChange={(checked) => setRoles((current) => (checked ? [...current, role.id] : current.filter((r) => r !== role.id)))} className="mt-1" />
             <span>
               <span className="block font-medium text-strong">{role.label}</span>
               <span className="block text-xs text-muted-foreground">{role.detail}</span>
@@ -237,7 +238,7 @@ export function ContactForm({ customerId, contact, properties, onDone }: { custo
             .filter((p) => p.status === "active")
             .map((p) => (
               <label key={p.id} className="flex items-center gap-2 text-sm text-strong">
-                <input type="checkbox" checked={sites.includes(p.id)} onChange={(event) => setSites((current) => (event.target.checked ? [...current, p.id] : current.filter((id) => id !== p.id)))} className="size-4 accent-brand-500" />
+                <Checkbox checked={sites.includes(p.id)} onCheckedChange={(checked) => setSites((current) => (checked ? [...current, p.id] : current.filter((id) => id !== p.id)))} />
                 {p.name}
               </label>
             ))}

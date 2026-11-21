@@ -5,6 +5,7 @@ import { startTransition, useActionState, useId } from "react";
 import { AlertTriangle, CircleCheckIcon, Loader } from "@/components/icons";
 import type { RequestState } from "@/lib/trust/requests";
 import { cn } from "@/lib/utils";
+import { SelectInput } from "@/components/app/form";
 
 type FieldBase = { name: string; label: string; required?: boolean; hint?: string; /** Shown after an unrequired label instead of "(optional)". */ optionalLabel?: string };
 export type FieldSpec =
@@ -61,14 +62,14 @@ export function RequestForm({ action, fields, submitLabel, consentNote }: { acti
             {field.kind === "textarea" ? (
               <textarea {...common} rows={field.rows ?? 5} maxLength={field.max} className={cn(control, "py-2.5")} />
             ) : field.kind === "select" ? (
-              <select {...common} className={cn(control, "h-11 cursor-pointer")}>
+              <SelectInput {...common} className={cn(control, "h-11 cursor-pointer")}>
                 <option value="">Choose one</option>
                 {field.options.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}
-              </select>
+              </SelectInput>
             ) : (
               <input {...common} type={field.kind} autoComplete={field.autoComplete} maxLength={field.max} inputMode={field.kind === "email" ? "email" : undefined} className={cn(control, "h-11")} />
             )}

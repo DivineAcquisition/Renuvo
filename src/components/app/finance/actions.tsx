@@ -12,6 +12,7 @@ import { MANUAL_METHODS, clientKey, moneyInput, parseMoney, todayKey, usd } from
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * The confirmations behind every money action. Each one shows, before anything runs, exactly what will
@@ -106,7 +107,7 @@ function RecordPaymentForm({ invoiceId, owedCents, onDone }: { invoiceId: Id<"in
         <TextArea value={note} maxLength={500} rows={2} onChange={(e) => setNote(e.target.value)} />
       </Field>
       <label className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-sm text-strong">
-        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+        <Checkbox checked={confirmed} onCheckedChange={(checked) => setConfirmed(checked)} className="mt-0.5" />
         <span>I received this money. It isn&apos;t a promise to pay or a check I haven&apos;t been given yet.</span>
       </label>
       <FormError message={error} />
@@ -224,7 +225,7 @@ function RefundForm({ paymentId, refundableCents, onDone }: { paymentId: Id<"pay
       {cents > 0 ? <Consequences lines={preview?.lines} blocked={preview?.blocked} /> : null}
       {manual ? (
         <label className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-sm text-strong">
-          <input type="checkbox" checked={returned} onChange={(e) => setReturned(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+          <Checkbox checked={returned} onCheckedChange={(checked) => setReturned(checked)} className="mt-0.5" />
           <span>I returned this money to the customer myself.</span>
         </label>
       ) : null}

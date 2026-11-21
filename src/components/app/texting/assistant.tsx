@@ -7,6 +7,7 @@
 import { ACTIVITIES_BY_KEY } from "./catalog";
 import { formatPhone, placeName, useSetup } from "./context";
 import { Bubble, Needs } from "./parts";
+import { Checkbox } from "@/components/ui/selection";
 
 const when = (at: number) => new Date(at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -80,7 +81,7 @@ function Preview({ name }: { name: string }) {
         <div className="h-7 rounded-md border border-border bg-card" aria-hidden />
         <div className="h-7 rounded-md border border-border bg-card" aria-hidden />
         <label className="flex items-start gap-2">
-          <input type="checkbox" disabled className="mt-0.5" aria-label="Text messages (optional), unchecked" />
+          <Checkbox checked={false} disabled className="mt-0.5" aria-label="Text messages (optional), unchecked" />
           <span>
             <span className="font-medium text-strong">Text messages (optional). </span>
             {consent}
@@ -88,7 +89,7 @@ function Preview({ name }: { name: string }) {
         </label>
         {marketing ? (
           <label className="flex items-start gap-2">
-            <input type="checkbox" disabled className="mt-0.5" aria-label="Offers by text (optional), unchecked" />
+            <Checkbox checked={false} disabled className="mt-0.5" aria-label="Offers by text (optional), unchecked" />
             <span>
               <span className="font-medium text-strong">Offers by text (optional). </span>
               {marketing}

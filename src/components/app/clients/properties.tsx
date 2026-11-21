@@ -27,6 +27,7 @@ import { Card, EmptyState, money, PropertyKindIcon, StaffingLine } from "./bits"
 import { ActionMenu } from "./menu";
 import { AgentCard, PropertyCard, VisitRow, type PropertyRow } from "./parts";
 import type { Profile } from "./profile";
+import { Checkbox } from "@/components/ui/selection";
 
 type Detail = NonNullable<ReturnType<typeof useQuery<typeof api.clientProperties.detail>>>;
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -412,7 +413,7 @@ function PropertyForm({ profile, property, onDone }: { profile: Profile; propert
               <div className="flex flex-wrap gap-1.5">
                 {DAYS.map((label, i) => (
                   <label key={label} className="cursor-pointer rounded-lg border border-border px-2.5 py-1 text-sm has-[:checked]:border-brand-500 has-[:checked]:bg-brand-500/[0.08]">
-                    <input type="checkbox" className="sr-only" checked={days.includes(i)} onChange={(event) => setDays((current) => (event.target.checked ? [...current, i] : current.filter((x) => x !== i)))} />
+                    <Checkbox className="sr-only" checked={days.includes(i)} onCheckedChange={(checked) => setDays((current) => (checked ? [...current, i] : current.filter((x) => x !== i)))} />
                     {label}
                   </label>
                 ))}
@@ -505,7 +506,7 @@ function AddressChange({ detail, onDone }: { detail: Detail; onDone: () => void 
           ) : null}
           {!impact.inArea && impact.canOverride ? (
             <label className="flex items-start gap-2 text-strong">
-              <input type="checkbox" checked={confirmOutside} onChange={(event) => setConfirmOutside(event.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+              <Checkbox checked={confirmOutside} onCheckedChange={(checked) => setConfirmOutside(checked)} className="mt-0.5" />
               Move it anyway: we will serve this address outside our area.
             </label>
           ) : null}

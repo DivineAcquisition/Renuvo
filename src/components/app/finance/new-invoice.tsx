@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { RadioButtonGroup } from "@/components/ui/selection";
 
 /** Starts a draft: from a completed visit (its price comes along) or for any customer. */
 export function NewInvoiceDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: (id: Id<"invoices">) => void }) {
@@ -34,7 +35,7 @@ function Picker({ onCreated }: { onCreated: (id: Id<"invoices">) => void }) {
   if (!sources) return <Skeleton className="h-48 rounded-xl" />;
   return (
     <div className="grid gap-4">
-      <div role="radiogroup" aria-label="Start from" className="grid grid-cols-2 gap-2">
+      <RadioButtonGroup aria-label="Start from" className="grid grid-cols-2 gap-2">
         {(
           [
             { id: "job", label: "A completed visit", body: `${sources.jobs.length} not invoiced yet`, icon: CalendarCheckIcon },
@@ -56,7 +57,7 @@ function Picker({ onCreated }: { onCreated: (id: Id<"invoices">) => void }) {
             </span>
           </button>
         ))}
-      </div>
+      </RadioButtonGroup>
       {mode === "job" ? (
         sources.jobs.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Every completed visit from the last 60 days with a price already has an invoice.</p>

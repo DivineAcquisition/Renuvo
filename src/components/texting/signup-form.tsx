@@ -5,6 +5,7 @@ import { useState } from "react";
 import { signUpForTexts } from "@/app/b/actions";
 
 import { Linked } from "./legal-page";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * A company's texting sign-up. Both boxes start unchecked and are optional, the text box is labelled for
@@ -44,7 +45,7 @@ export function SignupForm(props: { handle: string; version: number; company: st
         <input value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" inputMode="tel" placeholder="(512) 555-0142" required className="h-11 rounded-lg border border-zinc-300 bg-white px-3 text-[15px] text-zinc-900 outline-none focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10" />
       </label>
       <label className="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm leading-6">
-        <input type="checkbox" checked={texts} onChange={(e) => setTexts(e.target.checked)} className="mt-1 size-4 shrink-0 accent-zinc-900" />
+        <Checkbox checked={texts} onCheckedChange={(checked) => setTexts(checked)} className="mt-1 shrink-0" />
         <span>
           <span className="block font-medium text-zinc-900">Text messages (optional)</span>
           <Linked text={props.consent} />
@@ -52,7 +53,7 @@ export function SignupForm(props: { handle: string; version: number; company: st
       </label>
       {props.marketing ? (
         <label className="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 text-sm leading-6">
-          <input type="checkbox" checked={marketing} onChange={(e) => setMarketing(e.target.checked)} className="mt-1 size-4 shrink-0 accent-zinc-900" />
+          <Checkbox checked={marketing} onCheckedChange={(checked) => setMarketing(checked)} className="mt-1 shrink-0" />
           <span>
             <span className="block font-medium text-zinc-900">Offers by text (optional)</span>
             {props.marketing}

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { BATHROOM_CHOICES, BEDROOM_CHOICES, bathroomFacts, bookingEmailDisclosure } from "../../../convex/lib/booking/logic";
 import { copyOf, sectionOn, useBooking } from "./context";
 import { BottomBar, Editable, Field, HomeSizePlan, Notice, Pill, SelectedMark, StepHeading } from "./parts";
+import { Checkbox, RadioButtonGroup } from "@/components/ui/selection";
 
 function formatPhone(value: string): string {
   const d = value.replace(/\D/g, "").slice(0, 10);
@@ -151,7 +152,7 @@ export function LocationStep() {
                 </Field>
                 {company.texting ? (
                   <label className="flex items-start gap-3 rounded-[var(--bk-radius)] border border-[color:var(--bk-hairline)] p-3 text-left text-xs leading-5 text-[color:var(--bk-muted-text)]">
-                    <input type="checkbox" checked={textOk} onChange={(e) => setTextOk(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
+                    <Checkbox checked={textOk} onCheckedChange={(checked) => setTextOk(checked)} className="mt-0.5 shrink-0" />
                     <span>
                       <span className="block text-sm font-medium text-[color:var(--bk-text,inherit)]">Text messages (optional)</span>
                       {company.texting.consent}{" "}
@@ -226,7 +227,7 @@ export function SizeStep() {
       <StepHeading id="copy:size" title={copy.title} subtitle={copy.subtitle} icon={<House className="h-7 w-7 @3xl:h-8 @3xl:w-8" aria-hidden weight="duotone" />} />
       {cards ? (
         <Editable id="sizes" label="size labels">
-          <div role="radiogroup" aria-label="Property size" className="mb-6 grid grid-cols-1 gap-3 @3xl:grid-cols-3 @3xl:gap-5">
+          <RadioButtonGroup aria-label="Property size" className="mb-6 grid grid-cols-1 gap-3 @3xl:grid-cols-3 @3xl:gap-5">
             {cards.cards.map((card, index) => {
               const selected = home.sizeKey === card.key;
               return (
@@ -238,7 +239,7 @@ export function SizeStep() {
                 </button>
               );
             })}
-          </div>
+          </RadioButtonGroup>
           {cards.customQuoteFrom !== null ? (
             <div className="bk-card mb-6 bg-[var(--bk-muted)] p-5 text-center @3xl:p-6">
               <p className="mb-3 text-base font-medium text-[color:var(--bk-brand-text)] @3xl:text-lg">{def.sizes.customQuoteTitle}</p>
@@ -260,23 +261,23 @@ export function SizeStep() {
         <div className="bk-card mx-auto mb-6 max-w-xl space-y-5 p-5 @2xl:p-6">
           <fieldset>
             <legend className="mb-2 text-sm font-medium">Bedrooms</legend>
-            <div className="grid grid-cols-6 gap-2">
+            <RadioButtonGroup aria-label="Bedrooms" className="grid grid-cols-6 gap-2">
               {BEDROOM_CHOICES.map((n) => (
-                <button key={n} type="button" aria-pressed={bedrooms === n} onClick={() => setBedrooms(n)} className={cn("h-11 rounded-lg border text-sm font-semibold", bedrooms === n ? "border-[var(--bk-brand)] bg-[var(--bk-brand)] text-[color:var(--bk-on-brand)]" : "border-[color:var(--bk-hairline)] bg-white hover:border-[rgb(var(--bk-brand-rgb)/0.5)]")}>
+                <button key={n} type="button" role="radio" aria-checked={bedrooms === n} onClick={() => setBedrooms(n)} className={cn("h-11 rounded-lg border text-sm font-semibold", bedrooms === n ? "border-[var(--bk-brand)] bg-[var(--bk-brand)] text-[color:var(--bk-on-brand)]" : "border-[color:var(--bk-hairline)] bg-white hover:border-[rgb(var(--bk-brand-rgb)/0.5)]")}>
                   {n === 6 ? "6+" : n}
                 </button>
               ))}
-            </div>
+            </RadioButtonGroup>
           </fieldset>
           <fieldset>
             <legend className="mb-2 text-sm font-medium">Bathrooms</legend>
-            <div className="grid grid-cols-4 gap-2 @2xl:grid-cols-8">
+            <RadioButtonGroup aria-label="Bathrooms" className="grid grid-cols-4 gap-2 @2xl:grid-cols-8">
               {BATHROOM_CHOICES.map((n) => (
-                <button key={n} type="button" aria-pressed={baths === n} onClick={() => setBaths(n)} className={cn("h-11 rounded-lg border text-sm font-semibold", baths === n ? "border-[var(--bk-brand)] bg-[var(--bk-brand)] text-[color:var(--bk-on-brand)]" : "border-[color:var(--bk-hairline)] bg-white hover:border-[rgb(var(--bk-brand-rgb)/0.5)]")}>
+                <button key={n} type="button" role="radio" aria-checked={baths === n} onClick={() => setBaths(n)} className={cn("h-11 rounded-lg border text-sm font-semibold", baths === n ? "border-[var(--bk-brand)] bg-[var(--bk-brand)] text-[color:var(--bk-on-brand)]" : "border-[color:var(--bk-hairline)] bg-white hover:border-[rgb(var(--bk-brand-rgb)/0.5)]")}>
                   {n}
                 </button>
               ))}
-            </div>
+            </RadioButtonGroup>
           </fieldset>
         </div>
       ) : null}

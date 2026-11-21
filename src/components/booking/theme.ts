@@ -72,6 +72,8 @@ export function resolveTheme(theme: Theme, company: { brandColor: string; accent
     brandText,
     style: {
       ["--bk-brand" as string]: brand,
+      // The shared selection controls (checkboxes, radios, selects) take the customer's colour, not Selestial's.
+      ["--sel-accent" as string]: brand,
       ["--bk-brand-rgb" as string]: `${r} ${g} ${b}`,
       ["--bk-accent" as string]: accent,
       ["--bk-accent-rgb" as string]: `${ar} ${ag} ${ab}`,

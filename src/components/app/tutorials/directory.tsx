@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 import { PLATFORM_WORDS, TASK_WORDS, type Platform } from "../../../../convex/lib/tutorials/catalog";
 import { supportHref, useTutorials } from "./host";
+import { SegmentedControl } from "@/components/ui/selection";
 
 const FILTERS: { id: Platform | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -51,13 +52,7 @@ export function TutorialDirectory() {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search, for example “recurring” or “Jobber clients”" className="h-11 w-full rounded-xl border border-border bg-card pr-3 pl-9 text-sm text-strong placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-brand-500" />
         </label>
-        <div role="group" aria-label="System" className="flex flex-wrap gap-1.5">
-          {FILTERS.map((filter) => (
-            <button key={filter.id} type="button" aria-pressed={platform === filter.id} onClick={() => setPlatform(filter.id)} className={cn("min-h-9 rounded-full border px-3 text-sm focus-visible:outline-2 focus-visible:outline-brand-500", platform === filter.id ? "border-brand-500 bg-brand-500/10 font-medium text-strong" : "border-border text-muted-foreground hover:text-strong")}>
-              {filter.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="System" hideLabel density="compact" value={platform} options={FILTERS.map((filter) => ({ id: filter.id, label: filter.label }))} onChange={setPlatform} />
       </div>
 
       {published === undefined ? (

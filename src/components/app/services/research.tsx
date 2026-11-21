@@ -22,6 +22,7 @@ import { startingCents } from "../../../../convex/lib/services/engine";
 import { BASIS_LABELS, comparableRange } from "../../../../convex/lib/services/research";
 import { Empty, formatCents, InfoTip, Notice, SectionTitle, when } from "./shared";
 import { PriceStrip } from "./visuals";
+import { Checkbox } from "@/components/ui/selection";
 
 const BASIS_TONE: Record<string, "info" | "warning" | "success" | "outline"> = { advertised_starting: "warning", estimated: "info", firm_published: "success", company_data: "success", ai_inference: "outline" };
 
@@ -208,7 +209,7 @@ function SourceRows({ sources, setSources }: { sources: OwnerSource[]; setSource
               </Field>
             </div>
             <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={s.comparable} onChange={(e) => set({ comparable: e.target.checked })} /> The scope is comparable to ours
+              <Checkbox checked={s.comparable} onCheckedChange={(checked) => set({ comparable: checked })} /> The scope is comparable to ours
             </label>
           </div>
         );

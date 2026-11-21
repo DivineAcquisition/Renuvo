@@ -31,6 +31,7 @@ function phone(value: string | null) {
 }
 
 import type { Profile } from "./profile";
+import { Checkbox, SegmentedControl } from "@/components/ui/selection";
 
 type Thread = NonNullable<ReturnType<typeof useQuery<typeof api.clientConversations.thread>>>;
 type Item = Thread["items"][number];
@@ -252,18 +253,18 @@ function Compose({ profile }: { profile: Profile }) {
   const [mode, setMode] = useState<Mode>("message");
   return (
     <div className="border-t border-border p-4">
-      <div role="group" aria-label="Write" className="mb-3 inline-flex rounded-lg border border-border p-0.5 text-sm">
-        {(
-          [
-            ["message", "Message the client", SendIcon],
-            ["note", "Internal note", NotebookPenIcon],
-          ] as const
-        ).map(([id, label, Icon]) => (
-          <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)} className={cn("inline-flex items-center gap-1.5 rounded-md px-3 py-1.5", mode === id ? "bg-brand-500/10 font-medium text-brand-300" : "text-muted-foreground hover:text-strong")}>
-            <Icon className="size-4" aria-hidden /> {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        className="mb-3"
+        label="Write"
+        hideLabel
+        density="compact"
+        value={mode}
+        options={[
+          { id: "message", label: <span className="inline-flex items-center gap-1.5"><SendIcon className="size-4" aria-hidden /> Message the client</span> },
+          { id: "note", label: <span className="inline-flex items-center gap-1.5"><NotebookPenIcon className="size-4" aria-hidden /> Internal note</span> },
+        ]}
+        onChange={setMode}
+      />
       {mode === "note" ? <NoteForm profile={profile} /> : composer === undefined ? <Skeleton className="h-40 rounded-xl" /> : <MessageForm profile={profile} composer={composer} />}
     </div>
   );
@@ -426,7 +427,7 @@ function MessageForm({ profile, composer }: { profile: Profile; composer: Compos
         </Field>
         <div className="grid content-start gap-2">
           <label className="mt-7 flex items-center gap-2 text-sm text-strong">
-            <input type="checkbox" className="size-4 accent-brand-500" checked={later} onChange={(event) => setLater(event.target.checked)} />
+            <Checkbox checked={later} onCheckedChange={(checked) => setLater(checked)} />
             Schedule as a follow-up
           </label>
           {later ? (

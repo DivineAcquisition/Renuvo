@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { FinanceNav } from "./finance-screen";
 import { Amount, Empty, StateBadge } from "./kit";
+import { SegmentedControl } from "@/components/ui/selection";
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -47,29 +48,17 @@ export function InvoicesTab({ nav }: { nav: FinanceNav & { set: (c: Record<strin
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <div role="radiogroup" aria-label="Show invoices" className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 sm:mx-0 sm:px-0">
-          {FILTERS.map((f) => {
+        <SegmentedControl
+          label="Show invoices"
+          hideLabel
+          density="compact"
+          value={filter}
+          options={FILTERS.map((f) => {
             const count = data?.counts[f.id];
-            return (
-              <button
-                key={f.id}
-                type="button"
-                role="radio"
-                aria-checked={filter === f.id}
-                onClick={() => nav.set({ filter: f.id === "all" ? null : f.id })}
-                className={cn(
-                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-brand-500",
-                  filter === f.id ? "border-brand-500/50 bg-brand-500/10 text-strong" : "border-border bg-card text-muted-foreground hover:text-strong",
-                  f.id === "overdue" && count ? "data-[on=false]:text-destructive-foreground" : "",
-                )}
-                data-on={filter === f.id}
-              >
-                {f.label}
-                {count !== undefined ? <span className="tabular-nums text-xs text-muted-foreground">{count}</span> : null}
-              </button>
-            );
+            return { id: f.id, label: <>{f.label}{count !== undefined ? <span className={f.id === "overdue" && count ? "ml-1.5 text-xs tabular-nums text-destructive-foreground" : "ml-1.5 text-xs tabular-nums text-muted-foreground"}>{count}</span> : null}</> };
           })}
-        </div>
+          onChange={(id) => nav.set({ filter: id === "all" ? null : id })}
+        />
         <label className="relative ml-auto w-full sm:w-64">
           <span className="sr-only">Search invoices</span>
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />

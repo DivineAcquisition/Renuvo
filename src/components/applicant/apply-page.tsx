@@ -6,6 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "@/components/cleaner/shell";
+import { Check } from "@/components/icons";
+import { SelectInput } from "@/components/app/form";
+import { Checkbox, RadioButtonGroup } from "@/components/ui/selection";
 
 type Answer = string | number | boolean | string[];
 type Answers = Record<string, Answer>;
@@ -27,7 +30,11 @@ const CLOSED: Record<string, { tone: "neutral" | "warn" | "good"; title: string;
   revoked: { tone: "neutral", title: "This link is no longer active", body: "Use the newest link you were sent, or reply to the email that brought you here." },
 };
 
-const inputClass = "min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base outline-none focus:border-brand-500";
+const inputClass = "min-h-12 w-full rounded-xl border border-border bg-background px-3 text-base outline-none focus:border-brand-500 focus-visible:outline-2 focus-visible:outline-brand-500/40";
+// The selection system's look for the applicant's choices: a visible tick on what is chosen, never colour alone.
+const choiceClass = "inline-flex items-center justify-center gap-1.5 border font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500/50 motion-reduce:transition-none";
+const choiceOn = "border-brand-500 bg-brand-500 text-white";
+const choiceOff = "border-border bg-background hover:border-brand-500/40";
 
 function FieldInput({ field, value, onChange }: { field: Field; value: Answer | undefined; onChange: (value: Answer | undefined) => void }) {
   const id = `field-${field.key}`;
@@ -36,7 +43,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: Answer | 
     if (field.key === "smsConsent") {
       return (
         <label className="flex items-start gap-3 text-sm">
-          <input type="checkbox" data-testid={id} className="mt-1 size-5 shrink-0" checked={value === true} onChange={(event) => onChange(event.target.checked)} />
+          <Checkbox data-testid={id} className="mt-1 shrink-0" checked={value === true} onCheckedChange={(checked) => onChange(checked)} />
           <span>{field.label}</span>
         </label>
       );
@@ -44,13 +51,15 @@ function FieldInput({ field, value, onChange }: { field: Field; value: Answer | 
     return (
       <fieldset className="flex flex-col gap-2 text-sm">
         <legend className="mb-1 font-medium">{field.label}{field.required ? " *" : ""}</legend>
-        <div className="flex gap-2">
+        {/* Yes and No are exclusive, so they are radios. Nothing is chosen until the applicant answers. */}
+        <RadioButtonGroup className="flex gap-2" aria-label={field.label}>
           {[true, false].map((option) => (
-            <button key={String(option)} type="button" data-testid={`${id}-${option ? "yes" : "no"}`} aria-pressed={value === option} onClick={() => onChange(option)} className={`min-h-12 flex-1 rounded-xl border px-4 text-base font-medium ${value === option ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-background"}`}>
+            <button key={String(option)} type="button" role="radio" data-testid={`${id}-${option ? "yes" : "no"}`} aria-checked={value === option} onClick={() => onChange(option)} className={`${choiceClass} min-h-12 flex-1 rounded-xl px-4 text-base ${value === option ? choiceOn : choiceOff}`}>
+              {value === option ? <Check className="size-4" aria-hidden /> : null}
               {option ? "Yes" : "No"}
             </button>
           ))}
-        </div>
+        </RadioButtonGroup>
       </fieldset>
     );
   }
@@ -59,11 +68,12 @@ function FieldInput({ field, value, onChange }: { field: Field; value: Answer | 
     return (
       <fieldset className="flex flex-col gap-2 text-sm">
         <legend className="mb-1 font-medium">{field.label}{field.required ? " *" : ""}</legend>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" role="group" aria-label={field.label}>
           {(field.options ?? []).map((option) => {
             const on = chosen.includes(option);
             return (
-              <button key={option} type="button" data-testid={`${id}-${option}`} aria-pressed={on} onClick={() => onChange(on ? chosen.filter((entry) => entry !== option) : [...chosen, option])} className={`min-h-11 rounded-full border px-4 text-sm font-medium ${on ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-background"}`}>
+              <button key={option} type="button" role="checkbox" data-testid={`${id}-${option}`} aria-checked={on} onClick={() => onChange(on ? chosen.filter((entry) => entry !== option) : [...chosen, option])} className={`${choiceClass} min-h-11 rounded-full px-4 text-sm ${on ? choiceOn : choiceOff}`}>
+                {on ? <Check className="size-3.5" aria-hidden /> : null}
                 {option}
               </button>
             );
@@ -82,12 +92,12 @@ function FieldInput({ field, value, onChange }: { field: Field; value: Answer | 
     return (
       <label className="flex flex-col gap-1 text-sm">
         {label}
-        <select data-testid={id} className={inputClass} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
+        <SelectInput data-testid={id} className={`${inputClass} select-native cursor-pointer pr-10`} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(event.target.value || undefined)}>
           <option value="">Choose…</option>
           {(field.options ?? []).map((option) => (
             <option key={option} value={option}>{option}</option>
           ))}
-        </select>
+        </SelectInput>
       </label>
     );
   }
@@ -265,7 +275,7 @@ export function ApplyPage({ token }: { token: string }) {
             </Notice>
           ) : null}
           <label className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 text-sm">
-            <input type="checkbox" data-testid="attest" className="mt-1 size-5 shrink-0" checked={attested} onChange={(event) => setAttested(event.target.checked)} />
+            <Checkbox data-testid="attest" className="mt-1 shrink-0" checked={attested} onCheckedChange={(checked) => setAttested(checked)} />
             <span>{form.attestation}</span>
           </label>
         </>

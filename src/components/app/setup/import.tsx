@@ -31,6 +31,7 @@ import {
   type ImportRow,
 } from "../../../../convex/lib/clients/importing";
 import type { Platform } from "../../../../convex/lib/tutorials/catalog";
+import { Checkbox } from "@/components/ui/selection";
 
 type Checked = FunctionReturnType<typeof api.clientImports.check>;
 type Result = FunctionReturnType<
@@ -414,18 +415,16 @@ export function ReviewImport({
                   </span>
                   {row.matches.length && !row.problems.length ? (
                     <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-[#6838ef]"
+                      <Checkbox
+                       
+                        
                         checked={addAnyway.includes(row.index)}
-                        onChange={() =>
-                          setAddAnyway(
+                        onCheckedChange={() => setAddAnyway(
                             addAnyway.includes(row.index)
                               ? addAnyway.filter((index) => index !== row.index)
                               : [...addAnyway, row.index],
                           )
-                        }
-                      />
+                        } />
                       Add anyway
                     </label>
                   ) : null}

@@ -20,6 +20,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { FinanceNav } from "./finance-screen";
 import { Chip, Empty, Notice, eyebrow } from "./kit";
+import { Checkbox, SegmentedControl } from "@/components/ui/selection";
 
 /**
  * Finance › Expenses. Receipts the Owner snaps or uploads (Selestial reads them into drafts), expenses
@@ -121,13 +122,13 @@ export function ExpensesTab({ nav }: { nav: Nav }) {
       <div className="flex flex-wrap items-center gap-2">
         <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <span className="sr-only">Period</span>
-          <select value={nav.period} onChange={(event) => nav.set({ period: event.target.value === "this_month" ? null : (event.target.value as PeriodId) })} className="h-9 cursor-pointer rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong focus-visible:outline-2 focus-visible:outline-brand-500">
+          <SelectInput value={nav.period} onChange={(event) => nav.set({ period: event.target.value === "this_month" ? null : (event.target.value as PeriodId) })} className="h-9 cursor-pointer rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong focus-visible:outline-2 focus-visible:outline-brand-500">
             {PERIODS.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
         <input ref={snapRef} type="file" accept="image/*" capture="environment" className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => (e.target.files && void uploads.upload(e.target.files), (e.target.value = ""))} />
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic,application/pdf" multiple className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => (e.target.files && void uploads.upload(e.target.files), (e.target.value = ""))} />
@@ -224,21 +225,7 @@ export function ExpensesTab({ nav }: { nav: Nav }) {
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <div role="radiogroup" aria-label="Show" className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 sm:mx-0 sm:px-0">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={filter === f.id}
-                  onClick={() => nav.set({ filter: f.id === "review" ? null : f.id })}
-                  className={cn("inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-brand-500", filter === f.id ? "border-brand-500/50 bg-brand-500/10 text-strong" : "border-border bg-card text-muted-foreground hover:text-strong")}
-                >
-                  {f.label}
-                  {f.id in data.counts ? <span className="text-xs tabular-nums text-muted-foreground">{data.counts[f.id as keyof typeof data.counts]}</span> : null}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl label="Show" hideLabel density="compact" value={filter} options={FILTERS.map((f) => ({ id: f.id, label: <>{f.label}{f.id in data.counts ? <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{data.counts[f.id as keyof typeof data.counts]}</span> : null}</> }))} onChange={(id) => nav.set({ filter: id === "review" ? null : id })} />
             <div className="ml-auto flex gap-2">
               {filter === "review" && ready.length > 0 ? (
                 <Button size="sm" variant="default" onClick={() => setDialog("record")}>
@@ -713,7 +700,7 @@ function ExpenseEditor({ e, onClose }: { e: Detail; onClose: () => void }) {
             {e.repeat.vendor ?? "No vendor"} · {calendarDate(e.repeat.spentOn)} · {e.repeat.amountCents === null ? "—" : usd(e.repeat.amountCents)} <span className="text-muted-foreground">({e.repeat.statusWords}, {e.repeat.sourceWords.toLowerCase()})</span>
           </p>
           <label className="flex items-center gap-2 text-strong">
-            <input type="checkbox" checked={notARepeat} onChange={(ev) => setNotARepeat(ev.target.checked)} className="size-4 accent-brand-500" />
+            <Checkbox checked={notARepeat} onCheckedChange={(checked) => setNotARepeat(checked)} />
             They&apos;re two different purchases
           </label>
           {!notARepeat ? <p className="text-xs text-muted-foreground">If it is the same purchase, void this one.</p> : null}
@@ -775,14 +762,14 @@ function ExpenseEditor({ e, onClose }: { e: Detail; onClose: () => void }) {
       ) : editable && form.vendor && form.categoryId ? (
         <div className="grid gap-1.5 rounded-xl border border-border px-3.5 py-3 text-sm">
           <label className="flex items-start gap-2 text-strong">
-            <input type="checkbox" checked={makeRule} onChange={(ev) => setMakeRule(ev.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+            <Checkbox checked={makeRule} onCheckedChange={(checked) => setMakeRule(checked)} className="mt-0.5" />
             <span>
               Always file {form.vendor} as {category?.name ?? "this category"}
             </span>
           </label>
           {makeRule ? (
             <label className="ml-6 flex items-start gap-2 text-strong">
-              <input type="checkbox" checked={autoFile} onChange={(ev) => setAutoFile(ev.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+              <Checkbox checked={autoFile} onCheckedChange={(checked) => setAutoFile(checked)} className="mt-0.5" />
               <span>
                 And record it without asking
                 <span className="block text-xs text-muted-foreground">Only when the vendor, date and amount are read clearly and it isn&apos;t a possible repeat. Otherwise it waits for you.</span>
@@ -1145,7 +1132,7 @@ function RulesBody() {
           </Field>
         </div>
         <label className="flex items-start gap-2 text-sm text-strong">
-          <input type="checkbox" checked={autoFile} onChange={(e) => setAutoFile(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+          <Checkbox checked={autoFile} onCheckedChange={(checked) => setAutoFile(checked)} className="mt-0.5" />
           <span>
             Record matching expenses without asking
             <span className="block text-xs text-muted-foreground">Only when the receipt is clear and it isn&apos;t a possible repeat.</span>

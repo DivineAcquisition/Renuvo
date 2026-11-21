@@ -22,6 +22,7 @@ import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { CaseDrawer } from "./drawer";
 import { CaseCardView, Empty, useCaseParam } from "./shared";
+import { Checkbox } from "@/components/ui/selection";
 
 function NewCase({ open, onClose, onOpened }: { open: boolean; onClose: () => void; onOpened: (id: string) => void }) {
   const { companyId } = useCompany();
@@ -68,7 +69,7 @@ function NewCase({ open, onClose, onOpened }: { open: boolean; onClose: () => vo
           <TextArea rows={4} value={description} onChange={(event) => setDescription(event.target.value)} />
         </Field>
         <label className="flex items-start gap-2 text-sm text-foreground">
-          <input type="checkbox" className="mt-1" checked={cleaner} onChange={(event) => setCleaner(event.target.checked)} />
+          <Checkbox className="mt-1" checked={cleaner} onCheckedChange={(checked) => setCleaner(checked)} />
           <span>The customer asked for a different cleaner.</span>
         </label>
         <FormError message={error} />

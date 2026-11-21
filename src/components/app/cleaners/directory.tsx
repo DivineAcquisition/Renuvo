@@ -28,6 +28,7 @@ import { Avatar, Chips, ENGAGEMENT_SHORT, Progress, ReadinessLine, StatusBadge, 
 import { CleanerDrawer } from "./drawer";
 import { InviteManyDialog } from "./onboarding-review";
 import { CLEANERS_PATH, useDirectoryState, type DirectoryState } from "./state";
+import { SelectInput } from "@/components/app/form";
 
 export type Directory = FunctionReturnType<typeof api.workforce.directory>;
 export type Row = Directory["rows"][number];
@@ -200,7 +201,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
   return (
     <label className="grid gap-1 text-xs font-medium text-muted-foreground">
       {label}
-      <select
+      <SelectInput
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || undefined)}
         className="h-9 w-full cursor-pointer rounded-lg border border-border bg-card px-2.5 text-sm text-strong focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30"
@@ -211,7 +212,7 @@ function Select({ label, value, onChange, options }: { label: string; value: str
             {option.label}
           </option>
         ))}
-      </select>
+      </SelectInput>
     </label>
   );
 }

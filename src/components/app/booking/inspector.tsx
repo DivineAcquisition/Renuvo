@@ -35,6 +35,7 @@ import {
   type StepId,
 } from "../../../../convex/lib/booking/definition";
 import { contrast } from "@/components/booking/theme";
+import { Checkbox, ChoiceChips } from "@/components/ui/selection";
 
 export type BuilderData = {
   kind: ExperienceKind;
@@ -358,16 +359,7 @@ function ComparisonPanel({ def, change, data }: Props) {
                 <Trash aria-hidden />
               </button>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {keys.map((k) => {
-                const on = row.included.includes(k);
-                return (
-                  <button key={k} type="button" aria-pressed={on} onClick={() => change((d) => void (d.services.comparison.rows[i].included = on ? row.included.filter((x) => x !== k) : [...row.included, k]))} className={cn("rounded-md border px-2 py-0.5 text-xs", on ? "border-brand-500 bg-brand-500/10 text-strong" : "border-border text-muted-foreground")}>
-                    {data.services.find((s) => s.key === k)?.name ?? k}
-                  </button>
-                );
-              })}
-            </div>
+            <ChoiceChips aria-label={`Services included in ${row.label || "this row"}`} density="compact" options={keys.map((k) => ({ value: k, label: data.services.find((s) => s.key === k)?.name ?? k }))} value={row.included} onValueChange={(next) => change((d) => void (d.services.comparison.rows[i].included = next))} />
           </li>
         ))}
       </ul>
@@ -391,7 +383,7 @@ function ListPanel({ def, change, kind }: Props & { kind: "trust" | "faqs" | "ne
               })} />
               <div className="flex items-center justify-between gap-2">
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="size-4 accent-[#6838ef]" checked={t.confirmed} onChange={(e) => change((d) => void (d.content.trust[i].confirmed = e.target.checked))} />
+                  <Checkbox checked={t.confirmed} onCheckedChange={(checked) => change((d) => void (d.content.trust[i].confirmed = checked))} />
                   This is true for our company
                 </label>
                 <span className="flex items-center">

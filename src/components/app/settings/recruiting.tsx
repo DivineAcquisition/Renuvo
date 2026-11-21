@@ -19,6 +19,7 @@ import { timeZoneLabel } from "@/lib/app/timezones";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 function RecruitingInner() {
   const { companyId, role } = useCompany();
@@ -123,7 +124,7 @@ function HiringInbox({ canEdit, companyId }: { canEdit: boolean; companyId: Id<"
               <TextInput value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Hiring" />
             </Field>
             <label className="flex items-center gap-2 text-sm text-strong">
-              <input type="checkbox" checked={canSend} onChange={(event) => setCanSend(event.target.checked)} />
+              <Checkbox checked={canSend} onCheckedChange={(checked) => setCanSend(checked)} />
               Also send applicant email from this inbox
             </label>
           </div>
@@ -338,7 +339,7 @@ function RecruitingFormView({ saved, timezone, canEdit, companyId }: { saved: Re
           <div className="mt-1.5 flex flex-wrap gap-2">
             {WEEKDAYS.map((day, weekday) => (
               <label key={day} className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-sm text-strong has-[:checked]:border-brand-500/60 has-[:checked]:bg-brand-500/5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand-500">
-                <input type="checkbox" disabled={!canEdit} checked={form.sendDays.includes(weekday)} onChange={(event) => set("sendDays", event.target.checked ? [...form.sendDays, weekday] : form.sendDays.filter((value) => value !== weekday))} />
+                <Checkbox disabled={!canEdit} checked={form.sendDays.includes(weekday)} onCheckedChange={(checked) => set("sendDays", checked ? [...form.sendDays, weekday] : form.sendDays.filter((value) => value !== weekday))} />
                 {day.slice(0, 3)}
               </label>
             ))}

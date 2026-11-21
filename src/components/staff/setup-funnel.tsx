@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { api } from "../../../convex/_generated/api";
+import { SegmentedControl } from "@/components/ui/selection";
 
 const WINDOWS = [7, 30, 90] as const;
 
@@ -32,13 +33,7 @@ export function SetupFunnel() {
           </h1>
           <p className="text-sm text-muted-foreground">New companies that started setup in the window, and how far they got.</p>
         </div>
-        <div className="flex gap-1" role="group" aria-label="Window">
-          {WINDOWS.map((value) => (
-            <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)} className={days === value ? "rounded-lg bg-brand-500/10 px-3 py-1.5 text-sm font-semibold text-brand-700" : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:text-strong"}>
-              {value} days
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Window" hideLabel density="compact" value={String(days)} options={WINDOWS.map((value) => ({ id: String(value), label: `${value} days` }))} onChange={(value) => setDays(Number(value) as (typeof WINDOWS)[number])} />
       </div>
       {!funnel ? (
         <Skeleton className="h-72 rounded-2xl" />

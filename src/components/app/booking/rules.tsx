@@ -11,15 +11,45 @@ import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, SelectInput, TextArea, TextInput, useRun } from "@/components/app/form";
+import { Field, FormError, TextArea, TextInput, useRun } from "@/components/app/form";
 import { Notice, Segmented } from "@/components/app/services/shared";
 import { buttonVariants } from "@/components/ui/button-variants";
+import { Consequence, Select, type Option } from "@/components/ui/selection";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 type Policy = { id: string; label: string; kind: "none" | "deposit_percent" | "deposit_fixed" | "full"; percent?: number; cents?: number; balanceTerms: string };
 type Agreement = { id: string; label: string; templateId: Id<"agreementTemplates">; standing: Record<string, string | number | boolean> };
+
+const PAY_KINDS: Option<Policy["kind"]>[] = [
+  { value: "deposit_percent", label: "A percentage deposit", description: "A share of the price is paid by card when they book." },
+  { value: "deposit_fixed", label: "A fixed deposit", description: "The same amount is paid by card when they book, whatever the price." },
+  { value: "full", label: "The full amount", description: "The whole price is paid by card when they book." },
+  { value: "none", label: "Nothing (invoice later)", description: "Nothing is paid when booking. Everything is invoiced after the visit." },
+];
+
+const YES_NO: Option<"true" | "false">[] = [
+  { value: "true", label: "Yes" },
+  { value: "false", label: "No" },
+];
+
+/** Sets or clears one standing answer. `undefined` removes it, so an unanswered question is never stored as "No". */
+function answer(standing: Agreement["standing"], key: string, value: string | number | boolean | undefined): Agreement["standing"] {
+  const next = { ...standing };
+  if (value === undefined) delete next[key];
+  else next[key] = value;
+  return next;
+}
+
+/** What a payment policy does at booking, from its actual values. It describes; it doesn't change how anything is charged. */
+function policyEffect(p: Policy): string {
+  const rest = p.balanceTerms.trim() ? ` The rest: ${p.balanceTerms.trim().replace(/\.?$/, ".")}` : "";
+  if (p.kind === "full") return "Customers pay the whole price by card when they book.";
+  if (p.kind === "none") return `Customers aren't charged when they book.${rest}`;
+  if (p.kind === "deposit_percent") return p.percent ? `Customers pay ${p.percent}% of the price by card when they book.${rest}` : "Enter the percentage customers pay when they book.";
+  return p.cents ? `Customers pay $${(p.cents / 100).toFixed(2)} by card when they book.${rest}` : "Enter the deposit customers pay when they book.";
+}
 
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -162,12 +192,7 @@ function RulesForm({ rules, onClose }: { rules: RulesData; onClose: () => void }
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="What's paid when booking">
-                  <SelectInput value={p.kind} onChange={(e) => set({ policies: state.policies.map((x, j) => (j === i ? { ...x, kind: e.target.value as Policy["kind"] } : x)) })}>
-                    <option value="deposit_percent">A percentage deposit</option>
-                    <option value="deposit_fixed">A fixed deposit</option>
-                    <option value="full">The full amount</option>
-                    <option value="none">Nothing (invoice later)</option>
-                  </SelectInput>
+                  <Select value={p.kind} options={PAY_KINDS} onValueChange={(kind) => (kind ? set({ policies: state.policies.map((x, j) => (j === i ? { ...x, kind } : x)) }) : undefined)} />
                 </Field>
                 {p.kind === "deposit_percent" ? (
                   <Field label="Percent">
@@ -179,6 +204,7 @@ function RulesForm({ rules, onClose }: { rules: RulesData; onClose: () => void }
                   </Field>
                 ) : null}
               </div>
+              <Consequence>{policyEffect(p)}</Consequence>
               {p.kind !== "full" ? (
                 <Field label="How the rest is collected" hint="Shown to customers word for word.">
                   <TextInput value={p.balanceTerms} maxLength={200} placeholder="Invoiced after the visit." onChange={(e) => set({ policies: state.policies.map((x, j) => (j === i ? { ...x, balanceTerms: e.target.value } : x)) })} />
@@ -246,13 +272,7 @@ function AgreementRule({ rule, templates, onChange, onRemove }: { rule: Agreemen
         </button>
       </div>
       <Field label="Approved template">
-        <SelectInput value={rule.templateId} onChange={(e) => onChange({ ...rule, templateId: e.target.value as Id<"agreementTemplates">, standing: {} })}>
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.title}
-            </option>
-          ))}
-        </SelectInput>
+        <Select value={rule.templateId} options={templates.map((t) => ({ value: t.id, label: t.title }))} onValueChange={(templateId) => (templateId ? onChange({ ...rule, templateId: templateId as Id<"agreementTemplates">, standing: {} }) : undefined)} emptyText="No approved customer templates yet." />
       </Field>
       {needs === undefined ? null : !needs.ok ? (
         <Notice tone="warning" title={needs.why ?? "This template can't be used."}>{" "}</Notice>
@@ -268,20 +288,10 @@ function AgreementRule({ rule, templates, onChange, onRemove }: { rule: Agreemen
                 {n.type === "longtext" ? (
                   <TextArea value={String(rule.standing[n.key] ?? "")} onChange={(e) => onChange({ ...rule, standing: { ...rule.standing, [n.key]: e.target.value } })} />
                 ) : n.type === "bool" ? (
-                  <SelectInput value={rule.standing[n.key] === undefined ? "" : String(rule.standing[n.key])} onChange={(e) => onChange({ ...rule, standing: { ...rule.standing, [n.key]: e.target.value === "true" } })}>
-                    <option value="">Choose…</option>
-                    <option value="true">Yes</option>
-                    <option value="false">No</option>
-                  </SelectInput>
+                  // Unanswered stays unanswered: choosing "Not answered" removes the answer instead of storing "No".
+                  <Select value={rule.standing[n.key] === undefined ? "" : String(rule.standing[n.key]) as "true" | "false"} options={YES_NO} emptyLabel="Not answered" onValueChange={(next) => onChange({ ...rule, standing: answer(rule.standing, n.key, next === null ? undefined : next === "true") })} />
                 ) : n.choices.length ? (
-                  <SelectInput value={String(rule.standing[n.key] ?? "")} onChange={(e) => onChange({ ...rule, standing: { ...rule.standing, [n.key]: e.target.value } })}>
-                    <option value="">Choose…</option>
-                    {n.choices.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </SelectInput>
+                  <Select value={String(rule.standing[n.key] ?? "")} options={n.choices.map((c) => ({ value: c, label: c }))} emptyLabel="Not answered" onValueChange={(next) => onChange({ ...rule, standing: answer(rule.standing, n.key, next ?? undefined) })} />
                 ) : (
                   <TextInput
                     inputMode={n.type === "int" || n.type === "money" ? "decimal" : undefined}

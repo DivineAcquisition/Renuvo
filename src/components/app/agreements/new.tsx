@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type Mode = "selestial" | "template" | "upload";
 const MODES: { id: Mode; label: string; blurb: string }[] = [
@@ -289,7 +290,7 @@ function UploadAgreement({ catalog }: { catalog: Catalog }) {
               {canVerify ? (
                 <div className="grid gap-2 rounded-xl border border-border p-3">
                   <label className="flex items-start gap-2 text-sm text-strong">
-                    <input type="checkbox" className="mt-1" checked={form.signedElsewhere} onChange={set("signedElsewhere")} />
+                    <Checkbox className="mt-1" checked={form.signedElsewhere} onCheckedChange={(checked) => set("signedElsewhere")({ target: { type: "checkbox", checked } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
                     <span>This copy was already signed outside Selestial, and I checked it<span className="block text-xs text-muted-foreground">Selestial did not collect these signatures. Your name and what you checked are recorded as the verification. Leave this off and the upload is just a document that has not been signed.</span></span>
                   </label>
                   {form.signedElsewhere ? (

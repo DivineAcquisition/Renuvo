@@ -15,6 +15,7 @@ import { api } from "../../../../convex/_generated/api";
 import { ACTIVITIES_BY_KEY } from "./catalog";
 import { formatPhone, placeName, useSetup, type StepId } from "./context";
 import { Needs, Note, Section, StepHeading } from "./parts";
+import { Checkbox } from "@/components/ui/selection";
 
 export function ReviewStep() {
   const { view, go, run, companyId, locked } = useSetup();
@@ -91,7 +92,7 @@ export function ReviewStep() {
           </div>
         ) : null}
         <label className="flex items-start gap-3 rounded-xl border border-border p-3.5 text-sm leading-6">
-          <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} className="mt-1 size-4 shrink-0 accent-brand-500" disabled={locked} />
+          <Checkbox checked={agreed} onCheckedChange={(checked) => setAgreed(checked)} className="mt-1 shrink-0" disabled={locked} />
           <span className="text-strong">{view.charges.wording}</span>
         </label>
         <div>

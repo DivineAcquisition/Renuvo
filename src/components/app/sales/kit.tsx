@@ -2,6 +2,7 @@
 
 import { Check } from "@/components/icons";
 import { cn } from "@/lib/utils";
+import { focusWithin, markBase, markOff, markOn, restingSurface, selectedSurface } from "@/components/ui/selection/tokens";
 
 /**
  * Building blocks of the booking and proposal workspace: numbered sections, selectable cards, summary
@@ -30,13 +31,14 @@ export function FormSection({ n, id, title, lead, done, children, aside }: { n: 
 }
 
 /** A large radio-style card. Uses a real radio so arrow keys and screen readers work. */
+/** A sales choice as a card. Native radio underneath (form-friendly, arrow keys), drawn with the shared selection look. */
 export function ChoiceCard({ name, value, checked, onChange, title, detail, meta, disabled }: { name: string; value: string; checked: boolean; onChange: () => void; title: string; detail?: React.ReactNode; meta?: React.ReactNode; disabled?: boolean }) {
   return (
-    <label className={cn("relative flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-sm transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-500", checked ? "border-brand-500 bg-brand-500/6 shadow-[0_0_0_1px_var(--color-brand-500)]" : "border-border bg-card hover:border-brand-500/40", disabled && "cursor-not-allowed opacity-60")}>
+    <label className={cn("relative flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-sm transition-colors motion-reduce:transition-none", focusWithin, checked ? selectedSurface : restingSurface, disabled && "cursor-not-allowed opacity-60")}>
       <input type="radio" className="sr-only" name={name} value={value} checked={checked} onChange={onChange} disabled={disabled} />
       <span className="flex items-start justify-between gap-2">
         <span className="font-medium text-strong">{title}</span>
-        <span aria-hidden className={cn("grid size-4.5 shrink-0 place-content-center rounded-full border", checked ? "border-brand-500 bg-brand-500 text-white" : "border-border")}>{checked ? <Check className="size-3" /> : null}</span>
+        <span aria-hidden className={cn(markBase, "rounded-full", checked ? markOn : markOff)}>{checked ? <span className="block size-1.5 rounded-full bg-white" /> : null}</span>
       </span>
       {detail ? <span className="text-xs text-muted-foreground">{detail}</span> : null}
       {meta ? <span className="text-xs font-medium text-strong tabular-nums">{meta}</span> : null}

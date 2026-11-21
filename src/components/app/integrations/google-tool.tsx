@@ -12,6 +12,7 @@ import { driveIdFrom, pickerConfig, pickFromDrive } from "@/lib/app/google-picke
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 export type Feature = "drive" | "calendar" | "business_profile" | "ads" | "conversions";
 const PURPOSES = ["photos", "resumes", "agreements", "reports", "creative", "documents"] as const;
@@ -500,8 +501,8 @@ function ConversionsPanel({ companyId, owner }: { companyId: Id<"companies">; ow
             <Field label="How your customers agreed to this">
               <TextArea rows={2} value={basis} onChange={(e) => setBasis(e.target.value)} />
             </Field>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={userData} onChange={(e) => setUserData(e.target.checked)} /> Customers agreed to share their data with Google for ads</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={personalization} onChange={(e) => setPersonalization(e.target.checked)} /> Customers agreed to personalized ads</label>
+            <label className="flex items-center gap-2 text-sm"><Checkbox checked={userData} onCheckedChange={(checked) => setUserData(checked)} /> Customers agreed to share their data with Google for ads</label>
+            <label className="flex items-center gap-2 text-sm"><Checkbox checked={personalization} onCheckedChange={(checked) => setPersonalization(checked)} /> Customers agreed to personalized ads</label>
             <div className="flex gap-2">
               <Button type="button" size="sm" variant="outline" disabled={busy || !basis.trim()} onClick={() => void run(() => save({ companyId, adUserData: userData, adPersonalization: personalization, basis }))}>
                 Save and turn reporting on

@@ -5,7 +5,7 @@ import { useId, useMemo, useState } from "react";
 import { Unavailable } from "@/components/app/settings/guard";
 import { useBusinessDraft } from "@/components/app/settings/business-draft";
 import { SaveBar as SaveArea } from "@/components/app/settings/save-bar";
-import { Field, TextInput } from "@/components/app/form";
+import { Field, TextInput, SelectInput } from "@/components/app/form";
 import { Plus, Search, Trash2, X } from "@/components/icons";
 import { Panel } from "@/components/app/shell";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { addPostalCodes, clockLabel, hoursSummary, minuteToTime, type HoursWindow, timeToMinute, WEEKDAYS } from "@/lib/app/settings-draft";
 import { filterTimeZones, timeZoneLabel, timeZoneOptions } from "@/lib/app/timezones";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/selection";
 
 /** Save and discard for the business draft. */
 export function SaveBar() {
@@ -66,7 +67,7 @@ function TimeZonePicker({ value, disabled, onChange }: { value: string; disabled
           className="block min-h-10 w-full rounded-t-lg border border-b-0 border-border bg-card py-2 pr-3 pl-8 text-sm text-strong placeholder:text-muted-foreground/70 focus-visible:border-brand-500/60 focus-visible:outline-2 focus-visible:outline-brand-500/30"
         />
       </div>
-      <select
+      <SelectInput
         id={`${id}-select`}
         size={6}
         value={value}
@@ -85,7 +86,7 @@ function TimeZonePicker({ value, disabled, onChange }: { value: string; disabled
               ))}
           </optgroup>
         ))}
-      </select>
+      </SelectInput>
       <span id={`${id}-hint`} className="text-xs text-muted-foreground">
         Selected: <span className="font-medium text-strong">{timeZoneLabel(value)}</span>. Bookings, deadlines and your booking hours use this clock.
       </span>
@@ -271,16 +272,14 @@ function BookingHours() {
             return (
               <li key={weekday} className="grid gap-2 px-3 py-2.5 sm:grid-cols-[9rem_1fr] sm:items-start">
                 <label className="flex min-h-9 items-center gap-2 text-sm font-medium text-strong">
-                  <input
-                    type="checkbox"
+                  <Checkbox
+                   
                     checked={open}
-                    onChange={(event) =>
-                      edit((current) => ({
+                    onCheckedChange={(checked) => edit((current) => ({
                         ...current,
-                        hours: event.target.checked ? [...current.hours, { weekday, ...DEFAULT_DAY }] : current.hours.filter((w) => w.weekday !== weekday),
+                        hours: checked ? [...current.hours, { weekday, ...DEFAULT_DAY }] : current.hours.filter((w) => w.weekday !== weekday),
                       }))
-                    }
-                  />
+                    } />
                   {WEEKDAYS[weekday]}
                 </label>
                 {open ? (

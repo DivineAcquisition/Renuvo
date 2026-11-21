@@ -29,6 +29,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { STEP_LABELS, type Definition, type StepId } from "../../../../convex/lib/booking/definition";
 import { signBookingAgreement } from "../../../app/b/actions";
 import { Inspector, type BuilderData } from "./inspector";
+import { Checkbox, RadioButtonGroup, SegmentedControl } from "@/components/ui/selection";
 
 const ROOT = "/app/agents/sales/booking-forms";
 const STATUS_WORDS: Record<string, { label: string; variant: "success" | "outline" | "warning" | "info" }> = {
@@ -218,13 +219,13 @@ export function ExperienceBuilder({ experienceId }: { experienceId: Id<"bookingE
           <button type="button" onClick={redo} disabled={!future.length} aria-label="Redo" title="Redo (Ctrl+Shift+Z)" className={buttonVariants({ variant: "ghost", size: "icon-sm" })}>
             <ArrowArcRight aria-hidden />
           </button>
-          <div role="radiogroup" aria-label="Preview size" className="hidden rounded-lg border border-border p-0.5 sm:flex">
+          <RadioButtonGroup aria-label="Preview size" className="hidden rounded-lg border border-border p-0.5 sm:flex">
             {(["desktop", "mobile"] as const).map((d) => (
               <button key={d} type="button" role="radio" aria-checked={device === d} aria-label={d === "desktop" ? "Desktop preview" : "Mobile preview"} onClick={() => setDevice(d)} className={cn("grid h-7 w-8 place-items-center rounded-md", device === d ? "bg-brand-500/10 text-strong" : "text-muted-foreground")}>
                 {d === "desktop" ? <DesktopTower aria-hidden className="size-4" /> : <DeviceMobile aria-hidden className="size-4" />}
               </button>
             ))}
-          </div>
+          </RadioButtonGroup>
           {canEdit ? (
             <button
               type="button"
@@ -513,16 +514,10 @@ function Results({ experienceId }: { experienceId: Id<"bookingExperiences"> }) {
           <h3 className="font-heading text-base tracking-tight text-strong">Results</h3>
           <p className="mt-0.5 text-sm text-muted-foreground">From what customers actually did. {test ? "Test bookings only." : "Test bookings are left out."}</p>
         </div>
-        <span className="flex gap-1">
-          {[7, 30, 90].map((d) => (
-            <button key={d} type="button" aria-pressed={days === d} onClick={() => setDays(d)} className={cn(buttonVariants({ variant: days === d ? "secondary" : "ghost", size: "xs" }))}>
-              {d}d
-            </button>
-          ))}
-        </span>
+        <SegmentedControl label="Period" hideLabel density="compact" value={String(days)} options={[7, 30, 90].map((d) => ({ id: String(d), label: `${d}d` }))} onChange={(d) => setDays(Number(d))} />
       </header>
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <input type="checkbox" className="size-4 accent-[#6838ef]" checked={test} onChange={(e) => setTest(e.target.checked)} /> Show test bookings instead
+        <Checkbox checked={test} onCheckedChange={(checked) => setTest(checked)} /> Show test bookings instead
       </label>
       {data === undefined ? (
         <div className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />

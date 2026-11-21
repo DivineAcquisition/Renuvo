@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Checkbox, ChoiceChips, RadioButtonGroup } from "@/components/ui/selection";
 
 type View = NonNullable<FunctionReturnType<typeof api.retentionCare.view>>;
 type Active = Extract<View, { state: "active"; customerName: string }>;
@@ -61,16 +62,7 @@ function AreaPicker({ value, onChange }: { value: string[]; onChange: (next: str
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="text-sm font-medium">Where? Choose any that apply</legend>
-      <div className="flex flex-wrap gap-2">
-        {AREAS.map((area) => {
-          const on = value.includes(area);
-          return (
-            <button key={area} type="button" aria-pressed={on} onClick={() => onChange(on ? value.filter((a) => a !== area) : [...value, area])} className={cn("min-h-10 rounded-full border px-3.5 text-sm font-medium", on ? "border-brand-500 bg-brand-500/15 text-strong" : "border-border bg-card text-foreground")}>
-              {area}
-            </button>
-          );
-        })}
-      </div>
+      <ChoiceChips aria-label="Where" options={AREAS.map((area) => ({ value: area, label: area }))} value={value} onValueChange={onChange} />
     </fieldset>
   );
 }
@@ -119,20 +111,20 @@ function Feedback({ token, view }: { token: string; view: Active }) {
     <>
       {view.purpose === "feedback" ? (
         <Card title="How did it go?">
-          <div role="radiogroup" aria-label="Rating from 1 to 5" className="flex gap-2">
+          <RadioButtonGroup aria-label="Rating from 1 to 5" className="flex gap-2">
             {[1, 2, 3, 4, 5].map((value) => (
               <button key={value} type="button" role="radio" aria-checked={rating === value} onClick={() => setRating(value)} className={cn("flex min-h-12 flex-1 items-center justify-center rounded-xl border text-base font-semibold", rating === value ? "border-brand-500 bg-brand-500/15 text-strong" : "border-border bg-card")}>
                 {value}
               </button>
             ))}
-          </div>
+          </RadioButtonGroup>
           <p className="flex justify-between text-xs text-muted-foreground">
             <span>1 is poor</span>
             <span>5 is excellent</span>
           </p>
           <TextBox label="Anything you would like us to know (optional)" value={comment} onChange={setComment} />
           <label className="flex items-start gap-3 rounded-xl border border-border p-3 text-sm">
-            <input type="checkbox" className="mt-1 size-4" checked={issue} onChange={(event) => setIssue(event.target.checked)} />
+            <Checkbox className="mt-1" checked={issue} onCheckedChange={(checked) => setIssue(checked)} />
             <span>
               <span className="font-medium">Something was not right</span>
               <span className="block text-muted-foreground">Tell us and we will follow it up, whatever rating you gave.</span>
@@ -146,7 +138,7 @@ function Feedback({ token, view }: { token: string; view: Active }) {
           <TextBox label="Describe it in your own words" value={description} onChange={setDescription} placeholder="For example: the shower was not cleaned." />
           {view.allowed.includes("request_different_cleaner") ? (
             <label className="flex items-start gap-3 text-sm">
-              <input type="checkbox" className="mt-1 size-4" checked={cleaner} onChange={(event) => setCleaner(event.target.checked)} />
+              <Checkbox className="mt-1" checked={cleaner} onCheckedChange={(checked) => setCleaner(checked)} />
               <span>I would like a different cleaner next time.</span>
             </label>
           ) : null}

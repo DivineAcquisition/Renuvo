@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { ProgressRing, STAGE_WORDS } from "./shared";
+import { Checkbox } from "@/components/ui/selection";
 
 type Board = NonNullable<ReturnType<typeof useQuery<typeof api.hiringOffers.board>>>;
 type Row = Board["rows"][number];
@@ -226,7 +227,7 @@ function Onboarding({ row }: { row: NonNullable<ReturnType<typeof useQuery<typeo
         {row.requirements.map((item) => (
           <li key={item.key}>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={item.status === "done"} disabled={busy || role === "office"} onChange={(event) => void run(() => record({ companyId, handoffId: row.handoffId as Id<"onboardingHandoffs">, requirement: item.key, done: event.target.checked }))} />
+              <Checkbox checked={item.status === "done"} disabled={busy || role === "office"} onCheckedChange={(checked) => void run(() => record({ companyId, handoffId: row.handoffId as Id<"onboardingHandoffs">, requirement: item.key, done: checked }))} />
               <span className={cn(item.status === "done" ? "text-muted-foreground line-through" : "text-strong")}>{item.label}</span>
             </label>
           </li>

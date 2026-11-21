@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { useCompany } from "@/components/app/company";
 import { Field, messageOf, TextInput } from "@/components/app/form";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, CircleHelp, Globe, Info, PenLine, Plug, Rocket, Sparkles } from "@/components/icons";
+import { CheckboxRow, ChoiceChips, FieldSource, FieldSuggestion, SearchableSelect, SegmentedControl, SelectionCard, SelectionCards, suggestionState, type Option } from "@/components/ui/selection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,43 +85,7 @@ function Message({ title, body, children }: { title: string; body: string; child
 
 // ── Small building blocks ───────────────────────────────────────────────────────────────────────────
 
-function ChoiceCard({ choice, selected, onPress, multi }: { choice: Choice; selected: boolean; onPress: () => void; multi: boolean }) {
-  return (
-    <button
-      type="button"
-      role={multi ? "checkbox" : "radio"}
-      aria-checked={selected}
-      onClick={onPress}
-      className={cn(
-        "flex min-h-14 items-start gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-brand-500 motion-reduce:transition-none",
-        selected ? "border-brand-500 bg-brand-500/5" : "border-border bg-card hover:border-brand-500/40",
-      )}
-    >
-      <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center border", multi ? "rounded-md" : "rounded-full", selected ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-background")} aria-hidden>
-        {selected ? <Check className="size-3.5" /> : null}
-      </span>
-      <span className="min-w-0">
-        <span className="block font-medium text-strong">{choice.label}</span>
-        {choice.hint ? <span className="block text-xs text-muted-foreground">{choice.hint}</span> : null}
-      </span>
-    </button>
-  );
-}
-
-function Chips({ choices, value, onChange, label }: { choices: Choice[]; value: string[]; onChange: (next: string[]) => void; label: string }) {
-  return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-2">
-      {choices.map((choice) => {
-        const on = value.includes(choice.value);
-        return (
-          <button key={choice.value} type="button" aria-pressed={on} onClick={() => onChange(toggle(value, choice.value))} className={cn("min-h-10 rounded-full border px-3.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-brand-500 motion-reduce:transition-none", on ? "border-brand-500 bg-brand-500/8 text-strong" : "border-border bg-card text-foreground hover:border-brand-500/40")}>
-            {choice.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+const asOptions = (choices: Choice[]) => choices.map((choice) => ({ value: choice.value, label: choice.label, description: choice.hint }));
 
 function Why({ children }: { children: React.ReactNode }) {
   return (
@@ -185,6 +150,7 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
   const [error, setError] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const allZones = useMemo(() => zones(), []);
+  const zoneOptions = useMemo(() => zoneChoices(allZones), [allZones]);
 
   const steps = stepsFor(priority ?? undefined, secondary);
   const index = Math.max(0, steps.findIndex((step) => step.id === stepId));
@@ -316,32 +282,25 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
             {step.id === "start" ? (
               <>
                 <StepHeading eyebrow="Your company" title="How would you like to start?" lead="Choose one or more. You can change your mind at any point, and nothing is used until you have seen it." />
-                <div className="grid gap-2.5" role="group" aria-label="Ways to start">
-                  {METHOD_CARDS.map((card) => {
-                    const on = methods.includes(card.id);
-                    return (
-                      <div key={card.id} className={cn("rounded-xl border transition-colors motion-reduce:transition-none", on ? "border-brand-500 bg-brand-500/5" : "border-border bg-card")}>
-                        <button type="button" role="checkbox" aria-checked={on} onClick={() => setMethods(toggle(methods, card.id) as Method[])} className="flex w-full items-start gap-3 rounded-xl px-3.5 py-3 text-left focus-visible:outline-2 focus-visible:outline-brand-500">
-                          <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg", on ? "bg-brand-500 text-white" : "bg-muted text-muted-foreground")} aria-hidden>
-                            <card.icon className="size-5" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block font-medium text-strong">{card.title}</span>
-                            <span className="block text-sm text-muted-foreground">{card.body}</span>
-                          </span>
-                        </button>
-                        {on && card.id === "website" ? (
-                          <div className="px-3.5 pb-3.5">
-                            <Field label="Website address">
-                              <TextInput value={one(facts["company.website"])} onChange={(event) => fact("company.website", event.target.value)} placeholder="yourcompany.com" inputMode="url" autoComplete="url" maxLength={200} />
-                            </Field>
-                          </div>
-                        ) : null}
-                        {on && card.id === "connect" ? <p className="px-3.5 pb-3.5 text-xs text-muted-foreground">You will choose what to bring in after you pick a priority, so we only ask for what that needs.</p> : null}
+                <SelectionCards
+                  type="multiple"
+                  aria-label="Ways to start"
+                  columns={1}
+                  value={methods}
+                  onValueChange={(next) => setMethods(next)}
+                  options={METHOD_CARDS.map((card) => ({ value: card.id, label: card.title, description: card.body, icon: <card.icon className="size-5" /> }))}
+                  extra={(option, on) =>
+                    on && option.value === "website" ? (
+                      <div className="px-3.5 pb-3.5">
+                        <Field label="Website address">
+                          <TextInput value={one(facts["company.website"])} onChange={(event) => fact("company.website", event.target.value)} placeholder="yourcompany.com" inputMode="url" autoComplete="url" maxLength={200} />
+                        </Field>
                       </div>
-                    );
-                  })}
-                </div>
+                    ) : on && option.value === "connect" ? (
+                      <p className="px-3.5 pb-3.5 text-xs text-muted-foreground">You will choose what to bring in after you pick a priority, so we only ask for what that needs.</p>
+                    ) : null
+                  }
+                />
               </>
             ) : null}
 
@@ -358,8 +317,8 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     </Field>
                     <Suggestion found={view.facts["company.location"]} current={facts["company.location"]} onUse={(value) => fact("company.location", value)} />
                   </div>
-                  <Field label="Time zone" hint="Schedules, availability and deadlines are shown on this clock. Type to search.">
-                    <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} list="setup-zones" autoComplete="off" required />
+                  <Field label="Time zone" hint="Schedules, availability and deadlines are shown on this clock. Type a city to search." required>
+                    {zoneOptions.length ? <SearchableSelect value={timezone} onValueChange={(zone) => setTimezone(zone ?? "")} options={zoneOptions} placeholder="Search for a city" clearable={false} /> : <TextInput value={timezone} onChange={(event) => setTimezone(event.target.value)} autoComplete="off" />}
                   </Field>
                   <div className="grid content-start gap-1.5">
                     <Field label="Areas you serve" hint="Cities or neighborhoods, in your own words.">
@@ -367,20 +326,11 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     </Field>
                     <Suggestion found={view.facts["company.areas"]} current={facts["company.areas"]} onUse={(value) => fact("company.areas", value)} />
                   </div>
-                  <datalist id="setup-zones">
-                    {allZones.map((zone) => (
-                      <option key={zone} value={zone} />
-                    ))}
-                  </datalist>
                 </div>
                 <fieldset className="grid gap-2">
                   <legend className="mb-1 text-sm font-medium text-strong">Who do you clean for?</legend>
                   <Suggestion found={view.facts["services.categories"]} current={facts["services.categories"]} onUse={(value) => fact("services.categories", value)} words={(value) => many(value).map((item) => labelOf(CATEGORY_CHOICES, item)).join(", ")} />
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {CATEGORY_CHOICES.map((choice) => (
-                      <ChoiceCard key={choice.value} choice={choice} multi selected={many(facts["services.categories"]).includes(choice.value)} onPress={() => fact("services.categories", toggle(many(facts["services.categories"]), choice.value))} />
-                    ))}
-                  </div>
+                  <SelectionCards type="multiple" aria-label="Who do you clean for?" value={many(facts["services.categories"])} onValueChange={(next) => fact("services.categories", next)} options={asOptions(CATEGORY_CHOICES)} />
                 </fieldset>
                 {(["contact.phone", "contact.email", "company.about", "policies.published"] as const).some((key) => view.facts[key]?.state === "found") ? (
                   <fieldset className="grid gap-2 rounded-xl border border-border p-3">
@@ -389,13 +339,14 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                     {(["contact.phone", "contact.email", "company.about", "policies.published"] as const)
                       .filter((key) => view.facts[key]?.state === "found")
                       .map((key) => (
-                        <label key={key} className="flex items-start gap-2.5 text-sm">
-                          <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-[#6838ef]" checked={useFound.includes(key)} onChange={() => setUseFound(toggle(useFound, key))} />
-                          <span className="min-w-0">
-                            <span className="block text-xs text-muted-foreground">{FOUND_LABELS[key]}</span>
-                            <span className="block break-words text-strong">{one(view.facts[key]?.value)}</span>
-                          </span>
-                        </label>
+                        <CheckboxRow
+                          key={key}
+                          checked={useFound.includes(key)}
+                          onCheckedChange={() => setUseFound(toggle(useFound, key))}
+                          title={<span className="font-normal break-words">{one(view.facts[key]?.value)}</span>}
+                          description={FOUND_LABELS[key]}
+                          aside={<FieldSource source={{ kind: "website" }} />}
+                        />
                       ))}
                   </fieldset>
                 ) : null}
@@ -408,19 +359,21 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
                 <StepHeading eyebrow="Your company" title="Your team and how you run today" lead="Optional. It helps Selestial suggest the right setup for your size." />
                 <fieldset className="grid gap-2">
                   <legend className="mb-1 text-sm font-medium text-strong">How do your cleaners work with you?</legend>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {WORKFORCE_CHOICES.map((choice) => (
-                      <ChoiceCard key={choice.value} choice={choice} multi selected={many(facts["workforce.arrangement"]).includes(choice.value)} onPress={() => fact("workforce.arrangement", toggle(many(facts["workforce.arrangement"]), choice.value))} />
-                    ))}
-                  </div>
+                  <SelectionCards type="multiple" aria-label="How do your cleaners work with you?" value={many(facts["workforce.arrangement"])} onValueChange={(next) => fact("workforce.arrangement", next)} options={asOptions(WORKFORCE_CHOICES)} />
                 </fieldset>
                 <div className="grid gap-2">
-                  <p className="text-sm font-medium text-strong">About how many people clean for you?</p>
-                  <Chips label="People who clean" choices={SCALE_CHOICES} value={one(facts["scale.cleaners"]) ? [one(facts["scale.cleaners"])] : []} onChange={(nextValue) => fact("scale.cleaners", nextValue.find((value) => value !== one(facts["scale.cleaners"])) ?? "")} />
+                  <SegmentedControl label="About how many people clean for you?" value={one(facts["scale.cleaners"])} options={SCALE_CHOICES.map((choice) => ({ id: choice.value, label: choice.label }))} onChange={(value) => fact("scale.cleaners", value)} />
+                  {one(facts["scale.cleaners"]) ? (
+                    <button type="button" onClick={() => fact("scale.cleaners", "")} className="justify-self-start text-xs text-muted-foreground underline-offset-2 hover:text-strong hover:underline focus-visible:outline-2 focus-visible:outline-brand-500">
+                      Clear this answer
+                    </button>
+                  ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <p className="text-sm font-medium text-strong">What do you run the business on today?</p>
-                  <Chips label="Current tools" choices={TOOL_CHOICES} value={many(facts["tools.current"])} onChange={(nextValue) => fact("tools.current", nextValue)} />
+                  <p id="setup-tools-label" className="text-sm font-medium text-strong">
+                    What do you run the business on today?
+                  </p>
+                  <ChoiceChips aria-labelledby="setup-tools-label" options={asOptions(TOOL_CHOICES)} value={many(facts["tools.current"])} onValueChange={(nextValue) => fact("tools.current", nextValue)} />
                   <Field label="Anything else" hint="The name of an app or system you use, if you want to bring records from it later.">
                     <TextInput value={one(facts["tools.other"])} onChange={(event) => fact("tools.other", event.target.value)} maxLength={200} />
                   </Field>
@@ -432,40 +385,23 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
             {step.id === "priority" ? (
               <>
                 <StepHeading eyebrow="Your priority" title="What would you like Selestial to help with first?" lead="Pick one to start with. The next questions follow from it, and you can add the others whenever you like." />
-                <div className="grid gap-2.5 sm:grid-cols-2" role="radiogroup" aria-label="First priority">
-                  {PRIORITY_INFO.map((item) => {
-                    const first = priority === item.id;
-                    const also = secondary.includes(item.id);
-                    return (
-                      <div key={item.id} className={cn("flex flex-col rounded-xl border transition-colors motion-reduce:transition-none", first ? "border-brand-500 bg-brand-500/5" : also ? "border-brand-500/40 bg-card" : "border-border bg-card")}>
-                        <button
-                          type="button"
-                          role="radio"
-                          aria-checked={first}
-                          onClick={() => {
-                            setPriority(item.id);
-                            setSecondary(secondary.filter((value) => value !== item.id));
-                          }}
-                          className="flex flex-1 items-start gap-3 rounded-xl px-3.5 py-3 text-left focus-visible:outline-2 focus-visible:outline-brand-500"
-                        >
-                          <span className={cn("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border", first ? "border-brand-500 bg-brand-500 text-white" : "border-border bg-background")} aria-hidden>
-                            {first ? <Check className="size-3.5" /> : null}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block font-medium text-strong">{item.title}</span>
-                            {item.caveat ? <span className="mt-1 block text-xs text-muted-foreground">{item.caveat}</span> : null}
-                          </span>
-                        </button>
-                        {priority && !first ? (
-                          <label className="flex items-center gap-2 border-t border-border/70 px-3.5 py-2 text-xs text-muted-foreground">
-                            <input type="checkbox" className="size-4 shrink-0 accent-[#6838ef]" checked={also} onChange={() => setSecondary(toggle(secondary, item.id) as Priority[])} />
-                            Also important to me
-                          </label>
-                        ) : null}
+                <SelectionCards
+                  type="single"
+                  aria-label="First priority"
+                  value={priority}
+                  onValueChange={(id) => {
+                    setPriority(id);
+                    setSecondary(secondary.filter((value) => value !== id));
+                  }}
+                  options={PRIORITY_INFO.map((item) => ({ value: item.id, label: item.title, description: item.caveat }))}
+                  extra={(option, first) =>
+                    priority && !first ? (
+                      <div className="border-t border-border/70 px-3.5 py-2">
+                        <CheckboxRow density="compact" checked={secondary.includes(option.value)} onCheckedChange={() => setSecondary(toggle(secondary, option.value) as Priority[])} title={<span className="font-normal text-muted-foreground">Also important to me</span>} />
                       </div>
-                    );
-                  })}
-                </div>
+                    ) : null
+                  }
+                />
                 {info ? (
                   <p className="flex gap-2 rounded-xl border border-brand-500/30 bg-brand-500/8 px-3.5 py-3 text-sm text-strong" role="status">
                     <Sparkles className="mt-0.5 size-4 shrink-0 text-brand-300" aria-hidden />
@@ -478,14 +414,21 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
             {question ? (
               <>
                 <StepHeading eyebrow={info ? info.title : "Your priority"} title={question.title} lead={question.kind === "multi" ? "Choose all that apply." : undefined} />
-                <div className="grid gap-2 sm:grid-cols-2" role={question.kind === "multi" ? "group" : "radiogroup"} aria-label={question.title}>
-                  {question.choices.map((choice) => {
-                    const current = answers[question.id];
-                    const selected = question.kind === "multi" ? many(current).includes(choice.value) : current === choice.value;
-                    return <ChoiceCard key={choice.value} choice={choice} multi={question.kind === "multi"} selected={selected} onPress={() => setAnswers({ ...answers, [question.id]: question.kind === "multi" ? toggle(many(current), choice.value) : choice.value })} />;
-                  })}
-                  <ChoiceCard choice={{ value: UNSURE, label: "I'm not sure", hint: "We will mark it as open and come back to it." }} multi={false} selected={answers[question.id] === UNSURE} onPress={() => setAnswers({ ...answers, [question.id]: UNSURE })} />
-                </div>
+                {question.kind === "multi" ? (
+                  <div className="grid gap-2">
+                    <SelectionCards type="multiple" aria-label={question.title} value={many(answers[question.id])} onValueChange={(next) => setAnswers({ ...answers, [question.id]: next })} options={asOptions(question.choices)} />
+                    {/* "Not sure" replaces the whole answer, so it is its own choice rather than one more tick. */}
+                    <SelectionCard title="I'm not sure" description="We will mark it as open and come back to it." selected={answers[question.id] === UNSURE} onPress={() => setAnswers({ ...answers, [question.id]: UNSURE })} />
+                  </div>
+                ) : (
+                  <SelectionCards
+                    type="single"
+                    aria-label={question.title}
+                    value={typeof answers[question.id] === "string" ? (answers[question.id] as string) : null}
+                    onValueChange={(next) => setAnswers({ ...answers, [question.id]: next })}
+                    options={[...asOptions(question.choices), { value: UNSURE, label: "I'm not sure", description: "We will mark it as open and come back to it." }]}
+                  />
+                )}
                 <details className="group rounded-xl bg-muted/50 px-3 py-2.5 text-sm">
                   <summary className="flex cursor-pointer list-none items-center gap-2 font-medium text-strong">
                     <CircleHelp className="size-4 text-muted-foreground" aria-hidden />
@@ -639,22 +582,34 @@ function Flow({ view, setup, onReload }: { view: View; setup: Setup; onReload: (
 
 const FOUND_LABELS = { "contact.phone": "Phone", "contact.email": "Email", "company.about": "How you describe the company", "policies.published": "A policy, in your website's words" } as const;
 
-/** A value found on the owner's website, offered beside the field. It is used only if they choose it. */
+/**
+ * A value found on the owner's website, offered beside the field. It is used only if they choose it, and
+ * choosing it fills the field the same way typing would: it is saved with the step, like everything else.
+ */
 function Suggestion({ found, current, onUse, words }: { found: View["facts"][string] | undefined; current: Value | undefined; onUse: (value: Value) => void; words?: (value: Value) => string }) {
+  const [dismissed, setDismissed] = useState<string[]>([]);
   const show = (value: Value) => (words ? words(value) : one(value));
   const offer = found?.conflict && found.conflict.source === "website" ? found.conflict.value : found && found.source === "website" && found.state === "found" ? found.value : null;
-  if (!offer || JSON.stringify(offer) === JSON.stringify(current)) return null;
+  if (!offer || !suggestionState({ current: current ?? "", proposed: offer, dismissed }).offer) return null;
   return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-xs text-strong">
-      <Globe className="size-3.5 text-brand-300" aria-hidden />
-      <span className="min-w-0">
-        {found?.conflict ? "Your website says" : "Found on your website"}: <span className="font-medium">{show(offer)}</span>
-      </span>
-      <button type="button" className="font-medium text-brand-300 underline underline-offset-4" onClick={() => onUse(offer)}>
-        Use this
-      </button>
-    </p>
+    <FieldSuggestion
+      value={show(offer)}
+      source={{ kind: "website" }}
+      reason={found?.conflict ? "Your website says something different from what is here now. Your answer stays unless you apply this." : undefined}
+      applyLabel="Use this"
+      onApply={() => onUse(offer)}
+      onDismiss={() => setDismissed([...dismissed, JSON.stringify(offer)])}
+    />
   );
+}
+
+/** Time zones grouped by region, labelled by their main city so people can find theirs by name. */
+function zoneChoices(zones: string[]): Option<string>[] {
+  return zones.map((zone) => {
+    const [region, ...rest] = zone.split("/");
+    const city = rest.length ? rest[rest.length - 1].replace(/_/g, " ") : zone;
+    return { value: zone, label: rest.length ? `${city} (${zone})` : zone, group: rest.length ? region.replace(/_/g, " ") : "Other", keywords: [zone.replace(/_/g, " ")] };
+  });
 }
 
 const AGENT_TONE = { ready_to_work: "success", waiting_for_information: "warning", connection_needed: "info", plan_needed: "info", paused: "outline", not_available: "outline" } as const;

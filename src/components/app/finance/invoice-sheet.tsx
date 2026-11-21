@@ -20,6 +20,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { InvoiceMessages } from "./messages";
 import { CreditDialog, IssueDialog, RecordPaymentDialog, RefundDialog, RequestBalanceDialog, VoidInvoiceDialog, VoidPaymentDialog } from "./actions";
 import { Chip, Notice, StateBadge, eyebrow } from "./kit";
+import { Checkbox } from "@/components/ui/selection";
 
 type Detail = FunctionReturnType<typeof api.finance.invoice>;
 
@@ -526,7 +527,7 @@ function DraftEditor({ detail }: { detail: Detail }) {
                 </div>
                 <div className="flex items-center justify-between gap-2 sm:justify-end">
                   <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <input type="checkbox" checked={line.taxable} onChange={(e) => update(line.id, { taxable: e.target.checked })} className="size-3.5 accent-brand-500" />
+                    <Checkbox checked={line.taxable} onCheckedChange={(checked) => update(line.id, { taxable: checked })} />
                     Taxed
                   </label>
                   <Button size="icon-sm" variant="ghost" aria-label={`Remove ${line.description || "line"}`} onClick={() => (setLines((c) => c.filter((l) => l.id !== line.id)), touch())}>
@@ -573,7 +574,7 @@ function DraftEditor({ detail }: { detail: Detail }) {
 
       <section aria-label="Deposit and note" className="grid gap-3">
         <label className="flex items-start gap-2.5 text-sm text-strong">
-          <input type="checkbox" checked={depositOn} onChange={(e) => (setDepositOn(e.target.checked), touch())} className="mt-0.5 size-4 accent-brand-500" />
+          <Checkbox checked={depositOn} onCheckedChange={(checked) => (setDepositOn(checked), touch())} className="mt-0.5" />
           <span>
             Ask for a deposit first
             <span className="block text-xs text-muted-foreground">The pay link asks for the deposit now; you request the rest after the visit.</span>

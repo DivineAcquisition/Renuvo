@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Markdown } from "@/components/app/chat/markdown";
 import { useCompany } from "@/components/app/company";
-import { messageOf } from "@/components/app/form";
+import { messageOf, SelectInput } from "@/components/app/form";
 import { CheckCircle2, Copy, Download, FileText, Hand, PenLine, Split, TriangleAlert, X } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { diffCounts, diffLines } from "@/lib/app/chat/diff";
@@ -123,7 +123,7 @@ export function DocumentWorkspace({ artifactId, onClose }: { artifactId: string;
         </div>
         <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
           Version
-          <select value={doc.version?.version ?? doc.currentVersion} onChange={(event) => setVersion(Number(event.target.value) === doc.currentVersion ? null : Number(event.target.value))} className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-strong">
+          <SelectInput value={doc.version?.version ?? doc.currentVersion} onChange={(event) => setVersion(Number(event.target.value) === doc.currentVersion ? null : Number(event.target.value))} className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-strong">
             {doc.versions.map((row) => (
               <option key={row.version} value={row.version}>
                 {row.version}
@@ -131,7 +131,7 @@ export function DocumentWorkspace({ artifactId, onClose }: { artifactId: string;
                 {row.note ? ` · ${row.note}` : ""}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
       </div>
 
@@ -189,7 +189,7 @@ export function DocumentWorkspace({ artifactId, onClose }: { artifactId: string;
             <div className="grid gap-2">
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 Compare version {doc.version?.version} with
-                <select value={compareTo ?? ""} onChange={(event) => setCompareTo(Number(event.target.value) || null)} className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-strong">
+                <SelectInput value={compareTo ?? ""} onChange={(event) => setCompareTo(Number(event.target.value) || null)} className="h-8 rounded-lg border border-border bg-card px-2 text-xs text-strong">
                   {doc.versions
                     .filter((row) => row.version !== doc.version?.version)
                     .map((row) => (
@@ -197,7 +197,7 @@ export function DocumentWorkspace({ artifactId, onClose }: { artifactId: string;
                         version {row.version}
                       </option>
                     ))}
-                </select>
+                </SelectInput>
               </label>
               {lines.length ? (
                 <>

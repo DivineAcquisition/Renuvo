@@ -22,6 +22,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { EXPERIENCE_KINDS, KIND_LABELS, type ExperienceKind } from "../../../../convex/lib/booking/definition";
 import { BookingRules } from "./rules";
+import { Checkbox } from "@/components/ui/selection";
 
 const ROOT = "/app/agents/sales/booking-forms";
 const KIND_ICONS: Record<ExperienceKind, React.ReactNode> = {
@@ -213,7 +214,7 @@ function Sessions() {
           <p className="text-sm text-muted-foreground">Each state is kept apart: paid isn&apos;t confirmed, and confirmed isn&apos;t a cleaner accepting.</p>
         </div>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <input type="checkbox" className="size-4 accent-[#6838ef]" checked={showTests} onChange={(e) => setShowTests(e.target.checked)} /> Test bookings
+          <Checkbox checked={showTests} onCheckedChange={(checked) => setShowTests(checked)} /> Test bookings
         </label>
       </header>
       {notice ? <Notice tone="info" title={notice} className="mb-3">{" "}</Notice> : null}

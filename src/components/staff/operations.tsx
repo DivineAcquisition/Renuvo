@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type Overview = FunctionReturnType<typeof api.operations.overview>;
 type Row = Overview["needsStaff"][number];
@@ -247,7 +248,7 @@ function IncidentsView({ area, onOpen }: { area?: Area; onOpen: (id: Id<"inciden
           </SelectInput>
         </Field>
         <label className="flex min-h-10 items-center gap-2 text-sm text-strong">
-          <input type="checkbox" checked={resolved} onChange={(event) => setResolved(event.target.checked)} className="size-4 accent-brand-500" />
+          <Checkbox checked={resolved} onCheckedChange={(checked) => setResolved(checked)} />
           Resolved in the last 30 days
         </label>
       </div>

@@ -16,6 +16,7 @@ import { linkTo } from "@/lib/app/navigation-helpers";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../../convex/_generated/api";
+import { Checkbox } from "@/components/ui/selection";
 
 type Policy = FunctionReturnType<typeof api.dispatchOps.policy>;
 type Settings = FunctionReturnType<typeof api.dispatch.settings>;
@@ -160,7 +161,7 @@ function NumbersForm({ section, policy, settings, canEdit }: { section: Exclude<
       ) : null}
       {section === "coverage" ? (
         <label className="flex items-start gap-2 text-sm text-strong">
-          <input type="checkbox" disabled={!canEdit} checked={toggles.broadcastEnabled} onChange={(event) => setToggles((current) => ({ ...current, broadcastEnabled: event.target.checked }))} className="mt-1 size-4 accent-[var(--color-brand-400)]" />
+          <Checkbox disabled={!canEdit} checked={toggles.broadcastEnabled} onCheckedChange={(checked) => setToggles((current) => ({ ...current, broadcastEnabled: checked }))} className="mt-1" />
           <span>
             Ask several cleaners at once for an open place
             <span className="block text-xs text-muted-foreground">Off: one offer per open place. On: Dispatch may ask up to the number below, only if its permission to broadcast allows it.</span>
@@ -169,7 +170,7 @@ function NumbersForm({ section, policy, settings, canEdit }: { section: Exclude<
       ) : null}
       {section === "day-of" ? (
         <label className="flex items-start gap-2 text-sm text-strong">
-          <input type="checkbox" disabled={!canEdit} checked={toggles.sendBeforePhotoLink} onChange={(event) => setToggles((current) => ({ ...current, sendBeforePhotoLink: event.target.checked }))} className="mt-1 size-4 accent-[var(--color-brand-400)]" />
+          <Checkbox disabled={!canEdit} checked={toggles.sendBeforePhotoLink} onCheckedChange={(checked) => setToggles((current) => ({ ...current, sendBeforePhotoLink: checked }))} className="mt-1" />
           <span>
             Text the photo page at check-in
             <span className="block text-xs text-muted-foreground">A second text with the before-photo page, sent once when the cleaner checks in.</span>

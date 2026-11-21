@@ -8,7 +8,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { messageOf } from "@/components/app/form";
+import { messageOf, SelectInput } from "@/components/app/form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PLATFORM_WORDS, STATE_WORDS, STATES, type Media, type State } from "../../../convex/lib/tutorials/catalog";
+import { SegmentedControl } from "@/components/ui/selection";
 
 type Row = NonNullable<ReturnType<typeof useQuery<typeof api.tutorials.staffList>>>[number];
 
@@ -98,7 +99,7 @@ function TutorialRow({ row }: { row: Row }) {
         </div>
         <label className="grid gap-1 text-xs text-muted-foreground">
           State
-          <select
+          <SelectInput
             value={row.state}
             onChange={(event) => run(setState({ tutorialId: row.id, state: event.target.value as State }))}
             className="h-9 rounded-lg border border-border bg-background px-2 text-sm text-strong"
@@ -108,7 +109,7 @@ function TutorialRow({ row }: { row: Row }) {
                 {STATE_WORDS[state]}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
       </div>
 
@@ -201,13 +202,7 @@ function Metrics() {
           </h2>
           <p className="text-sm text-muted-foreground">Counts only. A finished video is not evidence that anyone exported anything.</p>
         </div>
-        <div className="flex gap-1" role="group" aria-label="Window">
-          {WINDOWS.map((value) => (
-            <button key={value} type="button" aria-pressed={days === value} onClick={() => setDays(value)} className={days === value ? "rounded-lg bg-brand-500/10 px-3 py-1.5 text-sm font-semibold text-brand-700" : "rounded-lg px-3 py-1.5 text-sm text-muted-foreground hover:text-strong"}>
-              {value} days
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Window" hideLabel density="compact" value={String(days)} options={WINDOWS.map((value) => ({ id: String(value), label: `${value} days` }))} onChange={(value) => setDays(Number(value) as (typeof WINDOWS)[number])} />
       </div>
       {!metrics ? (
         <Skeleton className="h-64 rounded-2xl" />

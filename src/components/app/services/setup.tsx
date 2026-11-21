@@ -16,6 +16,7 @@ import type { Costs, Pay } from "../../../../convex/lib/services/profit";
 import type { Context } from "../../../../convex/lib/services/schema";
 import { CATEGORIES, CATEGORY_LABELS } from "../../../../convex/lib/services/spec";
 import { MoneyInput, Notice, NumberInput, SectionTitle, Segmented, Toggle } from "./shared";
+import { Checkbox, ChoiceChips } from "@/components/ui/selection";
 
 const KINDS = [
   { id: "home", label: "Homes" },
@@ -29,7 +30,7 @@ function Unsure({ field, context, setContext }: { field: string; context: Contex
   const on = context.unsure.includes(field);
   return (
     <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-      <input type="checkbox" checked={on} onChange={(e) => setContext({ ...context, unsure: e.target.checked ? [...context.unsure, field] : context.unsure.filter((u) => u !== field) })} />
+      <Checkbox checked={on} onCheckedChange={(checked) => setContext({ ...context, unsure: checked ? [...context.unsure, field] : context.unsure.filter((u) => u !== field) })} />
       I&apos;m not sure
     </label>
   );
@@ -84,25 +85,11 @@ function SetupForm({ profile }: { profile: NonNullable<ReturnType<typeof useQuer
         </div>
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium text-strong">Who you clean for</legend>
-          <div className="flex flex-wrap gap-2">
-            {KINDS.map((k) => (
-              <label key={k.id} className={cn("cursor-pointer rounded-lg border px-3 py-1.5 text-sm has-[:focus-visible]:outline-2", context.customerKinds.includes(k.id) ? "border-brand-500 bg-brand-500/[0.08] text-strong" : "border-border text-muted-foreground")}>
-                <input type="checkbox" className="sr-only" checked={context.customerKinds.includes(k.id)} onChange={(e) => setContext({ ...context, customerKinds: e.target.checked ? [...context.customerKinds, k.id] : context.customerKinds.filter((x) => x !== k.id) })} />
-                {k.label}
-              </label>
-            ))}
-          </div>
+          <ChoiceChips aria-label="Who you clean for" density="compact" options={KINDS.map((k) => ({ value: k.id, label: k.label }))} value={context.customerKinds} onValueChange={(next) => setContext({ ...context, customerKinds: next })} />
         </fieldset>
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium text-strong">Kinds of cleaning</legend>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
-              <label key={c} className={cn("cursor-pointer rounded-lg border px-3 py-1.5 text-sm has-[:focus-visible]:outline-2", context.categories.includes(c) ? "border-brand-500 bg-brand-500/[0.08] text-strong" : "border-border text-muted-foreground")}>
-                <input type="checkbox" className="sr-only" checked={context.categories.includes(c)} onChange={(e) => setContext({ ...context, categories: e.target.checked ? [...context.categories, c] : context.categories.filter((x) => x !== c) })} />
-                {CATEGORY_LABELS[c]}
-              </label>
-            ))}
-          </div>
+          <ChoiceChips aria-label="Kinds of cleaning" density="compact" options={CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABELS[c] }))} value={context.categories} onValueChange={(next) => setContext({ ...context, categories: next })} />
         </fieldset>
         <Field label="What you sell today" hint="In your own words, with prices if you have them.">
           <TextArea rows={2} value={context.currentServices} onChange={(e) => setContext({ ...context, currentServices: e.target.value })} />

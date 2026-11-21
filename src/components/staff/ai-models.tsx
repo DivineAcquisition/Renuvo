@@ -3,13 +3,14 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
-import { FormError, messageOf } from "@/components/app/form";
+import { FormError, messageOf, SelectInput } from "@/components/app/form";
 import { PageHeader, Panel } from "@/components/app/shell";
 import { CheckCircle2, CircleDashed, Lock } from "@/components/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
+import { Switch } from "@/components/ui/selection";
 
 const EVALUATIONS = [
   ["not_evaluated", "Not evaluated"],
@@ -60,20 +61,16 @@ export function AiModels() {
                 {row.maker} · {row.route === "anthropic" ? "direct" : "via OpenRouter"} · <code>{row.model}</code> · {rate(row.rates.inputPerMTok, "/M in")}, {rate(row.rates.outputPerMTok, "/M out")}
                 {` · ${row.cost}`}
               </span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={row.enabled}
-                aria-label={`Offer ${row.label} in chat`}
+              <Switch
+                className="ml-auto"
+                checked={row.enabled}
+                label={`Offer ${row.label} in chat`}
                 disabled={row.key === "claude-sonnet"}
-                onClick={() => {
+                onChange={() => {
                   setError(null);
                   setChatModel({ key: row.key, enabled: !row.enabled }).catch((caught: unknown) => setError(messageOf(caught)));
                 }}
-                className={cn("relative ml-auto inline-flex h-6 w-11 rounded-full border transition-colors disabled:opacity-40", row.enabled ? "border-brand-600 bg-brand-500" : "border-border bg-muted")}
-              >
-                <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white shadow transition-transform", row.enabled ? "translate-x-5.5" : "translate-x-0.5")} />
-              </button>
+              />
             </li>
           ))}
         </ul>
@@ -98,16 +95,14 @@ export function AiModels() {
                   {row.optional ? " · optional" : ""}
                 </span>
                 <span className="ml-auto flex items-center gap-2">
-                  <select aria-label={`Evaluation for ${row.label}`} value={evaluation} disabled={!row.implemented} onChange={(event) => update({ evaluation: event.target.value as Evaluation })} className="h-8 rounded-lg border border-border bg-card px-2 text-xs">
+                  <SelectInput aria-label={`Evaluation for ${row.label}`} value={evaluation} disabled={!row.implemented} onChange={(event) => update({ evaluation: event.target.value as Evaluation })} className="h-8 rounded-lg border border-border bg-card px-2 text-xs">
                     {EVALUATIONS.map(([value, label]) => (
                       <option key={value} value={value}>
                         {label}
                       </option>
                     ))}
-                  </select>
-                  <button type="button" role="switch" aria-checked={enabled} aria-label={`${row.label} on`} disabled={!row.implemented} onClick={() => update({ enabled: !enabled })} className={cn("relative inline-flex h-6 w-11 rounded-full border transition-colors disabled:opacity-40", enabled ? "border-brand-600 bg-brand-500" : "border-border bg-muted")}>
-                    <span className={cn("absolute top-0.5 size-4.5 rounded-full bg-white shadow transition-transform", enabled ? "translate-x-5.5" : "translate-x-0.5")} />
-                  </button>
+                  </SelectInput>
+                  <Switch checked={enabled} label={`${row.label} on`} disabled={!row.implemented} onChange={() => update({ enabled: !enabled })} />
                 </span>
               </div>
               <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">

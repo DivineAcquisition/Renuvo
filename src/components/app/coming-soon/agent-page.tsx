@@ -21,6 +21,7 @@ import type { Capability, ComingSoonAgent } from "@/lib/app/coming-soon";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
+import { Checkbox } from "@/components/ui/selection";
 
 export function ComingSoonAgentPage({ agent }: { agent: ComingSoonAgent }) {
   return (
@@ -178,7 +179,7 @@ function RequestAccess({ agent }: { agent: ComingSoonAgent }) {
                   const on = uses.includes(capability.title);
                   return (
                     <label key={capability.title} className={cn("flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm", on ? "border-brand-500 bg-brand-500/[0.08] text-strong" : "border-border text-muted-foreground hover:text-strong")}>
-                      <input type="checkbox" className="mt-0.5 size-4 accent-brand-600" checked={on} onChange={() => setUses(on ? uses.filter((use) => use !== capability.title) : [...uses, capability.title])} />
+                      <Checkbox className="mt-0.5" checked={on} onCheckedChange={() => setUses(on ? uses.filter((use) => use !== capability.title) : [...uses, capability.title])} />
                       {capability.title}
                     </label>
                   );

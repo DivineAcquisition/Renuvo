@@ -8,14 +8,15 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
 
-import { Field, SelectInput, TextInput } from "@/components/app/form";
+import { Field, TextInput } from "@/components/app/form";
 import { Lock } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { Select, SelectionCards } from "@/components/ui/selection";
 
 import { api } from "../../../../convex/_generated/api";
 import type { BusinessField } from "../../../../convex/lib/texting/schema";
 import { formatPhone, useSetup } from "./context";
-import { ChoiceCard, Note, Section, SourceChip, StepHeading } from "./parts";
+import { Note, Section, SourceChip, StepHeading } from "./parts";
 
 const ENTITY_ORDER = ["PRIVATE_PROFIT", "SOLE_PROPRIETOR", "NON_PROFIT", "PUBLIC_PROFIT"] as const;
 const EXCHANGES = ["NASDAQ", "NYSE", "AMEX", "TSX", "LON"];
@@ -49,11 +50,14 @@ export function BusinessStep() {
       <StepHeading eyebrow="Step 1 of 6" title="Your business" lead="Carriers check these details against official records, so they need to match exactly. Anything Selestial already knew is filled in and marked with where it came from." />
 
       <Section title="What kind of business is this?">
-        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Kind of business">
-          {ENTITY_ORDER.map((key) => (
-            <ChoiceCard key={key} selected={entity === key} onPress={() => choose("entityType", key)} title={view.catalog.entities[key].label} hint={view.catalog.entities[key].hint} disabled={locked} />
-          ))}
-        </div>
+        <SelectionCards
+          type="single"
+          aria-label="Kind of business"
+          value={ENTITY_ORDER.find((key) => key === entity) ?? null}
+          onValueChange={(key) => choose("entityType", key)}
+          options={ENTITY_ORDER.map((key) => ({ value: key, label: view.catalog.entities[key].label, description: view.catalog.entities[key].hint }))}
+          disabled={locked}
+        />
         {sole ? (
           <Note>
             Without an EIN, you register as a sole proprietor under your own name. The carriers text a one-time code to your own mobile to confirm it&apos;s you. You get one number and one registration, with room for about 1,000 texts a day to T-Mobile customers. Promotions aren&apos;t allowed on this kind of registration. If you get an EIN later, you can register again as a company.
@@ -110,14 +114,7 @@ export function BusinessStep() {
               <TextInput {...field("stockSymbol")} maxLength={10} />
             </Field>
             <Field label="Exchange" error={problem("stockExchange")}>
-              <SelectInput value={values.stockExchange ?? ""} onChange={(event) => choose("stockExchange", event.target.value)}>
-                <option value="">Choose…</option>
-                {EXCHANGES.map((code) => (
-                  <option key={code} value={code}>
-                    {code}
-                  </option>
-                ))}
-              </SelectInput>
+              <Select value={values.stockExchange ?? ""} onValueChange={(code) => choose("stockExchange", code ?? "")} options={EXCHANGES.map((code) => ({ value: code, label: code }))} disabled={locked} />
             </Field>
             <Field label="Business contact email" error={problem("contactEmail")}>
               <TextInput {...field("contactEmail")} type="email" />
@@ -127,16 +124,9 @@ export function BusinessStep() {
       ) : null}
 
       <Section title="Kind of work" lead="Carriers don't list cleaning, so choose the closest fit.">
-        <Field label="Industry" error={problem("vertical")}>
-          <SelectInput value={values.vertical ?? ""} onChange={(event) => choose("vertical", event.target.value)}>
-            {view.catalog.verticals.map((row) => (
-              <option key={row.value} value={row.value}>
-                {row.label}
-              </option>
-            ))}
-          </SelectInput>
+        <Field label="Industry" error={problem("vertical")} aside={<SourceChip field="vertical" />}>
+          <Select value={values.vertical ?? ""} onValueChange={(next) => (next ? choose("vertical", next) : undefined)} options={view.catalog.verticals.map((row) => ({ value: row.value, label: row.label }))} placeholder="Choose the closest fit" disabled={locked} />
         </Field>
-        <SourceChip field="vertical" />
       </Section>
 
       <Section title="Business address" lead={sole ? "Where you run the business." : "The address the IRS has for the business."}>

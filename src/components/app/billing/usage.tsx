@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox, SegmentedControl } from "@/components/ui/selection";
 
 type Usage = Extract<NonNullable<ReturnType<typeof useQuery<typeof api.billingUsage.usage>>>, { connected: true }>;
 
@@ -169,19 +170,13 @@ function UsageOverTime({ data, range, onRange }: { data: Usage; range: { from?: 
         <Field label="To">
           <TextInput type="date" value={dayInput(data.range.to - 1)} onChange={(event) => event.target.value && onRange({ ...range, from: range.from ?? data.range.from, to: Date.parse(`${event.target.value}T00:00:00Z`) + 86_400_000 })} />
         </Field>
-        <div role="group" aria-label="Break down by" className="flex rounded-lg border border-border p-0.5 text-sm">
-          {(["agent", "task"] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={group === value} onClick={() => setGroup(value)} className={cn("rounded-md px-3 py-1", group === value ? "bg-muted font-medium text-strong" : "text-muted-foreground")}>
-              {value === "agent" ? "By agent" : "By action"}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="Break down by" hideLabel density="compact" value={group} options={[{ id: "agent", label: "By agent" }, { id: "task", label: "By action" }]} onChange={setGroup} />
         <label className="flex items-center gap-1.5 text-sm text-strong">
-          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} />
+          <Checkbox checked={compare} onCheckedChange={(checked) => setCompare(checked)} />
           Compare with the previous period
         </label>
         <label className="flex items-center gap-1.5 text-sm text-strong">
-          <input type="checkbox" checked={asTable} onChange={(event) => setAsTable(event.target.checked)} />
+          <Checkbox checked={asTable} onCheckedChange={(checked) => setAsTable(checked)} />
           Show as a table
         </label>
       </div>
@@ -325,13 +320,7 @@ function WhereCreditsWent({ data }: { data: Usage }) {
     <Panel
       title="Agents at work"
       action={
-        <div role="group" aria-label="View" className="flex rounded-lg border border-border p-0.5 text-sm">
-          {(["agent", "task"] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={cn("rounded-md px-3 py-1", view === value ? "bg-muted font-medium text-strong" : "text-muted-foreground")}>
-              {value === "agent" ? "By agent" : "By action"}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="View" hideLabel density="compact" value={view} options={[{ id: "agent", label: "By agent" }, { id: "task", label: "By action" }]} onChange={setView} />
       }
     >
       {view === "agent" ? (
@@ -424,13 +413,7 @@ function ActivityAndHistory({ data, filters, onFilters }: { data: Usage; filters
     <Panel
       title="Activity and credit history"
       action={
-        <div role="group" aria-label="View" className="flex rounded-lg border border-border p-0.5 text-sm">
-          {(["activity", "balance"] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)} className={cn("rounded-md px-3 py-1", view === value ? "bg-muted font-medium text-strong" : "text-muted-foreground")}>
-              {value === "activity" ? "Usage activity" : "Balance history"}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="View" hideLabel density="compact" value={view} options={[{ id: "activity", label: "Usage activity" }, { id: "balance", label: "Balance history" }]} onChange={setView} />
       }
     >
       {view === "activity" ? (

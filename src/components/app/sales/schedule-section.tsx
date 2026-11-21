@@ -14,6 +14,8 @@ import type { DraftBody } from "../../../../convex/lib/sales/draft";
 import { CadencePicker } from "./cadence-picker";
 import { Chip, fieldClass, FormSection, minutesToTime } from "./kit";
 import type { DraftData, Working } from "./use-draft";
+import { SelectInput } from "@/components/app/form";
+import { Checkbox } from "@/components/ui/selection";
 
 type Summary = FunctionReturnType<typeof api.sales.price>;
 
@@ -84,24 +86,24 @@ export function ScheduleSection({ n, data, working, setBody, summary, done, comp
         </label>
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium text-strong">Arrival time</span>
-          <select className={fieldClass()} value={schedule.arrivalMinute ?? ""} onChange={(e) => setSchedule({ arrivalMinute: e.target.value === "" ? undefined : Number(e.target.value) })}>
+          <SelectInput className={fieldClass()} value={schedule.arrivalMinute ?? ""} onChange={(e) => setSchedule({ arrivalMinute: e.target.value === "" ? undefined : Number(e.target.value) })}>
             <option value="">Choose a time</option>
             {times.map((m) => (
               <option key={m} value={m}>
                 {minutesToTime(m)}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium text-strong">Arrival window</span>
-          <select className={fieldClass()} value={schedule.windowMinutes ?? 60} onChange={(e) => setSchedule({ windowMinutes: Number(e.target.value) })}>
+          <SelectInput className={fieldClass()} value={schedule.windowMinutes ?? 60} onChange={(e) => setSchedule({ windowMinutes: Number(e.target.value) })}>
             {[0, 30, 60, 120, 180].map((m) => (
               <option key={m} value={m}>
                 {m === 0 ? "Exact time" : `${m < 60 ? `${m} min` : `${m / 60} hour${m === 60 ? "" : "s"}`}`}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
       </div>
       {recurring ? (
@@ -113,7 +115,7 @@ export function ScheduleSection({ n, data, working, setBody, summary, done, comp
         </div>
       ) : null}
       <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" className="mt-0.5 accent-brand-500" checked={schedule.proposed === true} onChange={(e) => setSchedule({ proposed: e.target.checked })} />
+        <Checkbox className="mt-0.5" checked={schedule.proposed === true} onCheckedChange={(checked) => setSchedule({ proposed: checked })} />
         <span>
           <span className="font-medium text-strong">Proposed date only</span>
           <span className="block text-xs text-muted-foreground">The customer hasn’t confirmed this time. The booking request carries it as a proposal; it is not confirmed until a time is held.</span>
@@ -133,14 +135,14 @@ export function ScheduleSection({ n, data, working, setBody, summary, done, comp
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1.5 text-sm">
           <span className="font-medium text-strong">Preferred cleaner</span>
-          <select className={fieldClass()} value={schedule.preferredCleanerId ?? ""} onChange={(e) => setSchedule({ preferredCleanerId: e.target.value || undefined })}>
+          <SelectInput className={fieldClass()} value={schedule.preferredCleanerId ?? ""} onChange={(e) => setSchedule({ preferredCleanerId: e.target.value || undefined })}>
             <option value="">No preference</option>
             {(cleaners ?? []).map((c) => (
               <option key={c._id} value={c._id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </SelectInput>
           <span className="text-xs text-muted-foreground">A preference, not an assignment. Dispatch asks this cleaner first, and the visit is covered only when someone accepts.</span>
         </label>
         <label className="grid gap-1.5 text-sm">

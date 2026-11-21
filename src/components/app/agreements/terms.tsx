@@ -13,6 +13,7 @@ import { Panel } from "@/components/app/shell";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type Section = { group: string; label: string; answered: number; total: number; questions: Q[] };
 
@@ -162,7 +163,7 @@ export function PartiesAndLinks({ detail, editable }: { detail: Detail; editable
                 <TextInput inputMode="numeric" value={String(party.order ?? index + 1)} disabled={!editable} onChange={(event) => edit(index, { order: Number(event.target.value) || undefined })} />
               </Field>
               <label className="flex items-center gap-2 pb-2 text-sm text-strong">
-                <input type="checkbox" checked={party.signer} disabled={!editable} onChange={(event) => edit(index, { signer: event.target.checked })} />
+                <Checkbox checked={party.signer} disabled={!editable} onCheckedChange={(checked) => edit(index, { signer: checked })} />
                 Signs
               </label>
               {editable ? (

@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 function Stepper({ workflow }: { workflow: string }) {
   const at = WORKFLOW_ORDER.indexOf(workflow as never);
@@ -101,7 +102,7 @@ export function ReviewAndSignatures({ detail }: { detail: Detail }) {
               <>
                 {ready.skipped.length ? (
                   <label className="flex items-center gap-1.5 text-xs text-strong">
-                    <input type="checkbox" checked={ack} onChange={(event) => setAck(event.target.checked)} /> Approve with those terms still open
+                    <Checkbox checked={ack} onCheckedChange={(checked) => setAck(checked)} /> Approve with those terms still open
                   </label>
                 ) : null}
                 <Button size="sm" variant="primary" loading={busy} disabled={issues.length > 0 || (ready.skipped.length > 0 && !ack)} onClick={() => void run(async () => { const r = await approve({ companyId, agreementId: id, version: detail.currentVersion, hash: detail.version.hash, acknowledgeSkipped: ack }); setInfo(r.complete ? "Approved." : "First approval recorded. A second, different person must also approve."); })}>
@@ -118,12 +119,11 @@ export function ReviewAndSignatures({ detail }: { detail: Detail }) {
           </div>
           {caps.canApprove && detail.workflow !== "signed" ? (
             <label className="flex flex-wrap items-center gap-2 text-sm text-strong">
-              <input
-                type="checkbox"
+              <Checkbox
+               
                 checked={detail.requiresSecondApproval}
                 disabled={!["draft", "needs_review"].includes(detail.workflow)}
-                onChange={(event) => void run(() => routing({ companyId, agreementId: id, required: event.target.checked }))}
-              />
+                onCheckedChange={(checked) => void run(() => routing({ companyId, agreementId: id, required: checked }))} />
               Require a second person to approve
               <ToneBadge tone="info">Expand</ToneBadge>
               {!detail.entitlements.expand.advanced_approval ? <span className="text-xs text-muted-foreground">Available on the Expand plan.</span> : null}

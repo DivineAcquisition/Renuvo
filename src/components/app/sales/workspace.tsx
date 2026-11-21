@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { FormError, messageOf } from "@/components/app/form";
+import { FormError, messageOf, SelectInput } from "@/components/app/form";
 import { ArrowLeft, ChatIcon, ChevronDown, Eye, Save } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +23,7 @@ import { ScheduleSection } from "./schedule-section";
 import { ServiceSection } from "./service-section";
 import { BookingSummary } from "./summary";
 import { useDraft, type SaveState, type Segment, type Working } from "./use-draft";
+import { SegmentedControl } from "@/components/ui/selection";
 
 const SEGMENTS: { id: Segment; label: string }[] = [
   { id: "residential", label: "Residential" },
@@ -53,16 +54,7 @@ function SaveStatus({ state, onReload }: { state: SaveState; onReload: () => voi
 }
 
 function Segmented<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: readonly { id: T; label: string }[]; onChange: (value: T) => void }) {
-  return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-xl border border-border bg-muted/60 p-1">
-      {options.map((option) => (
-        <label key={option.id} className={cn("cursor-pointer rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors focus-within:outline-2 focus-within:outline-brand-500", value === option.id ? "bg-card font-medium text-strong shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-strong")}>
-          <input type="radio" className="sr-only" name={label} checked={value === option.id} onChange={() => onChange(option.id)} />
-          {option.label}
-        </label>
-      ))}
-    </div>
-  );
+  return <SegmentedControl label={label} hideLabel value={value} options={options} onChange={onChange} density="compact" />;
 }
 
 /** The customer's view of what they will receive, without anything internal. */
@@ -179,13 +171,13 @@ export function SalesWorkspace({ draftId }: { draftId: Id<"salesDrafts"> }) {
           />
           <label className="text-sm">
             <span className="sr-only">Service category</span>
-            <select className="min-h-9 rounded-lg border border-border bg-card px-2.5 text-sm text-strong" value={working.segment} onChange={(e) => update({ segment: e.target.value as Segment })}>
+            <SelectInput className="min-h-9 rounded-lg border border-border bg-card px-2.5 text-sm text-strong" value={working.segment} onChange={(e) => update({ segment: e.target.value as Segment })}>
               {SEGMENTS.filter((s) => working.mode === "booking" || s.id !== "residential").map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.label}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           </label>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <SaveStatus state={state} onReload={reload} />

@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type Duplicate = { customerId: Id<"customers">; name: string; reason: string; status: string };
 
@@ -160,7 +161,7 @@ export function AddClientForm({ onDone, onCreated }: { onDone: () => void; onCre
       <fieldset className="grid gap-3 rounded-xl border border-border p-3">
         <legend className="px-1 text-sm font-medium text-strong">First property</legend>
         <label className="flex items-center gap-2 text-sm text-strong">
-          <input type="checkbox" checked={withProperty} onChange={(event) => setWithProperty(event.target.checked)} className="size-4 accent-brand-500" />
+          <Checkbox checked={withProperty} onCheckedChange={(checked) => setWithProperty(checked)} />
           Add it now
         </label>
         {withProperty ? (

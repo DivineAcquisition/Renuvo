@@ -30,6 +30,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Avatar, ReadinessBadge } from "./bits";
 import { CLEANERS_PATH, profilePath } from "./state";
+import { Checkbox } from "@/components/ui/selection";
 
 type Crew = FunctionReturnType<typeof api.crews.list>[number];
 type ForJob = FunctionReturnType<typeof api.crews.forJob>;
@@ -404,7 +405,7 @@ function CrewBuilder({ jobId, manager }: { jobId: Id<"jobs">; manager: boolean }
               const picked = chosen.includes(person.cleanerId);
               return (
                 <li key={person.cleanerId} className={cn("flex items-start gap-2.5 rounded-xl border px-3 py-2", picked ? "border-brand-500 bg-brand-500/5" : "border-border", !can && "bg-muted/30")}>
-                  <input type="checkbox" aria-label={`Choose ${person.name}`} className="mt-1 size-4 accent-[#6838ef]" disabled={!manager || !can || open === 0} checked={picked} onChange={() => toggle(person)} />
+                  <Checkbox aria-label={`Choose ${person.name}`} className="mt-1" disabled={!manager || !can || open === 0} checked={picked} onCheckedChange={() => toggle(person)} />
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <Link href={profilePath(person.cleanerId)} className="font-medium text-strong underline-offset-4 hover:underline">
@@ -569,7 +570,7 @@ function CrewDialog({ crew, onClose }: { crew?: Crew; onClose: () => void }) {
             {people.map((row) => (
               <li key={row.cleanerId}>
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-muted/50">
-                  <input type="checkbox" className="size-4 accent-[#6838ef]" checked={members.includes(row.cleanerId)} onChange={() => toggle(row.cleanerId)} />
+                  <Checkbox checked={members.includes(row.cleanerId)} onCheckedChange={() => toggle(row.cleanerId)} />
                   <span className="min-w-0 flex-1 truncate font-medium text-strong">{row.name}</span>
                   <ReadinessBadge state={row.readiness.state} />
                 </label>

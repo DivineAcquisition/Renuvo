@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 
 import { useCompany } from "@/components/app/company";
-import { useRun } from "@/components/app/form";
+import { useRun, SelectInput } from "@/components/app/form";
 import { AlertTriangle, ArrowRight, CircleDollarSign, Clock, FileText, HistoryIcon, Info, Plus, ReceiptIcon, Sparkles, Users, Wallet } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,7 +30,7 @@ export function OverviewTab({ nav }: { nav: FinanceNav & { set: (c: Record<strin
       <div className="flex flex-wrap items-center gap-3">
         <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <span className="sr-only sm:not-sr-only">Period</span>
-          <select
+          <SelectInput
             value={nav.period}
             onChange={(event) => nav.set({ period: event.target.value === "this_month" ? null : (event.target.value as PeriodId) })}
             className="h-9 cursor-pointer rounded-lg border border-border bg-card px-2.5 text-sm font-medium text-strong focus-visible:outline-2 focus-visible:outline-brand-500"
@@ -40,7 +40,7 @@ export function OverviewTab({ nav }: { nav: FinanceNav & { set: (c: Record<strin
                 {p.label}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
         <span className="text-xs text-muted-foreground">{data.period.label}</span>
         {data.stripe.testMode ? <span className="ml-auto rounded-md border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning-foreground">Stripe test mode · no real money moves</span> : null}

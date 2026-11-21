@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * Settings → Trust & Compliance. What the company is ready to do, and for each thing it is not, the
@@ -313,7 +314,7 @@ function MessagingForm({ profile }: { profile: Profile }) {
       <fieldset className="grid gap-3 rounded-xl border border-border p-3.5 sm:col-span-2 sm:grid-cols-2">
         <legend className="px-1 text-sm font-medium text-strong">Quiet hours</legend>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
-          <input type="checkbox" checked={form.quiet} onChange={set("quiet")} disabled={!owner} className="size-4 accent-[#6838ef]" />
+          <Checkbox checked={form.quiet} onCheckedChange={(checked) => set("quiet")({ target: { type: "checkbox", checked } } as unknown as React.ChangeEvent<HTMLInputElement>)} disabled={!owner} />
           Hold marketing and recruiting texts during quiet hours
         </label>
         {form.quiet ? (
@@ -325,7 +326,7 @@ function MessagingForm({ profile }: { profile: Profile }) {
               <TextInput type="time" value={form.end} onChange={set("end")} disabled={!owner} />
             </Field>
             <label className="flex items-start gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" checked={form.operational} onChange={set("operational")} disabled={!owner} className="mt-0.5 size-4 accent-[#6838ef]" />
+              <Checkbox checked={form.operational} onCheckedChange={(checked) => set("operational")({ target: { type: "checkbox", checked } } as unknown as React.ChangeEvent<HTMLInputElement>)} disabled={!owner} className="mt-0.5" />
               <span>
                 Hold work texts too
                 <span className="block text-xs text-muted-foreground">Visit changes and offers to cleaners would wait until the morning.</span>
@@ -712,7 +713,7 @@ export function AgreementsPanel() {
                 }}
               >
                 <label className="flex items-start gap-2">
-                  <input type="checkbox" checked={read} onChange={(event) => setRead(event.target.checked)} className="mt-0.5 size-4 accent-[#6838ef]" />
+                  <Checkbox checked={read} onCheckedChange={(checked) => setRead(checked)} className="mt-0.5" />
                   <span className="text-strong">I have read the {status.terms.title} and accept them for {company.name}.</span>
                 </label>
                 <FormError message={error} />

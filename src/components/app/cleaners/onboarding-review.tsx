@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { Profile } from "./profile";
+import { Checkbox } from "@/components/ui/selection";
 
 type Requirement = Profile["requirements"][number];
 
@@ -456,7 +457,7 @@ export function InviteManyDialog({ people, onClose }: { people: { cleanerId: str
             {candidates.map((person) => (
               <li key={person.cleanerId}>
                 <label className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-muted/50">
-                  <input type="checkbox" className="size-4 accent-[#6838ef]" checked={chosen.includes(person.cleanerId)} onChange={(event) => setChosen(event.target.checked ? [...chosen, person.cleanerId] : chosen.filter((id) => id !== person.cleanerId))} />
+                  <Checkbox checked={chosen.includes(person.cleanerId)} onCheckedChange={(checked) => setChosen(checked ? [...chosen, person.cleanerId] : chosen.filter((id) => id !== person.cleanerId))} />
                   <span className="font-medium text-strong">{person.name}</span>
                   <span className="text-xs text-muted-foreground">{person.status === "onboarding" ? "Onboarding" : "Active"}</span>
                 </label>

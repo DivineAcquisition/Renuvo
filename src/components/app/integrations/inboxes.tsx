@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
+import { Checkbox, SegmentedControl } from "@/components/ui/selection";
 
 export type Listing = FunctionReturnType<typeof api.inboxes.list>;
 type Inbox = Listing["inboxes"][number];
@@ -70,7 +71,7 @@ function PurposePicker({ value, onChange, disabled }: { value: Purpose[]; onChan
         const on = value.includes(p.id);
         return (
           <label key={p.id} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors", on ? "border-brand-500/50 bg-brand-500/5" : "border-border hover:bg-muted/50")}>
-            <input type="checkbox" checked={on} onChange={() => onChange(on ? value.filter((v) => v !== p.id) : [...value, p.id])} className="mt-1 size-4 accent-[#6838ef]" />
+            <Checkbox checked={on} onCheckedChange={() => onChange(on ? value.filter((v) => v !== p.id) : [...value, p.id])} className="mt-1" />
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-2 text-sm font-medium text-strong">
                 {p.label}
@@ -118,18 +119,12 @@ function ConnectForm({ onCancel, initial }: { onCancel?: () => void; initial?: {
 
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-medium text-strong">How far back should the first read go?</legend>
-        <div className="flex flex-wrap gap-2">
-          {HISTORY.map((h) => (
-            <button key={h.days} type="button" onClick={() => setHistory(h.days)} aria-pressed={history === h.days} className={cn("rounded-lg border px-3 py-1.5 text-sm", history === h.days ? "border-brand-500 bg-brand-500/10 font-medium text-strong" : "border-border text-muted-foreground hover:bg-muted")}>
-              {h.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl label="How far back should the first read go?" hideLabel value={String(history)} options={HISTORY.map((h) => ({ id: String(h.days), label: h.label }))} onChange={(days) => setHistory(Number(days))} />
         <span className="text-xs text-muted-foreground">Older mail is never read. What the first read finds is listed on the inbox here. Agents still act only as their permissions allow.</span>
       </fieldset>
 
       <label className="flex items-start gap-3 rounded-xl border border-border p-3">
-        <input type="checkbox" checked={canSend} onChange={(e) => setCanSend(e.target.checked)} className="mt-1 size-4 accent-[#6838ef]" />
+        <Checkbox checked={canSend} onCheckedChange={(checked) => setCanSend(checked)} className="mt-1" />
         <span className="min-w-0">
           <span className="block text-sm font-medium text-strong">Let agents send as this address</span>
           <span className="block text-xs text-muted-foreground">Replies go from your own address in the same thread, only for the purposes above and only as each agent&apos;s permissions allow. Off: Selestial only reads, and mail goes from Selestial&apos;s address with your company name.</span>
