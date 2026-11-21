@@ -14,7 +14,9 @@ import { areaWord, minutesWords, scheduleLabel } from "../../../../convex/lib/se
 import { defaultInput, ScheduleCalendar } from "./preview";
 import { AudienceTag, FieldLabel, formatCents, InfoTip, LabeledField, MoneyInput, NumberInput, SectionTitle, Segmented, Stepper, SwitchButton, Toggle } from "./shared";
 import { Checkbox, ChoiceChips } from "@/components/ui/selection";
-import { ListInput, NumberField, zipProblem } from "@/components/ui/fields";
+import { AssistedTextArea, ListInput, NumberField, organizeIntoSteps, type WritingAction, zipProblem } from "@/components/ui/fields";
+
+const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
 
 export type StepProps = { spec: Spec; edit: (change: (spec: Spec) => Spec) => void; disabled: boolean };
 
@@ -46,7 +48,7 @@ export function BasicsStep({ spec, edit, disabled }: StepProps) {
         <TextInput value={spec.name} disabled={disabled} maxLength={80} onChange={(event) => edit((s) => ({ ...s, name: event.target.value }))} placeholder="Standard clean" />
       </Field>
       <Field label="Description for customers">
-        <TextArea value={spec.summary} disabled={disabled} maxLength={1000} onChange={(event) => edit((s) => ({ ...s, summary: event.target.value }))} placeholder="A thorough clean of the kitchen, bathrooms and living areas." />
+        <AssistedTextArea value={spec.summary} disabled={disabled} maxLength={1000} audience={{ label: "Customers see this." }} actions={STEPS} onChange={(text) => edit((s) => ({ ...s, summary: text }))} placeholder="A thorough clean of the kitchen, bathrooms and living areas." />
       </Field>
       <label className="grid grid-cols-1 gap-1.5 text-sm">
         <span className="font-medium text-strong">Kind of cleaning</span>

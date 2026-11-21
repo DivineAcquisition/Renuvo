@@ -19,6 +19,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { Engagement } from "./bits";
 import { profilePath } from "./state";
 import { ChoiceChips } from "@/components/ui/selection";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 const TYPES: { value: Engagement; label: string; help: string }[] = [
   { value: "employee", label: "Employee", help: "On your payroll." },
@@ -133,10 +134,10 @@ export function AddCleanerDialog({ onClose, onAdded }: { onClose: () => void; on
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Mobile phone" hint="Used for offers and reminders once they agree to texts.">
-            <TextInput value={form.phone} onChange={set("phone")} inputMode="tel" autoComplete="off" />
+            <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} autoComplete="off" />
           </Field>
           <Field label="Email">
-            <TextInput type="email" value={form.email} onChange={set("email")} autoComplete="off" />
+            <EmailInput value={form.email} onChange={(text) => set("email")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} autoComplete="off" />
           </Field>
         </div>
 

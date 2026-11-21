@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import { useCompany } from "@/components/app/company";
 import { Field, messageOf } from "@/components/app/form";
-import { CountField, DurationField, NumberField } from "@/components/ui/fields";
+import { CountField, Disclosure, DurationField, NumberField } from "@/components/ui/fields";
 import { Guard } from "@/components/app/settings/guard";
 import { SaveBar, useSavedDraft, useUnsavedWarning } from "@/components/app/settings/save-bar";
 import { Panel } from "@/components/app/shell";
@@ -203,16 +203,12 @@ function DispatchForm({ settings, policy, canEdit }: { settings: Settings; polic
         </div>
       </Panel>
 
-      <details className="group rounded-2xl border border-border bg-card">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500 sm:px-5 [&::-webkit-details-marker]:hidden">
-          Cleaner link access and planning ahead
-          <span className="text-xs font-normal text-muted-foreground group-open:hidden">Less often changed</span>
-        </summary>
-        <div className="grid gap-4 border-t border-border px-4 py-4 sm:grid-cols-2 sm:px-5">
+      <Disclosure title="Cleaner link access and planning ahead" summary="Less often changed">
+        <div className="grid gap-4 sm:grid-cols-2">
           {field("jobAccessGraceHours")}
           {field("lookAheadDays")}
         </div>
-      </details>
+      </Disclosure>
 
       {leaveGuard}
       <SaveBar

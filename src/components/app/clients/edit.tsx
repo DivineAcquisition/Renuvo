@@ -16,6 +16,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import type { ContactRow, PropertyRow } from "./parts";
 import { Checkbox } from "@/components/ui/selection";
 import { useConfirm } from "@/components/ui/fields/confirm";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 type Profile = NonNullable<ReturnType<typeof useQuery<typeof api.clients.profile>>>;
 
@@ -215,10 +216,10 @@ export function ContactForm({ customerId, contact, properties, onDone }: { custo
           <TextInput value={form.title} onChange={set("title")} maxLength={80} />
         </Field>
         <Field label="Email">
-          <TextInput type="email" value={form.email} onChange={set("email")} />
+          <EmailInput value={form.email} onChange={(text) => set("email")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
         <Field label="Phone">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
       </div>
       <fieldset className="grid gap-2 sm:grid-cols-2">

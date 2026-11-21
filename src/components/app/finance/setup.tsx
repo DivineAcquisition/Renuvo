@@ -18,7 +18,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { Notice, Section } from "./kit";
 import { Checkbox } from "@/components/ui/selection";
-import { PercentField } from "@/components/ui/fields";
+import { EmailInput, PercentField } from "@/components/ui/fields";
 
 type Settings = FunctionReturnType<typeof api.finance.settings>;
 
@@ -225,7 +225,7 @@ function Reminders({ data }: { data: Settings }) {
           </span>
         </label>
         <Field label="Replies go to" hint="Leave empty to use your own email. Emails go out under your company's name.">
-          <TextInput type="email" value={replyTo} onChange={(e) => setReplyTo(e.target.value)} placeholder="billing@yourcompany.com" />
+          <EmailInput value={replyTo} onChange={(text) => setReplyTo(text)} placeholder="billing@yourcompany.com" />
         </Field>
         <p className="text-xs text-muted-foreground">
           Email or text, the shared sending rules apply: your sending setup (Settings › Compliance), each customer&apos;s recorded permission, the do-not-contact list and quiet hours.

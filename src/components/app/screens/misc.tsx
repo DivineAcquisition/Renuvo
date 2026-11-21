@@ -17,6 +17,7 @@ import { invitePath } from "@/lib/auth/routes";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { INVITATION_DAYS } from "../../../../convex/lib/invitationTerms";
+import { EmailInput } from "@/components/ui/fields";
 
 export function InsightsScreen() {
   const { companyId, timezone } = useCompany();
@@ -116,7 +117,7 @@ export function Invitations() {
           <TextInput value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required autoComplete="off" />
         </Field>
         <Field label="Email">
-          <TextInput type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} required autoComplete="off" />
+          <EmailInput value={form.email} onChange={(text) => setForm((current) => ({ ...current, email: text }))} required autoComplete="off" />
         </Field>
         <Field label="Role">
           <SelectInput value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as "manager" | "office" }))}>

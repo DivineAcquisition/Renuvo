@@ -28,6 +28,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { StatusBadge } from "./bits";
 import { CLEANERS_PATH, profilePath } from "./state";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 type Row = FunctionReturnType<typeof api.subcontractors.list>[number];
 type Detail = FunctionReturnType<typeof api.subcontractors.get>;
@@ -340,10 +341,10 @@ function CompanyDialog({ detail, onClose }: { detail?: Detail; onClose: () => vo
             <TextInput value={form.title} onChange={set("title")} maxLength={80} placeholder="Owner" />
           </Field>
           <Field label="Mobile (optional)">
-            <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+            <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
           </Field>
           <Field label="Email (optional)">
-            <TextInput type="email" value={form.email} onChange={set("email")} />
+            <EmailInput value={form.email} onChange={(text) => set("email")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
           </Field>
         </div>
         <Field label="Postal codes they cover (optional)" hint="Separate with commas.">

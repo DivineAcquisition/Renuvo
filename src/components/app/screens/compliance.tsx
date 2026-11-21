@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 /**
  * Settings → Trust & Compliance. What the company is ready to do, and for each thing it is not, the
@@ -202,14 +203,14 @@ function IdentityForm({ profile }: { profile: Profile }) {
         <TextInput value={form.repTitle} onChange={set("repTitle")} disabled={!owner} placeholder="Owner, Operations Manager…" />
       </Field>
       <Field label="Their email">
-        <TextInput type="email" value={form.repEmail} onChange={set("repEmail")} disabled={!owner} />
+        <EmailInput value={form.repEmail} onChange={(text) => set("repEmail")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} disabled={!owner} />
       </Field>
       <span className="hidden sm:block" />
       <Field label="Support email" hint="Where people can ask for help. Texts that answer HELP name this or the phone.">
-        <TextInput type="email" value={form.supportEmail} onChange={set("supportEmail")} disabled={!owner} />
+        <EmailInput value={form.supportEmail} onChange={(text) => set("supportEmail")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} disabled={!owner} />
       </Field>
       <Field label="Support phone" hint="International form, for example +15125550100.">
-        <TextInput type="tel" value={form.supportPhone} onChange={set("supportPhone")} disabled={!owner} />
+        <PhoneInput value={form.supportPhone} onChange={(text) => set("supportPhone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} disabled={!owner} />
       </Field>
       <div className="grid gap-2 sm:col-span-2">
         <FormError message={error} />
@@ -309,7 +310,7 @@ function MessagingForm({ profile }: { profile: Profile }) {
         <TextInput type="tel" value={form.smsNumber} onChange={set("smsNumber")} disabled={!owner} placeholder="+15125550100" />
       </Field>
       <Field label="Emails are sent from" className="sm:col-span-2">
-        <TextInput type="email" value={form.emailFromAddress} onChange={set("emailFromAddress")} disabled={!owner} />
+        <EmailInput value={form.emailFromAddress} onChange={(text) => set("emailFromAddress")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} disabled={!owner} />
       </Field>
       <fieldset className="grid gap-3 rounded-xl border border-border p-3.5 sm:col-span-2 sm:grid-cols-2">
         <legend className="px-1 text-sm font-medium text-strong">Quiet hours</legend>

@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
-
 import { CheckCircle2, CircleDashed, Info, TriangleAlert } from "@/components/icons";
+import { Disclosure as SharedDisclosure } from "@/components/ui/fields";
 import { FieldSource, SelectionCard } from "@/components/ui/selection";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -104,13 +103,12 @@ export function PageState({ state }: { state: keyof typeof PAGE_STATE }) {
   return <Badge variant={PAGE_STATE[state].variant}>{PAGE_STATE[state].label}</Badge>;
 }
 
+/** The texting steps' disclosure: the shared one, kept under its old name. */
 export function Disclosure({ summary, children, defaultOpen = false }: { summary: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
   return (
-    <details open={open} onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)} className="group rounded-xl border border-border bg-card">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 py-2.5 text-sm font-medium text-strong focus-visible:outline-2 focus-visible:outline-brand-500 [&::-webkit-details-marker]:hidden">{summary}</summary>
-      <div className="border-t border-border p-3.5">{children}</div>
-    </details>
+    <SharedDisclosure title={summary} defaultOpen={defaultOpen}>
+      {children}
+    </SharedDisclosure>
   );
 }
 

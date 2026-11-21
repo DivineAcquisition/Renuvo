@@ -8,11 +8,17 @@ import { Select } from "@/components/ui/selection/select";
 import type { Option } from "@/components/ui/selection/types";
 import { cn } from "@/lib/utils";
 
-/** The words a refused request carries. Messages meant for a person travel as ConvexError data. */
+/**
+ * The words a refused request carries. Messages meant for a person travel as ConvexError data and are
+ * shown as written. A lost connection says so. Anything else gets the general line, which promises only
+ * what is true: it didn't go through, and what was typed is still on the screen.
+ */
 export function messageOf(error: unknown): string {
   const data = (error as { data?: { message?: unknown } } | null)?.data;
   if (data && typeof data.message === "string") return data.message;
-  return "That did not go through. Please try again.";
+  const text = error instanceof Error ? error.message : "";
+  if (/failed to fetch|network|connection lost|websocket/i.test(text)) return "Selestial couldn't be reached, so this didn't go through. Check your connection. What you entered is still here.";
+  return "That did not go through. What you entered is still here.";
 }
 
 /** Runs one request at a time and keeps what went wrong in words. */

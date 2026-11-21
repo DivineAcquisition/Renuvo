@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { clientKey } from "@/lib/app/finance";
 
 import { api } from "../../../../../convex/_generated/api";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 type Kind = "residential" | "commercial" | "short_term_rental";
 const CONSENT = [
@@ -63,10 +64,10 @@ function InquiryForm({ onDone }: { onDone: (id: string) => void }) {
           <TextInput required value={form.name} onChange={(event) => set("name", event.target.value)} autoComplete="off" />
         </Field>
         <Field label="Phone">
-          <TextInput type="tel" value={form.phone} onChange={(event) => set("phone", event.target.value)} autoComplete="off" />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone", text)} autoComplete="off" />
         </Field>
         <Field label="Email">
-          <TextInput type="email" value={form.email} onChange={(event) => set("email", event.target.value)} autoComplete="off" />
+          <EmailInput value={form.email} onChange={(text) => set("email", text)} autoComplete="off" />
         </Field>
         <Field label="Kind of work">
           <SelectInput value={form.kind} onChange={(event) => set("kind", event.target.value as Kind)}>

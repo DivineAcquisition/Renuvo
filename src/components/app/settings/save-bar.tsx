@@ -79,7 +79,7 @@ export function SaveBar({
           Discard changes
         </Button>
         <span role="status" aria-live="polite" className="text-xs text-muted-foreground">
-          {saving ? "Saving your changes…" : dirty ? "You have unsaved changes." : notice ? (
+          {saving ? "Saving your changes…" : error && dirty ? "Not saved. Your changes are still here." : stale && dirty ? "Newer changes are available." : dirty ? "You have unsaved changes." : notice ? (
             <span className="inline-flex items-center gap-1 text-success">
               <CheckCircle2 aria-hidden className="size-3.5" />
               {notice}

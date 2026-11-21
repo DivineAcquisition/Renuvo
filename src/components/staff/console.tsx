@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
-import { NumberField } from "@/components/ui/fields";
+import { EmailInput, NumberField } from "@/components/ui/fields";
 
 /**
  * Selestial's own staff console: the public request queues, the trust records the public pages are
@@ -969,7 +969,7 @@ export function StaffPeople() {
               <TextInput value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
             </Field>
             <Field label="Email" className="sm:col-span-2">
-              <TextInput type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required />
+              <EmailInput value={form.email} onChange={(text) => setForm({ ...form, email: text })} required />
             </Field>
             <Field label="Role">
               <SelectInput value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as StaffRole })}>

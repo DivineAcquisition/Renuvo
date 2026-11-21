@@ -19,7 +19,9 @@ import type { Spec } from "../../../../convex/lib/services/spec";
 import { visitScope } from "../../../../convex/lib/services/operations";
 import { lowerFirst } from "../../../../convex/lib/services/words";
 import { Checkbox, ChoiceChips } from "@/components/ui/selection";
-import { CountField, DurationField } from "@/components/ui/fields";
+import { AssistedTextArea, CountField, DurationField, EmailInput, PhoneInput, organizeIntoSteps, type WritingAction } from "@/components/ui/fields";
+
+const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
 
 const KINDS = [
   { id: "home", label: "Home" },
@@ -91,10 +93,10 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
           </SelectInput>
         </Field>
         <Field label="Email (optional)">
-          <TextInput type="email" value={form.email} onChange={set("email")} />
+          <EmailInput value={form.email} onChange={(text) => set("email")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
         <Field label="Phone (optional)">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
       </div>
       <AddressField
@@ -179,7 +181,7 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
           </SelectInput>
         </Field>
         <Field label="Phone (optional)">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} />
         </Field>
         <Field label="Skills (optional)" hint="Separate with commas.">
           <TextInput value={form.skills} onChange={set("skills")} />
@@ -428,7 +430,7 @@ export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?
         </div>
       ) : null}
       <Field label="Scope" hint="What the cleaner will be told to do.">
-        <TextArea value={form.scope} onChange={set("scope")} required rows={2} />
+        <AssistedTextArea value={form.scope} onChange={(text) => setForm((current) => ({ ...current, scope: text }))} required rows={3} actions={STEPS} />
       </Field>
       <Field label="Skills needed (optional)" hint="Separate with commas. Only cleaners with these skills can be offered the visit.">
         <TextInput value={form.skills} onChange={set("skills")} />
@@ -458,8 +460,8 @@ export function NewVisitForm({ onDone, initial }: { onDone: () => void; initial?
           <TextInput type="time" value={form.deadlineTime} onChange={set("deadlineTime")} />
         </Field>
       </div>
-      <Field label="Instructions for the crew (optional)" hint="What the crew needs to know that is not the scope. A cleaner sees it only after they accept.">
-        <TextArea value={form.instructions} onChange={set("instructions")} rows={2} maxLength={4000} />
+      <Field label="Instructions for the crew (optional)" hint="What the crew needs to know that is not the scope.">
+        <AssistedTextArea value={form.instructions} onChange={(text) => setForm((current) => ({ ...current, instructions: text }))} rows={3} maxLength={4000} audience={{ label: "Visible to the assigned cleaner after they accept." }} actions={STEPS} />
       </Field>
       <p className="text-xs text-muted-foreground">Times are on the company’s clock ({timezone}). A new visit has no cleaner until one accepts it.</p>
       <FormError message={error} />

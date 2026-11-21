@@ -29,7 +29,9 @@ import { AgentCard, PropertyCard, VisitRow, type PropertyRow } from "./parts";
 import type { Profile } from "./profile";
 import { Checkbox } from "@/components/ui/selection";
 import { useConfirm } from "@/components/ui/fields/confirm";
-import { NumberField } from "@/components/ui/fields";
+import { AssistedTextArea, NumberField, organizeIntoSteps, type WritingAction } from "@/components/ui/fields";
+
+const STEPS: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
 
 type Detail = NonNullable<ReturnType<typeof useQuery<typeof api.clientProperties.detail>>>;
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -453,7 +455,7 @@ function PropertyForm({ profile, property, onDone }: { profile: Profile; propert
       </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Parking and where to go" hint="The crew sees this."><TextArea rows={2} value={form.parking} onChange={set("parking")} maxLength={500} /></Field>
-        <Field label="Notes for the crew" hint="How this property is cleaned."><TextArea rows={2} value={form.crewNotes} onChange={set("crewNotes")} maxLength={2000} /></Field>
+        <Field label="Notes for the crew" hint="How this property is cleaned."><AssistedTextArea rows={3} value={form.crewNotes} onChange={(text) => setForm((current) => ({ ...current, crewNotes: text }))} maxLength={2000} actions={STEPS} /></Field>
         <Field label="What the client asked for" hint="In their words; shared with the client."><TextArea rows={2} value={form.clientNotes} onChange={set("clientNotes")} maxLength={2000} /></Field>
         {profile.canManage ? (
           <Field label="Office notes" hint="Owners and Managers only."><TextArea rows={2} value={form.officeNotes} onChange={set("officeNotes")} maxLength={2000} /></Field>

@@ -18,6 +18,7 @@ import { Consequence, Select, type Option } from "@/components/ui/selection";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 type Policy = { id: string; label: string; kind: "none" | "deposit_percent" | "deposit_fixed" | "full"; percent?: number; cents?: number; balanceTerms: string };
 type Agreement = { id: string; label: string; templateId: Id<"agreementTemplates">; standing: Record<string, string | number | boolean> };
@@ -105,10 +106,10 @@ function RulesForm({ rules, onClose }: { rules: RulesData; onClose: () => void }
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Public phone">
-              <TextInput type="tel" value={state.profile.phone} onChange={(e) => set({ profile: { ...state.profile, phone: e.target.value } })} />
+              <PhoneInput value={state.profile.phone} onChange={(text) => set({ profile: { ...state.profile, phone: text } })} />
             </Field>
             <Field label="Public email">
-              <TextInput type="email" value={state.profile.email} onChange={(e) => set({ profile: { ...state.profile, email: e.target.value } })} />
+              <EmailInput value={state.profile.email} onChange={(text) => set({ profile: { ...state.profile, email: text } })} />
             </Field>
           </div>
           <Field label="Website">

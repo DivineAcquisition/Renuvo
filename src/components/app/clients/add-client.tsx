@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { Checkbox } from "@/components/ui/selection";
+import { EmailInput, PhoneInput } from "@/components/ui/fields";
 
 type Duplicate = { customerId: Id<"customers">; name: string; reason: string; status: string };
 
@@ -152,10 +153,10 @@ export function AddClientForm({ onDone, onCreated }: { onDone: () => void; onCre
           </>
         ) : null}
         <Field label="Email">
-          <TextInput type="email" value={form.email} onChange={set("email")} autoComplete="email" />
+          <EmailInput value={form.email} onChange={(text) => set("email")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} autoComplete="email" />
         </Field>
         <Field label="Phone" hint="An email or a phone is needed.">
-          <TextInput type="tel" value={form.phone} onChange={set("phone")} autoComplete="tel" />
+          <PhoneInput value={form.phone} onChange={(text) => set("phone")({ target: { type: "text", value: text } } as unknown as React.ChangeEvent<HTMLInputElement>)} autoComplete="tel" />
         </Field>
       </div>
       <Matches matches={refused.length ? refused : matches} title={refused.length ? "This looks like a client you already have" : "Already on file?"} />

@@ -32,6 +32,7 @@ import {
 } from "../../../../convex/lib/clients/importing";
 import type { Platform } from "../../../../convex/lib/tutorials/catalog";
 import { Checkbox } from "@/components/ui/selection";
+import { FileDetails } from "@/components/ui/fields";
 
 type Checked = FunctionReturnType<typeof api.clientImports.check>;
 type Result = FunctionReturnType<
@@ -82,6 +83,7 @@ export function ClientImport({
   const [wrongFile, setWrongFile] = useState<Platform | null>(null);
   const [file, setFile] = useState<{
     name: string;
+    size: number;
     header: string[];
     rows: string[][];
     key: string;
@@ -115,6 +117,7 @@ export function ClientImport({
     const [header, ...body] = parsed;
     setFile({
       name: chosen.name,
+      size: chosen.size,
       header,
       rows: body,
       key: `${chosen.name}:${chosen.size}:${chosen.lastModified}`,
@@ -159,29 +162,14 @@ export function ClientImport({
           />
         </label>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
-          <FileSpreadsheet
-            className="size-4 text-muted-foreground"
-            aria-hidden
-          />
-          <span className="font-medium text-strong">{file.name}</span>
-          <span className="text-muted-foreground">
-            · {file.rows.length} rows
-          </span>
-          {detected ? (
-            <Badge variant="info">
-              Looks like a {SOURCE_WORDS[detected]} export
-            </Badge>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="xs"
-            className="ml-auto"
-            onClick={() => setFile(null)}
-          >
-            Choose another file
-          </Button>
-        </div>
+        <FileDetails
+          name={file.name}
+          type="text/csv"
+          size={file.size}
+          state="ready"
+          counts={[{ label: "Rows", value: file.rows.length }, ...(detected ? [{ label: "Looks like", value: `a ${SOURCE_WORDS[detected]} export` }] : [])]}
+          onReplace={() => setFile(null)}
+        />
       )}
 
       {missingName ? (
