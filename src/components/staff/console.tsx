@@ -83,6 +83,7 @@ const NAV = [
   { href: "/staff/setup", label: "Setup funnel" },
   { href: "/staff/tutorials", label: "Tutorials" },
   { href: "/staff/selection", label: "Selection system" },
+  { href: "/staff/fields", label: "Form fields" },
   { href: "/staff/texting", label: "Texting" },
   { href: "/staff/messaging", label: "Messaging money" },
   { href: "/staff/agent-requests", label: "Agent requests" },
