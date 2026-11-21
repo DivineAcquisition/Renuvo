@@ -28,6 +28,7 @@ import { ActionMenu } from "./menu";
 import { AgentCard, PropertyCard, VisitRow, type PropertyRow } from "./parts";
 import type { Profile } from "./profile";
 import { Checkbox } from "@/components/ui/selection";
+import { useConfirm } from "@/components/ui/fields/confirm";
 
 type Detail = NonNullable<ReturnType<typeof useQuery<typeof api.clientProperties.detail>>>;
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -84,6 +85,7 @@ function PropertyDetail({ profile, propertyId }: { profile: Profile; propertyId:
   const [dialog, setDialog] = useState<"edit" | "address" | "book" | null>(null);
   const archive = useMutation(api.clientProperties.archive);
   const { busy, error, run } = useRun();
+  const { ask, element: confirmDialog } = useConfirm();
   const router = useRouter();
   if (detail === undefined) return <Skeleton className="h-96 rounded-2xl" />;
   const p = detail.property;
@@ -92,6 +94,7 @@ function PropertyDetail({ profile, propertyId }: { profile: Profile; propertyId:
   const site = p.kind === "office" || p.kind === "commercial";
   return (
     <div className="grid gap-5">
+      {confirmDialog}
       <Link href={clientPath(profile.id, "properties")} className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-strong">
         <ArrowLeft aria-hidden className="size-4" /> All properties
       </Link>
@@ -125,7 +128,18 @@ function PropertyDetail({ profile, propertyId }: { profile: Profile; propertyId:
             actions={[
               { label: "Edit details", onSelect: () => setDialog("edit") },
               { label: "Change the address", onSelect: () => setDialog("address") },
-              ...(detail.canManage && p.status === "active" ? [{ label: "Archive the property", danger: true, onSelect: () => window.confirm(`Archive ${p.name}? Its history is kept.`) && void run(async () => (await archive({ companyId, propertyId: p.id, expectedRevision: p.revision }), router.push(clientPath(profile.id, "properties")))) }] : []),
+              ...(detail.canManage && p.status === "active" ? [{ label: "Archive the property", danger: true, onSelect: () =>
+                      void ask({
+                        title: `Archive ${p.name}?`,
+                        body: "It is no longer offered for new visits. Its history is kept.",
+                        confirmLabel: "Archive the property",
+                        cancelLabel: "Keep it active",
+                        action: async () => {
+                          await archive({ companyId, propertyId: p.id, expectedRevision: p.revision });
+                          router.push(clientPath(profile.id, "properties"));
+                        },
+                      }),
+                  }] : []),
             ]}
           />
         </div>

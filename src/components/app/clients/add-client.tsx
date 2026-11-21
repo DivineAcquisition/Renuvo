@@ -27,10 +27,11 @@ export const addressInput = (a: AddressValue) => ({ line1: a.line1, ...(a.line2.
 
 /** A street with address search, and the rest of the address. Typing the street again drops a picked map location. */
 export function AddressInputs({ value, onChange, label = "Address", required }: { value: AddressValue; onChange: (next: AddressValue) => void; label?: string; required?: boolean }) {
-  const set = (key: "line2" | "city" | "region" | "postalCode") => (event: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, [key]: event.target.value });
+  // A changed city, state or ZIP no longer matches the map location of the picked address, so it is dropped. A unit never moves the pin.
+  const set = (key: "line2" | "city" | "region" | "postalCode") => (event: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, [key]: event.target.value, ...(key === "line2" ? {} : { place: null }) });
   return (
     <div className="grid gap-3">
-      <AddressField label={label} value={value.line1} required={required} onChange={(line1) => onChange({ ...value, line1, place: null })} onPick={({ placeId, lat, lng, ...picked }) => onChange({ line1: picked.line1, line2: picked.line2 ?? "", city: picked.city, region: picked.region, postalCode: picked.postalCode, place: { placeId, lat, lng } })} />
+      <AddressField label={label} value={value.line1} required={required} onChange={(line1) => onChange({ ...value, line1, place: null })} onPick={({ placeId, lat, lng, ...picked }) => onChange({ line1: picked.line1, line2: picked.line2 || value.line2, city: picked.city, region: picked.region, postalCode: picked.postalCode, place: { placeId, lat, lng } })} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Unit (optional)">
           <TextInput value={value.line2} onChange={set("line2")} autoComplete="address-line2" />

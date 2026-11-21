@@ -20,6 +20,7 @@ import { quote as runQuote } from "../../../../convex/lib/services/engine";
 import { lowerFirst, minutesWords } from "../../../../convex/lib/services/words";
 import { defaultInput } from "./preview";
 import { ChangeBadge, day, Empty, formatCents, Notice, SectionTitle, when } from "./shared";
+import { useConfirm } from "@/components/ui/fields/confirm";
 
 /** Every change: waiting first, then the history. */
 export function ChangesList() {
@@ -86,6 +87,7 @@ export function ChangeReview({ changeId }: { changeId: string }) {
   const withdraw = useMutation(api.services.withdraw);
   const apply = useMutation(api.services.applySuggestion);
   const { busy, error, run } = useRun();
+  const { ask, element: confirmDialog } = useConfirm();
   const [note, setNote] = useState("");
   const [returning, setReturning] = useState(false);
   const now = useNow();
@@ -96,6 +98,7 @@ export function ChangeReview({ changeId }: { changeId: string }) {
   const scheduled = change.effectiveAt !== null && change.effectiveAt > now;
   return (
     <div className="grid grid-cols-1 gap-5">
+      {confirmDialog}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link href={`${SERVICES_ROOT}/changes`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-strong">
@@ -235,8 +238,14 @@ export function ChangeReview({ changeId }: { changeId: string }) {
                         className="mt-2"
                         disabled={busy}
                         onClick={() => {
-                          if (!window.confirm(`${n.suggestion!.label}? This edits the draft, which returns this change to draft for resubmission.`)) return;
-                          void run(async () => apply({ companyId, serviceId: change.service.id, field: n.suggestion!.field as "team.crewSize", value: n.suggestion!.value }));
+                          const suggestion = n.suggestion!;
+                          void ask({
+                            title: `${suggestion.label}?`,
+                            body: "This edits the draft, so this change goes back to draft and needs submitting for review again.",
+                            confirmLabel: suggestion.label,
+                            cancelLabel: "Keep it as it is",
+                            action: () => apply({ companyId, serviceId: change.service.id, field: suggestion.field as "team.crewSize", value: suggestion.value }),
+                          });
                         }}
                       >
                         {n.suggestion.label}
@@ -319,7 +328,7 @@ export function ChangeReview({ changeId }: { changeId: string }) {
               <p className="mt-1 text-sm text-muted-foreground">Waiting for the Owner. Only the Owner approves and publishes price changes.</p>
             ) : null}
             {open && change.canWithdraw ? (
-              <Button variant="ghost" size="sm" className="mt-2" disabled={busy} onClick={() => window.confirm(ownPrice ? "Withdraw this proposal? The property keeps the price it has now." : "Withdraw this change? The draft stays.") && void run(async () => withdraw({ companyId, changeId: change.id }))}>
+              <Button variant="ghost" size="sm" className="mt-2" disabled={busy} onClick={() => void ask({ title: ownPrice ? "Withdraw this proposal?" : "Withdraw this change?", body: ownPrice ? "The property keeps the price it has now." : "The draft stays, so you can change it and submit it again.", confirmLabel: "Withdraw", cancelLabel: "Keep it open", action: () => withdraw({ companyId, changeId: change.id }) })}>
                 Withdraw
               </Button>
             ) : null}

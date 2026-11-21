@@ -53,7 +53,11 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
   // The place picked from address search. Typing in the street field afterwards drops it, so a changed
   // address never keeps the old map location.
   const [place, setPlace] = useState<{ placeId: string; lat?: number; lng?: number } | null>(null);
-  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    // A changed city, state or ZIP no longer matches the picked map location, so it is dropped.
+    if (key === "city" || key === "region" || key === "postalCode") setPlace(null);
+    setForm((current) => ({ ...current, [key]: event.target.value }));
+  };
   return (
     <form
       className="grid gap-3"
@@ -102,7 +106,7 @@ export function NewCustomerForm({ onDone }: { onDone: () => void }) {
         }}
         onPick={({ placeId, lat, lng, ...picked }) => {
           setPlace({ placeId, lat, lng });
-          setForm((current) => ({ ...current, line1: picked.line1, line2: picked.line2 ?? "", city: picked.city, region: picked.region, postalCode: picked.postalCode }));
+          setForm((current) => ({ ...current, line1: picked.line1, line2: picked.line2 || current.line2, city: picked.city, region: picked.region, postalCode: picked.postalCode }));
         }}
       />
       {form.line2 ? (

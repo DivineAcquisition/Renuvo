@@ -4,7 +4,10 @@ import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { Field, FormError, TextArea, TextInput, useRun } from "@/components/app/form";
+import { Field, FormError, TextInput, useRun } from "@/components/app/form";
+import { useSkillSuggestions } from "@/components/app/skill-suggestions";
+import { AssistedTextArea, AvailabilityStatus, CountField, DurationField, ListInput, MoneyField, organizeIntoSteps, ScheduleSummary, TimezoneNote, type WritingAction } from "@/components/ui/fields";
+import { Consequence } from "@/components/ui/selection";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { centsFrom, clock, dayName, localDate, localTime, money, whenLabel, zonedInstant } from "@/lib/app/format";
@@ -12,7 +15,6 @@ import { centsFrom, clock, dayName, localDate, localTime, money, whenLabel, zone
 import { api } from "../../../../convex/_generated/api";
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 
-const list = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 
 /**
  * Moving a visit, in two steps on one form: choose the new time, read what the move does to each
@@ -72,9 +74,12 @@ export function MoveVisitForm({ jobId, startsAt, endsAt, now, onDone }: { jobId:
           <TextInput type="time" value={form.to} onChange={set("to")} required />
         </Field>
       </div>
+      <ScheduleSummary startsAt={nextStart} endsAt={nextEnd} timezone={timezone} label="New time" />
       <p className="text-xs text-muted-foreground">
-        Now: {dayName(startsAt, timezone)}, {clock(startsAt, timezone)} to {clock(endsAt, timezone)}. Times are on the company’s clock ({timezone}).
+        Now: {dayName(startsAt, timezone)}, {clock(startsAt, timezone)} to {clock(endsAt, timezone)}.
       </p>
+      <TimezoneNote timezone={timezone} />
+      {changed ? <AvailabilityStatus timezone={timezone} status={plan === undefined ? { state: "checking" } : plan.problems.length ? { state: "conflict", reasons: plan.problems } : { state: "available" }} /> : null}
 
       {!changed ? (
         <p className="rounded-xl border border-border bg-muted px-3 py-2.5 text-sm text-muted-foreground">Choose a different time to see what moving the visit does.</p>
@@ -141,7 +146,7 @@ function EditFields({ job, held, accepted, onDone }: { job: Doc<"jobs">; held: b
   const [form, setForm] = useState({
     serviceType: job.serviceType,
     scope: job.scope,
-    skills: job.requiredSkills.join(", "),
+    skills: job.requiredSkills,
     price: job.priceCents === undefined ? "" : (job.priceCents / 100).toFixed(2),
     crew: String(job.requiredCrew ?? 1),
     arrival: String(job.arrivalWindowMinutes ?? 0),
@@ -149,7 +154,12 @@ function EditFields({ job, held, accepted, onDone }: { job: Doc<"jobs">; held: b
     deadlineTime: job.hardDeadlineAt ? localTime(job.hardDeadlineAt, timezone) : "",
     instructions: job.instructions ?? "",
   });
-  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const set = (key: Exclude<keyof typeof form, "skills">) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const put = <K extends keyof typeof form>(key: K) => (value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const skillSuggestions = useSkillSuggestions(job.requiredSkills);
+  const crew = Number(form.crew);
+  const deadlineAt = form.deadlineDate && form.deadlineTime ? zonedInstant(form.deadlineDate, form.deadlineTime, timezone) : null;
+  const steps: WritingAction[] = [{ id: "steps", label: "Organize into steps", kind: "template", run: organizeIntoSteps }];
   const locked = held ? "Locked while a cleaner holds an offer or a place: it is what they were told." : undefined;
   return (
     <form
@@ -166,7 +176,7 @@ function EditFields({ job, held, accepted, onDone }: { job: Doc<"jobs">; held: b
             companyId,
             jobId: job._id,
             expectedStartsAt: job.startsAt,
-            ...(held ? {} : { serviceType: form.serviceType, scope: form.scope, requiredSkills: list(form.skills) }),
+            ...(held ? {} : { serviceType: form.serviceType, scope: form.scope, requiredSkills: form.skills }),
             priceCents,
             requiredCrew: Number(form.crew),
             arrivalWindowMinutes: Number(form.arrival || "0"),
@@ -182,21 +192,21 @@ function EditFields({ job, held, accepted, onDone }: { job: Doc<"jobs">; held: b
           <TextInput value={form.serviceType} onChange={set("serviceType")} required maxLength={80} disabled={held} />
         </Field>
         <Field label="Price (optional)" hint="The price of the service. It is not a payment.">
-          <TextInput inputMode="decimal" value={form.price} onChange={set("price")} placeholder="0.00" />
+          <MoneyField value={form.price} onChange={put("price")} placeholder="0.00" />
         </Field>
       </div>
       <Field label="Scope" hint={locked ?? "What the cleaner will be told to do."}>
-        <TextArea value={form.scope} onChange={set("scope")} required rows={2} disabled={held} />
+        <AssistedTextArea value={form.scope} onChange={put("scope")} required rows={3} disabled={held} actions={steps} />
       </Field>
-      <Field label="Skills needed (optional)" hint={locked ?? "Separate with commas."}>
-        <TextInput value={form.skills} onChange={set("skills")} disabled={held} />
+      <Field label="Skills needed (optional)" hint={locked ?? "Dispatch offers this visit only to cleaners with every one of these confirmed skills."}>
+        <ListInput value={form.skills} onChange={put("skills")} suggestions={skillSuggestions} disabled={held} noun="skill" placeholder="Type a skill, or pick one from your services" />
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Cleaners needed" hint={accepted > 0 ? `${accepted} already accepted. It cannot go below that.` : "The visit is staffed only when this many have accepted."}>
-          <TextInput inputMode="numeric" value={form.crew} onChange={set("crew")} required />
+          <CountField value={form.crew} onChange={put("crew")} noun={["cleaner", "cleaners"]} min={Math.max(1, accepted)} max={20} required />
         </Field>
         <Field label="Arrival window, minutes" hint={accepted > 0 ? "A cleaner accepted this arrival time. Move the visit to change it." : "0 means arrive at the start time."}>
-          <TextInput inputMode="numeric" value={form.arrival} onChange={set("arrival")} disabled={accepted > 0} />
+          <DurationField value={form.arrival} onChange={put("arrival")} disabled={accepted > 0} min={0} max={240} step={15} stepper={accepted === 0} />
         </Field>
         <Field label="Must be finished by, day (optional)">
           <TextInput type="date" value={form.deadlineDate} onChange={set("deadlineDate")} />
@@ -205,8 +215,16 @@ function EditFields({ job, held, accepted, onDone }: { job: Doc<"jobs">; held: b
           <TextInput type="time" value={form.deadlineTime} onChange={set("deadlineTime")} />
         </Field>
       </div>
-      <Field label="Instructions for the crew (optional)" hint="A cleaner sees this only after they accept.">
-        <TextArea value={form.instructions} onChange={set("instructions")} rows={2} maxLength={4000} />
+      {Number.isInteger(crew) && crew > accepted ? (
+        <Consequence>
+          {accepted === 0
+            ? `The visit is staffed once ${crew} ${crew === 1 ? "cleaner accepts" : "cleaners accept"}.`
+            : `${crew - accepted} more accepted ${crew - accepted === 1 ? "cleaner is" : "cleaners are"} needed before the visit is staffed.`}
+        </Consequence>
+      ) : null}
+      <ScheduleSummary startsAt={job.startsAt} endsAt={job.endsAt} timezone={timezone} arrivalWindowMinutes={Number(form.arrival) || 0} deadlineAt={deadlineAt} label="Scheduled" />
+      <Field label="Instructions for the crew (optional)">
+        <AssistedTextArea value={form.instructions} onChange={put("instructions")} rows={3} maxLength={4000} audience={{ label: "Visible to the assigned cleaner after they accept." }} actions={steps} />
       </Field>
       <p className="text-xs text-muted-foreground">To change the day or time, use Move the visit: it shows what the move does to everyone on it first.</p>
       <FormError message={error} />

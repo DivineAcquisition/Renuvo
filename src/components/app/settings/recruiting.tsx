@@ -167,7 +167,7 @@ function RecruitingFormView({ saved, timezone, canEdit, companyId }: { saved: Re
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  useUnsavedWarning(dirty);
+  const leaveGuard = useUnsavedWarning(dirty, undefined, "the Recruiter's hiring settings");
   const problems = useMemo(() => (form && canEdit ? recruitingProblems(form) : []), [form, canEdit]);
   if (!form) return null;
   const savedKeys = new Set(saved.onboardingRequirements.map((row) => row.key));
@@ -375,6 +375,7 @@ function RecruitingFormView({ saved, timezone, canEdit, companyId }: { saved: Re
         </div>
       </details>
 
+      {leaveGuard}
       <SaveBar
         canEdit={canEdit}
         dirty={dirty}

@@ -1,9 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { CheckCircle2, TriangleAlert } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/fields/confirm";
 import { cn } from "@/lib/utils";
 
 /**
@@ -90,11 +92,15 @@ export function SaveBar({
 }
 
 /**
- * Asks before unsaved edits are lost: on closing or reloading the tab, and on following a link the
- * edits would not survive. `keeps` says which in-app links are safe (for example, other Settings pages
- * when the draft lives above them). History buttons are left alone.
+ * Asks before unsaved edits are lost. Closing or reloading the tab gets the browser's own warning (the
+ * only one a browser allows there). Following an in-app link opens Selestial's dialog instead, naming
+ * what would be lost; "Leave without saving" continues to the link the person chose. `keeps` says which
+ * in-app links are safe (for example, other Settings pages when the draft lives above them). History
+ * buttons are left alone. Render the returned element once in the form.
  */
-export function useUnsavedWarning(dirty: boolean, keeps: (target: URL) => boolean = () => false) {
+export function useUnsavedWarning(dirty: boolean, keeps: (target: URL) => boolean = () => false, what = "this page") {
+  const router = useRouter();
+  const [leaving, setLeaving] = useState<URL | null>(null);
   useEffect(() => {
     if (!dirty) return;
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -113,10 +119,9 @@ export function useUnsavedWarning(dirty: boolean, keeps: (target: URL) => boolea
       }
       const here = target.origin === window.location.origin && target.pathname === window.location.pathname && target.search === window.location.search;
       if (here || (target.origin === window.location.origin && keeps(target))) return;
-      if (!window.confirm("You have unsaved changes. Leave without saving them?")) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      setLeaving(target);
     };
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", onClick, true);
@@ -125,6 +130,20 @@ export function useUnsavedWarning(dirty: boolean, keeps: (target: URL) => boolea
       document.removeEventListener("click", onClick, true);
     };
   }, [dirty, keeps]);
+  return (
+    <ConfirmDialog
+      open={leaving !== null}
+      options={{ title: "Leave without saving?", body: `Your changes to ${what} have not been saved. If you leave now they are lost.`, confirmLabel: "Leave without saving", cancelLabel: "Keep editing", tone: "danger" }}
+      onCancel={() => setLeaving(null)}
+      onConfirm={() => {
+        const target = leaving;
+        setLeaving(null);
+        if (!target) return;
+        if (target.origin !== window.location.origin) window.location.assign(target.href);
+        else router.push(`${target.pathname}${target.search}${target.hash}`);
+      }}
+    />
+  );
 }
 
 /**

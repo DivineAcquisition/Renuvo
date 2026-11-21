@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { useCompany } from "@/components/app/company";
-import { FormError, useRun, SelectInput } from "@/components/app/form";
+import { Field, FormError, SelectInput, TextInput, useRun } from "@/components/app/form";
+import { Disclosure, FileDetails, MoneyField, NumberField } from "@/components/ui/fields";
 import { ArrowLeft } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { CATEGORIES, CATEGORY_LABELS, type Category } from "../../../../convex/lib/services/spec";
 import { formatCents, Notice, SectionTitle } from "./shared";
+import { useConfirm } from "@/components/ui/fields/confirm";
 
 type Method = "fixed" | "hourly_per_cleaner" | "hourly_per_crew" | "per_area" | "per_unit" | "recurring_package";
 const UNITS: { id: Method; label: string }[] = [
@@ -34,12 +36,14 @@ export function ImportReview({ importId }: { importId: string }) {
   const decide = useMutation(api.servicesImports.decide);
   const discard = useMutation(api.servicesImports.discard);
   const { busy, error, run } = useRun();
+  const { ask, element: confirmDialog } = useConfirm();
   const [category, setCategory] = useState<Category>("residential");
   const [edits, setEdits] = useState<Record<string, { name?: string; price?: string; method?: Method }>>({});
   if (!data) return <Skeleton className="h-96 rounded-2xl" />;
   const pending = data.rows.filter((r) => r.decision === "pending").length;
   return (
     <div className="grid grid-cols-1 gap-5">
+      {confirmDialog}
       <div>
         <Link href={SERVICES_ROOT} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-strong">
           <ArrowLeft aria-hidden className="size-4" /> All services
@@ -48,12 +52,28 @@ export function ImportReview({ importId }: { importId: string }) {
           {data.rows.length} row{data.rows.length === 1 ? "" : "s"} read, {pending} waiting for you. Correct anything unclear, then make each a draft or skip it. Drafts are reviewed before anything goes live.
         </SectionTitle>
       </div>
-      {data.state === "failed" ? <Notice tone="critical" title="This import could not be read">{data.error}</Notice> : null}
+      <FileDetails
+        name={data.name}
+        type={data.kind === "csv" ? "text/csv" : "text/plain"}
+        size={new Blob([data.source]).size}
+        state={data.state === "failed" ? "failed" : data.state === "review" ? "ready" : "processed"}
+        error={data.state === "failed" ? `${data.error ?? "It could not be read."} Nothing was imported.` : null}
+        counts={
+          data.state === "failed"
+            ? []
+            : [
+                { label: "Rows read", value: data.rows.length },
+                { label: "Waiting for you", value: pending },
+                { label: "Drafted", value: data.rows.filter((r) => r.decision === "drafted").length },
+                { label: "Skipped", value: data.rows.filter((r) => r.decision === "skipped").length },
+              ]
+        }
+      />
       {data.state === "discarded" ? <Notice>This import was set aside.</Notice> : null}
       {data.state === "review" ? (
         <label className="grid max-w-xs gap-1.5 text-sm">
           <span className="font-medium text-strong">Kind of cleaning for new drafts</span>
-          <SelectInput className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={category} onChange={(e) => setCategory(e.target.value as Category)}>
+          <SelectInput value={category} onChange={(e) => setCategory(e.target.value as Category)}>
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {CATEGORY_LABELS[c]}
@@ -72,8 +92,8 @@ export function ImportReview({ importId }: { importId: string }) {
             <li key={row.id} className="grid grid-cols-1 gap-3 rounded-2xl border border-border bg-card p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">{row.sourceRef}</p>
-                  <p className="break-words font-mono text-xs text-muted-foreground">“{row.raw}”</p>
+                  <p className="text-sm font-medium text-strong">{edit.name ?? row.name}</p>
+                  <p className="text-xs text-muted-foreground">Read from {row.sourceRef}</p>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {row.flagWords.map((f) => (
@@ -91,17 +111,15 @@ export function ImportReview({ importId }: { importId: string }) {
               {row.decision === "pending" && data.canEdit ? (
                 <>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <label className="grid grid-cols-1 gap-1.5 text-sm">
-                      <span className="font-medium text-strong">Name</span>
-                      <input className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={edit.name ?? row.name} onChange={(e) => set({ name: e.target.value })} />
-                    </label>
-                    <label className="grid grid-cols-1 gap-1.5 text-sm">
-                      <span className="font-medium text-strong">Price</span>
-                      <input className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm tabular-nums" inputMode="decimal" value={price} onChange={(e) => set({ price: e.target.value })} placeholder="Not stated" />
-                    </label>
+                    <Field label="Name">
+                      <TextInput value={edit.name ?? row.name} onChange={(e) => set({ name: e.target.value })} />
+                    </Field>
+                    <Field label="Price" hint={price === "" ? "Not stated in the file. Leave it empty to set it in the builder." : undefined}>
+                      {method === "per_area" ? <NumberField value={price} onChange={(text) => set({ price: text })} precision={5} min={0} prefix="$" suffix="per sq ft" placeholder="Not stated" /> : <MoneyField value={price} onChange={(text) => set({ price: text })} placeholder="Not stated" />}
+                    </Field>
                     <label className="grid grid-cols-1 gap-1.5 text-sm">
                       <span className="font-medium text-strong">Unit {row.unitRaw ? <span className="font-normal text-muted-foreground">(read “{row.unitRaw}”)</span> : null}</span>
-                      <SelectInput className="min-h-10 rounded-lg border border-border bg-card px-3 text-sm" value={method} onChange={(e) => set({ method: e.target.value as Method })}>
+                      <SelectInput value={method} onChange={(e) => set({ method: e.target.value as Method })}>
                         <option value="">Unclear: choose one</option>
                         {UNITS.map((u) => (
                           <option key={u.id} value={u.id}>
@@ -112,6 +130,9 @@ export function ImportReview({ importId }: { importId: string }) {
                     </label>
                   </div>
                   {row.scope ? <p className="text-sm text-muted-foreground">Scope read: {row.scope}</p> : null}
+                  <Disclosure variant="plain" title={<span className="text-xs font-normal text-muted-foreground">Show the line as it was in the file</span>}>
+                    <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 font-mono text-xs break-words whitespace-pre-wrap text-strong">{row.raw}</p>
+                  </Disclosure>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
@@ -154,15 +175,22 @@ export function ImportReview({ importId }: { importId: string }) {
       <FormError message={error} />
       {data.state === "review" && data.canEdit ? (
         <div>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => window.confirm("Set this import aside? Drafts already made stay.") && void run(async () => discard({ companyId, importId: data.id }))}>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() =>
+              void ask({
+                title: "Set the remaining import aside?",
+                body: "Service drafts already created will remain. The remaining rows will not be imported.",
+                confirmLabel: "Set remaining rows aside",
+                cancelLabel: "Continue reviewing",
+                action: () => discard({ companyId, importId: data.id }),
+              })
+            }>
             Set the rest aside
           </Button>
         </div>
       ) : null}
-      <details className="text-sm">
-        <summary className="cursor-pointer text-muted-foreground">The original, as it was given</summary>
-        <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-muted/30 p-3 text-xs text-strong">{data.source}</pre>
-      </details>
+      <Disclosure title="The original, as it was given" summary={`${data.source.split("\n").length.toLocaleString("en-US")} lines, kept for review. Shown as plain text.`}>
+        <pre className="max-h-80 overflow-auto rounded-lg bg-muted/30 p-3 text-xs whitespace-pre-wrap text-strong">{data.source}</pre>
+      </Disclosure>
     </div>
   );
 }
