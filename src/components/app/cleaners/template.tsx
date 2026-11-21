@@ -25,6 +25,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { EFFECT_WORDS, ENGAGEMENT_SHORT, type Engagement } from "./bits";
 import { CLEANERS_PATH } from "./state";
+import { Checkbox } from "@/components/ui/selection";
 
 type Definition = FunctionReturnType<typeof api.requirements.template>["definitions"][number];
 
@@ -236,7 +237,7 @@ function EditDialog({ definition, onClose }: { definition: Definition | null; on
             <div className="flex flex-wrap gap-3">
               {(["employee", "contractor", "subcontractor"] as Engagement[]).map((value) => (
                 <label key={value} className="flex items-center gap-2 text-sm text-strong">
-                  <input type="checkbox" className="size-4 accent-[#6838ef]" checked={form.appliesTo.includes(value)} onChange={(event) => set("appliesTo", event.target.checked ? [...form.appliesTo, value] : form.appliesTo.filter((item) => item !== value))} />
+                  <Checkbox checked={form.appliesTo.includes(value)} onCheckedChange={(checked) => set("appliesTo", checked ? [...form.appliesTo, value] : form.appliesTo.filter((item) => item !== value))} />
                   {ENGAGEMENT_SHORT[value]}s
                 </label>
               ))}
@@ -266,7 +267,7 @@ function EditDialog({ definition, onClose }: { definition: Definition | null; on
             <TextInput value={form.forServices} onChange={(event) => set("forServices", event.target.value)} placeholder="commercial, post-construction" />
           </Field>
           <label className="flex items-center gap-2 text-sm text-strong">
-            <input type="checkbox" className="size-4 accent-[#6838ef]" checked={form.cleanerCompletes} onChange={(event) => set("cleanerCompletes", event.target.checked)} />
+            <Checkbox checked={form.cleanerCompletes} onCheckedChange={(checked) => set("cleanerCompletes", checked)} />
             They do it from their portal (otherwise the office records it)
           </label>
           <FormError message={error} />

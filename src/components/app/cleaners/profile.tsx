@@ -31,6 +31,7 @@ import { ConfirmHoursDialog, ExceptionDialog, RemoveButton, TimeAwayDialog, Week
 import { PerformanceSection } from "./performance";
 import { FollowUpsCard, PortalAccessCard, RequirementActions, SkillClaims } from "./onboarding-review";
 import { profilePath, SECTIONS, type SectionId } from "./state";
+import { Checkbox } from "@/components/ui/selection";
 
 export type Profile = FunctionReturnType<typeof api.cleanerProfile.profile>;
 
@@ -268,13 +269,12 @@ function EvidencePicker({ cleanerId, selected, onChange }: { cleanerId: Id<"clea
         const checked = selected.includes(row.assignmentId);
         return (
           <label key={row.assignmentId} className={cn("flex items-start gap-2 rounded-lg border border-border px-2.5 py-2 text-sm", corrected && "opacity-60")}>
-            <input
-              type="checkbox"
-              className="mt-0.5 size-4 shrink-0 accent-[#6838ef]"
+            <Checkbox
+             
+              className="mt-0.5 shrink-0"
               disabled={corrected}
               checked={checked}
-              onChange={() => onChange(checked ? selected.filter((id) => id !== row.assignmentId) : [...selected, row.assignmentId])}
-            />
+              onCheckedChange={() => onChange(checked ? selected.filter((id) => id !== row.assignmentId) : [...selected, row.assignmentId])} />
             <span className="min-w-0">
               <span className="block text-strong">{row.label}</span>
               <span className="block text-xs text-muted-foreground">

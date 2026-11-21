@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { codeOf, problemOf, type AuthProblem } from "@/lib/auth/errors";
 import { meets, policyFrom, requirements, type PasswordPolicy } from "@/lib/auth/password";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * Some changes need the password again, even when signed in. The sign-in service decides when; this
@@ -165,7 +166,7 @@ function ChangePassword() {
         />
         <PasswordField label="Confirm new password" name="confirm-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" required error={mismatch ? "The two passwords are not the same." : null} />
         <label className="flex items-start gap-2 text-sm text-strong">
-          <input type="checkbox" checked={others} onChange={(event) => setOthers(event.target.checked)} className="mt-0.5 size-4 accent-[#6838ef]" />
+          <Checkbox checked={others} onCheckedChange={(checked) => setOthers(checked)} className="mt-0.5" />
           Sign out every other session when the password changes
         </label>
         {problem && !problem.field ? <Notice tone="error">{problem.message}</Notice> : null}

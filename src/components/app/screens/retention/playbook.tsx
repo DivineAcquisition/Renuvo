@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../../convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { NotConnected } from "./shared";
+import { Checkbox } from "@/components/ui/selection";
 
 type Settings = FunctionReturnType<typeof api.retentionAgent.settings>;
 
@@ -58,11 +59,11 @@ function Rules({ data }: { data: Settings }) {
         <TextInput type="url" placeholder="https://" disabled={!edit} value={review} onChange={(event) => setReview(event.target.value)} />
       </Field>
       <label className="flex items-start gap-2 text-sm text-foreground">
-        <input type="checkbox" className="mt-1" disabled={!edit} checked={first} onChange={(event) => setFirst(event.target.checked)} />
+        <Checkbox className="mt-1" disabled={!edit} checked={first} onCheckedChange={(checked) => setFirst(checked)} />
         <span>Ask for feedback after a customer&rsquo;s first completed and reviewed service. Later visits are asked only when a person chooses to.</span>
       </label>
       <label className="flex items-start gap-2 text-sm text-foreground">
-        <input type="checkbox" className="mt-1" disabled={!edit} checked={inbox} onChange={(event) => setInbox(event.target.checked)} />
+        <Checkbox className="mt-1" disabled={!edit} checked={inbox} onCheckedChange={(checked) => setInbox(checked)} />
         <span>
           Read customers&rsquo; email replies in the inbox connected for Care &amp; Retention.
           <span className="mt-0.5 block text-xs text-muted-foreground">
@@ -91,7 +92,7 @@ function Rules({ data }: { data: Settings }) {
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {data.changes.map((change) => (
             <label key={change.id} className="flex items-center gap-2 text-sm text-foreground">
-              <input type="checkbox" disabled={!edit || change.id === "end_service"} checked={offered.includes(change.id) || change.id === "end_service"} onChange={(event) => setOffered((list) => (event.target.checked ? [...list, change.id] : list.filter((id) => id !== change.id)))} />
+              <Checkbox disabled={!edit || change.id === "end_service"} checked={offered.includes(change.id) || change.id === "end_service"} onCheckedChange={(checked) => setOffered((list) => (checked ? [...list, change.id] : list.filter((id) => id !== change.id)))} />
               {change.words}
             </label>
           ))}

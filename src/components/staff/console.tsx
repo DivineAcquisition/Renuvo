@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * Selestial's own staff console: the public request queues, the trust records the public pages are
@@ -543,7 +544,7 @@ function OperatorSettings({ settings, canEdit }: { settings: Settings; canEdit: 
       </Field>
       {verifiedKey ? (
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input type="checkbox" checked={form.verified[verifiedKey]} disabled={!canEdit} onChange={(event) => (setSaved(false), setForm({ ...form, verified: { ...form.verified, [verifiedKey]: event.target.checked } }))} className="size-3.5 accent-[#6838ef]" />
+          <Checkbox checked={form.verified[verifiedKey]} disabled={!canEdit} onCheckedChange={(checked) => (setSaved(false), setForm({ ...form, verified: { ...form.verified, [verifiedKey]: checked } }))} />
           Verified, show it in public
         </label>
       ) : null}

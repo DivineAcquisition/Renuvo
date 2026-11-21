@@ -31,6 +31,7 @@ function phone(value: string | null) {
 }
 
 import type { Profile } from "./profile";
+import { Checkbox } from "@/components/ui/selection";
 
 type Thread = NonNullable<ReturnType<typeof useQuery<typeof api.clientConversations.thread>>>;
 type Item = Thread["items"][number];
@@ -426,7 +427,7 @@ function MessageForm({ profile, composer }: { profile: Profile; composer: Compos
         </Field>
         <div className="grid content-start gap-2">
           <label className="mt-7 flex items-center gap-2 text-sm text-strong">
-            <input type="checkbox" className="size-4 accent-brand-500" checked={later} onChange={(event) => setLater(event.target.checked)} />
+            <Checkbox checked={later} onCheckedChange={(checked) => setLater(checked)} />
             Schedule as a follow-up
           </label>
           {later ? (

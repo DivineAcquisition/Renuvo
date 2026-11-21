@@ -22,6 +22,7 @@ import { Faqs } from "./step-service";
 import { TrustRow } from "./step-start";
 import { moneyExact } from "./theme";
 import { SelectInput } from "@/components/app/form";
+import { Checkbox } from "@/components/ui/selection";
 
 // ── Details and agreement ────────────────────────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ function Agreement() {
             <SignaturePad onChange={setDrawn} />
           </div>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 h-4 w-4 accent-[var(--bk-brand)]" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+            <Checkbox className="mt-1" checked={agreed} onCheckedChange={(checked) => setAgreed(checked)} />
             <span>I have read and agree to the {agreement.title}.</span>
           </label>
           {error ? <Notice tone="bad" title={error} /> : null}

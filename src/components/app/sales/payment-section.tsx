@@ -11,6 +11,7 @@ import type { PaymentPolicy } from "../../../../convex/lib/sales/schema";
 import { ChoiceCard, fieldClass, FormSection } from "./kit";
 import type { Working } from "./use-draft";
 import { SelectInput } from "@/components/app/form";
+import { Checkbox } from "@/components/ui/selection";
 
 type Summary = FunctionReturnType<typeof api.sales.price>;
 
@@ -69,7 +70,7 @@ export function PaymentSection({ n, working, setBody, summary, done }: { n: numb
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-medium text-strong">Service agreement</legend>
         <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" className="mt-0.5 accent-brand-500" checked={agreement.required === true} onChange={(e) => setBody((b) => ({ ...b, agreement: { ...b.agreement, required: e.target.checked, docType: b.agreement?.docType ?? types[recurring ? 1 : 0]?.id ?? types[0]?.id } }))} />
+          <Checkbox className="mt-0.5" checked={agreement.required === true} onCheckedChange={(checked) => setBody((b) => ({ ...b, agreement: { ...b.agreement, required: checked, docType: b.agreement?.docType ?? types[recurring ? 1 : 0]?.id ?? types[0]?.id } }))} />
           <span>
             <span className="font-medium text-strong">The customer signs an agreement before service</span>
             <span className="block text-xs text-muted-foreground">Sent as a secure link. Saying the terms were discussed on the phone doesn’t count as a signature.</span>

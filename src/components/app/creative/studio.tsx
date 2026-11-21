@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type Asset = { assetId: string; kind: "image" | "video" | "logo"; origin: "original" | "composed" | "generated"; realWork: boolean; label: string; contentType: string; url: string | null; marketingPermission: { at: number; note: string } | null; generation: { model: string; provider: string; prompt: string; provenance: string; jobId: string } | null; sources: string[]; selectedFor: string[]; createdAt: number };
 
@@ -518,7 +519,7 @@ function Generator({ assets, allowance }: { assets: Asset[]; allowance: { images
                     </SelectInput>
                   </label>
                   <label className="flex items-center gap-2 self-end pb-2 text-xs font-medium text-strong">
-                    <input type="checkbox" checked={fast} onChange={(event) => setFast(event.target.checked)} className="size-4 accent-[#6838ef]" /> Fast variants
+                    <Checkbox checked={fast} onCheckedChange={(checked) => setFast(checked)} /> Fast variants
                   </label>
                 </>
               ) : null}

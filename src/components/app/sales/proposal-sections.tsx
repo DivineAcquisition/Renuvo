@@ -23,6 +23,7 @@ import { CustomerSection } from "./customer-section";
 import { Chip, fieldClass, FormSection, ReadyLine, SummaryRow } from "./kit";
 import { servicesFor } from "./service-section";
 import type { DraftData, Working } from "./use-draft";
+import { Checkbox } from "@/components/ui/selection";
 
 type Summary = FunctionReturnType<typeof api.sales.price>;
 type Preview = FunctionReturnType<typeof api.proposals.preview>;
@@ -240,7 +241,7 @@ export function ProposalWorkspace({ data, working, update, setBody, summary, flu
                 {spec && site.serviceKey ? <JobInputs spec={spec} input={site.input ?? {}} onInput={(input) => setSite(site.key, { input })} compact fromBooking /> : null}
                 {str ? (
                   <label className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" className="mt-0.5 accent-brand-500" checked={site.perTurnover !== false} onChange={(e) => setSite(site.key, { perTurnover: e.target.checked })} />
+                    <Checkbox className="mt-0.5" checked={site.perTurnover !== false} onCheckedChange={(checked) => setSite(site.key, { perTurnover: checked })} />
                     <span>
                       <span className="font-medium text-strong">Standing rate per turnover</span>
                       <span className="block text-xs text-muted-foreground">Turnovers are booked from real stays. Uncheck only if the host wants a fixed recurring schedule.</span>
@@ -375,7 +376,7 @@ export function ProposalWorkspace({ data, working, update, setBody, summary, flu
           </label>
           {proposal.sites.length > 1 ? (
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-0.5 accent-brand-500" checked={proposal.terms.startTogether === true} onChange={(e) => setProposal((p) => ({ ...p, terms: { ...p.terms, startTogether: e.target.checked } }))} />
+              <Checkbox className="mt-0.5" checked={proposal.terms.startTogether === true} onCheckedChange={(checked) => setProposal((p) => ({ ...p, terms: { ...p.terms, startTogether: checked } }))} />
               <span className="font-medium text-strong">All sites start together</span>
             </label>
           ) : null}

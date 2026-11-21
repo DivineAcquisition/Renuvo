@@ -20,6 +20,7 @@ import { cleanerTextWording } from "../../../convex/lib/texting/wording";
 import { ContactPortal } from "./contact-portal";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "./shell";
 import { fmt, useMinute, zoned } from "./time";
+import { Checkbox } from "@/components/ui/selection";
 
 type View = Extract<FunctionReturnType<typeof api.portal.view>, { state: "active"; jobs: unknown }>;
 type Step = View["steps"][number];
@@ -264,7 +265,7 @@ function Hours({ view, token }: { view: View; token: string }) {
           return (
             <div key={day} className="flex items-center gap-2">
               <label className="flex w-20 items-center gap-2 text-sm font-medium">
-                <input type="checkbox" className="size-5 accent-[#6838ef]" checked={Boolean(window)} onChange={(event) => setWeekState({ ...week, [day]: event.target.checked ? { startMinute: 8 * 60, endMinute: 17 * 60 } : null })} />
+                <Checkbox checked={Boolean(window)} onCheckedChange={(checked) => setWeekState({ ...week, [day]: checked ? { startMinute: 8 * 60, endMinute: 17 * 60 } : null })} />
                 {DAYS[day]}
               </label>
               {window ? (
@@ -415,7 +416,7 @@ function StepCard({ step, view, token, onTab }: { step: Step; view: View; token:
             <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="h-11 rounded-lg border border-border bg-background px-3 text-base" />
           </label>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" checked={texts} onChange={(event) => setTexts(event.target.checked)} className="mt-0.5 size-5 accent-[#6838ef]" />
+            <Checkbox checked={texts} onCheckedChange={(checked) => setTexts(checked)} className="mt-0.5" />
             <span>{cleanerTextWording(view.company)}</span>
           </label>
           <Problem message={problem} />

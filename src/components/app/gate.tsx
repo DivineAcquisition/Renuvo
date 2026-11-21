@@ -35,6 +35,7 @@ import { AUTH, withNext } from "@/lib/auth/routes";
 import { api } from "../../../convex/_generated/api";
 import { currentVersion } from "../../../convex/lib/trust/documents";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 const STORED = "selestial.company";
 const SETUP_PATH = SETUP_PAGES[0].path;
@@ -140,7 +141,7 @@ function Onboarding() {
         <TextField label="Company name" name="organization" value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} autoComplete="organization" autoFocus={!hasInvitations} />
         <TextField label="Time zone" name="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} required autoComplete="off" hint="The IANA name of your zone, such as America/Chicago. Schedules, availability and deadlines are shown on this clock." />
         <label className="flex items-start gap-2.5 text-sm text-[#3d3654]">
-          <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} required className="mt-0.5 size-4 shrink-0 accent-[#6838ef]" />
+          <Checkbox checked={agreed} onCheckedChange={(checked) => setAgreed(checked)} required className="mt-0.5 shrink-0" />
           <span>
             I accept the{" "}
             <a href="/terms" target="_blank" rel="noreferrer" className="font-medium text-[#5126c7] underline underline-offset-2">

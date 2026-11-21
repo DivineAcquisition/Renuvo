@@ -29,6 +29,7 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 import { STEP_LABELS, type Definition, type StepId } from "../../../../convex/lib/booking/definition";
 import { signBookingAgreement } from "../../../app/b/actions";
 import { Inspector, type BuilderData } from "./inspector";
+import { Checkbox } from "@/components/ui/selection";
 
 const ROOT = "/app/agents/sales/booking-forms";
 const STATUS_WORDS: Record<string, { label: string; variant: "success" | "outline" | "warning" | "info" }> = {
@@ -522,7 +523,7 @@ function Results({ experienceId }: { experienceId: Id<"bookingExperiences"> }) {
         </span>
       </header>
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <input type="checkbox" className="size-4 accent-[#6838ef]" checked={test} onChange={(e) => setTest(e.target.checked)} /> Show test bookings instead
+        <Checkbox checked={test} onCheckedChange={(checked) => setTest(checked)} /> Show test bookings instead
       </label>
       {data === undefined ? (
         <div className="h-48 animate-pulse rounded-xl bg-muted motion-reduce:animate-none" />

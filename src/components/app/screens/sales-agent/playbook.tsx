@@ -24,6 +24,7 @@ import { centsFrom } from "@/lib/app/format";
 
 import { api } from "../../../../../convex/_generated/api";
 import { ReadinessPanel } from "./shared";
+import { Checkbox } from "@/components/ui/selection";
 
 type Playbook = FunctionReturnType<typeof api.salesInquiries.playbook>;
 type Settings = Playbook["settings"];
@@ -155,20 +156,20 @@ function Editor({ playbook, justSaved, onSaved }: { playbook: Playbook; justSave
           <div className="grid gap-1.5 sm:grid-cols-3">
             {KINDS.map((kind) => (
               <label key={kind.id} className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm text-strong">
-                <input type="checkbox" disabled={!can} checked={settings.eligibility.kinds.includes(kind.id)} onChange={(event) => patch("eligibility", { ...settings.eligibility, kinds: event.target.checked ? [...settings.eligibility.kinds, kind.id] : settings.eligibility.kinds.filter((value) => value !== kind.id) })} className="size-4 accent-[var(--color-brand-500)]" />
+                <Checkbox disabled={!can} checked={settings.eligibility.kinds.includes(kind.id)} onCheckedChange={(checked) => patch("eligibility", { ...settings.eligibility, kinds: checked ? [...settings.eligibility.kinds, kind.id] : settings.eligibility.kinds.filter((value) => value !== kind.id) })} />
                 {kind.label}
               </label>
             ))}
           </div>
           <label className="flex items-start gap-2 text-sm text-strong">
-            <input type="checkbox" disabled={!can} checked={settings.eligibility.textInquiries} onChange={(event) => patch("eligibility", { ...settings.eligibility, textInquiries: event.target.checked })} className="mt-0.5 size-4 accent-[var(--color-brand-500)]" />
+            <Checkbox disabled={!can} checked={settings.eligibility.textInquiries} onCheckedChange={(checked) => patch("eligibility", { ...settings.eligibility, textInquiries: checked })} className="mt-0.5" />
             <span>
               Treat a first text from an unknown number as an inquiry
               <span className="block text-xs text-muted-foreground">Texts from existing customers and from cleaners are never treated as sales inquiries.</span>
             </span>
           </label>
           <label className="flex items-start gap-2 text-sm text-strong">
-            <input type="checkbox" disabled={!can} checked={settings.eligibility.commercialNeedsWalkthrough} onChange={(event) => patch("eligibility", { ...settings.eligibility, commercialNeedsWalkthrough: event.target.checked })} className="mt-0.5 size-4 accent-[var(--color-brand-500)]" />
+            <Checkbox disabled={!can} checked={settings.eligibility.commercialNeedsWalkthrough} onCheckedChange={(checked) => patch("eligibility", { ...settings.eligibility, commercialNeedsWalkthrough: checked })} className="mt-0.5" />
             <span>
               Commercial work is quoted after a walkthrough
               <span className="block text-xs text-muted-foreground">Sales gathers the details and hands it to you to arrange the visit, instead of pricing it from answers.</span>
@@ -247,7 +248,7 @@ function Editor({ playbook, justSaved, onSaved }: { playbook: Playbook; justSave
       <Panel title="6 · What a booking needs">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex items-start gap-2 text-sm text-strong sm:col-span-2">
-            <input type="checkbox" disabled={!can} checked={settings.booking.agreementRequired} onChange={(event) => patch("booking", { ...settings.booking, agreementRequired: event.target.checked })} className="mt-0.5 size-4 accent-[var(--color-brand-500)]" />
+            <Checkbox disabled={!can} checked={settings.booking.agreementRequired} onCheckedChange={(checked) => patch("booking", { ...settings.booking, agreementRequired: checked })} className="mt-0.5" />
             <span>
               A signed service agreement before the first visit
               <span className="block text-xs text-muted-foreground">Sales waits for an agreement that is signed and in force under Agreements. It does not write or send one.</span>

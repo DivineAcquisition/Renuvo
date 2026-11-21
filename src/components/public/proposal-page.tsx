@@ -7,6 +7,7 @@ import { Action, Card, Loading, Notice, Problem, problemWords } from "@/componen
 
 import { api } from "../../../convex/_generated/api";
 import { ProposalDocument, type ProposalDoc } from "./proposal-document";
+import { Checkbox } from "@/components/ui/selection";
 
 type Mode = null | "accept" | "changes" | "decline";
 
@@ -114,11 +115,11 @@ export function ProposalPage({ token }: { token: string }) {
               {mode === "accept" ? (
                 <>
                   <label className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" className="mt-1 size-4" checked={form.authorized} onChange={(e) => setForm({ ...form, authorized: e.target.checked, other: e.target.checked ? false : form.other })} />
+                    <Checkbox className="mt-1" checked={form.authorized} onCheckedChange={(checked) => setForm({ ...form, authorized: checked, other: checked ? false : form.other })} />
                     <span>I&apos;m authorized to accept this proposal for {view.content.client.name}.</span>
                   </label>
                   <label className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" className="mt-1 size-4" checked={form.other} onChange={(e) => setForm({ ...form, other: e.target.checked, authorized: e.target.checked ? false : form.authorized })} />
+                    <Checkbox className="mt-1" checked={form.other} onCheckedChange={(checked) => setForm({ ...form, other: checked, authorized: checked ? false : form.authorized })} />
                     <span>Someone else signs our contracts. They&apos;ll get the agreement to sign; the agreement stays with {view.content.client.name}.</span>
                   </label>
                   {form.other ? (

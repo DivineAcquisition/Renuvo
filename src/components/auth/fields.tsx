@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { AlertTriangle, Check, CircleCheckIcon, Eye, EyeOffIcon, Loader } from "@/components/icons";
 import type { Requirement } from "@/lib/auth/password";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/selection";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "id">;
 
@@ -128,16 +129,15 @@ export function ConsentField({ checked, onChange, disabled }: { checked: boolean
   const link = "rounded font-medium text-[#5126c7] underline underline-offset-4 hover:text-[#3f1ca3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]";
   return (
     <div className="flex items-start gap-2.5 rounded-xl border border-[#e4e0f5] bg-[#f8f6ff] px-3.5 py-3">
-      <input
+      <Checkbox
         id={id}
-        type="checkbox"
+       
         name="legal-accepted"
         checked={checked}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
+        onCheckedChange={(checked) => onChange(checked)}
         required
-        className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-[#b9c0cf] accent-[#6838ef] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]"
-      />
+        className="mt-0.5 shrink-0 border-[#b9c0cf] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]" />
       <label htmlFor={id} className="cursor-pointer text-sm leading-relaxed text-[#475467]">
         I agree to Selestial&rsquo;s{" "}
         <a href="/terms" target="_blank" rel="noopener" className={link}>

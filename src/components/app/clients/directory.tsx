@@ -29,6 +29,7 @@ import { CategoryChips, ClientMark, day, EmptyState, RelationshipBadge, Staffing
 import { ClientQuickView } from "./quick-view";
 import { ActionMenu } from "./menu";
 import { rememberScroll, takeScroll, useDirectoryState, viewOf, type DirectoryState } from "./state";
+import { Checkbox } from "@/components/ui/selection";
 
 type Overview = FunctionReturnType<typeof api.clients.overview>;
 type Row = FunctionReturnType<typeof api.clients.directory>["page"][number];
@@ -377,7 +378,7 @@ function DirectoryTable({ state, view, canManage, owners, onQuickView, onBook, o
           <tr>
             {canManage ? (
               <th scope="col" className="w-10 py-2 pl-4">
-                <input type="checkbox" aria-label="Select every client shown" checked={rows.length > 0 && rows.every((r) => selected.has(r.customerId))} onChange={(event) => setSelected(event.target.checked ? new Set(rows.map((r) => r.customerId)) : new Set())} className="size-4 accent-brand-500" />
+                <Checkbox aria-label="Select every client shown" checked={rows.length > 0 && rows.every((r) => selected.has(r.customerId))} onCheckedChange={(checked) => setSelected(checked ? new Set(rows.map((r) => r.customerId)) : new Set())} />
               </th>
             ) : null}
             <th scope="col" className={cn("py-2 font-medium", canManage ? "pl-2" : "pl-4")}>
@@ -411,7 +412,7 @@ function DirectoryTable({ state, view, canManage, owners, onQuickView, onBook, o
             <tr key={row.customerId} className="group align-top transition-colors hover:bg-muted/30">
               {canManage ? (
                 <td className="py-3 pl-4">
-                  <input type="checkbox" aria-label={`Select ${row.name}`} checked={selected.has(row.customerId)} onChange={() => toggle(row.customerId)} className="mt-1 size-4 accent-brand-500" />
+                  <Checkbox aria-label={`Select ${row.name}`} checked={selected.has(row.customerId)} onCheckedChange={() => toggle(row.customerId)} className="mt-1" />
                 </td>
               ) : null}
               <td className={cn("py-3", canManage ? "pl-2" : "pl-4")}>
@@ -470,7 +471,7 @@ function DirectoryTable({ state, view, canManage, owners, onQuickView, onBook, o
       <ul className="divide-y divide-border md:hidden" aria-label="Clients in this view">
         {rows.map((row) => (
           <li key={row.customerId} className="flex items-start gap-3 px-4 py-3">
-            {canManage ? <input type="checkbox" aria-label={`Select ${row.name}`} checked={selected.has(row.customerId)} onChange={() => toggle(row.customerId)} className="mt-2.5 size-4 accent-brand-500" /> : null}
+            {canManage ? <Checkbox aria-label={`Select ${row.name}`} checked={selected.has(row.customerId)} onCheckedChange={() => toggle(row.customerId)} className="mt-2.5" /> : null}
             <button type="button" onClick={() => onQuickView(row.customerId)} className="flex min-w-0 flex-1 items-start gap-3 text-left focus-visible:outline-2 focus-visible:outline-brand-500/50">
               <ClientMark name={row.name} type={row.type} size="sm" />
               <span className="grid min-w-0 flex-1 gap-0.5">

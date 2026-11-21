@@ -8,6 +8,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { Action, Card, Loading, Notice, Page, Problem, problemWords, Row } from "@/components/cleaner/shell";
 import { Check } from "@/components/icons";
 import { SelectInput } from "@/components/app/form";
+import { Checkbox } from "@/components/ui/selection";
 
 type Answer = string | number | boolean | string[];
 type Answers = Record<string, Answer>;
@@ -42,7 +43,7 @@ function FieldInput({ field, value, onChange }: { field: Field; value: Answer | 
     if (field.key === "smsConsent") {
       return (
         <label className="flex items-start gap-3 text-sm">
-          <input type="checkbox" data-testid={id} className="mt-1 size-5 shrink-0" checked={value === true} onChange={(event) => onChange(event.target.checked)} />
+          <Checkbox data-testid={id} className="mt-1 shrink-0" checked={value === true} onCheckedChange={(checked) => onChange(checked)} />
           <span>{field.label}</span>
         </label>
       );
@@ -274,7 +275,7 @@ export function ApplyPage({ token }: { token: string }) {
             </Notice>
           ) : null}
           <label className="flex items-start gap-3 rounded-2xl border border-border bg-card p-4 text-sm">
-            <input type="checkbox" data-testid="attest" className="mt-1 size-5 shrink-0" checked={attested} onChange={(event) => setAttested(event.target.checked)} />
+            <Checkbox data-testid="attest" className="mt-1 shrink-0" checked={attested} onCheckedChange={(checked) => setAttested(checked)} />
             <span>{form.attestation}</span>
           </label>
         </>

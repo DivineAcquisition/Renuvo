@@ -18,6 +18,7 @@ import { quote as runQuote, type PropertyExtra, type QuoteInput } from "../../..
 import type { Spec } from "../../../../convex/lib/services/spec";
 import { visitScope } from "../../../../convex/lib/services/operations";
 import { lowerFirst } from "../../../../convex/lib/services/words";
+import { Checkbox } from "@/components/ui/selection";
 
 const KINDS = [
   { id: "home", label: "Home" },
@@ -211,7 +212,7 @@ export function NewCleanerForm({ onDone }: { onDone: () => void }) {
         </Field>
       </div>
       <label className="flex items-start gap-2 text-sm text-strong">
-        <input type="checkbox" checked={ready} onChange={(event) => setReady(event.target.checked)} className="mt-1 size-4 accent-[var(--color-brand-400)]" />
+        <Checkbox checked={ready} onCheckedChange={(checked) => setReady(checked)} className="mt-1" />
         <span>
           Ready for work now
           <span className="block text-xs text-muted-foreground">Only a cleaner a person marked ready is offered visits.</span>

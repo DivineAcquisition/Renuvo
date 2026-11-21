@@ -14,6 +14,7 @@ import { addOnWord, areaWord, minutesWords, scheduleLabel } from "../../../../co
 import { formatCents, InfoTip, NumberInput, Segmented, Stepper } from "./shared";
 import { AnimatedMoney, MarginMeter, PriceChange, SPLIT_COLORS, SplitBar, type SplitPart } from "./visuals";
 import { SelectInput } from "@/components/app/form";
+import { Checkbox } from "@/components/ui/selection";
 
 /** Sensible first inputs for a spec: the middle of its range, with every required question answered plainly. */
 export function defaultInput(spec: Spec): QuoteInput {
@@ -166,7 +167,7 @@ export function JobInputs({ spec, input, onInput, compact, fromBooking }: { spec
 function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <label className="inline-flex items-center gap-2 text-sm text-strong">
-      <input type="checkbox" className="size-4 accent-[var(--color-brand-500)]" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <Checkbox checked={checked} onCheckedChange={(checked) => onChange(checked)} />
       {label}
     </label>
   );

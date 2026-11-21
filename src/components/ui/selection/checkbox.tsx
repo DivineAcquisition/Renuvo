@@ -24,6 +24,7 @@ export type CheckboxProps = {
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
+  "data-testid"?: string;
 };
 
 /**

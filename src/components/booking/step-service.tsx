@@ -16,6 +16,7 @@ import { copyOf, sectionOn, useBooking, type SessionView } from "./context";
 import { BottomBar, Editable, Notice, Pill, StepHeading } from "./parts";
 import { TrustRow } from "./step-start";
 import { money, moneyExact } from "./theme";
+import { Checkbox } from "@/components/ui/selection";
 
 type Offer = SessionView["offers"][number];
 
@@ -137,7 +138,7 @@ function Choices({ offer }: { offer: Offer }) {
               return (
                 <div key={x.id} className={cn("flex items-center justify-between rounded-lg border px-3 py-2.5", n > 0 ? "border-[var(--bk-brand)] bg-[rgb(var(--bk-brand-rgb)/0.05)]" : "border-[color:var(--bk-hairline)]")}>
                   <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left">
-                    <input type="checkbox" className="h-4 w-4 accent-[var(--bk-brand)]" checked={n > 0} disabled={x.included} onChange={(e) => setQty(x.id, e.target.checked ? 1 : 0)} />
+                    <Checkbox checked={n > 0} disabled={x.included} onCheckedChange={(checked) => setQty(x.id, checked ? 1 : 0)} />
                     <span className="truncate text-sm font-medium">{x.label}</span>
                     <span className="shrink-0 rounded-full border border-[color:var(--bk-hairline)] px-2 py-0.5 text-[10px]">{x.included ? "Included" : `+${money(x.priceCents)}${x.per === "item" ? ` per ${x.itemWord ?? "item"}` : x.per === "hour" ? " per hour" : ""}`}</span>
                   </label>

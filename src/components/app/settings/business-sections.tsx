@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { addPostalCodes, clockLabel, hoursSummary, minuteToTime, type HoursWindow, timeToMinute, WEEKDAYS } from "@/lib/app/settings-draft";
 import { filterTimeZones, timeZoneLabel, timeZoneOptions } from "@/lib/app/timezones";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/selection";
 
 /** Save and discard for the business draft. */
 export function SaveBar() {
@@ -271,16 +272,14 @@ function BookingHours() {
             return (
               <li key={weekday} className="grid gap-2 px-3 py-2.5 sm:grid-cols-[9rem_1fr] sm:items-start">
                 <label className="flex min-h-9 items-center gap-2 text-sm font-medium text-strong">
-                  <input
-                    type="checkbox"
+                  <Checkbox
+                   
                     checked={open}
-                    onChange={(event) =>
-                      edit((current) => ({
+                    onCheckedChange={(checked) => edit((current) => ({
                         ...current,
-                        hours: event.target.checked ? [...current.hours, { weekday, ...DEFAULT_DAY }] : current.hours.filter((w) => w.weekday !== weekday),
+                        hours: checked ? [...current.hours, { weekday, ...DEFAULT_DAY }] : current.hours.filter((w) => w.weekday !== weekday),
                       }))
-                    }
-                  />
+                    } />
                   {WEEKDAYS[weekday]}
                 </label>
                 {open ? (

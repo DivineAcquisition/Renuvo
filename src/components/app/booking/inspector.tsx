@@ -35,6 +35,7 @@ import {
   type StepId,
 } from "../../../../convex/lib/booking/definition";
 import { contrast } from "@/components/booking/theme";
+import { Checkbox } from "@/components/ui/selection";
 
 export type BuilderData = {
   kind: ExperienceKind;
@@ -391,7 +392,7 @@ function ListPanel({ def, change, kind }: Props & { kind: "trust" | "faqs" | "ne
               })} />
               <div className="flex items-center justify-between gap-2">
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="size-4 accent-[#6838ef]" checked={t.confirmed} onChange={(e) => change((d) => void (d.content.trust[i].confirmed = e.target.checked))} />
+                  <Checkbox checked={t.confirmed} onCheckedChange={(checked) => change((d) => void (d.content.trust[i].confirmed = checked))} />
                   This is true for our company
                 </label>
                 <span className="flex items-center">

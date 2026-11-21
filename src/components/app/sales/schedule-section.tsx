@@ -15,6 +15,7 @@ import { CadencePicker } from "./cadence-picker";
 import { Chip, fieldClass, FormSection, minutesToTime } from "./kit";
 import type { DraftData, Working } from "./use-draft";
 import { SelectInput } from "@/components/app/form";
+import { Checkbox } from "@/components/ui/selection";
 
 type Summary = FunctionReturnType<typeof api.sales.price>;
 
@@ -114,7 +115,7 @@ export function ScheduleSection({ n, data, working, setBody, summary, done, comp
         </div>
       ) : null}
       <label className="flex items-start gap-2 text-sm">
-        <input type="checkbox" className="mt-0.5 accent-brand-500" checked={schedule.proposed === true} onChange={(e) => setSchedule({ proposed: e.target.checked })} />
+        <Checkbox className="mt-0.5" checked={schedule.proposed === true} onCheckedChange={(checked) => setSchedule({ proposed: checked })} />
         <span>
           <span className="font-medium text-strong">Proposed date only</span>
           <span className="block text-xs text-muted-foreground">The customer hasn’t confirmed this time. The booking request carries it as a proposal; it is not confirmed until a time is held.</span>

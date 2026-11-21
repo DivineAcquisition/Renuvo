@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type Usage = Extract<NonNullable<ReturnType<typeof useQuery<typeof api.billingUsage.usage>>>, { connected: true }>;
 
@@ -177,11 +178,11 @@ function UsageOverTime({ data, range, onRange }: { data: Usage; range: { from?: 
           ))}
         </div>
         <label className="flex items-center gap-1.5 text-sm text-strong">
-          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} />
+          <Checkbox checked={compare} onCheckedChange={(checked) => setCompare(checked)} />
           Compare with the previous period
         </label>
         <label className="flex items-center gap-1.5 text-sm text-strong">
-          <input type="checkbox" checked={asTable} onChange={(event) => setAsTable(event.target.checked)} />
+          <Checkbox checked={asTable} onCheckedChange={(checked) => setAsTable(checked)} />
           Show as a table
         </label>
       </div>

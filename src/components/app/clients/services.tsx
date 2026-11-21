@@ -32,6 +32,7 @@ import { VisitRow } from "./parts";
 import { SalesPlans, SalesWork, useClientSales } from "./sales";
 import type { Profile } from "./profile";
 import { ImportedRecords } from "@/components/app/setup/migration";
+import { Checkbox } from "@/components/ui/selection";
 
 type Plan = NonNullable<ReturnType<typeof useQuery<typeof api.servicePlans.forClient>>>["plans"][number];
 
@@ -390,7 +391,7 @@ function PlanForm({ profile, onDone }: { profile: Profile; onDone: () => void })
         ) : null;
       })()}
       <label className="flex items-center gap-2 text-sm text-strong">
-        <input type="checkbox" checked={form.start} onChange={(event) => setForm((c) => ({ ...c, start: event.target.checked }))} className="size-4 accent-brand-500" />
+        <Checkbox checked={form.start} onCheckedChange={(checked) => setForm((c) => ({ ...c, start: checked }))} />
         Start now{form.kind === "recurring" ? ": book the visits for the next four weeks" : ""}
       </label>
       <FormError message={error} />

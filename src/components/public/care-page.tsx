@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type View = NonNullable<FunctionReturnType<typeof api.retentionCare.view>>;
 type Active = Extract<View, { state: "active"; customerName: string }>;
@@ -132,7 +133,7 @@ function Feedback({ token, view }: { token: string; view: Active }) {
           </p>
           <TextBox label="Anything you would like us to know (optional)" value={comment} onChange={setComment} />
           <label className="flex items-start gap-3 rounded-xl border border-border p-3 text-sm">
-            <input type="checkbox" className="mt-1 size-4" checked={issue} onChange={(event) => setIssue(event.target.checked)} />
+            <Checkbox className="mt-1" checked={issue} onCheckedChange={(checked) => setIssue(checked)} />
             <span>
               <span className="font-medium">Something was not right</span>
               <span className="block text-muted-foreground">Tell us and we will follow it up, whatever rating you gave.</span>
@@ -146,7 +147,7 @@ function Feedback({ token, view }: { token: string; view: Active }) {
           <TextBox label="Describe it in your own words" value={description} onChange={setDescription} placeholder="For example: the shower was not cleaned." />
           {view.allowed.includes("request_different_cleaner") ? (
             <label className="flex items-start gap-3 text-sm">
-              <input type="checkbox" className="mt-1 size-4" checked={cleaner} onChange={(event) => setCleaner(event.target.checked)} />
+              <Checkbox className="mt-1" checked={cleaner} onCheckedChange={(checked) => setCleaner(checked)} />
               <span>I would like a different cleaner next time.</span>
             </label>
           ) : null}

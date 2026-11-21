@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { BATHROOM_CHOICES, BEDROOM_CHOICES, bathroomFacts, bookingEmailDisclosure } from "../../../convex/lib/booking/logic";
 import { copyOf, sectionOn, useBooking } from "./context";
 import { BottomBar, Editable, Field, HomeSizePlan, Notice, Pill, SelectedMark, StepHeading } from "./parts";
+import { Checkbox } from "@/components/ui/selection";
 
 function formatPhone(value: string): string {
   const d = value.replace(/\D/g, "").slice(0, 10);
@@ -151,7 +152,7 @@ export function LocationStep() {
                 </Field>
                 {company.texting ? (
                   <label className="flex items-start gap-3 rounded-[var(--bk-radius)] border border-[color:var(--bk-hairline)] p-3 text-left text-xs leading-5 text-[color:var(--bk-muted-text)]">
-                    <input type="checkbox" checked={textOk} onChange={(e) => setTextOk(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" />
+                    <Checkbox checked={textOk} onCheckedChange={(checked) => setTextOk(checked)} className="mt-0.5 shrink-0" />
                     <span>
                       <span className="block text-sm font-medium text-[color:var(--bk-text,inherit)]">Text messages (optional)</span>
                       {company.texting.consent}{" "}

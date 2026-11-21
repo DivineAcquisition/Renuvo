@@ -7,6 +7,7 @@ import { Action, Card, Loading, Notice, Page, Problem, problemWords } from "@/co
 
 import { api } from "../../../convex/_generated/api";
 import { PlainDoc } from "./plain-doc";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * Selestial-hosted signing. The signer reads the exact approved version, types their name, agrees and
@@ -75,7 +76,7 @@ export function SignPage({ token }: { token: string }) {
             <input className="min-h-11 rounded-xl border border-border bg-background px-3 text-base" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
           </label>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 size-4" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+            <Checkbox className="mt-1" checked={agreed} onCheckedChange={(checked) => setAgreed(checked)} />
             <span>{view.consent}</span>
           </label>
           <Problem message={problem} />

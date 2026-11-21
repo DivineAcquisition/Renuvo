@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import { Checkbox } from "@/components/ui/selection";
 
 type Window = { weekday: number; startMinute: number; endMinute: number };
 type Change = Omit<FunctionArgs<typeof api.availability.preview>, "companyId" | "cleanerId">;
@@ -284,7 +285,7 @@ export function ExceptionDialog({ cleanerId, firstName, onClose }: { cleanerId: 
             <TextInput type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required />
           </Field>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[#6838ef]" checked={form.whole} onChange={(event) => setForm({ ...form, whole: event.target.checked })} />
+            <Checkbox checked={form.whole} onCheckedChange={(checked) => setForm({ ...form, whole: checked })} />
             The whole day
           </label>
           {!form.whole ? (

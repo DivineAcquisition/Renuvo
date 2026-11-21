@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { BasisTag, Flag, StatusPill, type ActionRow, type Detail, type Entry } from "./shared";
+import { Checkbox } from "@/components/ui/selection";
 
 const TOOLS = [
   { id: "explain_attention", label: "Explain why this needs attention" },
@@ -323,7 +324,7 @@ function ProposeRemedy({ detail, timezone }: { detail: Detail; timezone: string 
               <p className="text-xs text-muted-foreground">The Owner sets what the crew is paid for a correction visit before it is booked.</p>
             )}
             <label className="flex items-start gap-2 text-sm text-foreground">
-              <input type="checkbox" className="mt-1" checked={ask} onChange={(event) => setAsk(event.target.checked)} />
+              <Checkbox className="mt-1" checked={ask} onCheckedChange={(checked) => setAsk(checked)} />
               <span>Ask the customer first. They review it on a private page, and nothing is booked until they accept.</span>
             </label>
           </>

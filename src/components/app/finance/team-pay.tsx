@@ -19,6 +19,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { FinanceNav } from "./finance-screen";
 import { Chip, Empty, Notice, eyebrow } from "./kit";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * Finance › Team Pay. Each cleaner's earnings per completed job, worked out by Selestial from their pay
@@ -586,7 +587,7 @@ function TipDialog({ open, onClose, jobId }: { open: boolean; onClose: () => voi
           <TextInput value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} placeholder="Cash left on the counter" />
         </Field>
         <label className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-sm text-strong">
-          <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+          <Checkbox checked={confirmed} onCheckedChange={(checked) => setConfirmed(checked)} className="mt-0.5" />
           <span>The customer gave this tip for this job.</span>
         </label>
         <FormError message={error} />
@@ -645,7 +646,7 @@ function PaymentForm({ cleanerId, preselect, onDone }: { cleanerId: Id<"cleaners
           {owed.map((r) => (
             <li key={r.id}>
               <label className="flex items-center gap-3 px-3 py-2 text-sm">
-                <input type="checkbox" checked={chosen.includes(r.id)} onChange={(e) => setPicked(e.target.checked ? [...chosen, r.id] : chosen.filter((id) => id !== r.id))} className="size-4 accent-brand-500" />
+                <Checkbox checked={chosen.includes(r.id)} onCheckedChange={(checked) => setPicked(checked ? [...chosen, r.id] : chosen.filter((id) => id !== r.id))} />
                 <span className="min-w-0 flex-1 truncate text-strong">
                   {r.service} · {r.day}
                   {r.lateTipCents ? <span className="text-muted-foreground"> · tip that came later</span> : null}
@@ -689,7 +690,7 @@ function PaymentForm({ cleanerId, preselect, onDone }: { cleanerId: Id<"cleaners
             <TextInput type="date" value={paidOn} max={todayKey(timezone)} onChange={(e) => setPaidOn(e.target.value)} />
           </Field>
           <label className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-sm text-strong">
-            <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+            <Checkbox checked={confirmed} onCheckedChange={(checked) => setConfirmed(checked)} className="mt-0.5" />
             <span>I paid {data.name} this amount. It isn&apos;t only scheduled or promised.</span>
           </label>
         </>
@@ -874,7 +875,7 @@ function ConfirmPaidDialog({ payment, cleaner, onClose }: { payment: CleanerPaym
           <TextInput type="date" value={paidOn} max={todayKey(timezone)} onChange={(e) => setPaidOn(e.target.value)} />
         </Field>
         <label className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-sm text-strong">
-          <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+          <Checkbox checked={confirmed} onCheckedChange={(checked) => setConfirmed(checked)} className="mt-0.5" />
           <span>The money reached {cleaner}.</span>
         </label>
         <FormError message={error} />

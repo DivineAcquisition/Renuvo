@@ -7,6 +7,7 @@ import { X } from "@/components/icons";
 import { allowed } from "@/lib/consent/model";
 import type { TrackingTool } from "@/lib/consent/tools";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/selection";
 
 const button = "inline-flex h-11 items-center justify-center rounded-xl border px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6838ef]";
 const quiet = cn(button, "border-[#d5dae5] bg-white text-[#211a35] hover:bg-[#f8f9fc]");
@@ -189,7 +190,7 @@ function Category({ title, body, checked, onChange, locked, lockedNote, tools }:
           <span className="block text-sm font-semibold">{title}</span>
           <span className="block text-sm text-[#667085]">{body}</span>
         </label>
-        <input id={id} type="checkbox" role="switch" aria-checked={checked} checked={checked} disabled={locked} onChange={(event) => onChange?.(event.target.checked)} className="mt-1 size-5 shrink-0 accent-[#6838ef]" />
+        <Switch id={id} checked={checked} disabled={locked} onChange={(value) => onChange?.(value)} className="mt-1" />
       </div>
       {lockedNote ? <p className="mt-1 text-xs text-[#3f1d9e]">{lockedNote}</p> : null}
       {tools.length > 0 ? (

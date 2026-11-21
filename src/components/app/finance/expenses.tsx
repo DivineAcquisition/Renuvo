@@ -20,6 +20,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import type { FinanceNav } from "./finance-screen";
 import { Chip, Empty, Notice, eyebrow } from "./kit";
+import { Checkbox } from "@/components/ui/selection";
 
 /**
  * Finance › Expenses. Receipts the Owner snaps or uploads (Selestial reads them into drafts), expenses
@@ -713,7 +714,7 @@ function ExpenseEditor({ e, onClose }: { e: Detail; onClose: () => void }) {
             {e.repeat.vendor ?? "No vendor"} · {calendarDate(e.repeat.spentOn)} · {e.repeat.amountCents === null ? "—" : usd(e.repeat.amountCents)} <span className="text-muted-foreground">({e.repeat.statusWords}, {e.repeat.sourceWords.toLowerCase()})</span>
           </p>
           <label className="flex items-center gap-2 text-strong">
-            <input type="checkbox" checked={notARepeat} onChange={(ev) => setNotARepeat(ev.target.checked)} className="size-4 accent-brand-500" />
+            <Checkbox checked={notARepeat} onCheckedChange={(checked) => setNotARepeat(checked)} />
             They&apos;re two different purchases
           </label>
           {!notARepeat ? <p className="text-xs text-muted-foreground">If it is the same purchase, void this one.</p> : null}
@@ -775,14 +776,14 @@ function ExpenseEditor({ e, onClose }: { e: Detail; onClose: () => void }) {
       ) : editable && form.vendor && form.categoryId ? (
         <div className="grid gap-1.5 rounded-xl border border-border px-3.5 py-3 text-sm">
           <label className="flex items-start gap-2 text-strong">
-            <input type="checkbox" checked={makeRule} onChange={(ev) => setMakeRule(ev.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+            <Checkbox checked={makeRule} onCheckedChange={(checked) => setMakeRule(checked)} className="mt-0.5" />
             <span>
               Always file {form.vendor} as {category?.name ?? "this category"}
             </span>
           </label>
           {makeRule ? (
             <label className="ml-6 flex items-start gap-2 text-strong">
-              <input type="checkbox" checked={autoFile} onChange={(ev) => setAutoFile(ev.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+              <Checkbox checked={autoFile} onCheckedChange={(checked) => setAutoFile(checked)} className="mt-0.5" />
               <span>
                 And record it without asking
                 <span className="block text-xs text-muted-foreground">Only when the vendor, date and amount are read clearly and it isn&apos;t a possible repeat. Otherwise it waits for you.</span>
@@ -1145,7 +1146,7 @@ function RulesBody() {
           </Field>
         </div>
         <label className="flex items-start gap-2 text-sm text-strong">
-          <input type="checkbox" checked={autoFile} onChange={(e) => setAutoFile(e.target.checked)} className="mt-0.5 size-4 accent-brand-500" />
+          <Checkbox checked={autoFile} onCheckedChange={(checked) => setAutoFile(checked)} className="mt-0.5" />
           <span>
             Record matching expenses without asking
             <span className="block text-xs text-muted-foreground">Only when the receipt is clear and it isn&apos;t a possible repeat.</span>
